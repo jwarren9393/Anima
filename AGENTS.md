@@ -17,7 +17,7 @@
 | AI backend | [NanoGPT API](https://docs.nano-gpt.com/) (OpenAI-compatible chat completions) |
 | Primary platform | Android |
 | Also target | Windows, Linux |
-| Repo | Private GitHub repo (creating in this session) |
+| Repo | Private: https://github.com/jwarren9393/Anima |
 
 Base chat URL: `https://nano-gpt.com/api/v1/chat/completions`  
 Auth header: `Authorization: Bearer <API_KEY>`
@@ -40,7 +40,7 @@ Auth header: `Authorization: Bearer <API_KEY>`
 **Phase:** 0 — Project foundation (complete)
 
 **Last updated:** 2026-07-16  
-**Last agent action:** First git commit + private GitHub repo setup in progress.
+**Last agent action:** Created private GitHub repo `jwarren9393/Anima`, initial commit pushed to `main`. GitHub CLI installed to `~/.local/bin/gh`; logged in as jwarren9393.
 
 ### What works today
 
@@ -50,6 +50,7 @@ Auth header: `Authorization: Bearer <API_KEY>`
 - Starter `NanoGptService` that can call NanoGPT (not wired into the chat UI yet)
 - Internet permission on Android
 - Secrets-safe `.gitignore` entries
+- Private GitHub repo at https://github.com/jwarren9393/Anima (`main` branch)
 
 ### What does NOT work yet
 
@@ -60,7 +61,6 @@ Auth header: `Authorization: Bearer <API_KEY>`
 - Local message database
 - Android SDK / phone deploy on this machine (Flutter doctor: Android toolchain missing)
 - Linux desktop build tools (clang, cmake, ninja, pkg-config missing)
-- GitHub remote repository (not created yet; `gh` CLI not installed)
 
 ---
 
@@ -76,7 +76,7 @@ Update checkboxes as phases complete.
 - [x] NanoGPT service stub
 - [x] Living agent document (`AGENTS.md`)
 - [x] Harden `.gitignore` against secrets
-- [ ] Initialize git + create private GitHub repo (next human/agent step)
+- [x] Initialize git + create private GitHub repo (`jwarren9393/Anima`)
 
 ### Phase 1 — Dev environment (Android first)
 
@@ -151,7 +151,7 @@ lib/
 | Chrome | ❌ Not required for this app |
 | Linux desktop toolchain | ❌ clang/cmake/ninja/pkg-config missing |
 | Git | ✅ installed |
-| GitHub CLI (`gh`) | ❌ not installed (`sudo apt install gh`) |
+| GitHub CLI (`gh`) | ✅ `~/.local/bin/gh` (logged in as jwarren9393) |
 
 PATH tip for shells:
 
@@ -163,10 +163,10 @@ export PATH="$HOME/development/flutter/bin:$PATH"
 
 ## Next actions (do these in order)
 
-1. **Initialize git** in this folder and make the first commit (when the owner asks).
-2. **Install GitHub CLI**, log in, create a **private** repo, push.
-3. **Phase 1:** Install Android Studio / SDK so the owner can run Anima on their phone.
-4. **Phase 2:** Build the real chat screen and connect it to NanoGPT.
+1. **Phase 1:** Install Android Studio / SDK so the owner can run Anima on their phone.
+2. Confirm `flutter run` on a connected Android phone or emulator.
+3. **Phase 2:** Build the real chat screen and connect it to NanoGPT.
+4. Optional: install Linux build deps for desktop testing on this PC.
 
 ---
 

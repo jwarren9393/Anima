@@ -4,7 +4,8 @@ Private, personal AI character chat app built with Flutter.
 Talks to the [NanoGPT](https://nano-gpt.com) API for replies.
 
 **Platforms:** Android (primary), Windows, Linux  
-**Not published** to any app store — for personal use only.
+**Not published** to any app store — for personal use only.  
+**Repo:** https://github.com/jwarren9393/Anima (private)
 
 ---
 
