@@ -40,7 +40,7 @@ Auth header: `Authorization: Bearer <API_KEY>`
 **Phase:** 3 — Characters ✅
 
 **Last updated:** 2026-07-17  
-**Last agent action:** Added create/edit/select/delete characters with JSON file persistence; chat sends each character’s system prompt to NanoGPT. Deployed to SM-S731U. Phase 1–2 previously pushed; Phase 3 ready to commit.
+**Last agent action:** Added create/edit/select/delete characters with JSON file persistence; chat sends each character’s system prompt to NanoGPT. Deployed to SM-S731U. Phase 3 committed and pushed to GitHub.
 
 ### What works today
 
@@ -184,8 +184,7 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 ## Next actions (do these in order)
 
 1. **Phase 4:** Persist chat history per character; optional streaming replies.
-2. Commit/push Phase 3 to GitHub when the owner asks (if not already pushed).
-3. Optional: `sudo apt install clang cmake ninja-build pkg-config libgtk-3-dev` for Linux desktop runs.
+2. Optional: `sudo apt install clang cmake ninja-build pkg-config libgtk-3-dev` for Linux desktop runs.
 
 ---
 
