@@ -2,16 +2,36 @@ import 'package:flutter/material.dart';
 
 import 'screens/chat_screen.dart';
 import 'services/api_key_service.dart';
+import 'services/nanogpt_service.dart';
+import 'services/settings_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(AnimaApp(apiKeyService: ApiKeyService()));
+
+  final apiKeyService = ApiKeyService();
+  final settingsService = SettingsService();
+  final nanoGptService = NanoGptService(apiKeyService: apiKeyService);
+
+  runApp(
+    AnimaApp(
+      apiKeyService: apiKeyService,
+      settingsService: settingsService,
+      nanoGptService: nanoGptService,
+    ),
+  );
 }
 
 class AnimaApp extends StatelessWidget {
-  const AnimaApp({super.key, required this.apiKeyService});
+  const AnimaApp({
+    super.key,
+    required this.apiKeyService,
+    required this.settingsService,
+    required this.nanoGptService,
+  });
 
   final ApiKeyService apiKeyService;
+  final SettingsService settingsService;
+  final NanoGptService nanoGptService;
 
   @override
   Widget build(BuildContext context) {
@@ -33,7 +53,11 @@ class AnimaApp extends StatelessWidget {
         useMaterial3: true,
       ),
       themeMode: .system,
-      home: ChatScreen(apiKeyService: apiKeyService),
+      home: ChatScreen(
+        apiKeyService: apiKeyService,
+        settingsService: settingsService,
+        nanoGptService: nanoGptService,
+      ),
     );
   }
 }

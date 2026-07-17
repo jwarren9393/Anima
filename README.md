@@ -19,27 +19,29 @@ device's secure vault — it is never put in project files or GitHub.
 
 ### What you need on this computer
 
-1. Flutter SDK (already at `~/development/flutter`)
-2. Later: Android Studio / Android SDK to put the app on your phone
+1. Flutter SDK at `~/development/flutter`
+2. JDK 17 at `~/development/jdk-17` and Android SDK at `~/Android/Sdk` (Phase 1 — installed)
 3. A NanoGPT API key from https://nano-gpt.com
+4. An Android phone with USB debugging (to install the app)
 
 ### Quick commands
 
 ```bash
-# Make sure Flutter is on your PATH for this terminal
-export PATH="$HOME/development/flutter/bin:$PATH"
+# Load the toolchain (new terminals should get this from ~/.bashrc)
+export JAVA_HOME="$HOME/development/jdk-17"
+export ANDROID_HOME="$HOME/Android/Sdk"
+export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$HOME/development/flutter/bin:$HOME/.local/bin:$PATH"
 
 # Check tooling
 flutter doctor
 
-# Get packages (if needed)
-flutter pub get
+# See connected phones
+adb devices
+flutter devices
 
-# Run on Linux desktop (once Linux build tools are installed)
-flutter run -d linux
-
-# Run on a connected Android phone (once Android SDK is set up)
-flutter run -d android
+# Run on a connected Android phone
+cd /run/media/jakwan/JaKwanSSD/AI/Anima
+flutter run
 ```
 
 ### Saving your API key (safe)
@@ -64,12 +66,15 @@ That file is the living build status: what exists, what's next, and rules.
 ```
 lib/
   main.dart                 # App entry + theme
+  models/
+    chat_message.dart       # One chat bubble
   screens/
-    chat_screen.dart        # Home / chat placeholder
-    settings_screen.dart    # Secure API key input
+    chat_screen.dart        # Chat with NanoGPT
+    settings_screen.dart    # API key + model
   services/
     api_key_service.dart    # Secure storage for the NanoGPT key
-    nanogpt_service.dart    # NanoGPT HTTP chat client (starter)
+    settings_service.dart   # Saved model name
+    nanogpt_service.dart    # Talks to NanoGPT over the internet
 ```
 
 ---

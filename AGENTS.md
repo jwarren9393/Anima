@@ -37,30 +37,30 @@ Auth header: `Authorization: Bearer <API_KEY>`
 
 ## Current status
 
-**Phase:** 0 — Project foundation (complete)
+**Phase:** 2 — Real chat UI ✅
 
-**Last updated:** 2026-07-16  
-**Last agent action:** Created private GitHub repo `jwarren9393/Anima`, initial commit pushed to `main`. GitHub CLI installed to `~/.local/bin/gh`; logged in as jwarren9393.
+**Last updated:** 2026-07-17  
+**Last agent action:** Built real chat UI wired to NanoGPT (message bubbles, send, in-memory history, loading/errors, editable model in Settings). Deployed to SM-S731U.
 
 ### What works today
 
 - Flutter app named `anima` (`com.anima.anima`) with Android, Linux, and Windows folders
-- Welcome / chat placeholder screen
-- Settings screen to save / clear NanoGPT API key via `flutter_secure_storage`
-- Starter `NanoGptService` that can call NanoGPT (not wired into the chat UI yet)
+- **Real chat screen:** bubbles, text box, send button, “Thinking…” state, plain-English errors
+- **In-memory conversation** for the current session (clears if you kill the app or tap Clear)
+- Settings: save/clear NanoGPT API key + choose AI model (default `openai/gpt-4o-mini`)
+- `NanoGptService` calls `https://nano-gpt.com/api/v1/chat/completions`
 - Internet permission on Android
 - Secrets-safe `.gitignore` entries
 - Private GitHub repo at https://github.com/jwarren9393/Anima (`main` branch)
+- **Android toolchain** + **runs on Samsung SM-S731U**
 
 ### What does NOT work yet
 
-- Real chat UI (message bubbles, send box, history)
-- Character profiles / personality prompts
-- Wiring the chat screen to `NanoGptService`
-- Streaming replies
-- Local message database
-- Android SDK / phone deploy on this machine (Flutter doctor: Android toolchain missing)
-- Linux desktop build tools (clang, cmake, ninja, pkg-config missing)
+- Character profiles / personality prompts (Phase 3)
+- Chat history saved across app restarts (Phase 4)
+- Streaming replies (Phase 4)
+- Linux desktop build tools (optional; needs sudo apt)
+- Emulator (optional; real phone works)
 
 ---
 
@@ -80,19 +80,19 @@ Update checkboxes as phases complete.
 
 ### Phase 1 — Dev environment (Android first)
 
-- [ ] Install Android Studio / Android SDK; fix `flutter doctor` Android issues
-- [ ] Connect a phone (USB debugging) or set up an emulator
-- [ ] Confirm `flutter run` on Android
+- [x] Install Android SDK + JDK; fix `flutter doctor` Android issues
+- [x] Confirm Android debug APK builds (`flutter build apk --debug`)
+- [x] Connect a phone (USB debugging) and confirm `flutter run` on Android (SM-S731U)
 - [ ] Optional: install Linux build deps for desktop testing
-- [ ] Install `gh` and create a **private** GitHub repo; push initial commit
+- [x] Install `gh` and create a **private** GitHub repo; push initial commit
 
-### Phase 2 — Real chat UI
+### Phase 2 — Real chat UI ✅
 
-- [ ] Message list + text input + send button
-- [ ] Local in-memory conversation for one session
-- [ ] Call `NanoGptService.sendChatMessage` from the chat screen
-- [ ] Show loading / error states in plain language
-- [ ] Default model setting (editable in Settings)
+- [x] Message list + text input + send button
+- [x] Local in-memory conversation for one session
+- [x] Call `NanoGptService.sendChatMessage` from the chat screen
+- [x] Show loading / error states in plain language
+- [x] Default model setting (editable in Settings)
 
 ### Phase 3 — Characters
 
@@ -119,13 +119,16 @@ Update checkboxes as phases complete.
 
 ```
 lib/
-  main.dart                      App entry, themes, home route
+  main.dart                      App entry, themes, wires services → ChatScreen
+  models/
+    chat_message.dart            One chat bubble (user or assistant)
   screens/
-    chat_screen.dart             Home placeholder + link to Settings
-    settings_screen.dart         Paste/save/clear NanoGPT API key
+    chat_screen.dart             Chat UI + NanoGPT send/receive
+    settings_screen.dart         API key + model name
   services/
-    api_key_service.dart         flutter_secure_storage wrapper
-    nanogpt_service.dart         HTTP client for /chat/completions
+    api_key_service.dart         Secure storage for NanoGPT API key
+    settings_service.dart        Saved model preference (default openai/gpt-4o-mini)
+    nanogpt_service.dart         HTTP client for /chat/completions + plain errors
 ```
 
 **Dependencies in use:** `flutter_secure_storage`, `http`
@@ -147,26 +150,40 @@ lib/
 |------|--------|
 | Flutter | ✅ 3.44.6 stable at `~/development/flutter` |
 | Dart | ✅ 3.12.2 |
-| Android SDK | ❌ Not installed yet |
+| JDK | ✅ Temurin 17 at `~/development/jdk-17` |
+| Android SDK | ✅ `~/Android/Sdk` (platform 36, build-tools 36.0.0) — Flutter doctor Android ✓ |
 | Chrome | ❌ Not required for this app |
-| Linux desktop toolchain | ❌ clang/cmake/ninja/pkg-config missing |
+| Linux desktop toolchain | ❌ clang/cmake/ninja/pkg-config missing (needs sudo apt) |
 | Git | ✅ installed |
 | GitHub CLI (`gh`) | ✅ `~/.local/bin/gh` (logged in as jwarren9393) |
+| Physical Android phone | ✅ Samsung SM-S731U (`R3CYA09N26J`), Android 16 — `flutter run` verified |
 
-PATH tip for shells:
+PATH tip for shells (also appended to `~/.bashrc`):
 
 ```bash
-export PATH="$HOME/development/flutter/bin:$PATH"
+export JAVA_HOME="$HOME/development/jdk-17"
+export ANDROID_HOME="$HOME/Android/Sdk"
+export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$HOME/development/flutter/bin:$HOME/.local/bin:$PATH"
 ```
+
+### Phone USB debugging (owner checklist)
+
+1. On the phone: **Settings → About phone → tap Build number 7 times** (unlocks Developer options).
+2. **Settings → Developer options → turn on USB debugging**.
+3. Plug phone into this PC with a data-capable USB cable.
+4. Accept the “Allow USB debugging?” prompt on the phone.
+5. In a terminal, run: `adb devices` — you should see your phone listed (not `unauthorized`).
+6. From the Anima folder: `flutter run`
+
+If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the prompt. On some Linux setups a udev rule may be needed later.
 
 ---
 
 ## Next actions (do these in order)
 
-1. **Phase 1:** Install Android Studio / SDK so the owner can run Anima on their phone.
-2. Confirm `flutter run` on a connected Android phone or emulator.
-3. **Phase 2:** Build the real chat screen and connect it to NanoGPT.
-4. Optional: install Linux build deps for desktop testing on this PC.
+1. **Phase 3:** Characters (name + system prompt, create/edit/select, save on device).
+2. Optional: commit/push Phase 1–2 changes to GitHub when the owner asks.
+3. Optional: `sudo apt install clang cmake ninja-build pkg-config libgtk-3-dev` for Linux desktop runs.
 
 ---
 
