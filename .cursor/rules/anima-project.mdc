@@ -1,0 +1,18 @@
+---
+description: Always read and update the Anima living project document
+alwaysApply: true
+---
+
+# Anima agent rule
+
+Before planning or coding, read `AGENTS.md` at the repo root.
+
+That file is the source of truth for:
+- what Anima is
+- current build phase / status
+- what to do next
+- security rules for the NanoGPT API key
+
+When you finish meaningful work, update `AGENTS.md` (status, checkboxes, code map, next actions).
+
+Never commit API keys or put them in source files. Use in-app Settings + `ApiKeyService`.
