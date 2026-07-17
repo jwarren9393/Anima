@@ -13,6 +13,7 @@
 | Item | Value |
 |------|--------|
 | Owner use | Personal only — will **not** be published to app stores |
+| Inspiration | **SillyTavern-like** experience on mobile (core RP/chat features), **not** a full SillyTavern clone |
 | UI framework | Flutter |
 | AI backend | [NanoGPT API](https://docs.nano-gpt.com/) (OpenAI-compatible chat completions) |
 | Primary platform | Android |
@@ -21,6 +22,24 @@
 
 Base chat URL: `https://nano-gpt.com/api/v1/chat/completions`  
 Auth header: `Authorization: Bearer <API_KEY>`
+
+### Product direction (read this every session)
+
+Anima should feel **reminiscent of SillyTavern**: rich character roleplay, persistent chats, editable messages, swipes, lorebooks, personas, and card import — optimized for a **simple Android-first Flutter app**.
+
+**Do not try to rebuild all of SillyTavern.** Prefer the highest-value ST features in small phases. Keep architecture simple. When choosing between “perfect ST parity” and “works great on a phone,” choose the phone.
+
+High-value SillyTavern concepts to aim for over time:
+
+1. Richer character cards (description, personality, scenario, first message, examples, greetings)
+2. Per-character (and eventually multi-chat) persistent history
+3. Chat controls: edit / delete / continue / regenerate / swipes
+4. Streaming replies
+5. User persona + simple macros (`{{user}}`, `{{char}}`)
+6. World Info / lorebooks (keyword-triggered context)
+7. Import/export Character Card V2/V3 (JSON/PNG) when feasible
+8. Sampling controls (temperature, max tokens, etc.)
+9. Later / optional: group chats, TTS, advanced prompt templates, regex
 
 ---
 
@@ -32,33 +51,34 @@ Auth header: `Authorization: Bearer <API_KEY>`
 4. API keys must be entered in-app Settings and stored with **secure storage** — never committed to Git.
 5. Do **not** invent app-store / Play Store requirements; this app stays private.
 6. After completing work, **update this file** (status, done, next).
+7. Prefer **SillyTavern-inspired** features that fit mobile; do not chase full ST feature parity.
 
 ---
 
 ## Current status
 
-**Phase:** 3 — Characters ✅
+**Phase:** 5 — Richer character cards + ST import/export ✅
 
 **Last updated:** 2026-07-17  
-**Last agent action:** Added create/edit/select/delete characters with JSON file persistence; chat sends each character’s system prompt to NanoGPT. Deployed to SM-S731U. Phase 3 committed and pushed to GitHub.
+**Last agent action:** Committed and pushed Phases 4–5 (persistence/chat controls + ST card fields/import-export) to GitHub `main`.
 
 ### What works today
 
-- Flutter app named `anima` (`com.anima.anima`) with Android, Linux, and Windows folders
-- **Real chat screen** wired to NanoGPT (bubbles, send, Thinking…, plain-English errors)
-- **Characters:** name + personality prompt; list / create / edit / delete / select
-- Characters saved on-device as `anima_characters.json` (via `path_provider`)
-- Selected character’s system prompt is sent with every NanoGPT request
-- Switching characters clears the in-memory chat (per-character saved history is Phase 4)
-- Settings: API key + model (default `openai/gpt-4o-mini`)
-- Private GitHub repo + Android toolchain + runs on Samsung SM-S731U
+- SillyTavern-inspired chat app (saved chats, streaming, swipes, regenerate, edit/delete)
+- **Character cards** with ST fields: description, personality, scenario, first_mes, mes_example, system_prompt, post_history_instructions, alternate_greetings, tags, creator notes, etc.
+- **Import** SillyTavern / site cards: `.json` (V1/V2/V3) and `.png` (embedded `chara` / `ccv3` chunk)
+- **Export** Card V2 or V3 JSON (share sheet) — lorebook + extensions preserved
+- **Persona** in Settings (`{{user}}` name + about-you text)
+- **Macros** `{{user}}` / `{{char}}` in card text and greetings
+- Alternate greetings become first-message swipes on new chats
+- Embedded `character_book` kept for later Phase 6 lore playback
 
 ### What does NOT work yet
 
-- Chat history saved across app restarts / per character (Phase 4)
-- Streaming replies (Phase 4)
-- Character avatars (optional later)
-- Linux desktop build tools (optional; needs sudo apt)
+- Lorebook / World Info playback (Phase 6) — books are stored but not injected yet
+- PNG *export* with embedded card (JSON export works; PNG import works)
+- Optional local avatar image UI
+- Sampling knobs / chat transcript import (rest of Phase 7)
 
 ---
 
@@ -98,18 +118,58 @@ Update checkboxes as phases complete.
 - [x] Create / edit / select a character
 - [x] Persist characters on device (JSON file via `path_provider`)
 
-### Phase 4 — Persistence & polish
+### Phase 4 — Persistence & chat controls (ST core feel) ✅
 
-- [ ] Save chat history per character
-- [ ] Streaming responses (SSE) from NanoGPT
-- [ ] Basic theming / nicer mobile layout
-- [ ] Windows smoke test; Linux smoke test
+Goal: chats that stick around and feel controllable like SillyTavern’s basics.
 
-### Phase 5 — Nice-to-haves (only if requested)
+- [x] Save chat history **per character** on device
+- [x] Optional: multiple named chats per character (ST “new chat”)
+- [x] Streaming responses (SSE) from NanoGPT
+- [x] First message / greeting when starting a chat
+- [x] Basic message actions: edit, delete, regenerate last reply
+- [x] Swipes (alternate generations for the last AI message)
 
-- [ ] Export / import chats
-- [ ] Multiple API base URLs (e.g. subscription endpoint)
-- [ ] Offline-friendly error messages
+### Phase 5 — Richer character cards (ST card fields) ✅
+
+Goal: characters closer to SillyTavern cards, still simple to edit on phone.
+
+- [x] Split fields: description, personality, scenario, first message, example dialogue
+- [x] Alternate greetings (pick/swipe opening)
+- [x] Simple macros: `{{user}}`, `{{char}}`
+- [x] User persona (your name + short description injected into prompts)
+- [ ] Optional avatar image per character (local file) — deferred
+- [x] Import Character Card V1/V2/V3 JSON + PNG (`chara`/`ccv3`) *(pulled forward from Phase 7)*
+- [x] Export Anima characters to ST-compatible V2/V3 JSON *(pulled forward from Phase 7)*
+
+### Phase 6 — Lorebooks / World Info (ST signature feature)
+
+Goal: keyword-triggered lore so long worlds don’t dump everything into every prompt.
+
+- [ ] Lorebook entries: keys, content, on/off, order
+- [ ] Bind a lorebook to a character (and/or to a chat)
+- [ ] Scan recent messages for keys and inject matching entries
+- [ ] Simple token/entry budget so prompts stay small on mobile
+- [ ] Play back embedded `character_book` already stored on imported cards
+
+### Phase 7 — Import / export & sampling
+
+Goal: bring characters in/out of the SillyTavern ecosystem; tune generation.
+
+- [x] Import Character Card V2/V3 JSON (PNG-with-embedded-JSON supported)
+- [x] Export Anima characters to ST-compatible JSON
+- [ ] Export/import chat transcripts
+- [ ] Sampling settings: temperature, max tokens, top_p (saved in Settings)
+- [ ] Optional NanoGPT subscription base URL toggle
+- [ ] Optional: export PNG with embedded `chara` chunk
+
+### Phase 8 — Nice-to-haves (only if requested)
+
+- [ ] Group chats
+- [ ] Continue / impersonate
+- [ ] Author’s Note / chat-level instructions
+- [ ] Basic theming / nicer mobile layout polish
+- [ ] Windows / Linux smoke tests
+- [ ] TTS or other ST-like extensions (lowest priority)
 
 ---
 
@@ -119,21 +179,25 @@ Update checkboxes as phases complete.
 lib/
   main.dart                         App entry, themes, wires services → ChatScreen
   models/
-    chat_message.dart               One chat bubble (user or assistant)
-    character.dart                  Character name + system prompt
+    chat_message.dart               Bubble + swipe variants
+    chat_session.dart               Saved chat thread
+    character.dart                  ST-compatible card fields (+ Anima id)
   screens/
-    chat_screen.dart                Chat UI + NanoGPT send/receive
-    characters_screen.dart          List / select / delete characters
-    character_edit_screen.dart      Create or edit a character
-    settings_screen.dart            API key + model name
+    chat_screen.dart                Chat UI, streaming, swipes, persistence
+    characters_screen.dart          List / import / export / select characters
+    character_edit_screen.dart      Full card field editor
+    settings_screen.dart            API key + model + persona
   services/
     api_key_service.dart            Secure storage for NanoGPT API key
-    settings_service.dart           Model + selected character id
+    settings_service.dart           Model, selected character, persona
     character_service.dart          Load/save characters JSON on device
-    nanogpt_service.dart            HTTP client for /chat/completions + plain errors
+    character_card_codec.dart       ST Card V1/V2/V3 + PNG import/export
+    prompt_builder.dart             System prompt + {{user}}/{{char}} macros
+    chat_service.dart               Load/save chats JSON per character
+    nanogpt_service.dart            Streaming + plain-English errors
 ```
 
-**Dependencies in use:** `flutter_secure_storage`, `http`, `path_provider`
+**Dependencies in use:** `flutter_secure_storage`, `http`, `path_provider`, `file_picker`, `share_plus`, `path`
 
 ---
 
@@ -183,8 +247,8 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. **Phase 4:** Persist chat history per character; optional streaming replies.
-2. Optional: `sudo apt install clang cmake ninja-build pkg-config libgtk-3-dev` for Linux desktop runs.
+1. **Phase 6:** World Info / lorebook playback (including embedded `character_book` from imports).
+2. Optional: avatar images; PNG card export; sampling settings; Linux desktop deps.
 
 ---
 

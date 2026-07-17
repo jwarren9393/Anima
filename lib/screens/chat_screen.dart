@@ -2,26 +2,31 @@ import 'package:flutter/material.dart';
 
 import '../models/character.dart';
 import '../models/chat_message.dart';
+import '../models/chat_session.dart';
 import '../services/api_key_service.dart';
 import '../services/character_service.dart';
+import '../services/chat_service.dart';
 import '../services/nanogpt_service.dart';
+import '../services/prompt_builder.dart';
 import '../services/settings_service.dart';
 import 'characters_screen.dart';
 import 'settings_screen.dart';
 
-/// Main chat screen: type a message, send it to NanoGPT, see the reply.
+/// Main chat screen with saved history, streaming, and SillyTavern-like controls.
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
     super.key,
     required this.apiKeyService,
     required this.settingsService,
     required this.characterService,
+    required this.chatService,
     required this.nanoGptService,
   });
 
   final ApiKeyService apiKeyService;
   final SettingsService settingsService;
   final CharacterService characterService;
+  final ChatService chatService;
   final NanoGptService nanoGptService;
 
   @override
@@ -31,13 +36,16 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
-  final _messages = <ChatMessage>[];
+  final _promptBuilder = const PromptBuilder();
 
   bool _hasApiKey = false;
   bool _loading = true;
-  bool _sending = false;
+  bool _busy = false;
   String? _error;
   Character? _character;
+  ChatSession? _session;
+
+  List<ChatMessage> get _messages => _session?.messages ?? const [];
 
   @override
   void initState() {
@@ -48,12 +56,19 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _bootstrap() async {
     final hasKey = await widget.apiKeyService.hasApiKey();
     final character = await _resolveSelectedCharacter();
+    final userName = await widget.settingsService.getUserName();
+    final session = await widget.chatService.loadOrCreateActiveChat(
+      character,
+      userName: userName,
+    );
     if (!mounted) return;
     setState(() {
       _hasApiKey = hasKey;
       _character = character;
+      _session = session;
       _loading = false;
     });
+    _scrollToBottom(jump: true);
   }
 
   Future<Character> _resolveSelectedCharacter() async {
@@ -68,6 +83,12 @@ class _ChatScreenState extends State<ChatScreen> {
     }
     await widget.settingsService.saveSelectedCharacterId(chosen.id);
     return chosen;
+  }
+
+  Future<void> _persist() async {
+    final session = _session;
+    if (session == null) return;
+    await widget.chatService.saveChat(session);
   }
 
   Future<void> _openSettings() async {
@@ -98,33 +119,99 @@ class _ChatScreenState extends State<ChatScreen> {
     final character = selected ?? await _resolveSelectedCharacter();
     if (!mounted) return;
 
-    // Switching characters starts a fresh in-memory chat (saved history is Phase 4).
-    final switched = previousId != null && previousId != character.id;
+    if (previousId == character.id) {
+      // Character may have been edited (greeting / prompt). Refresh object only.
+      setState(() => _character = character);
+      return;
+    }
+
+    final session = await widget.chatService.loadOrCreateActiveChat(
+      character,
+      userName: await widget.settingsService.getUserName(),
+    );
+    if (!mounted) return;
     setState(() {
       _character = character;
-      if (switched) {
-        _messages.clear();
-        _error = null;
-      }
+      _session = session;
+      _error = null;
     });
+    _scrollToBottom(jump: true);
+  }
+
+  Future<void> _newChat() async {
+    final character = _character;
+    if (character == null || _busy) return;
+    final session = await widget.chatService.startNewChat(
+      character,
+      userName: await widget.settingsService.getUserName(),
+    );
+    if (!mounted) return;
+    setState(() {
+      _session = session;
+      _error = null;
+    });
+    _scrollToBottom(jump: true);
+  }
+
+  Future<void> _pickChat() async {
+    final character = _character;
+    if (character == null || _busy) return;
+    final chats = await widget.chatService.listChats(character.id);
+    if (!mounted) return;
+
+    final chosen = await showModalBottomSheet<ChatSession>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        if (chats.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.all(24),
+            child: Text('No saved chats yet.'),
+          );
+        }
+        return ListView.separated(
+          shrinkWrap: true,
+          itemCount: chats.length,
+          separatorBuilder: (_, _) => const Divider(height: 1),
+          itemBuilder: (context, index) {
+            final chat = chats[index];
+            final selected = chat.id == _session?.id;
+            return ListTile(
+              selected: selected,
+              title: Text(chat.title),
+              subtitle: Text(
+                '${chat.messages.length} messages · ${_shortDate(chat.updatedAt)}',
+              ),
+              trailing: selected ? const Icon(Icons.check) : null,
+              onTap: () => Navigator.pop(context, chat),
+            );
+          },
+        );
+      },
+    );
+
+    if (chosen == null || !mounted) return;
+    await widget.chatService.setActiveChatId(character.id, chosen.id);
+    setState(() {
+      _session = chosen;
+      _error = null;
+    });
+    _scrollToBottom(jump: true);
+  }
+
+  String _shortDate(DateTime value) {
+    final local = value.toLocal();
+    return '${local.month}/${local.day} ${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
   }
 
   Future<void> _send() async {
     final text = _inputController.text.trim();
-    if (text.isEmpty || _sending) return;
+    if (text.isEmpty || _busy || _session == null || _character == null) return;
 
     if (!_hasApiKey) {
       setState(() {
-        _error =
-            'Add your NanoGPT API key in Settings before you can chat.';
-      });
-      return;
-    }
-
-    final character = _character;
-    if (character == null) {
-      setState(() {
-        _error = 'Pick a character first (people icon in the top bar).';
+        _error = 'Add your NanoGPT API key in Settings before you can chat.';
       });
       return;
     }
@@ -132,60 +219,291 @@ class _ChatScreenState extends State<ChatScreen> {
     FocusScope.of(context).unfocus();
     _inputController.clear();
 
-    final priorForApi =
-        _messages.map((message) => message.toApiMap()).toList(growable: false);
+    final userMessage = ChatMessage(
+      id: ChatMessage.newId(),
+      role: ChatRole.user,
+      text: text,
+    );
+    final assistantPlaceholder = ChatMessage(
+      id: ChatMessage.newId(),
+      role: ChatRole.assistant,
+      text: '',
+      swipes: const [''],
+      swipeIndex: 0,
+    );
 
     setState(() {
       _error = null;
-      _sending = true;
-      _messages.add(ChatMessage(role: ChatRole.user, text: text));
+      _busy = true;
+      _session!.messages.add(userMessage);
+      _session!.messages.add(assistantPlaceholder);
+    });
+    _scrollToBottom();
+    await _persist();
+    await _streamIntoLastAssistant(excludeLastAssistant: true);
+  }
+
+  Future<void> _regenerateOrSwipe({required bool asNewSwipe}) async {
+    if (_busy || _session == null || _character == null || _messages.isEmpty) {
+      return;
+    }
+    if (!_hasApiKey) {
+      setState(() {
+        _error = 'Add your NanoGPT API key in Settings before you can chat.';
+      });
+      return;
+    }
+
+    final last = _messages.last;
+    if (last.isUser) {
+      setState(() {
+        _error = 'Send a message first so there is an AI reply to regenerate.';
+      });
+      return;
+    }
+
+    setState(() {
+      _error = null;
+      _busy = true;
+      if (asNewSwipe) {
+        // Keep current text; new generation becomes another swipe.
+        final updated = last.withNewSwipe('');
+        _session!.messages[_messages.length - 1] = ChatMessage(
+          id: updated.id,
+          role: updated.role,
+          text: '',
+          swipes: [...last.swipes, ''],
+          swipeIndex: last.swipes.length,
+        );
+      } else {
+        // Regenerate replaces the visible swipe text.
+        final swipes = List<String>.from(last.swipes);
+        if (swipes.isEmpty) swipes.add('');
+        final index = last.swipeIndex.clamp(0, swipes.length - 1);
+        swipes[index] = '';
+        _session!.messages[_messages.length - 1] = ChatMessage(
+          id: last.id,
+          role: last.role,
+          text: '',
+          swipes: swipes,
+          swipeIndex: index,
+        );
+      }
     });
     _scrollToBottom();
 
+    await _streamIntoLastAssistant(
+      excludeLastAssistant: true,
+      allowGreetingNudge: true,
+    );
+  }
+
+  Future<List<Map<String, String>>> _buildApiMessages({
+    required bool excludeLastAssistant,
+    bool allowGreetingNudge = false,
+  }) async {
+    final character = _character!;
+    final userName = await widget.settingsService.getUserName();
+    final persona = await widget.settingsService.getUserPersona();
+    final system = _promptBuilder.buildSystemPrompt(
+      character: character,
+      userName: userName,
+      userPersona: persona,
+    );
+    final postHistory = _promptBuilder.buildPostHistory(
+      character: character,
+      userName: userName,
+    );
+
+    final msgs = <Map<String, String>>[
+      {'role': 'system', 'content': system},
+    ];
+
+    final end = excludeLastAssistant ? _messages.length - 1 : _messages.length;
+    for (var i = 0; i < end; i++) {
+      final message = _messages[i];
+      if (message.text.trim().isEmpty) continue;
+      msgs.add(message.toApiMap());
+    }
+
+    if (allowGreetingNudge && msgs.length <= 1) {
+      msgs.add({
+        'role': 'user',
+        'content':
+            '(Write an alternate opening greeting in character. Stay in first person as the character.)',
+      });
+    }
+
+    if (postHistory.isNotEmpty) {
+      msgs.add({'role': 'system', 'content': postHistory});
+    }
+    return msgs;
+  }
+
+  Future<void> _streamIntoLastAssistant({
+    required bool excludeLastAssistant,
+    bool allowGreetingNudge = false,
+  }) async {
     try {
       final model = await widget.settingsService.getModel();
-      final reply = await widget.nanoGptService.sendChatMessage(
-        userMessage: text,
-        model: model,
-        systemPrompt: character.systemPrompt,
-        priorMessages: priorForApi,
+      final messages = await _buildApiMessages(
+        excludeLastAssistant: excludeLastAssistant,
+        allowGreetingNudge: allowGreetingNudge,
       );
+      final buffer = StringBuffer();
+      await for (final chunk in widget.nanoGptService.streamCompletion(
+        model: model,
+        messages: messages,
+      )) {
+        if (!mounted) return;
+        buffer.write(chunk);
+        final text = buffer.toString();
+        setState(() {
+          final last = _messages.last;
+          final swipes = List<String>.from(last.swipes);
+          final index =
+              last.swipeIndex.clamp(0, (swipes.length - 1).clamp(0, 9999));
+          if (swipes.isEmpty) {
+            swipes.add(text);
+          } else {
+            swipes[index] = text;
+          }
+          _session!.messages[_messages.length - 1] = ChatMessage(
+            id: last.id,
+            role: ChatRole.assistant,
+            text: text,
+            swipes: swipes,
+            swipeIndex: index,
+          );
+        });
+        _scrollToBottom();
+      }
+
       if (!mounted) return;
-      setState(() {
-        _messages.add(ChatMessage(role: ChatRole.assistant, text: reply));
-        _sending = false;
-      });
-      _scrollToBottom();
+      final finalText = _messages.last.text.trim();
+      if (finalText.isEmpty) {
+        throw NanoGptException('NanoGPT returned an empty reply. Try again.');
+      }
+      setState(() => _busy = false);
+      await _persist();
     } on NanoGptException catch (error) {
       if (!mounted) return;
       setState(() {
-        _sending = false;
+        _busy = false;
         _error = error.message;
+        if (_messages.isNotEmpty &&
+            !_messages.last.isUser &&
+            _messages.last.text.trim().isEmpty) {
+          final last = _messages.last;
+          if (last.swipes.length > 1 &&
+              last.swipeIndex == last.swipes.length - 1) {
+            final previous = List<String>.from(last.swipes)..removeLast();
+            _session!.messages[_messages.length - 1] = ChatMessage(
+              id: last.id,
+              role: last.role,
+              text: previous.last,
+              swipes: previous,
+              swipeIndex: previous.length - 1,
+            );
+          } else {
+            _session!.messages.removeLast();
+          }
+        }
       });
+      await _persist();
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _sending = false;
+        _busy = false;
         _error = 'Something unexpected went wrong: $error';
       });
+      await _persist();
     }
   }
 
-  void _clearChat() {
+  Future<void> _editMessage(int index) async {
+    if (_busy || _session == null) return;
+    final message = _messages[index];
+    final controller = TextEditingController(text: message.text);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(message.isUser ? 'Edit your message' : 'Edit reply'),
+        content: TextField(
+          controller: controller,
+          minLines: 3,
+          maxLines: 10,
+          autofocus: true,
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result == null || !mounted) return;
+    final trimmed = result.trim();
+    if (trimmed.isEmpty) return;
     setState(() {
-      _messages.clear();
-      _error = null;
+      _session!.messages[index] = message.withEditedText(trimmed);
     });
+    await _persist();
   }
 
-  void _scrollToBottom() {
+  Future<void> _deleteMessage(int index) async {
+    if (_busy || _session == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete message?'),
+        content: const Text('Remove this message from the saved chat?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _session!.messages.removeAt(index));
+    await _persist();
+  }
+
+  void _shiftSwipe(int delta) {
+    if (_busy || _session == null || _messages.isEmpty) return;
+    final last = _messages.last;
+    if (last.isUser || last.swipes.length < 2) return;
+    final next = last.withSwipeIndex(last.swipeIndex + delta);
+    setState(() => _session!.messages[_messages.length - 1] = next);
+    _persist();
+  }
+
+  void _scrollToBottom({bool jump = false}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) return;
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOut,
-      );
+      final target = _scrollController.position.maxScrollExtent;
+      if (jump) {
+        _scrollController.jumpTo(target);
+      } else {
+        _scrollController.animateTo(
+          target,
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+        );
+      }
     });
   }
 
@@ -200,32 +518,40 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final characterName = _character?.name ?? 'Anima';
+    final showSwipeBar = !_busy &&
+        _messages.isNotEmpty &&
+        !_messages.last.isUser &&
+        _messages.last.swipes.length > 1;
 
     return Scaffold(
       appBar: AppBar(
         title: Column(
           crossAxisAlignment: .start,
           children: [
-            const Text('Anima'),
-            if (_character != null)
+            Text(characterName),
+            if (_session != null)
               Text(
-                'Chatting with $characterName',
+                _session!.title,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
           ],
         ),
         actions: [
           IconButton(
+            tooltip: 'Saved chats',
+            icon: const Icon(Icons.history),
+            onPressed: _loading || _busy ? null : _pickChat,
+          ),
+          IconButton(
+            tooltip: 'New chat',
+            icon: const Icon(Icons.add_comment_outlined),
+            onPressed: _loading || _busy ? null : _newChat,
+          ),
+          IconButton(
             tooltip: 'Characters',
             icon: const Icon(Icons.people_outline),
-            onPressed: _loading || _sending ? null : _openCharacters,
+            onPressed: _loading || _busy ? null : _openCharacters,
           ),
-          if (_messages.isNotEmpty)
-            IconButton(
-              tooltip: 'Clear chat',
-              icon: const Icon(Icons.delete_outline),
-              onPressed: _sending ? null : _clearChat,
-            ),
           IconButton(
             tooltip: 'Settings',
             icon: const Icon(Icons.settings),
@@ -257,25 +583,89 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
           Expanded(
-            child: _messages.isEmpty && !_sending
+            child: _messages.isEmpty && !_busy
                 ? _EmptyChat(
                     hasApiKey: _hasApiKey,
                     characterName: characterName,
                     onOpenSettings: _openSettings,
                     onOpenCharacters: _openCharacters,
+                    onNewChat: _newChat,
                   )
                 : ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-                    itemCount: _messages.length + (_sending ? 1 : 0),
+                    itemCount: _messages.length,
                     itemBuilder: (context, index) {
-                      if (_sending && index == _messages.length) {
-                        return const _TypingBubble();
-                      }
-                      return _MessageBubble(message: _messages[index]);
+                      final message = _messages[index];
+                      final isLast = index == _messages.length - 1;
+                      return _MessageBubble(
+                        message: message,
+                        showThinking: _busy && isLast && !message.isUser && message.text.isEmpty,
+                        onLongPress: _busy
+                            ? null
+                            : () => _showMessageMenu(index),
+                      );
                     },
                   ),
           ),
+          if (showSwipeBar)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+              child: Row(
+                mainAxisAlignment: .center,
+                children: [
+                  IconButton(
+                    tooltip: 'Previous swipe',
+                    onPressed: _messages.last.swipeIndex > 0
+                        ? () => _shiftSwipe(-1)
+                        : null,
+                    icon: const Icon(Icons.chevron_left),
+                  ),
+                  Text(
+                    'Swipe ${_messages.last.swipeIndex + 1}/${_messages.last.swipes.length}',
+                  ),
+                  IconButton(
+                    tooltip: 'Next swipe',
+                    onPressed: _messages.last.swipeIndex <
+                            _messages.last.swipes.length - 1
+                        ? () => _shiftSwipe(1)
+                        : null,
+                    icon: const Icon(Icons.chevron_right),
+                  ),
+                  IconButton(
+                    tooltip: 'Generate another swipe',
+                    onPressed: () => _regenerateOrSwipe(asNewSwipe: true),
+                    icon: const Icon(Icons.auto_awesome),
+                  ),
+                  IconButton(
+                    tooltip: 'Regenerate',
+                    onPressed: () => _regenerateOrSwipe(asNewSwipe: false),
+                    icon: const Icon(Icons.refresh),
+                  ),
+                ],
+              ),
+            )
+          else if (!_busy &&
+              _messages.isNotEmpty &&
+              !_messages.last.isUser)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+              child: Row(
+                mainAxisAlignment: .center,
+                children: [
+                  TextButton.icon(
+                    onPressed: () => _regenerateOrSwipe(asNewSwipe: true),
+                    icon: const Icon(Icons.auto_awesome),
+                    label: const Text('Swipe'),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => _regenerateOrSwipe(asNewSwipe: false),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Regenerate'),
+                  ),
+                ],
+              ),
+            ),
           if (_error != null)
             Material(
               color: colorScheme.errorContainer,
@@ -314,7 +704,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   Expanded(
                     child: TextField(
                       controller: _inputController,
-                      enabled: !_sending,
+                      enabled: !_busy,
                       minLines: 1,
                       maxLines: 5,
                       textInputAction: .newline,
@@ -324,18 +714,18 @@ class _ChatScreenState extends State<ChatScreen> {
                         isDense: true,
                       ),
                       onSubmitted: (_) {
-                        if (!_sending) _send();
+                        if (!_busy) _send();
                       },
                     ),
                   ),
                   const SizedBox(width: 8),
                   FilledButton(
-                    onPressed: _sending ? null : _send,
+                    onPressed: _busy ? null : _send,
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.all(14),
                       minimumSize: const Size(48, 48),
                     ),
-                    child: _sending
+                    child: _busy
                         ? const SizedBox(
                             width: 18,
                             height: 18,
@@ -351,6 +741,48 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
     );
   }
+
+  Future<void> _showMessageMenu(int index) async {
+    final message = _messages[index];
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: .min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Edit'),
+              onTap: () => Navigator.pop(context, 'edit'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline),
+              title: const Text('Delete'),
+              onTap: () => Navigator.pop(context, 'delete'),
+            ),
+            if (!message.isUser && index == _messages.length - 1) ...[
+              ListTile(
+                leading: const Icon(Icons.refresh),
+                title: const Text('Regenerate'),
+                onTap: () => Navigator.pop(context, 'regen'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.auto_awesome),
+                title: const Text('New swipe'),
+                onTap: () => Navigator.pop(context, 'swipe'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+
+    if (action == 'edit') await _editMessage(index);
+    if (action == 'delete') await _deleteMessage(index);
+    if (action == 'regen') await _regenerateOrSwipe(asNewSwipe: false);
+    if (action == 'swipe') await _regenerateOrSwipe(asNewSwipe: true);
+  }
 }
 
 class _EmptyChat extends StatelessWidget {
@@ -359,12 +791,14 @@ class _EmptyChat extends StatelessWidget {
     required this.characterName,
     required this.onOpenSettings,
     required this.onOpenCharacters,
+    required this.onNewChat,
   });
 
   final bool hasApiKey;
   final String characterName;
   final VoidCallback onOpenSettings;
   final VoidCallback onOpenCharacters;
+  final VoidCallback onNewChat;
 
   @override
   Widget build(BuildContext context) {
@@ -388,7 +822,7 @@ class _EmptyChat extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               hasApiKey
-                  ? 'Type a message below. Use the people icon to switch characters.'
+                  ? 'This chat is saved on your phone. Add a first message on the character, or type below to begin.'
                   : 'First save your NanoGPT API key in Settings, then send a message.',
               style: Theme.of(context).textTheme.bodyLarge,
               textAlign: .center,
@@ -400,12 +834,19 @@ class _EmptyChat extends StatelessWidget {
                 icon: const Icon(Icons.key),
                 label: const Text('Open Settings'),
               )
-            else
+            else ...[
               OutlinedButton.icon(
                 onPressed: onOpenCharacters,
                 icon: const Icon(Icons.people_outline),
                 label: const Text('Manage characters'),
               ),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: onNewChat,
+                icon: const Icon(Icons.add_comment_outlined),
+                label: const Text('Start new chat'),
+              ),
+            ],
           ],
         ),
       ),
@@ -414,9 +855,15 @@ class _EmptyChat extends StatelessWidget {
 }
 
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message});
+  const _MessageBubble({
+    required this.message,
+    required this.showThinking,
+    this.onLongPress,
+  });
 
   final ChatMessage message;
+  final bool showThinking;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -434,56 +881,42 @@ class _MessageBubble extends StatelessWidget {
         constraints: BoxConstraints(
           maxWidth: MediaQuery.sizeOf(context).width * 0.82,
         ),
-        child: Container(
-          margin: const EdgeInsets.symmetric(vertical: 4),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: background,
-            borderRadius: .circular(16),
-          ),
-          child: SelectableText(
-            message.text,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: foreground,
-                ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _TypingBubble extends StatelessWidget {
-  const _TypingBubble();
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: .centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: InkWell(
+          onLongPress: onLongPress,
           borderRadius: .circular(16),
-        ),
-        child: Row(
-          mainAxisSize: .min,
-          children: [
-            SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Theme.of(context).colorScheme.primary,
-              ),
+          child: Container(
+            margin: const EdgeInsets.symmetric(vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: background,
+              borderRadius: .circular(16),
             ),
-            const SizedBox(width: 10),
-            Text(
-              'Thinking…',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ],
+            child: showThinking
+                ? Row(
+                    mainAxisSize: .min,
+                    children: [
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        'Thinking…',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  )
+                : SelectableText(
+                    message.text,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color: foreground,
+                        ),
+                  ),
+          ),
         ),
       ),
     );

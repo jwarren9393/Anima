@@ -20,50 +20,39 @@ class NanoGptService {
   final http.Client _http;
   final String baseUrl;
 
-  /// Sends one user message and returns the assistant's reply text.
+  /// Streams an assistant reply as plain text chunks (SillyTavern-style live typing).
   ///
-  /// [model] is a NanoGPT model id, e.g. "openai/gpt-4o-mini".
-  /// [systemPrompt] is optional personality / character instructions.
-  /// [priorMessages] are earlier turns in this chat (user + assistant only).
-  Future<String> sendChatMessage({
-    required String userMessage,
+  /// [messages] should already include optional system + conversation turns.
+  Stream<String> streamCompletion({
     required String model,
-    String? systemPrompt,
-    List<Map<String, String>> priorMessages = const [],
-  }) async {
+    required List<Map<String, String>> messages,
+  }) async* {
     final apiKey = await _apiKeyService.getApiKey();
     if (apiKey == null) {
       throw NanoGptException(
         'No NanoGPT API key saved yet. Open Settings and paste your key first.',
       );
     }
-
-    final messages = <Map<String, String>>[
-      if (systemPrompt != null && systemPrompt.trim().isNotEmpty)
-        {'role': 'system', 'content': systemPrompt.trim()},
-      ...priorMessages,
-      {'role': 'user', 'content': userMessage},
-    ];
+    if (messages.isEmpty) {
+      throw NanoGptException('Nothing to send to NanoGPT yet.');
+    }
 
     final uri = Uri.parse('$baseUrl/chat/completions');
+    final request = http.Request('POST', uri)
+      ..headers.addAll({
+        'Authorization': 'Bearer $apiKey',
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
+      })
+      ..body = jsonEncode({
+        'model': model,
+        'messages': messages,
+        'stream': true,
+      });
 
-    late final http.Response response;
+    late final http.StreamedResponse response;
     try {
-      response = await _http
-          .post(
-            uri,
-            headers: {
-              'Authorization': 'Bearer $apiKey',
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
-            body: jsonEncode({
-              'model': model,
-              'messages': messages,
-              'stream': false,
-            }),
-          )
-          .timeout(const Duration(seconds: 90));
+      response = await _http.send(request).timeout(const Duration(seconds: 90));
     } on SocketException {
       throw NanoGptException(
         'Could not reach NanoGPT. Check your internet connection and try again.',
@@ -100,26 +89,81 @@ class NanoGptService {
       );
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      final body = await response.stream.bytesToString();
       throw NanoGptException(
         'NanoGPT returned an error (${response.statusCode}). '
         'If this keeps happening, try a different model name in Settings.\n\n'
-        '${_shortBody(response.body)}',
+        '${_shortBody(body)}',
       );
     }
 
-    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-    final choices = decoded['choices'] as List<dynamic>?;
-    if (choices == null || choices.isEmpty) {
-      throw NanoGptException('NanoGPT returned an empty reply. Try again.');
+    var produced = false;
+    final buffer = StringBuffer();
+
+    await for (final chunk in response.stream.transform(utf8.decoder)) {
+      buffer.write(chunk);
+      var content = buffer.toString();
+
+      while (true) {
+        final sep = content.indexOf('\n');
+        if (sep < 0) {
+          buffer
+            ..clear()
+            ..write(content);
+          break;
+        }
+        var line = content.substring(0, sep);
+        content = content.substring(sep + 1);
+        if (line.endsWith('\r')) {
+          line = line.substring(0, line.length - 1);
+        }
+        if (line.isEmpty) continue;
+        if (!line.startsWith('data:')) continue;
+
+        final data = line.substring(5).trimLeft();
+        if (data == '[DONE]') {
+          return;
+        }
+
+        try {
+          final decoded = jsonDecode(data);
+          if (decoded is! Map) continue;
+          final choices = decoded['choices'];
+          if (choices is! List || choices.isEmpty) continue;
+          final first = choices.first;
+          if (first is! Map) continue;
+          final delta = first['delta'];
+          if (delta is! Map) continue;
+          final piece = delta['content'];
+          if (piece is String && piece.isNotEmpty) {
+            produced = true;
+            yield piece;
+          }
+        } catch (_) {
+          // Ignore malformed SSE lines and keep reading.
+        }
+      }
     }
 
-    final message = choices.first['message'] as Map<String, dynamic>?;
-    final content = message?['content'];
-    if (content is! String || content.trim().isEmpty) {
+    if (!produced) {
       throw NanoGptException('NanoGPT returned an empty reply. Try again.');
     }
+  }
 
-    return content.trim();
+  /// Non-streaming helper kept for simple one-shot calls.
+  Future<String> complete({
+    required String model,
+    required List<Map<String, String>> messages,
+  }) async {
+    final parts = <String>[];
+    await for (final chunk in streamCompletion(model: model, messages: messages)) {
+      parts.add(chunk);
+    }
+    final text = parts.join().trim();
+    if (text.isEmpty) {
+      throw NanoGptException('NanoGPT returned an empty reply. Try again.');
+    }
+    return text;
   }
 
   String _shortBody(String body) {

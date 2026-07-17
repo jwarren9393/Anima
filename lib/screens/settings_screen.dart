@@ -3,9 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/api_key_service.dart';
 import '../services/settings_service.dart';
 
-/// Settings: NanoGPT API key + which AI model to use.
-///
-/// The key is stored only on this device via [ApiKeyService].
+/// Settings: API key, model, and your persona (for {{user}} macros).
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
@@ -23,10 +21,13 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final _keyController = TextEditingController();
   final _modelController = TextEditingController();
+  final _userNameController = TextEditingController();
+  final _personaController = TextEditingController();
   bool _obscure = true;
   bool _loading = true;
   bool _savingKey = false;
   bool _savingModel = false;
+  bool _savingPersona = false;
   bool _hasKey = false;
 
   @override
@@ -38,11 +39,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _load() async {
     final key = await widget.apiKeyService.getApiKey();
     final model = await widget.settingsService.getModel();
+    final userName = await widget.settingsService.getUserName();
+    final persona = await widget.settingsService.getUserPersona();
     if (!mounted) return;
     setState(() {
       _hasKey = key != null;
       _modelController.text = model;
-      // Do not pre-fill the full key into the text field for safety.
+      _userNameController.text = userName;
+      _personaController.text = persona;
       _loading = false;
     });
   }
@@ -96,10 +100,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Future<void> _savePersona() async {
+    setState(() => _savingPersona = true);
+    await widget.settingsService.saveUserName(_userNameController.text);
+    await widget.settingsService.saveUserPersona(_personaController.text);
+    if (!mounted) return;
+    setState(() => _savingPersona = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Persona saved.')),
+    );
+  }
+
   @override
   void dispose() {
     _keyController.dispose();
     _modelController.dispose();
+    _userNameController.dispose();
+    _personaController.dispose();
     super.dispose();
   }
 
@@ -167,12 +184,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  'This is the NanoGPT model name Anima will ask for replies. '
-                  'Use the exact id from nano-gpt.com (for example openai/gpt-4o-mini).',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 16),
                 TextField(
                   controller: _modelController,
                   autocorrect: false,
@@ -194,10 +205,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         )
                       : const Text('Save model'),
                 ),
+                const SizedBox(height: 32),
+                Text(
+                  'Your persona',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Used for {{user}} in character cards (SillyTavern-style).',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _userNameController,
+                  textCapitalization: .words,
+                  decoration: const InputDecoration(
+                    labelText: 'Your name',
+                    hintText: SettingsService.defaultUserName,
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _personaController,
+                  minLines: 3,
+                  maxLines: 6,
+                  decoration: const InputDecoration(
+                    labelText: 'About you (optional)',
+                    hintText: 'Short description the AI should know…',
+                    alignLabelWithHint: true,
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: _savingPersona ? null : _savePersona,
+                  child: _savingPersona
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Save persona'),
+                ),
                 const SizedBox(height: 24),
                 Text(
-                  'Get a key at nano-gpt.com, then paste it here. '
-                  'Anima never writes your key into project files.',
+                  'Get a key at nano-gpt.com. Anima never writes secrets into project files.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],

@@ -3,6 +3,7 @@
 Private, personal AI character chat app built with Flutter.
 Talks to the [NanoGPT](https://nano-gpt.com) API for replies.
 
+**Inspiration:** SillyTavern-like roleplay/chat features on mobile — not a full SillyTavern clone.  
 **Platforms:** Android (primary), Windows, Linux  
 **Not published** to any app store — for personal use only.  
 **Repo:** https://github.com/jwarren9393/Anima (private)
@@ -67,10 +68,11 @@ That file is the living build status: what exists, what's next, and rules.
 lib/
   main.dart                      # App entry + theme
   models/
-    chat_message.dart            # One chat bubble
-    character.dart               # Name + personality prompt
+    chat_message.dart            # Bubble + swipes
+    chat_session.dart            # Saved chat thread
+    character.dart               # Name + prompt + greeting
   screens/
-    chat_screen.dart             # Chat with NanoGPT
+    chat_screen.dart             # Chat, streaming, controls
     characters_screen.dart       # Pick / manage characters
     character_edit_screen.dart   # Create or edit a character
     settings_screen.dart         # API key + model
@@ -78,7 +80,8 @@ lib/
     api_key_service.dart         # Secure storage for the NanoGPT key
     settings_service.dart        # Saved model + selected character
     character_service.dart       # Characters JSON on this device
-    nanogpt_service.dart         # Talks to NanoGPT over the internet
+    chat_service.dart            # Chats JSON on this device
+    nanogpt_service.dart         # Streaming NanoGPT client
 ```
 
 ---
