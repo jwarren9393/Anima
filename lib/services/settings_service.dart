@@ -1,15 +1,26 @@
+import 'dart:convert';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-/// Generation knobs sent with each NanoGPT chat request.
+import '../models/ui_style_settings.dart';
+
+export '../models/ui_style_settings.dart'
+    show AvatarShape, AvatarSizeTier, AvatarStyleSettings;
+
+/// Generation knobs sent with each NanoGPT chat request (core + penalties).
 class SamplingSettings {
   const SamplingSettings({
     this.temperature = defaultTemperature,
     this.topP = defaultTopP,
     this.maxTokens,
+    this.frequencyPenalty = defaultPenalty,
+    this.presencePenalty = defaultPenalty,
+    this.repetitionPenalty,
   });
 
   static const defaultTemperature = 0.8;
   static const defaultTopP = 0.95;
+  static const defaultPenalty = 0.0;
 
   /// 0–2. Higher = more random / creative.
   final double temperature;
@@ -20,16 +31,153 @@ class SamplingSettings {
   /// Upper bound on reply length. Null = let NanoGPT / the model decide.
   final int? maxTokens;
 
+  /// -2 to 2. Penalize tokens by how often they appeared.
+  final double frequencyPenalty;
+
+  /// -2 to 2. Penalize tokens that appeared at all.
+  final double presencePenalty;
+
+  /// >1 discourages repeats. Null = do not send.
+  final double? repetitionPenalty;
+
+  /// Fields to send on each chat request. Optional knobs are omitted when unset.
+  Map<String, dynamic> toApiBody() {
+    final body = <String, dynamic>{
+      'temperature': temperature,
+      'top_p': topP,
+    };
+    if (maxTokens != null && maxTokens! > 0) {
+      body['max_tokens'] = maxTokens;
+    }
+    if (frequencyPenalty != defaultPenalty) {
+      body['frequency_penalty'] = frequencyPenalty;
+    }
+    if (presencePenalty != defaultPenalty) {
+      body['presence_penalty'] = presencePenalty;
+    }
+    if (repetitionPenalty != null) {
+      body['repetition_penalty'] = repetitionPenalty;
+    }
+    return body;
+  }
+
   SamplingSettings copyWith({
     double? temperature,
     double? topP,
     int? maxTokens,
     bool clearMaxTokens = false,
+    double? frequencyPenalty,
+    double? presencePenalty,
+    double? repetitionPenalty,
+    bool clearRepetitionPenalty = false,
   }) {
     return SamplingSettings(
       temperature: temperature ?? this.temperature,
       topP: topP ?? this.topP,
       maxTokens: clearMaxTokens ? null : (maxTokens ?? this.maxTokens),
+      frequencyPenalty: frequencyPenalty ?? this.frequencyPenalty,
+      presencePenalty: presencePenalty ?? this.presencePenalty,
+      repetitionPenalty: clearRepetitionPenalty
+          ? null
+          : (repetitionPenalty ?? this.repetitionPenalty),
+    );
+  }
+}
+
+/// How much chat history to send, plus optional auto memory summaries.
+class ContextSettings {
+  const ContextSettings({
+    this.historyTokenBudget = defaultHistoryTokens,
+    this.autoSummarize = false,
+    this.summarizeEveryMessages = defaultSummarizeEvery,
+    this.summarizeKeepRecent = defaultKeepRecent,
+  });
+
+  static const defaultHistoryTokens = 4096;
+  static const defaultSummarizeEvery = 20;
+  static const defaultKeepRecent = 10;
+
+  /// Rough max tokens of recent chat history sent each turn (1 token ≈ 4 chars).
+  /// System prompt, lore, and memory summary are outside this budget.
+  final int historyTokenBudget;
+
+  /// When true, Anima asks NanoGPT to update a per-chat memory summary.
+  final bool autoSummarize;
+
+  /// Run auto-summarize when this many new messages exist past [ChatSession.memoryCoveredCount].
+  final int summarizeEveryMessages;
+
+  /// Leave this many newest messages out of the summary (keep them as raw chat).
+  final int summarizeKeepRecent;
+
+  ContextSettings copyWith({
+    int? historyTokenBudget,
+    bool? autoSummarize,
+    int? summarizeEveryMessages,
+    int? summarizeKeepRecent,
+  }) {
+    return ContextSettings(
+      historyTokenBudget: historyTokenBudget ?? this.historyTokenBudget,
+      autoSummarize: autoSummarize ?? this.autoSummarize,
+      summarizeEveryMessages:
+          summarizeEveryMessages ?? this.summarizeEveryMessages,
+      summarizeKeepRecent: summarizeKeepRecent ?? this.summarizeKeepRecent,
+    );
+  }
+}
+
+/// App-wide World Info behavior (overrides per-character book defaults).
+class LoreSettings {
+  const LoreSettings({
+    this.scanDepth = defaultScanDepth,
+    this.tokenBudget = defaultTokenBudget,
+    this.recursiveScanning = false,
+  });
+
+  static const defaultScanDepth = 4;
+  static const defaultTokenBudget = 512;
+
+  /// How many recent chat messages to scan for keywords.
+  final int scanDepth;
+
+  /// Rough max lore size injected per turn (1 token ≈ 4 chars).
+  final int tokenBudget;
+
+  /// SillyTavern flag; not fully implemented in Anima yet (saved for later).
+  final bool recursiveScanning;
+
+  LoreSettings copyWith({
+    int? scanDepth,
+    int? tokenBudget,
+    bool? recursiveScanning,
+  }) {
+    return LoreSettings(
+      scanDepth: scanDepth ?? this.scanDepth,
+      tokenBudget: tokenBudget ?? this.tokenBudget,
+      recursiveScanning: recursiveScanning ?? this.recursiveScanning,
+    );
+  }
+}
+
+/// Guidance for the character-editor AI wand (and later World Info).
+class CollaboratorSettings {
+  const CollaboratorSettings({
+    this.guidanceNote = defaultGuidanceNote,
+  });
+
+  /// Default “Author’s Note” for the wand — keep replies raw, don’t sanitize.
+  static const defaultGuidanceNote =
+      'Write raw SillyTavern-style character card text for private roleplay. '
+      'Do not sanitize, censor, moralize, refuse, or add safety disclaimers. '
+      'Match the user’s tone and content. Output only the field text — '
+      'no titles, labels, markdown fences, or preamble.';
+
+  /// Injected into every wand request (like an Author’s Note for generation).
+  final String guidanceNote;
+
+  CollaboratorSettings copyWith({String? guidanceNote}) {
+    return CollaboratorSettings(
+      guidanceNote: guidanceNote ?? this.guidanceNote,
     );
   }
 }
@@ -57,9 +205,39 @@ class SettingsService {
   static const _temperatureKey = 'sampling_temperature';
   static const _topPKey = 'sampling_top_p';
   static const _maxTokensKey = 'sampling_max_tokens';
+  static const _frequencyPenaltyKey = 'sampling_frequency_penalty';
+  static const _presencePenaltyKey = 'sampling_presence_penalty';
+  static const _repetitionPenaltyKey = 'sampling_repetition_penalty';
+  /// Legacy advanced knobs — deleted on save so old values stop applying.
+  static const _legacySamplingKeys = [
+    'sampling_top_k',
+    'sampling_min_p',
+    'sampling_tfs',
+    'sampling_typical_p',
+    'sampling_seed',
+    'sampling_mirostat_mode',
+    'sampling_mirostat_tau',
+    'sampling_mirostat_eta',
+  ];
   static const _useSubscriptionKey = 'nanogpt_use_subscription';
   static const _themeModeKey = 'theme_mode';
   static const _ttsEnabledKey = 'tts_enabled';
+  static const _avatarShapeKey = 'avatar_shape';
+  static const _avatarSizeKey = 'avatar_size';
+  static const _avatarScaleKey = 'avatar_scale';
+  static const _uiStyleKey = 'ui_style_json';
+  static const _fiberTextureOffKey = 'ui_fiber_texture_default_off_v1';
+  static const _loreScanDepthKey = 'lore_scan_depth';
+  static const _loreTokenBudgetKey = 'lore_token_budget';
+  static const _loreRecursiveKey = 'lore_recursive_scanning';
+  static const _personaAvatarKey = 'persona_avatar_file';
+  static const _collaboratorGuidanceKey = 'collaborator_guidance_note';
+  static const _contextHistoryTokensKey = 'context_history_token_budget';
+  static const _contextAutoSummarizeKey = 'context_auto_summarize';
+  static const _contextSummarizeEveryKey = 'context_summarize_every';
+  static const _contextKeepRecentKey = 'context_summarize_keep_recent';
+  /// Legacy message-count context (migrated once to a token budget).
+  static const _legacyContextMaxHistoryKey = 'context_max_history_messages';
 
   final FlutterSecureStorage _storage;
 
@@ -122,11 +300,29 @@ class SettingsService {
     await _storage.write(key: _userPersonaKey, value: trimmed);
   }
 
-  /// Temperature, top_p, and optional max_tokens.
+  /// Local file name under `avatars/` for your persona picture.
+  Future<String?> getPersonaAvatarFileName() async {
+    final value = await _storage.read(key: _personaAvatarKey);
+    if (value == null || value.trim().isEmpty) return null;
+    return value.trim();
+  }
+
+  Future<void> savePersonaAvatarFileName(String? fileName) async {
+    if (fileName == null || fileName.trim().isEmpty) {
+      await _storage.delete(key: _personaAvatarKey);
+      return;
+    }
+    await _storage.write(key: _personaAvatarKey, value: fileName.trim());
+  }
+
+  /// Core + penalty generation parameters for NanoGPT.
   Future<SamplingSettings> getSampling() async {
     final tempRaw = await _storage.read(key: _temperatureKey);
     final topPRaw = await _storage.read(key: _topPKey);
     final maxRaw = await _storage.read(key: _maxTokensKey);
+    final freqRaw = await _storage.read(key: _frequencyPenaltyKey);
+    final presRaw = await _storage.read(key: _presencePenaltyKey);
+    final repRaw = await _storage.read(key: _repetitionPenaltyKey);
 
     final temperature = double.tryParse(tempRaw ?? '') ??
         SamplingSettings.defaultTemperature;
@@ -140,6 +336,9 @@ class SettingsService {
       temperature: temperature.clamp(0.0, 2.0),
       topP: topP.clamp(0.0, 1.0),
       maxTokens: maxTokens,
+      frequencyPenalty: _parsePenalty(freqRaw),
+      presencePenalty: _parsePenalty(presRaw),
+      repetitionPenalty: _parseOptionalDouble(repRaw, -2.0, 2.0),
     );
   }
 
@@ -148,18 +347,127 @@ class SettingsService {
       key: _temperatureKey,
       value: settings.temperature.toString(),
     );
+    await _storage.write(key: _topPKey, value: settings.topP.toString());
+    await _writeOptionalInt(_maxTokensKey, settings.maxTokens);
     await _storage.write(
-      key: _topPKey,
-      value: settings.topP.toString(),
+      key: _frequencyPenaltyKey,
+      value: settings.frequencyPenalty.toString(),
     );
-    if (settings.maxTokens == null || settings.maxTokens! <= 0) {
-      await _storage.delete(key: _maxTokensKey);
-    } else {
-      await _storage.write(
-        key: _maxTokensKey,
-        value: '${settings.maxTokens}',
-      );
+    await _storage.write(
+      key: _presencePenaltyKey,
+      value: settings.presencePenalty.toString(),
+    );
+    await _writeOptionalDouble(_repetitionPenaltyKey, settings.repetitionPenalty);
+    for (final key in _legacySamplingKeys) {
+      await _storage.delete(key: key);
     }
+  }
+
+  /// Global chat history token budget + auto-summarize knobs.
+  Future<ContextSettings> getContextSettings() async {
+    final tokensRaw = await _storage.read(key: _contextHistoryTokensKey);
+    final everyRaw = await _storage.read(key: _contextSummarizeEveryKey);
+    final keepRaw = await _storage.read(key: _contextKeepRecentKey);
+    final autoRaw = await _storage.read(key: _contextAutoSummarizeKey);
+
+    var historyTokens = int.tryParse(tokensRaw ?? '');
+    if (historyTokens == null) {
+      // One-time migrate: old “N messages” ≈ N × 120 tokens (rough bubble size).
+      final legacyRaw = await _storage.read(key: _legacyContextMaxHistoryKey);
+      final legacyMsgs = int.tryParse(legacyRaw ?? '');
+      if (legacyMsgs != null && legacyMsgs > 0) {
+        historyTokens = (legacyMsgs * 120).clamp(512, 32000);
+        await _storage.write(
+          key: _contextHistoryTokensKey,
+          value: '$historyTokens',
+        );
+        await _storage.delete(key: _legacyContextMaxHistoryKey);
+      } else {
+        historyTokens = ContextSettings.defaultHistoryTokens;
+      }
+    }
+
+    final every = int.tryParse(everyRaw ?? '') ??
+        ContextSettings.defaultSummarizeEvery;
+    final keep =
+        int.tryParse(keepRaw ?? '') ?? ContextSettings.defaultKeepRecent;
+
+    return ContextSettings(
+      historyTokenBudget: historyTokens.clamp(512, 32000),
+      autoSummarize: autoRaw == 'true' || autoRaw == '1',
+      summarizeEveryMessages: every.clamp(5, 100),
+      summarizeKeepRecent: keep.clamp(4, 40),
+    );
+  }
+
+  Future<void> saveContextSettings(ContextSettings settings) async {
+    await _storage.write(
+      key: _contextHistoryTokensKey,
+      value: '${settings.historyTokenBudget.clamp(512, 32000)}',
+    );
+    await _storage.write(
+      key: _contextAutoSummarizeKey,
+      value: settings.autoSummarize ? 'true' : 'false',
+    );
+    await _storage.write(
+      key: _contextSummarizeEveryKey,
+      value: '${settings.summarizeEveryMessages.clamp(5, 100)}',
+    );
+    await _storage.write(
+      key: _contextKeepRecentKey,
+      value: '${settings.summarizeKeepRecent.clamp(4, 40)}',
+    );
+    await _storage.delete(key: _legacyContextMaxHistoryKey);
+  }
+
+  /// App-wide World Info scan depth and token budget.
+  Future<LoreSettings> getLoreSettings() async {
+    final depthRaw = await _storage.read(key: _loreScanDepthKey);
+    final budgetRaw = await _storage.read(key: _loreTokenBudgetKey);
+    final recursiveRaw = await _storage.read(key: _loreRecursiveKey);
+
+    final depth = int.tryParse(depthRaw ?? '') ?? LoreSettings.defaultScanDepth;
+    final budget =
+        int.tryParse(budgetRaw ?? '') ?? LoreSettings.defaultTokenBudget;
+
+    return LoreSettings(
+      scanDepth: depth.clamp(1, 50),
+      tokenBudget: budget.clamp(10, 4000),
+      recursiveScanning: recursiveRaw == 'true' || recursiveRaw == '1',
+    );
+  }
+
+  Future<void> saveLoreSettings(LoreSettings settings) async {
+    await _storage.write(
+      key: _loreScanDepthKey,
+      value: '${settings.scanDepth.clamp(1, 50)}',
+    );
+    await _storage.write(
+      key: _loreTokenBudgetKey,
+      value: '${settings.tokenBudget.clamp(10, 4000)}',
+    );
+    await _storage.write(
+      key: _loreRecursiveKey,
+      value: settings.recursiveScanning ? 'true' : 'false',
+    );
+  }
+
+  /// AI wand guidance note (character editor collaborator).
+  Future<CollaboratorSettings> getCollaboratorSettings() async {
+    final raw = await _storage.read(key: _collaboratorGuidanceKey);
+    if (raw == null) {
+      return const CollaboratorSettings();
+    }
+    return CollaboratorSettings(guidanceNote: raw);
+  }
+
+  Future<void> saveCollaboratorSettings(CollaboratorSettings settings) async {
+    final note = settings.guidanceNote;
+    if (note == CollaboratorSettings.defaultGuidanceNote) {
+      await _storage.delete(key: _collaboratorGuidanceKey);
+      return;
+    }
+    await _storage.write(key: _collaboratorGuidanceKey, value: note);
   }
 
   /// When true, use the subscription API base URL.
@@ -195,7 +503,9 @@ class SettingsService {
 
   Future<void> saveThemeModeName(String mode) async {
     final normalized = mode.trim().toLowerCase();
-    if (normalized != 'light' && normalized != 'dark' && normalized != 'system') {
+    if (normalized != 'light' &&
+        normalized != 'dark' &&
+        normalized != 'system') {
       await _storage.delete(key: _themeModeKey);
       return;
     }
@@ -212,5 +522,126 @@ class SettingsService {
       key: _ttsEnabledKey,
       value: enabled ? 'true' : 'false',
     );
+  }
+
+  /// Full appearance pack (presets, colors, type, motion, avatars…).
+  Future<UiStyleSettings> getUiStyle() async {
+    UiStyleSettings style;
+    final raw = await _storage.read(key: _uiStyleKey);
+    if (raw != null && raw.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) {
+          style = UiStyleSettings.fromJson(Map<String, dynamic>.from(decoded));
+        } else {
+          final avatar = await getAvatarStyle();
+          style = UiStyleSettings(avatarStyle: avatar);
+        }
+      } catch (_) {
+        final avatar = await getAvatarStyle();
+        style = UiStyleSettings(avatarStyle: avatar);
+      }
+    } else {
+      final avatar = await getAvatarStyle();
+      style = UiStyleSettings(avatarStyle: avatar);
+    }
+
+    // One-time: turn off the old default fiber-line texture (looked like faint
+    // white scratches). Users can still re-enable it in Appearance.
+    final migrated = await _storage.read(key: _fiberTextureOffKey);
+    if (migrated != 'true' && style.showTexture) {
+      style = style.copyWith(showTexture: false);
+      await saveUiStyle(style);
+      await _storage.write(key: _fiberTextureOffKey, value: 'true');
+    } else if (migrated != 'true') {
+      await _storage.write(key: _fiberTextureOffKey, value: 'true');
+    }
+
+    return style;
+  }
+
+  Future<void> saveUiStyle(UiStyleSettings style) async {
+    await _storage.write(
+      key: _uiStyleKey,
+      value: jsonEncode(style.toJson()),
+    );
+    // Keep legacy avatar keys in sync for older code paths.
+    await saveAvatarStyle(style.avatarStyle);
+  }
+
+  /// Chat bubble avatar shape, size tier, and scale.
+  Future<AvatarStyleSettings> getAvatarStyle() async {
+    final style = await _storage.read(key: _uiStyleKey);
+    if (style != null && style.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(style);
+        if (decoded is Map) {
+          return UiStyleSettings.fromJson(Map<String, dynamic>.from(decoded))
+              .avatarStyle;
+        }
+      } catch (_) {}
+    }
+    final shapeRaw = await _storage.read(key: _avatarShapeKey);
+    final sizeRaw = await _storage.read(key: _avatarSizeKey);
+    final scaleRaw = await _storage.read(key: _avatarScaleKey);
+    final scale = double.tryParse(scaleRaw ?? '') ??
+        AvatarStyleSettings.defaultScale;
+    return AvatarStyleSettings(
+      shape: AvatarShape.fromStorage(shapeRaw),
+      sizeTier: AvatarSizeTier.fromStorage(sizeRaw),
+      scale: scale.clamp(
+        AvatarStyleSettings.minScale,
+        AvatarStyleSettings.maxScale,
+      ),
+    );
+  }
+
+  Future<void> saveAvatarStyle(AvatarStyleSettings settings) async {
+    await _storage.write(
+      key: _avatarShapeKey,
+      value: settings.shape.storageValue,
+    );
+    await _storage.write(
+      key: _avatarSizeKey,
+      value: settings.sizeTier.storageValue,
+    );
+    await _storage.write(
+      key: _avatarScaleKey,
+      value: settings.scale
+          .clamp(
+            AvatarStyleSettings.minScale,
+            AvatarStyleSettings.maxScale,
+          )
+          .toString(),
+    );
+  }
+
+  double _parsePenalty(String? raw) {
+    final parsed = double.tryParse(raw ?? '');
+    if (parsed == null) return SamplingSettings.defaultPenalty;
+    return parsed.clamp(-2.0, 2.0);
+  }
+
+  double? _parseOptionalDouble(String? raw, double min, double max) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    final parsed = double.tryParse(raw.trim());
+    if (parsed == null) return null;
+    return parsed.clamp(min, max);
+  }
+
+  Future<void> _writeOptionalInt(String key, int? value) async {
+    if (value == null || value <= 0) {
+      await _storage.delete(key: key);
+      return;
+    }
+    await _storage.write(key: key, value: '$value');
+  }
+
+  Future<void> _writeOptionalDouble(String key, double? value) async {
+    if (value == null) {
+      await _storage.delete(key: key);
+      return;
+    }
+    await _storage.write(key: key, value: value.toString());
   }
 }

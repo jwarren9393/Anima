@@ -5,33 +5,45 @@ import 'package:anima/services/api_key_service.dart';
 import 'package:anima/services/character_service.dart';
 import 'package:anima/services/chat_service.dart';
 import 'package:anima/services/nanogpt_service.dart';
+import 'package:anima/services/persona_service.dart';
 import 'package:anima/services/settings_service.dart';
+import 'package:anima/services/world_info_service.dart';
+import 'package:anima/services/world_workshop_service.dart';
+import 'package:anima/theme/anima_theme.dart';
 
 void main() {
-  testWidgets('Anima chat screen loads with character tools', (
+  TestWidgetsFlutterBinding.ensureInitialized();
+  AnimaTheme.useSystemFonts = true;
+
+  testWidgets('Anima home screen loads with history and settings', (
     WidgetTester tester,
   ) async {
     final apiKeyService = ApiKeyService();
     final settingsService = SettingsService();
     final characterService = CharacterService();
+    final personaService = PersonaService(settingsService: settingsService);
     final chatService = ChatService();
     final nanoGptService = NanoGptService(apiKeyService: apiKeyService);
+    final worldInfoService = WorldInfoService();
+    final worldWorkshopService = WorldWorkshopService();
 
     await tester.pumpWidget(
       AnimaApp(
         apiKeyService: apiKeyService,
         settingsService: settingsService,
         characterService: characterService,
+        personaService: personaService,
         chatService: chatService,
         nanoGptService: nanoGptService,
+        worldInfoService: worldInfoService,
+        worldWorkshopService: worldWorkshopService,
       ),
     );
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.byTooltip('Characters'), findsOneWidget);
-    expect(find.byTooltip('More'), findsOneWidget);
-    expect(find.byTooltip('New chat'), findsOneWidget);
-    expect(find.byTooltip('Saved chats'), findsOneWidget);
+    expect(find.text('Anima'), findsOneWidget);
+    expect(find.byTooltip('Settings'), findsOneWidget);
+    expect(find.text('New chat'), findsOneWidget);
   });
 }

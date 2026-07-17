@@ -1,8 +1,19 @@
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../models/character.dart';
 import '../models/lorebook.dart';
+import '../services/avatar_service.dart';
+import '../services/character_collaborator.dart';
 import '../services/character_service.dart';
+import '../services/nanogpt_service.dart';
+import '../services/settings_service.dart';
+import '../widgets/anima_avatar.dart';
+import '../widgets/preset_picker.dart';
+import '../models/anima_presets.dart';
 import 'lorebook_edit_screen.dart';
 
 /// Form to create/edit a SillyTavern-style character card.
@@ -10,10 +21,14 @@ class CharacterEditScreen extends StatefulWidget {
   const CharacterEditScreen({
     super.key,
     required this.characterService,
+    required this.settingsService,
+    required this.nanoGptService,
     this.existing,
   });
 
   final CharacterService characterService;
+  final SettingsService settingsService;
+  final NanoGptService nanoGptService;
   final Character? existing;
 
   @override
@@ -21,6 +36,9 @@ class CharacterEditScreen extends StatefulWidget {
 }
 
 class _CharacterEditScreenState extends State<CharacterEditScreen> {
+  static const _collaborator = CharacterCollaborator();
+
+  final _avatarService = AvatarService();
   final _name = TextEditingController();
   final _description = TextEditingController();
   final _personality = TextEditingController();
@@ -35,8 +53,11 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
   final _version = TextEditingController();
   final _tags = TextEditingController();
   bool _saving = false;
+  CharacterCollaboratorField? _wandBusy;
   Lorebook? _lorebook;
   Map<String, dynamic> _extensions = const {};
+  String? _avatarFileName;
+  late final String _characterId;
 
   bool get _isEditing => widget.existing != null;
 
@@ -44,6 +65,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
   void initState() {
     super.initState();
     final existing = widget.existing;
+    _characterId = existing?.id ?? widget.characterService.newId();
     if (existing != null) {
       _name.text = existing.name;
       _description.text = existing.description;
@@ -60,6 +82,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
       _tags.text = existing.tags.join(', ');
       _lorebook = existing.lorebook;
       _extensions = Map<String, dynamic>.from(existing.extensions);
+      _avatarFileName = existing.avatarFileName;
     }
   }
 
@@ -74,6 +97,146 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
       .map((l) => l.trim())
       .where((l) => l.isNotEmpty)
       .toList();
+
+  CharacterDraftContext _draftContext() {
+    return CharacterDraftContext(
+      name: _name.text,
+      description: _description.text,
+      personality: _personality.text,
+      scenario: _scenario.text,
+      firstMes: _firstMes.text,
+      alternateGreetings: _alternateGreetings.text,
+      mesExample: _mesExample.text,
+      systemPrompt: _systemPrompt.text,
+      postHistoryInstructions: _postHistory.text,
+      creatorNotes: _creatorNotes.text,
+      creator: _creator.text,
+      tags: _tags.text,
+    );
+  }
+
+  TextEditingController _controllerFor(CharacterCollaboratorField field) {
+    switch (field) {
+      case CharacterCollaboratorField.description:
+        return _description;
+      case CharacterCollaboratorField.personality:
+        return _personality;
+      case CharacterCollaboratorField.scenario:
+        return _scenario;
+      case CharacterCollaboratorField.firstMes:
+        return _firstMes;
+      case CharacterCollaboratorField.alternateGreetings:
+        return _alternateGreetings;
+      case CharacterCollaboratorField.mesExample:
+        return _mesExample;
+      case CharacterCollaboratorField.systemPrompt:
+        return _systemPrompt;
+      case CharacterCollaboratorField.postHistoryInstructions:
+        return _postHistory;
+    }
+  }
+
+  Future<void> _runWand(CharacterCollaboratorField field) async {
+    if (_wandBusy != null) return;
+
+    setState(() => _wandBusy = field);
+    try {
+      final collaborator =
+          await widget.settingsService.getCollaboratorSettings();
+      final messages = _collaborator.buildMessages(
+        field: field,
+        draft: _draftContext(),
+        guidanceNote: collaborator.guidanceNote,
+      );
+      final model = await widget.settingsService.getModel();
+      final sampling = await widget.settingsService.getSampling();
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+      final generated = await widget.nanoGptService.complete(
+        model: model,
+        messages: messages,
+        baseUrl: baseUrl,
+        sampling: sampling,
+      );
+      if (!mounted) return;
+      final controller = _controllerFor(field);
+      controller.text =
+          _collaborator.appendGenerated(controller.text, generated);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Appended AI text to ${_collaborator.fieldLabel(field)}.',
+          ),
+        ),
+      );
+    } on NanoGptCancelledException {
+      // User shouldn't hit Stop here; ignore.
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Wand failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _wandBusy = null);
+    }
+  }
+
+  Future<void> _pickAvatar() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+
+    final file = result.files.first;
+    Uint8List? bytes = file.bytes;
+    if (bytes == null && file.path != null) {
+      bytes = await File(file.path!).readAsBytes();
+    }
+    if (bytes == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not read that image.')),
+      );
+      return;
+    }
+
+    final id = _characterId;
+    var ext = '.png';
+    final name = file.name.toLowerCase();
+    if (name.endsWith('.jpg') || name.endsWith('.jpeg')) {
+      ext = '.jpg';
+    } else if (name.endsWith('.webp')) {
+      ext = '.webp';
+    } else if (name.endsWith('.gif')) {
+      ext = '.gif';
+    }
+
+    final previous = _avatarFileName;
+    final saved = await _avatarService.saveBytes(
+      stem: id,
+      bytes: bytes,
+      extension: ext,
+    );
+    if (previous != null && previous != saved) {
+      await _avatarService.delete(previous);
+    }
+    if (!mounted) return;
+    setState(() => _avatarFileName = saved);
+  }
+
+  Future<void> _clearAvatar() async {
+    final previous = _avatarFileName;
+    if (previous != null) {
+      await _avatarService.delete(previous);
+    }
+    if (!mounted) return;
+    setState(() => _avatarFileName = null);
+  }
 
   Future<void> _openLorebook() async {
     final initial = _lorebook ??
@@ -110,10 +273,9 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
     }
 
     setState(() => _saving = true);
-    final existing = widget.existing;
     final book = _lorebook;
     final character = Character(
-      id: existing?.id ?? widget.characterService.newId(),
+      id: _characterId,
       name: name,
       description: _description.text.trim(),
       personality: _personality.text.trim(),
@@ -129,6 +291,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
       tags: _csv(_tags.text),
       characterBook: book?.toJson(),
       extensions: _extensions,
+      avatarFileName: _avatarFileName,
     );
     await widget.characterService.upsert(character);
     if (!mounted) return;
@@ -160,23 +323,55 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
     String? help,
     int minLines = 1,
     int maxLines = 1,
+    CharacterCollaboratorField? wandField,
+    String? presetLabel,
+    List<TextPreset>? presetList,
   }) {
+    final wandBusy = wandField != null && _wandBusy == wandField;
+    final anyWandBusy = _wandBusy != null;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
-        crossAxisAlignment: .start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (presetLabel != null && presetList != null)
+            PresetButton(
+              label: presetLabel,
+              onPressed: () async {
+                final preset = await pickTextPreset(
+                  context: context,
+                  title: presetLabel,
+                  presets: presetList,
+                );
+                if (preset == null) return;
+                setState(() => controller.text = preset.text);
+              },
+            ),
           TextField(
             controller: controller,
             minLines: minLines,
             maxLines: maxLines,
-            textCapitalization:
-                minLines == 1 ? .sentences : .sentences,
+            textCapitalization: TextCapitalization.sentences,
             decoration: InputDecoration(
               labelText: label,
               hintText: hint,
               alignLabelWithHint: minLines > 1,
               border: const OutlineInputBorder(),
+              suffixIcon: wandField == null
+                  ? null
+                  : IconButton(
+                      tooltip: 'AI wand — expand this field',
+                      onPressed:
+                          anyWandBusy ? null : () => _runWand(wandField),
+                      icon: wandBusy
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.auto_awesome),
+                    ),
             ),
           ),
           if (help != null) ...[
@@ -203,10 +398,52 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         children: [
           Text(
             'Fields match SillyTavern Character Cards (V2/V3). '
-            'You can use {{char}} and {{user}} in the text.',
+            'You can use {{char}} and {{user}} in the text. '
+            'Tap the wand on a creative field to append AI text '
+            '(uses your NanoGPT model + Settings → AI collaborator).',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
+          Center(
+            child: Column(
+              children: [
+                AnimaAvatar(
+                  fileName: _avatarFileName,
+                  label: _name.text,
+                  radius: 48,
+                  avatarService: _avatarService,
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _pickAvatar,
+                      icon: const Icon(Icons.photo),
+                      label: Text(
+                        _avatarFileName == null
+                            ? 'Add avatar'
+                            : 'Change avatar',
+                      ),
+                    ),
+                    if (_avatarFileName != null)
+                      TextButton(
+                        onPressed: _clearAvatar,
+                        child: const Text('Remove'),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'PNG card imports use the card image automatically.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
           _field(_name, label: 'Name', hint: 'e.g. Luna'),
           _field(
             _description,
@@ -215,6 +452,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
             help: 'Usually included in every prompt (ST Description).',
             minLines: 4,
             maxLines: 10,
+            wandField: CharacterCollaboratorField.description,
           ),
           _field(
             _personality,
@@ -222,6 +460,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
             hint: 'Short personality summary…',
             minLines: 2,
             maxLines: 6,
+            wandField: CharacterCollaboratorField.personality,
           ),
           _field(
             _scenario,
@@ -229,6 +468,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
             hint: 'Current situation / context…',
             minLines: 2,
             maxLines: 6,
+            wandField: CharacterCollaboratorField.scenario,
           ),
           _field(
             _firstMes,
@@ -237,6 +477,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
             help: 'Shown when a new chat starts.',
             minLines: 3,
             maxLines: 8,
+            wandField: CharacterCollaboratorField.firstMes,
           ),
           _field(
             _alternateGreetings,
@@ -245,6 +486,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
             help: 'Extra first-message swipes (ST alternate_greetings).',
             minLines: 3,
             maxLines: 8,
+            wandField: CharacterCollaboratorField.alternateGreetings,
           ),
           _field(
             _mesExample,
@@ -253,6 +495,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
             help: 'ST mes_example — teaches tone and style.',
             minLines: 4,
             maxLines: 12,
+            wandField: CharacterCollaboratorField.mesExample,
           ),
           _field(
             _systemPrompt,
@@ -261,6 +504,9 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
             help: 'ST system_prompt. Supports {{original}}.',
             minLines: 2,
             maxLines: 6,
+            wandField: CharacterCollaboratorField.systemPrompt,
+            presetLabel: 'System prompt presets',
+            presetList: AnimaPresets.systemPrompts,
           ),
           _field(
             _postHistory,
@@ -269,6 +515,10 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
             help: 'ST post_history_instructions.',
             minLines: 2,
             maxLines: 6,
+            wandField:
+                CharacterCollaboratorField.postHistoryInstructions,
+            presetLabel: 'Post-history presets',
+            presetList: AnimaPresets.postHistory,
           ),
           OutlinedButton.icon(
             onPressed: _openLorebook,
@@ -303,7 +553,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
             hint: 'comma, separated, tags',
           ),
           FilledButton(
-            onPressed: _saving ? null : _save,
+            onPressed: _saving || _wandBusy != null ? null : _save,
             child: _saving
                 ? const SizedBox(
                     width: 20,

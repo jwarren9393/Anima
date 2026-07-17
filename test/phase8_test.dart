@@ -81,7 +81,7 @@ void main() {
       expect(group.effectiveParticipantIds, ['a', 'b']);
     });
 
-    test('round-trips authorsNote and participants in JSON', () {
+    test('round-trips authorsNote, participants, personaId, and autoReply', () {
       final session = ChatSession(
         id: 'chat_x',
         characterId: '__groups__',
@@ -90,12 +90,32 @@ void main() {
         authorsNote: 'Be playful.',
         participantIds: const ['a', 'b', 'c'],
         nextSpeakerIndex: 2,
+        personaId: 'persona_sam',
+        autoReply: false,
+        lorebookIds: const ['lore_1', 'lore_2'],
+        memorySummary: 'They met at the harbor.',
+        memoryCoveredCount: 12,
       );
       final restored = ChatSession.fromJson(session.toJson());
       expect(restored.authorsNote, 'Be playful.');
       expect(restored.participantIds, ['a', 'b', 'c']);
       expect(restored.nextSpeakerIndex, 2);
+      expect(restored.personaId, 'persona_sam');
+      expect(restored.autoReply, isFalse);
+      expect(restored.lorebookIds, ['lore_1', 'lore_2']);
+      expect(restored.memorySummary, 'They met at the harbor.');
+      expect(restored.memoryCoveredCount, 12);
       expect(restored.isGroup, isTrue);
+
+      final legacy = ChatSession.fromJson({
+        'id': 'old',
+        'characterId': 'c1',
+        'title': 'Old',
+        'updatedAt': DateTime.utc(2026, 1, 1).toIso8601String(),
+        'messages': const [],
+      });
+      expect(legacy.autoReply, isTrue);
+      expect(legacy.lorebookIds, isNull);
     });
   });
 }

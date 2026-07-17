@@ -219,4 +219,72 @@ void main() {
     expect(character.enabledLoreEntryCount, 1);
     expect(lore.bookFor(character)?.entries.first.content, contains('sticky'));
   });
+
+  test('merges global lorebooks with character book', () {
+    final character = characterWithBook(
+      Lorebook(
+        entries: [
+          LorebookEntry(
+            keys: const ['sword'],
+            content: 'Character blade lore.',
+            insertionOrder: 200,
+          ),
+        ],
+      ),
+    );
+    final global = Lorebook(
+      name: 'World',
+      entries: [
+        LorebookEntry(
+          keys: const ['sword'],
+          content: 'Global forge lore.',
+          insertionOrder: 50,
+        ),
+      ],
+    );
+    final injection = lore.buildInjection(
+      character: character,
+      messages: msgs(['I draw my sword.']),
+      extraBooks: [global],
+    );
+    expect(injection.matchedCount, 2);
+    expect(injection.beforeChar, contains('Global forge'));
+    expect(injection.beforeChar, contains('Character blade'));
+    expect(
+      injection.beforeChar.indexOf('Global forge'),
+      lessThan(injection.beforeChar.indexOf('Character blade')),
+    );
+  });
+
+  test('parses SillyTavern World Info map-style entries', () {
+    final book = Lorebook.parseImport({
+      'name': 'ST World',
+      'entries': {
+        '0': {
+          'uid': 0,
+          'key': ['harbor'],
+          'keysecondary': [],
+          'content': 'Harbor is foggy.',
+          'disable': false,
+          'order': 10,
+          'position': 0,
+          'constant': false,
+        },
+        '1': {
+          'uid': 1,
+          'key': ['rain'],
+          'content': 'It rains forever.',
+          'disable': true,
+          'order': 20,
+          'position': 1,
+        },
+      },
+    });
+    expect(book.name, 'ST World');
+    expect(book.entries, hasLength(2));
+    expect(book.entries.first.keys, ['harbor']);
+    expect(book.entries.first.enabled, isTrue);
+    expect(book.entries[1].enabled, isFalse);
+    expect(book.entries[1].position, LorebookPosition.afterChar);
+  });
 }

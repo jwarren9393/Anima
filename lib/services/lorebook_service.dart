@@ -28,6 +28,8 @@ class LorebookInjection {
 /// 2. Find lore entries whose keywords appear (or that are marked “always on”).
 /// 3. Keep only enough entries to stay under a small token budget.
 /// 4. Hand the text back so [PromptBuilder] can splice it into the system prompt.
+///
+/// Global lorebooks and the speaking character's embedded book are merged.
 class LorebookService {
   const LorebookService();
 
@@ -46,27 +48,38 @@ class LorebookService {
 
   /// Scan [messages] and pick lore to inject for this turn.
   ///
+  /// Pass [extraBooks] for enabled global / chat-selected World Info books.
   /// When regenerating, pass messages that exclude an empty assistant
   /// placeholder so keywords are only taken from real chat text.
   LorebookInjection buildInjection({
     required Character character,
     required List<ChatMessage> messages,
+    List<Lorebook> extraBooks = const [],
     int? scanDepthOverride,
     int? tokenBudgetOverride,
   }) {
-    final book = bookFor(character);
-    if (book == null) return const LorebookInjection();
+    final books = <Lorebook>[
+      ...extraBooks,
+      ?bookFor(character),
+    ];
+    if (books.isEmpty) return const LorebookInjection();
 
-    final depth = (scanDepthOverride ?? book.scanDepth).clamp(1, 50);
-    final budget = (tokenBudgetOverride ?? book.tokenBudget).clamp(10, 4000);
-    final haystack = _scanText(messages, depth);
+    final firstBook = books.first;
+    final resolvedDepth =
+        (scanDepthOverride ?? firstBook.scanDepth).clamp(1, 50);
+    final resolvedBudget =
+        (tokenBudgetOverride ?? firstBook.tokenBudget).clamp(10, 4000);
+
+    final haystack = _scanText(messages, resolvedDepth);
 
     final triggered = <LorebookEntry>[];
-    for (final entry in book.entries) {
-      if (!entry.enabled) continue;
-      if (entry.content.trim().isEmpty) continue;
-      if (_entryMatches(entry, haystack)) {
-        triggered.add(entry);
+    for (final book in books) {
+      for (final entry in book.entries) {
+        if (!entry.enabled) continue;
+        if (entry.content.trim().isEmpty) continue;
+        if (_entryMatches(entry, haystack)) {
+          triggered.add(entry);
+        }
       }
     }
 
@@ -79,7 +92,7 @@ class LorebookService {
       return (a.id ?? 0).compareTo(b.id ?? 0);
     });
 
-    final kept = _applyBudget(triggered, budget);
+    final kept = _applyBudget(triggered, resolvedBudget);
     final before = <String>[];
     final after = <String>[];
     for (final entry in kept) {

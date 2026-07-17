@@ -46,6 +46,19 @@ class ChatService {
     await file.writeAsString(const JsonEncoder.withIndent('  ').convert(root));
   }
 
+  /// All chats on this device, newest first (solo + group).
+  Future<List<ChatSession>> listAllChats() async {
+    final root = await _readRoot();
+    final all = <ChatSession>[];
+    for (final key in root.keys) {
+      final id = key.toString();
+      if (id.isEmpty) continue;
+      all.addAll(await listChats(id));
+    }
+    all.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return all;
+  }
+
   /// All chats for one character, newest first.
   Future<List<ChatSession>> listChats(String characterId) async {
     final root = await _readRoot();
@@ -89,6 +102,7 @@ class ChatService {
   Future<ChatSession> loadOrCreateActiveChat(
     Character character, {
     String userName = 'User',
+    String? personaId,
   }) async {
     final chats = await listChats(character.id);
     final activeId = await getActiveChatId(character.id);
@@ -103,13 +117,14 @@ class ChatService {
       return chats.first;
     }
 
-    return startNewChat(character, userName: userName);
+    return startNewChat(character, userName: userName, personaId: personaId);
   }
 
   /// Starts a fresh chat (keeps older chats). Adds greeting swipe(s) if set.
   Future<ChatSession> startNewChat(
     Character character, {
     String userName = 'User',
+    String? personaId,
   }) async {
     final builder = const PromptBuilder();
     final greetings = character.allGreetings
@@ -142,6 +157,7 @@ class ChatService {
       title: _defaultTitle(character),
       updatedAt: DateTime.now(),
       messages: messages,
+      personaId: personaId,
     );
 
     await saveChat(session);
@@ -220,6 +236,10 @@ class ChatService {
   Future<ChatSession> startGroupChat(
     List<Character> members, {
     String userName = 'User',
+    String? personaId,
+    String authorsNote = '',
+    bool autoReply = true,
+    List<String>? lorebookIds,
   }) async {
     if (members.length < 2) {
       throw ArgumentError('Group chats need at least two characters.');
@@ -265,8 +285,12 @@ class ChatService {
       title: 'Group · ${names.join(', ')} · $mm/$dd $hh:$min',
       updatedAt: DateTime.now(),
       messages: messages,
+      authorsNote: authorsNote.trim(),
       participantIds: members.map((m) => m.id).toList(),
       nextSpeakerIndex: greetings.isEmpty ? 0 : 1 % members.length,
+      personaId: personaId,
+      autoReply: autoReply,
+      lorebookIds: lorebookIds,
     );
 
     await saveChat(session);

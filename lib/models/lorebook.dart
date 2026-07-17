@@ -62,10 +62,19 @@ class Lorebook {
       };
 
   factory Lorebook.fromJson(Map<String, dynamic> json) {
-    final rawEntries = json['entries'];
     final entries = <LorebookEntry>[];
+    final rawEntries = json['entries'];
+    // Character Card V2 uses a list; SillyTavern World Info exports a map by uid.
     if (rawEntries is List) {
       for (final item in rawEntries) {
+        if (item is Map) {
+          entries.add(
+            LorebookEntry.fromJson(Map<String, dynamic>.from(item)),
+          );
+        }
+      }
+    } else if (rawEntries is Map) {
+      for (final item in rawEntries.values) {
         if (item is Map) {
           entries.add(
             LorebookEntry.fromJson(Map<String, dynamic>.from(item)),
@@ -77,12 +86,44 @@ class Lorebook {
     return Lorebook(
       name: _str(json['name']),
       description: _str(json['description']),
-      scanDepth: _int(json['scan_depth'], fallback: 4).clamp(1, 50),
-      tokenBudget: _int(json['token_budget'], fallback: 512).clamp(10, 4000),
-      recursiveScanning: json['recursive_scanning'] == true,
+      scanDepth: _int(
+        json['scan_depth'] ?? json['scanDepth'],
+        fallback: 4,
+      ).clamp(1, 50),
+      tokenBudget: _int(
+        json['token_budget'] ?? json['tokenBudget'],
+        fallback: 512,
+      ).clamp(10, 4000),
+      recursiveScanning: json['recursive_scanning'] == true ||
+          json['recursiveScanning'] == true,
       entries: entries,
       extensions: _map(json['extensions']),
     );
+  }
+
+  /// Parse a standalone SillyTavern / Anima lorebook JSON file.
+  ///
+  /// Accepts: character_book object, full card with character_book, or a bare
+  /// World Info export (`entries` list or map).
+  factory Lorebook.parseImport(Map<String, dynamic> root, {String? fallbackName}) {
+    Map<String, dynamic> bookMap = root;
+
+    final embedded = root['character_book'] ?? root['characterBook'];
+    if (embedded is Map) {
+      bookMap = Map<String, dynamic>.from(embedded);
+    } else if (root['data'] is Map) {
+      final data = Map<String, dynamic>.from(root['data'] as Map);
+      final nested = data['character_book'] ?? data['characterBook'];
+      if (nested is Map) {
+        bookMap = Map<String, dynamic>.from(nested);
+      }
+    }
+
+    final book = Lorebook.fromJson(bookMap);
+    if (book.name.trim().isNotEmpty) return book;
+    final name = (fallbackName ?? '').trim();
+    if (name.isEmpty) return book;
+    return book.copyWith(name: name);
   }
 
   /// Empty book ready for the editor.
@@ -218,16 +259,31 @@ class LorebookEntry {
       };
 
   factory LorebookEntry.fromJson(Map<String, dynamic> json) {
+    // ST World Info uses `disable`; Character Card uses `enabled`.
+    final disabled = json['disable'] == true || json['disabled'] == true;
+    final enabledFlag = json['enabled'];
+    final enabled = disabled
+        ? false
+        : (enabledFlag == null ? true : enabledFlag != false);
+
     return LorebookEntry(
       id: json['id'] is int
           ? json['id'] as int
-          : int.tryParse('${json['id'] ?? ''}'),
-      keys: _stringList(json['keys']),
-      secondaryKeys: _stringList(json['secondary_keys']),
+          : json['uid'] is int
+              ? json['uid'] as int
+              : int.tryParse('${json['id'] ?? json['uid'] ?? ''}'),
+      keys: _stringList(json['keys'] ?? json['key']),
+      secondaryKeys: _stringList(
+        json['secondary_keys'] ?? json['keysecondary'] ?? json['keySecondary'],
+      ),
       content: _str(json['content']),
-      enabled: json['enabled'] != false,
-      insertionOrder: _int(json['insertion_order'], fallback: 100),
-      caseSensitive: json['case_sensitive'] == true,
+      enabled: enabled,
+      insertionOrder: _int(
+        json['insertion_order'] ?? json['order'],
+        fallback: 100,
+      ),
+      caseSensitive:
+          json['case_sensitive'] == true || json['caseSensitive'] == true,
       selective: json['selective'] == true,
       constant: json['constant'] == true,
       position: LorebookPosition.fromJson(json['position']),
@@ -266,8 +322,14 @@ enum LorebookPosition {
       this == LorebookPosition.afterChar ? 'after_char' : 'before_char';
 
   static LorebookPosition fromJson(dynamic value) {
+    // SillyTavern numeric positions: 0 ≈ before defs, 1 ≈ after defs.
+    if (value is num) {
+      return value.round() == 1
+          ? LorebookPosition.afterChar
+          : LorebookPosition.beforeChar;
+    }
     final text = '$value'.toLowerCase().trim();
-    if (text == 'after_char' || text == 'after') {
+    if (text == 'after_char' || text == 'after' || text == '1') {
       return LorebookPosition.afterChar;
     }
     return LorebookPosition.beforeChar;

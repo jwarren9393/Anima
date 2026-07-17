@@ -4,19 +4,25 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 
 import '../models/character.dart';
+import 'avatar_service.dart';
 
 /// Saves and loads your characters as a JSON file on this device.
 ///
 /// File location (typical Android): app documents folder / `anima_characters.json`
 /// Nothing here is uploaded to GitHub.
 class CharacterService {
-  CharacterService({Future<Directory> Function()? documentsDirectory})
-      : _documentsDirectory =
-            documentsDirectory ?? getApplicationDocumentsDirectory;
+  CharacterService({
+    Future<Directory> Function()? documentsDirectory,
+    AvatarService? avatarService,
+  })  : _documentsDirectory =
+            documentsDirectory ?? getApplicationDocumentsDirectory,
+        _avatarService = avatarService ??
+            AvatarService(documentsDirectory: documentsDirectory);
 
   static const _fileName = 'anima_characters.json';
 
   final Future<Directory> Function() _documentsDirectory;
+  final AvatarService _avatarService;
 
   Future<File> _file() async {
     final dir = await _documentsDirectory();
@@ -99,7 +105,17 @@ class CharacterService {
   /// Deletes a character. Keeps at least one starter if the list would be empty.
   Future<List<Character>> delete(String id) async {
     final all = await loadCharacters();
+    Character? removed;
+    for (final c in all) {
+      if (c.id == id) {
+        removed = c;
+        break;
+      }
+    }
     all.removeWhere((c) => c.id == id);
+    if (removed?.avatarFileName != null) {
+      await _avatarService.delete(removed!.avatarFileName);
+    }
     if (all.isEmpty) {
       all.add(Character.starter());
     }

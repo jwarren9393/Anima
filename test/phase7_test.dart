@@ -110,6 +110,24 @@ void main() {
       // Prefer ccv3 → should be V3 spec when both present (extract prefers ccv3).
       expect(map['spec'], 'chara_card_v3');
     });
+    test('PNG export can inject card into an existing avatar PNG', () {
+      final codec = CharacterCardCodec();
+      final character = Character(
+        id: 'char_avatar',
+        name: 'Pix',
+        description: 'has face',
+        firstMes: 'Hi',
+      );
+      final teal = codec.toCardPng(character);
+      final withAvatar = codec.toCardPng(
+        character.copyWith(name: 'Pix2'),
+        avatarPngBytes: teal,
+      );
+      expect(codec.looksLikePng(withAvatar), isTrue);
+      final json = codec.extractJsonFromPng(withAvatar);
+      expect(json, isNotNull);
+      expect(json, contains('Pix2'));
+    });
   });
 
   group('sampling defaults', () {

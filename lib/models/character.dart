@@ -24,6 +24,7 @@ class Character {
     this.tags = const [],
     this.characterBook,
     this.extensions = const {},
+    this.avatarFileName,
   });
 
   /// Anima-only stable id (not part of the ST card spec).
@@ -59,6 +60,9 @@ class Character {
 
   /// Spec `extensions` object — unknown keys must be preserved.
   final Map<String, dynamic> extensions;
+
+  /// Local avatar file name under app `avatars/` (Anima-only; not an ST field).
+  final String? avatarFileName;
 
   /// Typed view of [characterBook], or null if missing/empty.
   Lorebook? get lorebook {
@@ -105,7 +109,9 @@ class Character {
     List<String>? tags,
     Map<String, dynamic>? characterBook,
     Map<String, dynamic>? extensions,
+    String? avatarFileName,
     bool clearCharacterBook = false,
+    bool clearAvatar = false,
   }) {
     return Character(
       id: id ?? this.id,
@@ -126,6 +132,8 @@ class Character {
       characterBook:
           clearCharacterBook ? null : (characterBook ?? this.characterBook),
       extensions: extensions ?? this.extensions,
+      avatarFileName:
+          clearAvatar ? null : (avatarFileName ?? this.avatarFileName),
     );
   }
 
@@ -147,6 +155,8 @@ class Character {
         'tags': tags,
         if (characterBook != null) 'character_book': characterBook,
         'extensions': extensions,
+        if (avatarFileName != null && avatarFileName!.isNotEmpty)
+          'avatar_file': avatarFileName,
       };
 
   factory Character.fromJson(Map<String, dynamic> json) {
@@ -214,6 +224,10 @@ class Character {
       tags: tags,
       characterBook: book,
       extensions: extensions,
+      avatarFileName: () {
+        final raw = _str(json['avatar_file']);
+        return raw.isEmpty ? null : raw;
+      }(),
     );
   }
 

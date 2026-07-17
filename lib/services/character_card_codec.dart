@@ -109,11 +109,16 @@ class CharacterCardCodec {
         : jsonEncode(v2);
   }
 
-  /// Build a small PNG with the card embedded (SillyTavern `chara` / `ccv3` tEXt).
+  /// Build a PNG with the card embedded (SillyTavern `chara` / `ccv3` tEXt).
   ///
-  /// No avatar image yet — uses a solid Anima-teal square so the file still
-  /// imports in SillyTavern and other card tools.
-  Uint8List toCardPng(Character character, {bool asV3 = false}) {
+  /// When [avatarPngBytes] is a real PNG (e.g. the character’s avatar), that
+  /// image is kept and card text is injected. Otherwise a solid teal square
+  /// is used as a placeholder.
+  Uint8List toCardPng(
+    Character character, {
+    bool asV3 = false,
+    Uint8List? avatarPngBytes,
+  }) {
     final v2Json = toCardV2Json(character, pretty: false);
     final charaB64 = base64.encode(utf8.encode(v2Json));
     final texts = <({String key, String value})>[
@@ -123,15 +128,70 @@ class CharacterCardCodec {
       final v3Json = toCardV3Json(character, pretty: false);
       texts.add((key: 'ccv3', value: base64.encode(utf8.encode(v3Json))));
     }
+
+    if (avatarPngBytes != null && _looksLikePng(avatarPngBytes)) {
+      return injectTextChunks(avatarPngBytes, texts);
+    }
+
     return _buildSolidPngWithText(
       width: 96,
       height: 96,
-      // Matches Anima theme seed teal.
-      red: 0x2F,
-      green: 0x6F,
-      blue: 0x6A,
+      // Matches Anima woodland pine (theme primary).
+      red: 0x3D,
+      green: 0x5C,
+      blue: 0x4A,
       texts: texts,
     );
+  }
+
+  /// Insert / replace `chara` + `ccv3` tEXt chunks in an existing PNG.
+  Uint8List injectTextChunks(
+    Uint8List pngBytes,
+    List<({String key, String value})> texts,
+  ) {
+    if (!_looksLikePng(pngBytes)) {
+      throw const FormatException('Avatar must be a PNG for card export.');
+    }
+
+    final replaceKeys =
+        texts.map((t) => t.key.toLowerCase()).toSet();
+
+    final out = BytesBuilder(copy: false);
+    out.add(pngBytes.sublist(0, 8));
+
+    var offset = 8;
+    while (offset + 12 <= pngBytes.length) {
+      final length = _readUint32(pngBytes, offset);
+      final type =
+          String.fromCharCodes(pngBytes.sublist(offset + 4, offset + 8));
+      final dataStart = offset + 8;
+      final dataEnd = dataStart + length;
+      if (dataEnd + 4 > pngBytes.length) break;
+
+      final chunkEnd = dataEnd + 4; // includes CRC
+
+      if (type == 'IEND') {
+        for (final text in texts) {
+          out.add(_pngChunk('tEXt', _textChunk(text.key, text.value)));
+        }
+        out.add(pngBytes.sublist(offset, chunkEnd));
+        break;
+      }
+
+      if (type == 'tEXt') {
+        final decoded = _parseTextChunk(pngBytes.sublist(dataStart, dataEnd));
+        final key = decoded?.key.toLowerCase() ?? '';
+        if (replaceKeys.contains(key)) {
+          offset = chunkEnd;
+          continue; // drop old chara/ccv3
+        }
+      }
+
+      out.add(pngBytes.sublist(offset, chunkEnd));
+      offset = chunkEnd;
+    }
+
+    return out.takeBytes();
   }
 
   /// Pull base64 JSON from PNG `chara` / `ccv3` text chunks.
@@ -174,6 +234,8 @@ class CharacterCardCodec {
       rethrow;
     }
   }
+
+  bool looksLikePng(Uint8List bytes) => _looksLikePng(bytes);
 
   bool _looksLikePng(Uint8List bytes) {
     if (bytes.length < 8) return false;

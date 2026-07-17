@@ -7,9 +7,12 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models/character.dart';
+import '../services/avatar_service.dart';
 import '../services/character_card_codec.dart';
 import '../services/character_service.dart';
+import '../services/nanogpt_service.dart';
 import '../services/settings_service.dart';
+import '../widgets/anima_avatar.dart';
 import 'character_edit_screen.dart';
 
 /// List of saved characters with SillyTavern card import/export.
@@ -18,10 +21,12 @@ class CharactersScreen extends StatefulWidget {
     super.key,
     required this.characterService,
     required this.settingsService,
+    required this.nanoGptService,
   });
 
   final CharacterService characterService;
   final SettingsService settingsService;
+  final NanoGptService nanoGptService;
 
   @override
   State<CharactersScreen> createState() => _CharactersScreenState();
@@ -29,6 +34,7 @@ class CharactersScreen extends StatefulWidget {
 
 class _CharactersScreenState extends State<CharactersScreen> {
   final _codec = CharacterCardCodec();
+  final _avatarService = AvatarService();
   List<Character> _characters = [];
   String? _selectedId;
   bool _loading = true;
@@ -83,6 +89,8 @@ class _CharactersScreenState extends State<CharactersScreen> {
       MaterialPageRoute(
         builder: (_) => CharacterEditScreen(
           characterService: widget.characterService,
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
         ),
       ),
     );
@@ -98,6 +106,8 @@ class _CharactersScreenState extends State<CharactersScreen> {
       MaterialPageRoute(
         builder: (_) => CharacterEditScreen(
           characterService: widget.characterService,
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
           existing: character,
         ),
       ),
@@ -163,14 +173,25 @@ class _CharactersScreenState extends State<CharactersScreen> {
         throw const FormatException('That card has no character name.');
       }
 
-      await widget.characterService.upsert(imported);
-      await widget.settingsService.saveSelectedCharacterId(imported.id);
+      var character = imported;
+      // SillyTavern PNG cards *are* the avatar image — save a copy.
+      if (_codec.looksLikePng(bytes)) {
+        final avatarName = await _avatarService.saveBytes(
+          stem: imported.id,
+          bytes: bytes,
+          extension: '.png',
+        );
+        character = imported.copyWith(avatarFileName: avatarName);
+      }
+
+      await widget.characterService.upsert(character);
+      await widget.settingsService.saveSelectedCharacterId(character.id);
       await _load();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Imported “${imported.name}”')),
+        SnackBar(content: Text('Imported “${character.name}”')),
       );
-      Navigator.of(context).pop(imported);
+      Navigator.of(context).pop(character);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -225,9 +246,17 @@ class _CharactersScreenState extends State<CharactersScreen> {
       final base = safeName.isEmpty ? 'character' : safeName;
 
       if (format == 'png' || format == 'png_v3') {
+        Uint8List? avatarPng;
+        final avatarPath =
+            await _avatarService.resolvePath(character.avatarFileName);
+        if (avatarPath != null &&
+            avatarPath.toLowerCase().endsWith('.png')) {
+          avatarPng = await File(avatarPath).readAsBytes();
+        }
         final bytes = _codec.toCardPng(
           character,
           asV3: format == 'png_v3',
+          avatarPngBytes: avatarPng,
         );
         final file = File('${dir.path}/${base}_card.png');
         await file.writeAsBytes(bytes);
@@ -301,20 +330,22 @@ class _CharactersScreenState extends State<CharactersScreen> {
                     itemBuilder: (context, index) {
                       final character = _characters[index];
                       final selected = character.id == _selectedId;
-                      final initial = character.name.isEmpty
-                          ? '?'
-                          : character.name.substring(0, 1).toUpperCase();
 
                       return ListTile(
                         selected: selected,
                         selectedTileColor:
                             colorScheme.primaryContainer.withValues(alpha: 0.45),
-                        leading: CircleAvatar(child: Text(initial)),
+                        leading: AnimaAvatar(
+                          fileName: character.avatarFileName,
+                          label: character.name,
+                          radius: 22,
+                          avatarService: _avatarService,
+                        ),
                         title: Text(character.name),
                         subtitle: Text(
                           _subtitle(character),
                           maxLines: 2,
-                          overflow: .ellipsis,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         trailing: PopupMenuButton<String>(
                           onSelected: (value) {
