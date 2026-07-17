@@ -94,6 +94,8 @@ class _LoreSettingsScreenState extends State<LoreSettingsScreen> {
       MaterialPageRoute(
         builder: (_) => LorebooksScreen(
           worldInfoService: widget.worldInfoService,
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
         ),
       ),
     );

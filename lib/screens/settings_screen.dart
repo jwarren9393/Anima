@@ -27,7 +27,6 @@ class SettingsScreen extends StatelessWidget {
     required this.nanoGptService,
     required this.worldInfoService,
     required this.worldWorkshopService,
-    this.onThemeChanged,
   });
 
   final ApiKeyService apiKeyService;
@@ -37,19 +36,15 @@ class SettingsScreen extends StatelessWidget {
   final NanoGptService nanoGptService;
   final WorldInfoService worldInfoService;
   final WorldWorkshopService worldWorkshopService;
-  final Future<void> Function()? onThemeChanged;
 
   Future<void> _openAppearance(BuildContext context) async {
-    final changed = await Navigator.of(context).push<bool>(
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => AppearanceSettingsScreen(
           settingsService: settingsService,
         ),
       ),
     );
-    if (changed == true) {
-      await onThemeChanged?.call();
-    }
   }
 
   @override
@@ -143,7 +138,7 @@ class SettingsScreen extends StatelessWidget {
           _SettingsTile(
             icon: Icons.auto_awesome,
             title: 'AI collaborator',
-            subtitle: 'Guidance note for wand + Creation Center',
+            subtitle: 'Wand note + composer Format note',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => CollaboratorSettingsScreen(
@@ -155,7 +150,7 @@ class SettingsScreen extends StatelessWidget {
           _SettingsTile(
             icon: Icons.palette,
             title: 'Appearance',
-            subtitle: 'Presets, colors, fonts, background, motion, TTS',
+            subtitle: 'Chat avatars (Obsidian & Gold theme is fixed)',
             onTap: () => _openAppearance(context),
           ),
           const Divider(height: 32),

@@ -8,6 +8,7 @@ import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
 import '../services/world_workshop_builder.dart';
 import '../services/world_workshop_service.dart';
+import '../widgets/keyboard_inset.dart';
 
 /// Plain chat with the World Info collaborator; Create lorebook exports to global WI.
 class WorldWorkshopChatScreen extends StatefulWidget {
@@ -31,7 +32,8 @@ class WorldWorkshopChatScreen extends StatefulWidget {
       _WorldWorkshopChatScreenState();
 }
 
-class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen> {
+class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
+    with WidgetsBindingObserver {
   static const _builder = WorldWorkshopBuilder();
 
   final _input = TextEditingController();
@@ -39,15 +41,30 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen> {
   late WorldWorkshop _workshop;
   bool _sending = false;
   bool _exporting = false;
+  double _keyboardInset = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _workshop = widget.workshop;
   }
 
   @override
+  void didChangeMetrics() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final inset = MediaQuery.viewInsetsOf(context).bottom;
+      if (inset > _keyboardInset + 8) {
+        _scrollToEnd();
+      }
+      _keyboardInset = inset;
+    });
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _input.dispose();
     _scroll.dispose();
     super.dispose();
@@ -266,6 +283,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen> {
     final busy = _sending || _exporting;
 
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         title: Text(_workshop.title),
         actions: [
@@ -285,7 +303,8 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen> {
           ),
         ],
       ),
-      body: Column(
+      body: KeyboardInset(
+        child: Column(
         children: [
           Material(
             color: theme.colorScheme.surfaceContainerHighest.withValues(
@@ -390,6 +409,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen> {
             ),
           ),
         ],
+        ),
       ),
     );
   }

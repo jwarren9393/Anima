@@ -159,10 +159,11 @@ class LoreSettings {
   }
 }
 
-/// Guidance for the character-editor AI wand (and later World Info).
+  /// Guidance for the character-editor / World Info wand, plus composer format.
 class CollaboratorSettings {
   const CollaboratorSettings({
     this.guidanceNote = defaultGuidanceNote,
+    this.composerFormatNote = defaultComposerFormatNote,
   });
 
   /// Default “Author’s Note” for the wand — keep replies raw, don’t sanitize.
@@ -172,12 +173,27 @@ class CollaboratorSettings {
       'Match the user’s tone and content. Output only the field text — '
       'no titles, labels, markdown fences, or preamble.';
 
-  /// Injected into every wand request (like an Author’s Note for generation).
+  /// Default for the chat composer Format button — polish markup only.
+  static const defaultComposerFormatNote =
+      'Do NOT reword, rewrite, expand, or improve the user’s wording. '
+      'Only fix capitalization and punctuation, and wrap existing actions/'
+      'narration/thoughts in *asterisks* and spoken lines in "double quotes". '
+      'Keep every word the user chose whenever possible. Output only the '
+      'formatted message.';
+
+  /// Injected into character / lore / Creation Center wand requests.
   final String guidanceNote;
 
-  CollaboratorSettings copyWith({String? guidanceNote}) {
+  /// Injected into the chat composer Format button request.
+  final String composerFormatNote;
+
+  CollaboratorSettings copyWith({
+    String? guidanceNote,
+    String? composerFormatNote,
+  }) {
     return CollaboratorSettings(
       guidanceNote: guidanceNote ?? this.guidanceNote,
+      composerFormatNote: composerFormatNote ?? this.composerFormatNote,
     );
   }
 }
@@ -220,18 +236,16 @@ class SettingsService {
     'sampling_mirostat_eta',
   ];
   static const _useSubscriptionKey = 'nanogpt_use_subscription';
-  static const _themeModeKey = 'theme_mode';
-  static const _ttsEnabledKey = 'tts_enabled';
   static const _avatarShapeKey = 'avatar_shape';
   static const _avatarSizeKey = 'avatar_size';
   static const _avatarScaleKey = 'avatar_scale';
   static const _uiStyleKey = 'ui_style_json';
-  static const _fiberTextureOffKey = 'ui_fiber_texture_default_off_v1';
   static const _loreScanDepthKey = 'lore_scan_depth';
   static const _loreTokenBudgetKey = 'lore_token_budget';
   static const _loreRecursiveKey = 'lore_recursive_scanning';
   static const _personaAvatarKey = 'persona_avatar_file';
   static const _collaboratorGuidanceKey = 'collaborator_guidance_note';
+  static const _composerFormatNoteKey = 'composer_format_guidance_note';
   static const _contextHistoryTokensKey = 'context_history_token_budget';
   static const _contextAutoSummarizeKey = 'context_auto_summarize';
   static const _contextSummarizeEveryKey = 'context_summarize_every';
@@ -452,22 +466,35 @@ class SettingsService {
     );
   }
 
-  /// AI wand guidance note (character editor collaborator).
+  /// AI wand + composer Format guidance notes.
   Future<CollaboratorSettings> getCollaboratorSettings() async {
-    final raw = await _storage.read(key: _collaboratorGuidanceKey);
-    if (raw == null) {
-      return const CollaboratorSettings();
-    }
-    return CollaboratorSettings(guidanceNote: raw);
+    final wandRaw = await _storage.read(key: _collaboratorGuidanceKey);
+    final formatRaw = await _storage.read(key: _composerFormatNoteKey);
+    return CollaboratorSettings(
+      guidanceNote: (wandRaw == null || wandRaw.trim().isEmpty)
+          ? CollaboratorSettings.defaultGuidanceNote
+          : wandRaw,
+      composerFormatNote: (formatRaw == null || formatRaw.trim().isEmpty)
+          ? CollaboratorSettings.defaultComposerFormatNote
+          : formatRaw,
+    );
   }
 
   Future<void> saveCollaboratorSettings(CollaboratorSettings settings) async {
-    final note = settings.guidanceNote;
-    if (note == CollaboratorSettings.defaultGuidanceNote) {
+    final note = settings.guidanceNote.trim();
+    if (note.isEmpty || note == CollaboratorSettings.defaultGuidanceNote) {
       await _storage.delete(key: _collaboratorGuidanceKey);
-      return;
+    } else {
+      await _storage.write(key: _collaboratorGuidanceKey, value: note);
     }
-    await _storage.write(key: _collaboratorGuidanceKey, value: note);
+
+    final format = settings.composerFormatNote.trim();
+    if (format.isEmpty ||
+        format == CollaboratorSettings.defaultComposerFormatNote) {
+      await _storage.delete(key: _composerFormatNoteKey);
+    } else {
+      await _storage.write(key: _composerFormatNoteKey, value: format);
+    }
   }
 
   /// When true, use the subscription API base URL.
@@ -489,75 +516,19 @@ class SettingsService {
     return subscription ? subscriptionBaseUrl : defaultBaseUrl;
   }
 
-  /// system / light / dark
-  Future<String> getThemeModeName() async {
-    final value = await _storage.read(key: _themeModeKey);
-    switch (value) {
-      case 'light':
-      case 'dark':
-        return value!;
-      default:
-        return 'system';
-    }
-  }
-
-  Future<void> saveThemeModeName(String mode) async {
-    final normalized = mode.trim().toLowerCase();
-    if (normalized != 'light' &&
-        normalized != 'dark' &&
-        normalized != 'system') {
-      await _storage.delete(key: _themeModeKey);
-      return;
-    }
-    await _storage.write(key: _themeModeKey, value: normalized);
-  }
-
-  Future<bool> getTtsEnabled() async {
-    final value = await _storage.read(key: _ttsEnabledKey);
-    return value == 'true' || value == '1';
-  }
-
-  Future<void> saveTtsEnabled(bool enabled) async {
-    await _storage.write(
-      key: _ttsEnabledKey,
-      value: enabled ? 'true' : 'false',
-    );
-  }
-
-  /// Full appearance pack (presets, colors, type, motion, avatars…).
+  /// Appearance prefs — currently chat avatars (theme is fixed Obsidian & Gold).
   Future<UiStyleSettings> getUiStyle() async {
-    UiStyleSettings style;
     final raw = await _storage.read(key: _uiStyleKey);
     if (raw != null && raw.trim().isNotEmpty) {
       try {
         final decoded = jsonDecode(raw);
         if (decoded is Map) {
-          style = UiStyleSettings.fromJson(Map<String, dynamic>.from(decoded));
-        } else {
-          final avatar = await getAvatarStyle();
-          style = UiStyleSettings(avatarStyle: avatar);
+          return UiStyleSettings.fromJson(Map<String, dynamic>.from(decoded));
         }
-      } catch (_) {
-        final avatar = await getAvatarStyle();
-        style = UiStyleSettings(avatarStyle: avatar);
-      }
-    } else {
-      final avatar = await getAvatarStyle();
-      style = UiStyleSettings(avatarStyle: avatar);
+      } catch (_) {}
     }
-
-    // One-time: turn off the old default fiber-line texture (looked like faint
-    // white scratches). Users can still re-enable it in Appearance.
-    final migrated = await _storage.read(key: _fiberTextureOffKey);
-    if (migrated != 'true' && style.showTexture) {
-      style = style.copyWith(showTexture: false);
-      await saveUiStyle(style);
-      await _storage.write(key: _fiberTextureOffKey, value: 'true');
-    } else if (migrated != 'true') {
-      await _storage.write(key: _fiberTextureOffKey, value: 'true');
-    }
-
-    return style;
+    final avatar = await getAvatarStyle();
+    return UiStyleSettings(avatarStyle: avatar);
   }
 
   Future<void> saveUiStyle(UiStyleSettings style) async {

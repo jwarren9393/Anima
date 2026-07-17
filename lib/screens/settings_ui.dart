@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../widgets/keyboard_inset.dart';
+
 /// Shared helpers for settings sub-screens.
 class SettingsUi {
   static const listPadding = EdgeInsets.all(20);
+
+  /// Keep focused fields above the keyboard when scrolling a settings form.
+  static const keyboardScrollPadding = kAnimaKeyboardScrollPadding;
 
   static Widget sectionTitle(BuildContext context, String title) {
     return Text(title, style: Theme.of(context).textTheme.titleMedium);

@@ -7,6 +7,8 @@ import 'package:share_plus/share_plus.dart';
 
 import '../models/global_lorebook.dart';
 import '../models/lorebook.dart';
+import '../services/nanogpt_service.dart';
+import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
 import 'lorebook_edit_screen.dart';
 
@@ -15,9 +17,13 @@ class LorebooksScreen extends StatefulWidget {
   const LorebooksScreen({
     super.key,
     required this.worldInfoService,
+    required this.settingsService,
+    required this.nanoGptService,
   });
 
   final WorldInfoService worldInfoService;
+  final SettingsService settingsService;
+  final NanoGptService nanoGptService;
 
   @override
   State<LorebooksScreen> createState() => _LorebooksScreenState();
@@ -48,6 +54,8 @@ class _LorebooksScreenState extends State<LorebooksScreen> {
       MaterialPageRoute(
         builder: (_) => LorebookEditScreen(
           initial: Lorebook.empty(name: 'New lorebook'),
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
         ),
       ),
     );
@@ -68,6 +76,8 @@ class _LorebooksScreenState extends State<LorebooksScreen> {
         builder: (_) => LorebookEditScreen(
           initial: existing.book,
           characterName: existing.displayName,
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
         ),
       ),
     );

@@ -28,7 +28,6 @@ class HomeScreen extends StatefulWidget {
     required this.nanoGptService,
     required this.worldInfoService,
     required this.worldWorkshopService,
-    this.onThemeChanged,
   });
 
   final ApiKeyService apiKeyService;
@@ -39,7 +38,6 @@ class HomeScreen extends StatefulWidget {
   final NanoGptService nanoGptService;
   final WorldInfoService worldInfoService;
   final WorldWorkshopService worldWorkshopService;
-  final Future<void> Function()? onThemeChanged;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -120,11 +118,9 @@ class _HomeScreenState extends State<HomeScreen> {
           nanoGptService: widget.nanoGptService,
           worldInfoService: widget.worldInfoService,
           worldWorkshopService: widget.worldWorkshopService,
-          onThemeChanged: widget.onThemeChanged,
         ),
       ),
     );
-    await widget.onThemeChanged?.call();
   }
 
   Future<void> _openChat(ChatSession session) async {
@@ -140,7 +136,6 @@ class _HomeScreenState extends State<HomeScreen> {
           worldInfoService: widget.worldInfoService,
           worldWorkshopService: widget.worldWorkshopService,
           initialSession: session,
-          onThemeChanged: widget.onThemeChanged,
         ),
       ),
     );

@@ -17,15 +17,17 @@ import '../services/chat_context_service.dart';
 import '../services/chat_service.dart';
 import '../services/chat_transcript_codec.dart';
 import '../services/lorebook_service.dart';
+import '../services/message_formatter.dart';
 import '../services/nanogpt_service.dart';
 import '../services/persona_service.dart';
 import '../services/prompt_builder.dart';
 import '../services/settings_service.dart';
-import '../services/tts_service.dart';
 import '../services/world_info_service.dart';
 import '../services/world_workshop_service.dart';
 import '../widgets/anima_avatar.dart';
+import '../widgets/keyboard_inset.dart';
 import '../widgets/preset_picker.dart';
+import '../widgets/rp_rich_text.dart';
 import 'characters_screen.dart';
 import 'group_chat_setup_screen.dart';
 import 'personas_screen.dart';
@@ -44,7 +46,6 @@ class ChatScreen extends StatefulWidget {
     required this.worldInfoService,
     required this.worldWorkshopService,
     required this.initialSession,
-    this.onThemeChanged,
   });
 
   final ApiKeyService apiKeyService;
@@ -56,31 +57,31 @@ class ChatScreen extends StatefulWidget {
   final WorldInfoService worldInfoService;
   final WorldWorkshopService worldWorkshopService;
   final ChatSession initialSession;
-  final Future<void> Function()? onThemeChanged;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
   final _promptBuilder = const PromptBuilder();
   final _lorebookService = const LorebookService();
   final _contextService = const ChatContextService();
   final _transcriptCodec = ChatTranscriptCodec();
-  final _tts = TtsService();
+  static const _formatter = MessageFormatter();
 
   bool _hasApiKey = false;
   bool _loading = true;
   bool _busy = false;
-  bool _ttsEnabled = false;
+  bool _formatting = false;
   AvatarStyleSettings _avatarStyle = const AvatarStyleSettings();
   String? _error;
   Character? _character;
   List<Character> _participants = const [];
   ChatSession? _session;
   Persona? _persona;
+  double _keyboardInset = 0;
 
   List<ChatMessage> get _messages => _session?.messages ?? const [];
   bool get _isGroup => _session?.isGroup == true;
@@ -93,7 +94,21 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _bootstrap();
+  }
+
+  @override
+  void didChangeMetrics() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final inset = MediaQuery.viewInsetsOf(context).bottom;
+      // Keyboard opening — keep the latest messages and composer in view.
+      if (inset > _keyboardInset + 8) {
+        _scrollToBottom();
+      }
+      _keyboardInset = inset;
+    });
   }
 
   Future<void> _bootstrap() async {
@@ -101,7 +116,6 @@ class _ChatScreenState extends State<ChatScreen> {
     var session = widget.initialSession;
     await widget.chatService.setActiveChatId(session.characterId, session.id);
     final character = await _resolveCharacterForSession(session);
-    final ttsEnabled = await widget.settingsService.getTtsEnabled();
     final uiStyle = await widget.settingsService.getUiStyle();
     var persona = await widget.personaService.resolve(session.personaId);
     // Bind persona onto older chats that never stored one.
@@ -116,7 +130,6 @@ class _ChatScreenState extends State<ChatScreen> {
       _character = character;
       _participants = participants;
       _session = session;
-      _ttsEnabled = ttsEnabled;
       _avatarStyle = uiStyle.avatarStyle;
       _persona = persona;
       _loading = false;
@@ -212,23 +225,19 @@ class _ChatScreenState extends State<ChatScreen> {
           nanoGptService: widget.nanoGptService,
           worldInfoService: widget.worldInfoService,
           worldWorkshopService: widget.worldWorkshopService,
-          onThemeChanged: widget.onThemeChanged,
         ),
       ),
     );
     final hasKey = await widget.apiKeyService.hasApiKey();
-    final ttsEnabled = await widget.settingsService.getTtsEnabled();
     final uiStyle = await widget.settingsService.getUiStyle();
     final persona =
         await widget.personaService.resolve(_session?.personaId);
     if (!mounted) return;
     setState(() {
       _hasApiKey = hasKey;
-      _ttsEnabled = ttsEnabled;
       _avatarStyle = uiStyle.avatarStyle;
       _persona = persona;
     });
-    await widget.onThemeChanged?.call();
   }
 
   Future<void> _pickPersona() async {
@@ -530,7 +539,13 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _send() async {
     final text = _inputController.text.trim();
-    if (text.isEmpty || _busy || _session == null || _character == null) return;
+    if (text.isEmpty ||
+        _busy ||
+        _formatting ||
+        _session == null ||
+        _character == null) {
+      return;
+    }
 
     if (!_hasApiKey) {
       setState(() {
@@ -649,7 +664,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _continueScene() async {
-    if (_busy || _session == null || _character == null) return;
+    if (_busy || _formatting || _session == null || _character == null) return;
     if (!_hasApiKey) {
       setState(() {
         _error = 'Add your NanoGPT API key in Settings before you can chat.';
@@ -680,6 +695,70 @@ class _ChatScreenState extends State<ChatScreen> {
       speakingAs: speaker,
       advanceGroupSpeaker: _isGroup,
     );
+  }
+
+  /// AI-formats the composer draft with *actions* and "dialogue".
+  Future<void> _formatDraft() async {
+    if (_busy || _formatting || _session == null) return;
+    final draft = _inputController.text.trim();
+    if (draft.isEmpty) return;
+    if (!_hasApiKey) {
+      setState(() {
+        _error = 'Add your NanoGPT API key in Settings before you can format.';
+      });
+      return;
+    }
+
+    setState(() {
+      _formatting = true;
+      _error = null;
+    });
+    try {
+      final collaborator =
+          await widget.settingsService.getCollaboratorSettings();
+      final model = await widget.settingsService.getModel();
+      final sampling = await widget.settingsService.getSampling();
+      // Cooler sampling = less “creative rewrite,” closer to the draft.
+      final formatSampling = sampling.copyWith(
+        temperature: sampling.temperature > 0.35 ? 0.35 : sampling.temperature,
+      );
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+      final charName = _character?.name.trim().isNotEmpty == true
+          ? _character!.name.trim()
+          : 'Character';
+      final messages = _formatter.buildMessages(
+        draft: draft,
+        userName: _userName,
+        characterName: charName,
+        recentMessages: _messages,
+        formatNote: collaborator.composerFormatNote,
+      );
+      final formatted = await widget.nanoGptService.complete(
+        model: model,
+        messages: messages,
+        baseUrl: baseUrl,
+        sampling: formatSampling,
+      );
+      if (!mounted) return;
+      _inputController.text = formatted.trim();
+      _inputController.selection = TextSelection.collapsed(
+        offset: _inputController.text.length,
+      );
+    } on NanoGptCancelledException {
+      // Ignore.
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Format failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _formatting = false);
+    }
   }
 
   Future<void> _impersonate() async {
@@ -986,12 +1065,6 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollToBottom(jump: true);
   }
 
-  Future<void> _speakMessage(int index) async {
-    final text = _messages[index].text.trim();
-    if (text.isEmpty) return;
-    await _tts.speak(text);
-  }
-
   Future<void> _regenerateOrSwipe({required bool asNewSwipe}) async {
     if (_busy || _session == null || _character == null || _messages.isEmpty) {
       return;
@@ -1216,9 +1289,6 @@ class _ChatScreenState extends State<ChatScreen> {
       }
       setState(() => _busy = false);
       await _persist();
-      if (_ttsEnabled && !_messages.last.isUser) {
-        await _tts.speak(finalText);
-      }
       await _maybeAutoSummarize();
     } on NanoGptCancelledException {
       if (!mounted) return;
@@ -1353,24 +1423,6 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _deleteMessage(int index) async {
     if (_busy || _session == null) return;
     if (index < 0 || index >= _messages.length) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete message?'),
-        content: const Text('Remove this message from the saved chat?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
     setState(() => _session!.messages.removeAt(index));
     await _persist();
   }
@@ -1385,63 +1437,16 @@ class _ChatScreenState extends State<ChatScreen> {
       );
       return;
     }
-    final removed = _messages.length - index - 1;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Rewind to this message?'),
-        content: Text(
-          'Delete the $removed message${removed == 1 ? '' : 's'} after this '
-          'one. The chat will continue from here.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Rewind'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
     setState(() {
       _session!.messages.removeRange(index + 1, _session!.messages.length);
     });
     await _persist();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Rewound. Later messages were removed.')),
-    );
   }
 
   /// Copy this chat through [index] into a new saved chat and switch to it.
   Future<void> _branchFromMessage(int index) async {
     if (_busy || _session == null) return;
     if (index < 0 || index >= _messages.length) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Branch to a new chat?'),
-        content: const Text(
-          'Creates a new chat with the history up through this message. '
-          'The current chat stays unchanged.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Branch'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
 
     final source = _session!;
     final copied = <ChatMessage>[];
@@ -1511,8 +1516,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     widget.nanoGptService.cancelActiveStream();
-    _tts.dispose();
     _inputController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -1528,6 +1533,9 @@ class _ChatScreenState extends State<ChatScreen> {
         ? 'Group'
         : (_character?.name ?? 'Anima');
     return Scaffold(
+      // We lift the body ourselves via [KeyboardInset] so the composer stays
+      // above the keyboard even with a transparent glass scaffold.
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         leading: IconButton(
           tooltip: 'Close chat',
@@ -1622,7 +1630,8 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         ],
       ),
-      body: Column(
+      body: KeyboardInset(
+        child: Column(
         children: [
           if (_loading)
             const LinearProgressIndicator(minHeight: 2)
@@ -1825,7 +1834,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       Expanded(
                         child: TextField(
                           controller: _inputController,
-                          enabled: !_busy,
+                          enabled: !_busy && !_formatting,
                           minLines: 1,
                           maxLines: 5,
                           textInputAction: .newline,
@@ -1836,17 +1845,17 @@ class _ChatScreenState extends State<ChatScreen> {
                                     : 'Send only — tap a name to reply…')
                                 : ((_session?.autoReply ?? true)
                                     ? 'Message $characterName…'
-                                    : 'Send only — long-press a message for Continue…'),
+                                    : 'Send only — tap Continue or long-press…'),
                             filled: true,
                             border: const OutlineInputBorder(),
                             isDense: true,
                           ),
                           onSubmitted: (_) {
-                            if (!_busy) _send();
+                            if (!_busy && !_formatting) _send();
                           },
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 4),
                       if (_busy)
                         FilledButton(
                           onPressed: _stopGeneration,
@@ -1860,15 +1869,34 @@ class _ChatScreenState extends State<ChatScreen> {
                           ),
                           child: const Icon(Icons.stop),
                         )
-                      else
+                      else ...[
+                        IconButton(
+                          tooltip: 'Format draft (*actions* and "dialogue")',
+                          onPressed: _formatting ? null : _formatDraft,
+                          icon: _formatting
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.auto_awesome),
+                        ),
+                        IconButton(
+                          tooltip: 'Continue',
+                          onPressed: _formatting ? null : _continueScene,
+                          icon: const Icon(Icons.play_arrow),
+                        ),
                         FilledButton(
-                          onPressed: _send,
+                          onPressed: _formatting ? null : _send,
                           style: FilledButton.styleFrom(
                             padding: const EdgeInsets.all(14),
                             minimumSize: const Size(48, 48),
                           ),
                           child: const Icon(Icons.send),
                         ),
+                      ],
                     ],
                   ),
                 ],
@@ -1876,6 +1904,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -1924,12 +1953,6 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                   onTap: () => Navigator.pop(context, 'branch'),
                 ),
-                if (message.text.trim().isNotEmpty)
-                  ListTile(
-                    leading: const Icon(Icons.volume_up_outlined),
-                    title: const Text('Speak'),
-                    onTap: () => Navigator.pop(context, 'speak'),
-                  ),
                 const Divider(),
                 ListTile(
                   leading: const Icon(Icons.play_arrow),
@@ -1987,7 +2010,6 @@ class _ChatScreenState extends State<ChatScreen> {
     if (action == 'delete') await _deleteMessage(index);
     if (action == 'rewind') await _rewindToMessage(index);
     if (action == 'branch') await _branchFromMessage(index);
-    if (action == 'speak') await _speakMessage(index);
     if (action == 'continue') await _continueScene();
     if (action == 'impersonate') await _impersonate();
     if (action == 'regen') await _regenerateOrSwipe(asNewSwipe: false);
@@ -2099,14 +2121,9 @@ class _MessageBubble extends StatelessWidget {
     final ui = AnimaUiTheme.of(context);
     final isUser = message.isUser;
     final alignment = isUser ? Alignment.centerRight : Alignment.centerLeft;
-    final background = isUser
-        ? (ui.userBubbleColor ?? colorScheme.primaryContainer)
-        : (ui.aiBubbleColor ??
-            (Theme.of(context).brightness == Brightness.dark
-                ? colorScheme.surfaceContainerHigh
-                : colorScheme.surfaceContainerLowest));
+    final background = isUser ? ui.userBubbleColor : ui.aiBubbleColor;
     final foreground =
-        isUser ? colorScheme.onPrimaryContainer : colorScheme.onSurface;
+        isUser ? colorScheme.onPrimary : colorScheme.onSurface;
     final bubbleRadius = BorderRadius.circular(ui.chatBubbleRadius);
     final chatFontSize =
         (Theme.of(context).textTheme.bodyLarge?.fontSize ?? 16) *
@@ -2137,14 +2154,16 @@ class _MessageBubble extends StatelessWidget {
               borderRadius: bubbleRadius,
               border: Border.all(
                 color: isUser
-                    ? colorScheme.primary.withValues(alpha: 0.35)
-                    : colorScheme.outlineVariant.withValues(alpha: 0.8),
+                    ? colorScheme.primary.withValues(alpha: 0.55)
+                    : colorScheme.primary.withValues(alpha: 0.18),
               ),
               boxShadow: [
                 BoxShadow(
-                  color: colorScheme.shadow.withValues(alpha: 0.08),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
+                  color: isUser
+                      ? colorScheme.primary.withValues(alpha: 0.22)
+                      : Colors.black.withValues(alpha: 0.35),
+                  blurRadius: isUser ? 14 : 10,
+                  offset: const Offset(0, 3),
                 ),
               ],
             ),
@@ -2175,28 +2194,30 @@ class _MessageBubble extends StatelessWidget {
                       if (!isUser &&
                           message.speakerName != null &&
                           message.speakerName!.trim().isNotEmpty) ...[
-                        Text(
-                          message.speakerName!,
-                          style: Theme.of(context)
-                              .textTheme
-                              .labelMedium
-                              ?.copyWith(
-                                color: colorScheme.primary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                        ),
-                        const SizedBox(height: 4),
-                      ],
                       Text(
-                        message.text,
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              color: foreground,
-                              height: 1.35,
-                              fontSize: chatFontSize,
+                        message.speakerName!,
+                        style: Theme.of(context)
+                            .textTheme
+                            .labelMedium
+                            ?.copyWith(
+                              color: colorScheme.primary,
+                              fontWeight: FontWeight.w600,
                             ),
                       ),
+                      const SizedBox(height: 4),
                     ],
-                  ),
+                    RpRichText(
+                      text: message.text,
+                      isUser: isUser,
+                      baseStyle:
+                          Theme.of(context).textTheme.bodyLarge!.copyWith(
+                                color: foreground,
+                                height: 1.4,
+                                fontSize: chatFontSize,
+                              ),
+                    ),
+                  ],
+                ),
           ),
         ),
       ),

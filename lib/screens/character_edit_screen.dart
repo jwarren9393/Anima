@@ -12,6 +12,7 @@ import '../services/character_service.dart';
 import '../services/nanogpt_service.dart';
 import '../services/settings_service.dart';
 import '../widgets/anima_avatar.dart';
+import '../widgets/keyboard_inset.dart';
 import '../widgets/preset_picker.dart';
 import '../models/anima_presets.dart';
 import 'lorebook_edit_screen.dart';
@@ -250,6 +251,8 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         builder: (_) => LorebookEditScreen(
           initial: initial,
           characterName: _name.text.trim(),
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
         ),
       ),
     );
@@ -352,6 +355,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
             controller: controller,
             minLines: minLines,
             maxLines: maxLines,
+            scrollPadding: kAnimaKeyboardScrollPadding,
             textCapitalization: TextCapitalization.sentences,
             decoration: InputDecoration(
               labelText: label,

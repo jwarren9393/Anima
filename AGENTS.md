@@ -39,7 +39,7 @@ High-value SillyTavern concepts to aim for over time:
 6. World Info / lorebooks (keyword-triggered context)
 7. Import/export Character Card V2/V3 (JSON/PNG) when feasible
 8. Sampling controls (temperature, max tokens, etc.)
-9. Later / optional: group chats, TTS, advanced prompt templates, regex
+9. Later / optional: group chats, advanced prompt templates, regex
 
 ---
 
@@ -60,7 +60,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-17  
-**Last agent action:** Expanded all built-in preset menus (sampling, context tokens, Author’s Note, system/post-history, collaborator).
+**Last agent action:** Composer Format got its own AI collaborator note (caps/punctuation/*quotes* only — no rewording) + cooler sampling on Format taps.
 
 ### What works today
 
@@ -69,23 +69,27 @@ High-value SillyTavern concepts to aim for over time:
 - **Settings hub** — separate menus:
   - **Personas** — create multiple {{user}} identities (name, bio, photo); set a default for new chats
   - **Characters** — character cards only
-  - **World Info & lore** — **global lorebooks** (create / import ST JSON / export / on-off) + scan depth/budget + link to per-character books
+  - **World Info & lore** — **global lorebooks** (create / import ST JSON / export / on-off) + scan depth/budget + link to per-character books; **entry AI wand** when editing entries
   - **Creation Center** — chat with AI to invent a world; **Create lorebook** saves keyword entries as a selectable global lorebook (one workshop = one book)
-  - **AI collaborator** — guidance note for character wand + Creation Center (+ guidance presets)
-  - API, Generation parameters, Appearance
+  - **AI collaborator** — wand guidance note + separate **Composer Format** note (Format button in chat)
+  - **Appearance** — chat avatar shape/size only (theme is fixed Obsidian & Gold)
+  - API, Generation parameters
+- **Look** — single dark glass theme (black + gold accents, gold glow backdrop); no parchment / Middle-earth look; no light mode or color studio
 - **Generation parameters** — detailed help + many sampling presets; **context size in tokens** + presets (1K–24K); **auto-summarize** every N messages
 - **Memory summary** — per chat (⋮ → Memory summary to edit; Summarize now); injected into prompts; auto-updates when enabled
 - **Text presets** — expanded Author’s Note / System prompt / Post-history / collaborator guidance sheets
 - **Character AI wand** — sparkle icon on creative card fields; sends all filled fields as context; appends NanoGPT text below what’s already there (uses chat model + sampling)
+- **World Info entry AI wand** — sparkle on Label / Keywords / Lore content (and Secondary keywords when Selective); uses book + sibling entry context; appends (keywords merge comma-separated); same model + collaborator guidance
 - **API & connection** — live NanoGPT model catalog: **Auto** provider (auto-model / basic / standard / premium) listed first, then providers A–Z; refresh; custom model id; subscription toggle reloads catalog
 - **Chat stop** — while a reply streams, the send button becomes **Stop** (keeps any partial text)
-- **Message actions** — **tap** a bubble to edit; **long-press** for Delete, Rewind, Branch, Speak, Continue, Impersonate, Regen/Swipe
+- **Composer shortcuts** — **Format** (✨) lightly fixes caps/punctuation and adds `*actions*` / `"dialogue"` (own note under Settings → AI collaborator; does not use the creative wand note); **Continue** (▶) next to Send
+- **RP message look** — bubbles style `*narration*` in soft italic gold and `"spoken lines"` in bolder text
+- **Message actions** — **tap** a bubble to edit; **long-press** for Delete, Rewind, Branch, Continue, Impersonate, Regen/Swipe (delete / rewind / branch run immediately — no confirm dialog)
 - **Quick swipe** — on the **latest** AI message, ◀ **1/N** ▶ always shows; ▶ on the last version generates a new swipe (older multi-swipe bubbles still show arrows to browse only)
 - **Clean chat chrome** — no Swipe/Regen/Continue bar under messages (those live in the long-press menu; compact swipe arrows under bubbles)
-- **Appearance studio** — look presets (Parchment / Teal / Midnight / Ember / Mist); custom colors (primary, accent, background, surfaces, ink, chat bubbles); font pairing + app/chat size; background style/texture/vignette; corner radius & density; chat bubble roundness/spacing; avatars; motion (off/slow/normal/lively); TTS; Reset + live preview
 - **Per-chat persona** — in a chat, ⋮ menu → **Persona: …** to switch who you are for that thread (saved on the chat)
 - **Group chat controls** — tap a character name chip to choose who speaks next; forum icon toggles auto-reply (off = your message posts alone; tap a name or Continue for a reply)
-- **Avatars** — persona + character photos; PNG card import still grabs the card image; chat bubbles follow Appearance avatar style
+- **Avatars** — persona + character photos; PNG card import still grabs the card image; chat bubble shape/size via Appearance
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar
 - **Smoke:** `flutter test` + `flutter analyze` pass; Android + Linux desktop debug work
 
@@ -96,7 +100,7 @@ High-value SillyTavern concepts to aim for over time:
 - PNG export uses the character’s PNG avatar when available; JPEG/WebP avatars still fall back to the teal placeholder on PNG export
 - Recursive lore scanning toggle saved but not implemented yet
 - NovelAI / Agnai / Risu lorebook converters not implemented (ST JSON + character_book shapes work)
-- AI wand for World Info / lorebook *entry* fields not built yet (Creation Center covers inventing whole books)
+- No TTS (removed — Speak was not useful enough to keep)
 
 ---
 
@@ -189,7 +193,8 @@ Goal: bring characters in/out of the SillyTavern ecosystem; tune generation.
 - [x] Author’s Note / chat-level instructions
 - [x] Basic theming / nicer mobile layout polish
 - [x] Windows / Linux smoke tests (documented; Linux needs deps, Windows needs Windows host)
-- [x] TTS (optional device voice via `flutter_tts`)
+- [x] TTS (optional device voice via `flutter_tts`) — later removed; not in current build
+
 
 ---
 
@@ -197,10 +202,10 @@ Goal: bring characters in/out of the SillyTavern ecosystem; tune generation.
 
 ```
 lib/
-  main.dart                       App entry, AnimaTheme, theme refresh
+  main.dart                       App entry — fixed Obsidian & Gold theme
   theme/
-    anima_theme.dart              Theme from UiStyleSettings (presets + overrides)
-    parchment_backdrop.dart       Background wash / texture / vignette from style
+    anima_theme.dart              Fixed Obsidian & Gold glass ThemeData
+    glass_backdrop.dart           Dark gold-glow backdrop (+ GlassPanel helper)
   models/
     chat_message.dart             Bubble + swipes + optional speaker
     chat_session.dart             Thread + authorsNote + group + lorebookIds + autoReply + memorySummary
@@ -208,18 +213,18 @@ lib/
     lorebook.dart                 CharacterBook / World Info entries (+ ST import aliases)
     global_lorebook.dart          Standalone global lorebook (id + enabled + book)
     world_workshop.dart           Creation Center workshop chat (one chat → one lorebook)
-    ui_style_settings.dart        Appearance pack (presets, colors, type, motion)
+    ui_style_settings.dart        Chat avatar prefs + fixed AnimaUiTheme extension
     anima_presets.dart            Built-in sampling + text presets (Author’s Note, prompts, guidance)
     persona.dart                  User persona ({{user}}) with optional avatar
   screens/
     home_screen.dart              Default landing — chat history + New chat Solo/Group
-    chat_screen.dart              Chat UI + ST actions + group + TTS + persona switch
+    chat_screen.dart              Chat UI + ST actions + group + persona switch
     group_chat_setup_screen.dart  New group: members, order, auto-reply, lore, note
     characters_screen.dart        List / import / export (JSON + PNG)
     character_edit_screen.dart    Full card field editor (+ lorebook + avatar + AI wand)
     personas_screen.dart          Persona list / default / pick-for-chat
     persona_edit_screen.dart      Create/edit one persona
-    lorebook_edit_screen.dart     World Info entry list + entry editor
+    lorebook_edit_screen.dart     World Info entry list + entry editor (+ AI wand)
     lorebooks_screen.dart         Global lorebook list / create / import / export
     world_workshop_list_screen.dart Creation Center workshop list
     world_workshop_chat_screen.dart Workshop chat + Create/Update lorebook
@@ -228,19 +233,23 @@ lib/
     lore_settings_screen.dart     Global books + scan/budget + character books link
     sampling_settings_screen.dart ST-style generation parameters
     collaborator_settings_screen.dart AI wand + workshop guidance note
-    appearance_settings_screen.dart Theme + TTS + chat avatar style
+    appearance_settings_screen.dart Chat avatars (theme is fixed)
     settings_ui.dart              Shared settings form helpers
   widgets/
     anima_avatar.dart             Local-file / initial avatar (circle or rect via style)
+    keyboard_inset.dart           Lift UI above keyboard (chat composers)
+    rp_rich_text.dart             *action* / "dialogue" styled message text
     preset_picker.dart            Preset button + bottom sheets (sampling / text)
   services/
     api_key_service.dart          Secure storage for NanoGPT API key
-    settings_service.dart         Model, sampling, context, lore, theme, TTS, avatar style, collaborator (+ legacy persona migrate)
+    settings_service.dart         Model, sampling, context, lore, avatars, collaborator (+ legacy persona migrate)
     persona_service.dart          Multi-persona load/save + default active id
     avatar_service.dart           Local avatar files under documents/avatars
     character_service.dart        Load/save characters JSON on device
     character_card_codec.dart     ST Card V1/V2/V3 + PNG import/export
     character_collaborator.dart   Field-aware prompts for the character-editor AI wand
+    lore_collaborator.dart        Field-aware prompts for World Info entry AI wand
+    message_formatter.dart        Composer AI format (*actions* / "dialogue")
     chat_service.dart             Chats per character + group bucket (+ personaId, autoReply, lorebookIds)
     chat_context_service.dart     History trim + memory summarize helpers
     prompt_builder.dart           System prompt, modes, group, authors note
@@ -250,10 +259,9 @@ lib/
     world_workshop_builder.dart   Workshop prompts + lorebook JSON parse
     chat_transcript_codec.dart    Chat JSON / plain-text import/export
     nanogpt_service.dart          Streaming + model catalog + sampling + plain-English errors
-    tts_service.dart              Optional flutter_tts wrapper
 ```
 
-**Dependencies in use:** `flutter_secure_storage`, `http`, `path_provider`, `file_picker`, `share_plus`, `path`, `flutter_tts`, `google_fonts`
+**Dependencies in use:** `flutter_secure_storage`, `http`, `path_provider`, `file_picker`, `share_plus`, `path`, `google_fonts`
 
 ---
 
@@ -304,8 +312,8 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. Hot restart → browse the expanded preset sheets (Generation, Author’s Note, System prompt, etc.).
-2. Tell the next agent what small tweak you want (UI polish, chat controls, lore wand, bugs, commit, etc.).
+1. Hot restart → in chat try Format (✨) on a rough draft, Continue (▶), and check *action* / "dialogue" styling in bubbles.
+2. Tell the next agent what small tweak you want (UI polish, format style, bugs, commit, etc.).
 
 ---
 

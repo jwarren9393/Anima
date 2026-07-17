@@ -9,9 +9,8 @@ import 'services/persona_service.dart';
 import 'services/settings_service.dart';
 import 'services/world_info_service.dart';
 import 'services/world_workshop_service.dart';
-import 'models/ui_style_settings.dart';
 import 'theme/anima_theme.dart';
-import 'theme/parchment_backdrop.dart';
+import 'theme/glass_backdrop.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,7 +38,7 @@ void main() {
   );
 }
 
-class AnimaApp extends StatefulWidget {
+class AnimaApp extends StatelessWidget {
   const AnimaApp({
     super.key,
     required this.apiKeyService,
@@ -62,72 +61,27 @@ class AnimaApp extends StatefulWidget {
   final WorldWorkshopService worldWorkshopService;
 
   @override
-  State<AnimaApp> createState() => _AnimaAppState();
-}
-
-class _AnimaAppState extends State<AnimaApp> {
-  ThemeMode _themeMode = ThemeMode.system;
-  UiStyleSettings _uiStyle = const UiStyleSettings();
-
-  @override
-  void initState() {
-    super.initState();
-    _loadTheme();
-  }
-
-  Future<void> _loadTheme() async {
-    final name = await widget.settingsService.getThemeModeName();
-    final style = await widget.settingsService.getUiStyle();
-    if (!mounted) return;
-    setState(() {
-      _themeMode = _parseThemeMode(name);
-      _uiStyle = style;
-    });
-  }
-
-  ThemeMode _parseThemeMode(String name) {
-    switch (name) {
-      case 'light':
-        return ThemeMode.light;
-      case 'dark':
-        return ThemeMode.dark;
-      default:
-        return ThemeMode.system;
-    }
-  }
-
-  Future<void> refreshTheme() => _loadTheme();
-
-  @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Anima',
       debugShowCheckedModeBanner: false,
-      theme: AnimaTheme.light(_uiStyle),
-      darkTheme: AnimaTheme.dark(_uiStyle),
-      themeMode: _themeMode,
+      theme: AnimaTheme.dark(),
+      darkTheme: AnimaTheme.dark(),
+      themeMode: ThemeMode.dark,
       builder: (context, child) {
-        Widget content = ParchmentBackdrop(
+        return GlassBackdrop(
           child: child ?? const SizedBox.shrink(),
         );
-        if (_uiStyle.reduceMotion) {
-          content = MediaQuery(
-            data: MediaQuery.of(context).copyWith(disableAnimations: true),
-            child: content,
-          );
-        }
-        return content;
       },
       home: HomeScreen(
-        apiKeyService: widget.apiKeyService,
-        settingsService: widget.settingsService,
-        characterService: widget.characterService,
-        personaService: widget.personaService,
-        chatService: widget.chatService,
-        nanoGptService: widget.nanoGptService,
-        worldInfoService: widget.worldInfoService,
-        worldWorkshopService: widget.worldWorkshopService,
-        onThemeChanged: refreshTheme,
+        apiKeyService: apiKeyService,
+        settingsService: settingsService,
+        characterService: characterService,
+        personaService: personaService,
+        chatService: chatService,
+        nanoGptService: nanoGptService,
+        worldInfoService: worldInfoService,
+        worldWorkshopService: worldWorkshopService,
       ),
     );
   }

@@ -5,47 +5,41 @@ import 'package:anima/models/ui_style_settings.dart';
 import 'package:anima/theme/anima_theme.dart';
 
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
   AnimaTheme.useSystemFonts = true;
 
-  test('UiStyleSettings round-trips JSON with color overrides', () {
+  test('UiStyleSettings round-trips avatar JSON', () {
     const style = UiStyleSettings(
-      preset: VisualPreset.ember,
-      primaryColor: Color(0xFF112233),
-      fontPairing: FontPairing.cleanSans,
-      fontScale: 1.1,
-      chatFontScale: 1.2,
-      backgroundStyle: BackgroundStyle.softGradient,
-      showTexture: false,
-      motion: MotionPreference.slow,
-      density: UiDensity.compact,
+      avatarStyle: AvatarStyleSettings(
+        shape: AvatarShape.roundedRect,
+        sizeTier: AvatarSizeTier.large,
+        scale: 1.25,
+      ),
     );
     final restored = UiStyleSettings.fromJson(style.toJson());
-    expect(restored.preset, VisualPreset.ember);
-    expect(restored.primaryColor?.toARGB32(), 0xFF112233);
-    expect(restored.fontPairing, FontPairing.cleanSans);
-    expect(restored.fontScale, closeTo(1.1, 0.001));
-    expect(restored.showTexture, isFalse);
-    expect(restored.motion, MotionPreference.slow);
-    expect(restored.density, UiDensity.compact);
+    expect(restored.avatarStyle.shape, AvatarShape.roundedRect);
+    expect(restored.avatarStyle.sizeTier, AvatarSizeTier.large);
+    expect(restored.avatarStyle.scale, closeTo(1.25, 0.001));
   });
 
-  test('withPreset clears color overrides', () {
-    final styled = const UiStyleSettings(
-      primaryColor: Color(0xFFABCDEF),
-    ).withPreset(VisualPreset.midnight);
-    expect(styled.preset, VisualPreset.midnight);
-    expect(styled.primaryColor, isNull);
+  test('legacy appearance JSON still yields avatar settings', () {
+    final restored = UiStyleSettings.fromJson({
+      'preset': 'parchment',
+      'showTexture': true,
+      'avatarShape': 'square',
+      'avatarSize': 'small',
+      'avatarScale': 0.9,
+    });
+    expect(restored.avatarStyle.shape, AvatarShape.square);
+    expect(restored.avatarStyle.sizeTier, AvatarSizeTier.small);
+    expect(restored.avatarStyle.scale, closeTo(0.9, 0.001));
   });
 
-  test('AnimaTheme builds light and dark for each preset', () {
-    for (final preset in VisualPreset.values) {
-      final style = UiStyleSettings(preset: preset);
-      final light = AnimaTheme.light(style);
-      final dark = AnimaTheme.dark(style);
-      expect(light.brightness, Brightness.light);
-      expect(dark.brightness, Brightness.dark);
-      expect(light.extension<AnimaUiTheme>(), isNotNull);
-    }
+  test('dark theme includes glass AnimaUiTheme extension', () {
+    final theme = AnimaTheme.dark();
+    final ui = theme.extension<AnimaUiTheme>();
+    expect(ui, isNotNull);
+    expect(ui!.chatBubbleRadius, greaterThan(0));
+    expect(theme.colorScheme.brightness, Brightness.dark);
+    expect(theme.colorScheme.primary, AnimaTheme.gold);
   });
 }

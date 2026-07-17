@@ -2,16 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/lorebook.dart';
+import '../services/lore_collaborator.dart';
+import '../services/nanogpt_service.dart';
+import '../services/settings_service.dart';
+import '../widgets/keyboard_inset.dart';
 
-/// Edit a character's embedded World Info / lorebook (SillyTavern-style).
+/// Edit a character's or global World Info / lorebook (SillyTavern-style).
 class LorebookEditScreen extends StatefulWidget {
   const LorebookEditScreen({
     super.key,
     required this.initial,
+    required this.settingsService,
+    required this.nanoGptService,
     this.characterName = '',
   });
 
   final Lorebook initial;
+  final SettingsService settingsService;
+  final NanoGptService nanoGptService;
   final String characterName;
 
   @override
@@ -65,9 +73,23 @@ class _LorebookEditScreenState extends State<LorebookEditScreen> {
 
   Future<void> _editEntry(int? index) async {
     final existing = index == null ? null : _entries[index];
+    final siblings = <LoreSiblingSummary>[];
+    for (var i = 0; i < _entries.length; i++) {
+      if (index != null && i == index) continue;
+      siblings.add(LoreSiblingSummary.fromEntry(_entries[i]));
+    }
+
     final result = await Navigator.of(context).push<LorebookEntry>(
       MaterialPageRoute(
-        builder: (_) => _LorebookEntryEditScreen(existing: existing),
+        builder: (_) => _LorebookEntryEditScreen(
+          existing: existing,
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
+          bookName: _name.text.trim(),
+          bookDescription: _description.text.trim(),
+          characterName: widget.characterName,
+          siblingEntries: siblings,
+        ),
       ),
     );
     if (result == null || !mounted) return;
@@ -143,6 +165,12 @@ class _LorebookEditScreenState extends State<LorebookEditScreen> {
             'World Info only sends lore when a keyword shows up in recent chat '
             '(or when an entry is set to Always on). That keeps prompts small on a phone.',
             style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Open an entry (or Add entry) and tap the wand on Label, Keywords, '
+            'or Lore content to append AI text — same as the character editor.',
+            style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 16),
           TextField(
@@ -260,9 +288,23 @@ class _LorebookEditScreenState extends State<LorebookEditScreen> {
 }
 
 class _LorebookEntryEditScreen extends StatefulWidget {
-  const _LorebookEntryEditScreen({this.existing});
+  const _LorebookEntryEditScreen({
+    this.existing,
+    required this.settingsService,
+    required this.nanoGptService,
+    this.bookName = '',
+    this.bookDescription = '',
+    this.characterName = '',
+    this.siblingEntries = const [],
+  });
 
   final LorebookEntry? existing;
+  final SettingsService settingsService;
+  final NanoGptService nanoGptService;
+  final String bookName;
+  final String bookDescription;
+  final String characterName;
+  final List<LoreSiblingSummary> siblingEntries;
 
   @override
   State<_LorebookEntryEditScreen> createState() =>
@@ -270,6 +312,8 @@ class _LorebookEntryEditScreen extends StatefulWidget {
 }
 
 class _LorebookEntryEditScreenState extends State<_LorebookEntryEditScreen> {
+  static const _collaborator = LoreCollaborator();
+
   late TextEditingController _name;
   late TextEditingController _keys;
   late TextEditingController _secondaryKeys;
@@ -284,6 +328,7 @@ class _LorebookEntryEditScreenState extends State<_LorebookEntryEditScreen> {
   late LorebookPosition _position;
   late Map<String, dynamic> _extensions;
   int? _id;
+  LoreCollaboratorField? _wandBusy;
 
   @override
   void initState() {
@@ -324,7 +369,105 @@ class _LorebookEntryEditScreenState extends State<_LorebookEntryEditScreen> {
       .where((s) => s.isNotEmpty)
       .toList();
 
+  LoreEntryDraftContext _draftContext() {
+    return LoreEntryDraftContext(
+      bookName: widget.bookName,
+      bookDescription: widget.bookDescription,
+      characterName: widget.characterName,
+      name: _name.text,
+      keys: _keys.text,
+      secondaryKeys: _secondaryKeys.text,
+      content: _content.text,
+      comment: _comment.text,
+      constant: _constant,
+      selective: _selective,
+      siblingEntries: widget.siblingEntries,
+    );
+  }
+
+  TextEditingController _controllerFor(LoreCollaboratorField field) {
+    switch (field) {
+      case LoreCollaboratorField.name:
+        return _name;
+      case LoreCollaboratorField.keys:
+        return _keys;
+      case LoreCollaboratorField.secondaryKeys:
+        return _secondaryKeys;
+      case LoreCollaboratorField.content:
+        return _content;
+    }
+  }
+
+  Future<void> _runWand(LoreCollaboratorField field) async {
+    if (_wandBusy != null) return;
+
+    setState(() => _wandBusy = field);
+    try {
+      final collaborator =
+          await widget.settingsService.getCollaboratorSettings();
+      final messages = _collaborator.buildMessages(
+        field: field,
+        draft: _draftContext(),
+        guidanceNote: collaborator.guidanceNote,
+      );
+      final model = await widget.settingsService.getModel();
+      final sampling = await widget.settingsService.getSampling();
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+      final generated = await widget.nanoGptService.complete(
+        model: model,
+        messages: messages,
+        baseUrl: baseUrl,
+        sampling: sampling,
+      );
+      if (!mounted) return;
+      final controller = _controllerFor(field);
+      controller.text = _collaborator.appendGenerated(
+        controller.text,
+        generated,
+        field: field,
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Appended AI text to ${_collaborator.fieldLabel(field)}.',
+          ),
+        ),
+      );
+    } on NanoGptCancelledException {
+      // One-shot complete; ignore cancel edge cases.
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Wand failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _wandBusy = null);
+    }
+  }
+
+  Widget? _wandSuffix(LoreCollaboratorField field) {
+    final wandBusy = _wandBusy == field;
+    final anyWandBusy = _wandBusy != null;
+    return IconButton(
+      tooltip: 'AI wand — expand this field',
+      onPressed: anyWandBusy ? null : () => _runWand(field),
+      icon: wandBusy
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.auto_awesome),
+    );
+  }
+
   void _save() {
+    if (_wandBusy != null) return;
     final content = _content.text.trim();
     if (content.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -362,16 +505,27 @@ class _LorebookEntryEditScreenState extends State<_LorebookEntryEditScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final anyWandBusy = _wandBusy != null;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.existing == null ? 'New lore entry' : 'Edit lore entry'),
         actions: [
-          TextButton(onPressed: _save, child: const Text('Done')),
+          TextButton(
+            onPressed: anyWandBusy ? null : _save,
+            child: const Text('Done'),
+          ),
         ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
+          Text(
+            'Tap the wand on Label, Keywords, or Lore content to append AI text '
+            '(uses your NanoGPT model + Settings → AI collaborator).',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Enabled'),
@@ -391,15 +545,18 @@ class _LorebookEntryEditScreenState extends State<_LorebookEntryEditScreen> {
           const SizedBox(height: 8),
           TextField(
             controller: _name,
-            decoration: const InputDecoration(
+            scrollPadding: kAnimaKeyboardScrollPadding,
+            decoration: InputDecoration(
               labelText: 'Label (optional)',
               hintText: 'Short name for this entry',
-              border: OutlineInputBorder(),
+              border: const OutlineInputBorder(),
+              suffixIcon: _wandSuffix(LoreCollaboratorField.name),
             ),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _keys,
+            scrollPadding: kAnimaKeyboardScrollPadding,
             decoration: InputDecoration(
               labelText: 'Keywords',
               hintText: 'sword, blade, Excalibur',
@@ -407,6 +564,7 @@ class _LorebookEntryEditScreenState extends State<_LorebookEntryEditScreen> {
                   ? 'Optional when Always on is checked.'
                   : 'Comma-separated. Any one match can fire this entry.',
               border: const OutlineInputBorder(),
+              suffixIcon: _wandSuffix(LoreCollaboratorField.keys),
             ),
           ),
           const SizedBox(height: 12),
@@ -422,10 +580,12 @@ class _LorebookEntryEditScreenState extends State<_LorebookEntryEditScreen> {
           if (_selective) ...[
             TextField(
               controller: _secondaryKeys,
-              decoration: const InputDecoration(
+              scrollPadding: kAnimaKeyboardScrollPadding,
+              decoration: InputDecoration(
                 labelText: 'Secondary keywords',
                 hintText: 'quest, legend',
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
+                suffixIcon: _wandSuffix(LoreCollaboratorField.secondaryKeys),
               ),
             ),
             const SizedBox(height: 12),
@@ -441,11 +601,13 @@ class _LorebookEntryEditScreenState extends State<_LorebookEntryEditScreen> {
             controller: _content,
             minLines: 5,
             maxLines: 12,
-            decoration: const InputDecoration(
+            scrollPadding: kAnimaKeyboardScrollPadding,
+            decoration: InputDecoration(
               labelText: 'Lore content',
               hintText: 'Facts injected into the AI prompt when this fires…',
               alignLabelWithHint: true,
-              border: OutlineInputBorder(),
+              border: const OutlineInputBorder(),
+              suffixIcon: _wandSuffix(LoreCollaboratorField.content),
             ),
           ),
           const SizedBox(height: 12),
@@ -510,6 +672,7 @@ class _LorebookEntryEditScreenState extends State<_LorebookEntryEditScreen> {
             controller: _comment,
             minLines: 2,
             maxLines: 4,
+            scrollPadding: kAnimaKeyboardScrollPadding,
             decoration: const InputDecoration(
               labelText: 'Comment (optional)',
               hintText: 'Notes for you — not sent to the AI',
@@ -519,7 +682,7 @@ class _LorebookEntryEditScreenState extends State<_LorebookEntryEditScreen> {
           ),
           const SizedBox(height: 24),
           FilledButton(
-            onPressed: _save,
+            onPressed: anyWandBusy ? null : _save,
             child: const Text('Save entry'),
           ),
         ],
