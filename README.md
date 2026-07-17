@@ -65,16 +65,20 @@ That file is the living build status: what exists, what's next, and rules.
 
 ```
 lib/
-  main.dart                 # App entry + theme
+  main.dart                      # App entry + theme
   models/
-    chat_message.dart       # One chat bubble
+    chat_message.dart            # One chat bubble
+    character.dart               # Name + personality prompt
   screens/
-    chat_screen.dart        # Chat with NanoGPT
-    settings_screen.dart    # API key + model
+    chat_screen.dart             # Chat with NanoGPT
+    characters_screen.dart       # Pick / manage characters
+    character_edit_screen.dart   # Create or edit a character
+    settings_screen.dart         # API key + model
   services/
-    api_key_service.dart    # Secure storage for the NanoGPT key
-    settings_service.dart   # Saved model name
-    nanogpt_service.dart    # Talks to NanoGPT over the internet
+    api_key_service.dart         # Secure storage for the NanoGPT key
+    settings_service.dart        # Saved model + selected character
+    character_service.dart       # Characters JSON on this device
+    nanogpt_service.dart         # Talks to NanoGPT over the internet
 ```
 
 ---

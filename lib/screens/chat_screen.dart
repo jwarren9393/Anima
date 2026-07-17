@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../models/character.dart';
 import '../models/chat_message.dart';
 import '../services/api_key_service.dart';
+import '../services/character_service.dart';
 import '../services/nanogpt_service.dart';
 import '../services/settings_service.dart';
+import 'characters_screen.dart';
 import 'settings_screen.dart';
 
 /// Main chat screen: type a message, send it to NanoGPT, see the reply.
@@ -12,11 +15,13 @@ class ChatScreen extends StatefulWidget {
     super.key,
     required this.apiKeyService,
     required this.settingsService,
+    required this.characterService,
     required this.nanoGptService,
   });
 
   final ApiKeyService apiKeyService;
   final SettingsService settingsService;
+  final CharacterService characterService;
   final NanoGptService nanoGptService;
 
   @override
@@ -29,23 +34,40 @@ class _ChatScreenState extends State<ChatScreen> {
   final _messages = <ChatMessage>[];
 
   bool _hasApiKey = false;
-  bool _checkingKey = true;
+  bool _loading = true;
   bool _sending = false;
   String? _error;
+  Character? _character;
 
   @override
   void initState() {
     super.initState();
-    _refreshApiKeyStatus();
+    _bootstrap();
   }
 
-  Future<void> _refreshApiKeyStatus() async {
+  Future<void> _bootstrap() async {
     final hasKey = await widget.apiKeyService.hasApiKey();
+    final character = await _resolveSelectedCharacter();
     if (!mounted) return;
     setState(() {
       _hasApiKey = hasKey;
-      _checkingKey = false;
+      _character = character;
+      _loading = false;
     });
+  }
+
+  Future<Character> _resolveSelectedCharacter() async {
+    final characters = await widget.characterService.loadCharacters();
+    final selectedId = await widget.settingsService.getSelectedCharacterId();
+    Character chosen = characters.first;
+    for (final character in characters) {
+      if (character.id == selectedId) {
+        chosen = character;
+        break;
+      }
+    }
+    await widget.settingsService.saveSelectedCharacterId(chosen.id);
+    return chosen;
   }
 
   Future<void> _openSettings() async {
@@ -57,7 +79,34 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
       ),
     );
-    await _refreshApiKeyStatus();
+    final hasKey = await widget.apiKeyService.hasApiKey();
+    if (!mounted) return;
+    setState(() => _hasApiKey = hasKey);
+  }
+
+  Future<void> _openCharacters() async {
+    final previousId = _character?.id;
+    final selected = await Navigator.of(context).push<Character>(
+      MaterialPageRoute(
+        builder: (_) => CharactersScreen(
+          characterService: widget.characterService,
+          settingsService: widget.settingsService,
+        ),
+      ),
+    );
+
+    final character = selected ?? await _resolveSelectedCharacter();
+    if (!mounted) return;
+
+    // Switching characters starts a fresh in-memory chat (saved history is Phase 4).
+    final switched = previousId != null && previousId != character.id;
+    setState(() {
+      _character = character;
+      if (switched) {
+        _messages.clear();
+        _error = null;
+      }
+    });
   }
 
   Future<void> _send() async {
@@ -68,6 +117,14 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() {
         _error =
             'Add your NanoGPT API key in Settings before you can chat.';
+      });
+      return;
+    }
+
+    final character = _character;
+    if (character == null) {
+      setState(() {
+        _error = 'Pick a character first (people icon in the top bar).';
       });
       return;
     }
@@ -90,6 +147,7 @@ class _ChatScreenState extends State<ChatScreen> {
       final reply = await widget.nanoGptService.sendChatMessage(
         userMessage: text,
         model: model,
+        systemPrompt: character.systemPrompt,
         priorMessages: priorForApi,
       );
       if (!mounted) return;
@@ -141,11 +199,27 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final characterName = _character?.name ?? 'Anima';
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Anima'),
+        title: Column(
+          crossAxisAlignment: .start,
+          children: [
+            const Text('Anima'),
+            if (_character != null)
+              Text(
+                'Chatting with $characterName',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+          ],
+        ),
         actions: [
+          IconButton(
+            tooltip: 'Characters',
+            icon: const Icon(Icons.people_outline),
+            onPressed: _loading || _sending ? null : _openCharacters,
+          ),
           if (_messages.isNotEmpty)
             IconButton(
               tooltip: 'Clear chat',
@@ -161,7 +235,7 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       body: Column(
         children: [
-          if (_checkingKey)
+          if (_loading)
             const LinearProgressIndicator(minHeight: 2)
           else if (!_hasApiKey)
             Material(
@@ -184,7 +258,12 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           Expanded(
             child: _messages.isEmpty && !_sending
-                ? _EmptyChat(hasApiKey: _hasApiKey, onOpenSettings: _openSettings)
+                ? _EmptyChat(
+                    hasApiKey: _hasApiKey,
+                    characterName: characterName,
+                    onOpenSettings: _openSettings,
+                    onOpenCharacters: _openCharacters,
+                  )
                 : ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
@@ -239,14 +318,13 @@ class _ChatScreenState extends State<ChatScreen> {
                       minLines: 1,
                       maxLines: 5,
                       textInputAction: .newline,
-                      decoration: const InputDecoration(
-                        hintText: 'Type a message…',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        hintText: 'Message $characterName…',
+                        border: const OutlineInputBorder(),
                         isDense: true,
                       ),
                       onSubmitted: (_) {
-                        // Enter on desktop sends; on mobile newline is fine.
-                        if (!(_sending)) _send();
+                        if (!_sending) _send();
                       },
                     ),
                   ),
@@ -276,10 +354,17 @@ class _ChatScreenState extends State<ChatScreen> {
 }
 
 class _EmptyChat extends StatelessWidget {
-  const _EmptyChat({required this.hasApiKey, required this.onOpenSettings});
+  const _EmptyChat({
+    required this.hasApiKey,
+    required this.characterName,
+    required this.onOpenSettings,
+    required this.onOpenCharacters,
+  });
 
   final bool hasApiKey;
+  final String characterName;
   final VoidCallback onOpenSettings;
+  final VoidCallback onOpenCharacters;
 
   @override
   Widget build(BuildContext context) {
@@ -296,26 +381,31 @@ class _EmptyChat extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              'Start chatting',
+              'Chat with $characterName',
               style: Theme.of(context).textTheme.headlineSmall,
               textAlign: .center,
             ),
             const SizedBox(height: 8),
             Text(
               hasApiKey
-                  ? 'Type a message below and NanoGPT will reply.'
+                  ? 'Type a message below. Use the people icon to switch characters.'
                   : 'First save your NanoGPT API key in Settings, then send a message.',
               style: Theme.of(context).textTheme.bodyLarge,
               textAlign: .center,
             ),
-            if (!hasApiKey) ...[
-              const SizedBox(height: 20),
+            const SizedBox(height: 20),
+            if (!hasApiKey)
               FilledButton.icon(
                 onPressed: onOpenSettings,
                 icon: const Icon(Icons.key),
                 label: const Text('Open Settings'),
+              )
+            else
+              OutlinedButton.icon(
+                onPressed: onOpenCharacters,
+                icon: const Icon(Icons.people_outline),
+                label: const Text('Manage characters'),
               ),
-            ],
           ],
         ),
       ),

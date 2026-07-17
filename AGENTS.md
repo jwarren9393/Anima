@@ -37,30 +37,28 @@ Auth header: `Authorization: Bearer <API_KEY>`
 
 ## Current status
 
-**Phase:** 2 — Real chat UI ✅
+**Phase:** 3 — Characters ✅
 
 **Last updated:** 2026-07-17  
-**Last agent action:** Built real chat UI wired to NanoGPT (message bubbles, send, in-memory history, loading/errors, editable model in Settings). Deployed to SM-S731U.
+**Last agent action:** Added create/edit/select/delete characters with JSON file persistence; chat sends each character’s system prompt to NanoGPT. Deployed to SM-S731U. Phase 1–2 previously pushed; Phase 3 ready to commit.
 
 ### What works today
 
 - Flutter app named `anima` (`com.anima.anima`) with Android, Linux, and Windows folders
-- **Real chat screen:** bubbles, text box, send button, “Thinking…” state, plain-English errors
-- **In-memory conversation** for the current session (clears if you kill the app or tap Clear)
-- Settings: save/clear NanoGPT API key + choose AI model (default `openai/gpt-4o-mini`)
-- `NanoGptService` calls `https://nano-gpt.com/api/v1/chat/completions`
-- Internet permission on Android
-- Secrets-safe `.gitignore` entries
-- Private GitHub repo at https://github.com/jwarren9393/Anima (`main` branch)
-- **Android toolchain** + **runs on Samsung SM-S731U**
+- **Real chat screen** wired to NanoGPT (bubbles, send, Thinking…, plain-English errors)
+- **Characters:** name + personality prompt; list / create / edit / delete / select
+- Characters saved on-device as `anima_characters.json` (via `path_provider`)
+- Selected character’s system prompt is sent with every NanoGPT request
+- Switching characters clears the in-memory chat (per-character saved history is Phase 4)
+- Settings: API key + model (default `openai/gpt-4o-mini`)
+- Private GitHub repo + Android toolchain + runs on Samsung SM-S731U
 
 ### What does NOT work yet
 
-- Character profiles / personality prompts (Phase 3)
-- Chat history saved across app restarts (Phase 4)
+- Chat history saved across app restarts / per character (Phase 4)
 - Streaming replies (Phase 4)
+- Character avatars (optional later)
 - Linux desktop build tools (optional; needs sudo apt)
-- Emulator (optional; real phone works)
 
 ---
 
@@ -94,11 +92,11 @@ Update checkboxes as phases complete.
 - [x] Show loading / error states in plain language
 - [x] Default model setting (editable in Settings)
 
-### Phase 3 — Characters
+### Phase 3 — Characters ✅
 
-- [ ] Simple character model (name, system prompt, optional avatar later)
-- [ ] Create / edit / select a character
-- [ ] Persist characters on device (start simple: local files or lightweight DB)
+- [x] Simple character model (name, system prompt, optional avatar later)
+- [x] Create / edit / select a character
+- [x] Persist characters on device (JSON file via `path_provider`)
 
 ### Phase 4 — Persistence & polish
 
@@ -119,19 +117,23 @@ Update checkboxes as phases complete.
 
 ```
 lib/
-  main.dart                      App entry, themes, wires services → ChatScreen
+  main.dart                         App entry, themes, wires services → ChatScreen
   models/
-    chat_message.dart            One chat bubble (user or assistant)
+    chat_message.dart               One chat bubble (user or assistant)
+    character.dart                  Character name + system prompt
   screens/
-    chat_screen.dart             Chat UI + NanoGPT send/receive
-    settings_screen.dart         API key + model name
+    chat_screen.dart                Chat UI + NanoGPT send/receive
+    characters_screen.dart          List / select / delete characters
+    character_edit_screen.dart      Create or edit a character
+    settings_screen.dart            API key + model name
   services/
-    api_key_service.dart         Secure storage for NanoGPT API key
-    settings_service.dart        Saved model preference (default openai/gpt-4o-mini)
-    nanogpt_service.dart         HTTP client for /chat/completions + plain errors
+    api_key_service.dart            Secure storage for NanoGPT API key
+    settings_service.dart           Model + selected character id
+    character_service.dart          Load/save characters JSON on device
+    nanogpt_service.dart            HTTP client for /chat/completions + plain errors
 ```
 
-**Dependencies in use:** `flutter_secure_storage`, `http`
+**Dependencies in use:** `flutter_secure_storage`, `http`, `path_provider`
 
 ---
 
@@ -181,8 +183,8 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. **Phase 3:** Characters (name + system prompt, create/edit/select, save on device).
-2. Optional: commit/push Phase 1–2 changes to GitHub when the owner asks.
+1. **Phase 4:** Persist chat history per character; optional streaming replies.
+2. Commit/push Phase 3 to GitHub when the owner asks (if not already pushed).
 3. Optional: `sudo apt install clang cmake ninja-build pkg-config libgtk-3-dev` for Linux desktop runs.
 
 ---
