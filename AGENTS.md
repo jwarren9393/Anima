@@ -57,28 +57,29 @@ High-value SillyTavern concepts to aim for over time:
 
 ## Current status
 
-**Phase:** 5 — Richer character cards + ST import/export ✅
+**Phase:** 8 — Nice-to-haves ✅
 
 **Last updated:** 2026-07-17  
-**Last agent action:** Committed and pushed Phases 4–5 (persistence/chat controls + ST card fields/import-export) to GitHub `main`.
+**Last agent action:** Completed Phase 8 — group chats, Continue/Impersonate, Author's Note, theme polish, TTS, desktop smoke notes.
 
 ### What works today
 
-- SillyTavern-inspired chat app (saved chats, streaming, swipes, regenerate, edit/delete)
-- **Character cards** with ST fields: description, personality, scenario, first_mes, mes_example, system_prompt, post_history_instructions, alternate_greetings, tags, creator notes, etc.
-- **Import** SillyTavern / site cards: `.json` (V1/V2/V3) and `.png` (embedded `chara` / `ccv3` chunk)
-- **Export** Card V2 or V3 JSON (share sheet) — lorebook + extensions preserved
-- **Persona** in Settings (`{{user}}` name + about-you text)
-- **Macros** `{{user}}` / `{{char}}` in card text and greetings
-- Alternate greetings become first-message swipes on new chats
-- Embedded `character_book` kept for later Phase 6 lore playback
+- Full SillyTavern-inspired core through Phase 7 (cards, lore, sampling, import/export)
+- **Continue** — generate the next character line without typing
+- **Impersonate** — AI writes your next line as {{user}}
+- **Author's Note** — per-chat instructions injected each turn
+- **Group chats** — pick 2+ characters; round-robin replies with speaker labels
+- **Theme** — system / light / dark in Settings; rounded mobile UI polish
+- **TTS** — optional “Speak” on long-press (device voice); enable in Settings
+- **Smoke:** `flutter test` + `flutter analyze` pass; Android debug APK builds
 
-### What does NOT work yet
+### What does NOT work yet / limits
 
-- Lorebook / World Info playback (Phase 6) — books are stored but not injected yet
-- PNG *export* with embedded card (JSON export works; PNG import works)
-- Optional local avatar image UI
-- Sampling knobs / chat transcript import (rest of Phase 7)
+- Linux desktop build needs apt packages (cmake/clang/ninja/pkg-config) — not installed on this PC
+- Windows build only on a Windows host (this machine is Linux)
+- Group chats are simple round-robin (not full ST group orchestration)
+- Avatar image UI still deferred (PNG export uses teal placeholder)
+- Recursive lore scanning still off
 
 ---
 
@@ -141,35 +142,35 @@ Goal: characters closer to SillyTavern cards, still simple to edit on phone.
 - [x] Import Character Card V1/V2/V3 JSON + PNG (`chara`/`ccv3`) *(pulled forward from Phase 7)*
 - [x] Export Anima characters to ST-compatible V2/V3 JSON *(pulled forward from Phase 7)*
 
-### Phase 6 — Lorebooks / World Info (ST signature feature)
+### Phase 6 — Lorebooks / World Info (ST signature feature) ✅
 
 Goal: keyword-triggered lore so long worlds don’t dump everything into every prompt.
 
-- [ ] Lorebook entries: keys, content, on/off, order
-- [ ] Bind a lorebook to a character (and/or to a chat)
-- [ ] Scan recent messages for keys and inject matching entries
-- [ ] Simple token/entry budget so prompts stay small on mobile
-- [ ] Play back embedded `character_book` already stored on imported cards
+- [x] Lorebook entries: keys, content, on/off, order
+- [x] Bind a lorebook to a character (embedded `character_book`; chat-level books deferred)
+- [x] Scan recent messages for keys and inject matching entries
+- [x] Simple token/entry budget so prompts stay small on mobile
+- [x] Play back embedded `character_book` already stored on imported cards
 
-### Phase 7 — Import / export & sampling
+### Phase 7 — Import / export & sampling ✅
 
 Goal: bring characters in/out of the SillyTavern ecosystem; tune generation.
 
 - [x] Import Character Card V2/V3 JSON (PNG-with-embedded-JSON supported)
 - [x] Export Anima characters to ST-compatible JSON
-- [ ] Export/import chat transcripts
-- [ ] Sampling settings: temperature, max tokens, top_p (saved in Settings)
-- [ ] Optional NanoGPT subscription base URL toggle
-- [ ] Optional: export PNG with embedded `chara` chunk
+- [x] Export/import chat transcripts
+- [x] Sampling settings: temperature, max tokens, top_p (saved in Settings)
+- [x] Optional NanoGPT subscription base URL toggle
+- [x] Optional: export PNG with embedded `chara` chunk
 
-### Phase 8 — Nice-to-haves (only if requested)
+### Phase 8 — Nice-to-haves ✅
 
-- [ ] Group chats
-- [ ] Continue / impersonate
-- [ ] Author’s Note / chat-level instructions
-- [ ] Basic theming / nicer mobile layout polish
-- [ ] Windows / Linux smoke tests
-- [ ] TTS or other ST-like extensions (lowest priority)
+- [x] Group chats (simple multi-character round-robin)
+- [x] Continue / impersonate
+- [x] Author’s Note / chat-level instructions
+- [x] Basic theming / nicer mobile layout polish
+- [x] Windows / Linux smoke tests (documented; Linux needs deps, Windows needs Windows host)
+- [x] TTS (optional device voice via `flutter_tts`)
 
 ---
 
@@ -177,27 +178,34 @@ Goal: bring characters in/out of the SillyTavern ecosystem; tune generation.
 
 ```
 lib/
-  main.dart                         App entry, themes, wires services → ChatScreen
+  main.dart                         App entry, AnimaTheme, theme refresh
+  theme/
+    anima_theme.dart                Light/dark Material 3 polish
   models/
-    chat_message.dart               Bubble + swipe variants
-    chat_session.dart               Saved chat thread
+    chat_message.dart               Bubble + swipes + optional speaker
+    chat_session.dart               Thread + authorsNote + group participants
     character.dart                  ST-compatible card fields (+ Anima id)
+    lorebook.dart                   CharacterBook / World Info entries
   screens/
-    chat_screen.dart                Chat UI, streaming, swipes, persistence
-    characters_screen.dart          List / import / export / select characters
-    character_edit_screen.dart      Full card field editor
-    settings_screen.dart            API key + model + persona
+    chat_screen.dart                Chat UI + ST actions + group + TTS
+    characters_screen.dart          List / import / export (JSON + PNG)
+    character_edit_screen.dart      Full card field editor (+ lorebook button)
+    lorebook_edit_screen.dart       World Info entry list + entry editor
+    settings_screen.dart            API, sampling, persona, theme, TTS
   services/
     api_key_service.dart            Secure storage for NanoGPT API key
-    settings_service.dart           Model, selected character, persona
+    settings_service.dart           Model, persona, sampling, theme, TTS flag
     character_service.dart          Load/save characters JSON on device
     character_card_codec.dart       ST Card V1/V2/V3 + PNG import/export
-    prompt_builder.dart             System prompt + {{user}}/{{char}} macros
-    chat_service.dart               Load/save chats JSON per character
-    nanogpt_service.dart            Streaming + plain-English errors
+    prompt_builder.dart             System prompt, modes, group, authors note
+    lorebook_service.dart           Keyword scan, budget, before/after blocks
+    chat_service.dart               Chats per character + group bucket
+    chat_transcript_codec.dart      Chat JSON / plain-text import/export
+    nanogpt_service.dart            Streaming + sampling + plain-English errors
+    tts_service.dart                Optional flutter_tts wrapper
 ```
 
-**Dependencies in use:** `flutter_secure_storage`, `http`, `path_provider`, `file_picker`, `share_plus`, `path`
+**Dependencies in use:** `flutter_secure_storage`, `http`, `path_provider`, `file_picker`, `share_plus`, `path`, `flutter_tts`
 
 ---
 
@@ -219,7 +227,8 @@ lib/
 | JDK | ✅ Temurin 17 at `~/development/jdk-17` |
 | Android SDK | ✅ `~/Android/Sdk` (platform 36, build-tools 36.0.0) — Flutter doctor Android ✓ |
 | Chrome | ❌ Not required for this app |
-| Linux desktop toolchain | ❌ clang/cmake/ninja/pkg-config missing (needs sudo apt) |
+| Linux desktop toolchain | ❌ clang/cmake/ninja/pkg-config missing (needs `sudo apt install cmake ninja-build clang libgtk-3-dev pkg-config`) — `flutter build linux` fails until then |
+| Windows desktop | ❌ Build only on a Windows host (`flutter build windows` refused on Linux) |
 | Git | ✅ installed |
 | GitHub CLI (`gh`) | ✅ `~/.local/bin/gh` (logged in as jwarren9393) |
 | Physical Android phone | ✅ Samsung SM-S731U (`R3CYA09N26J`), Android 16 — `flutter run` verified |
@@ -247,8 +256,10 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. **Phase 6:** World Info / lorebook playback (including embedded `character_book` from imports).
-2. Optional: avatar images; PNG card export; sampling settings; Linux desktop deps.
+1. Use the app on your phone (`flutter run`) and try Continue / Impersonate / group chat / TTS.
+2. Optional later: local avatar images, richer group orchestration, Linux desktop deps if you want desktop builds.
+
+The core SillyTavern-inspired roadmap (Phases 0–8) is complete for a private Android-first app.
 
 ---
 

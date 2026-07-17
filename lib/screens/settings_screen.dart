@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../services/api_key_service.dart';
 import '../services/settings_service.dart';
 
-/// Settings: API key, model, and your persona (for {{user}} macros).
+/// Settings: API key, model, sampling, persona, theme, TTS.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
@@ -23,12 +24,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _modelController = TextEditingController();
   final _userNameController = TextEditingController();
   final _personaController = TextEditingController();
+  final _temperatureController = TextEditingController();
+  final _topPController = TextEditingController();
+  final _maxTokensController = TextEditingController();
   bool _obscure = true;
   bool _loading = true;
   bool _savingKey = false;
   bool _savingModel = false;
   bool _savingPersona = false;
+  bool _savingSampling = false;
+  bool _savingLook = false;
   bool _hasKey = false;
+  bool _useSubscription = false;
+  bool _ttsEnabled = false;
+  String _themeMode = 'system';
 
   @override
   void initState() {
@@ -41,12 +50,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final model = await widget.settingsService.getModel();
     final userName = await widget.settingsService.getUserName();
     final persona = await widget.settingsService.getUserPersona();
+    final sampling = await widget.settingsService.getSampling();
+    final subscription = await widget.settingsService.getUseSubscriptionApi();
+    final themeMode = await widget.settingsService.getThemeModeName();
+    final tts = await widget.settingsService.getTtsEnabled();
     if (!mounted) return;
     setState(() {
       _hasKey = key != null;
       _modelController.text = model;
       _userNameController.text = userName;
       _personaController.text = persona;
+      _temperatureController.text = sampling.temperature.toString();
+      _topPController.text = sampling.topP.toString();
+      _maxTokensController.text =
+          sampling.maxTokens == null ? '' : '${sampling.maxTokens}';
+      _useSubscription = subscription;
+      _themeMode = themeMode;
+      _ttsEnabled = tts;
       _loading = false;
     });
   }
@@ -111,12 +131,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Future<void> _saveSampling() async {
+    final temperature =
+        double.tryParse(_temperatureController.text.trim()) ??
+            SamplingSettings.defaultTemperature;
+    final topP = double.tryParse(_topPController.text.trim()) ??
+        SamplingSettings.defaultTopP;
+    final maxRaw = _maxTokensController.text.trim();
+    final maxParsed = maxRaw.isEmpty ? null : int.tryParse(maxRaw);
+    if (maxRaw.isNotEmpty && (maxParsed == null || maxParsed <= 0)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Max tokens must be a positive number, or blank.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _savingSampling = true);
+    await widget.settingsService.saveSampling(
+      SamplingSettings(
+        temperature: temperature.clamp(0.0, 2.0),
+        topP: topP.clamp(0.0, 1.0),
+        maxTokens: maxParsed,
+      ),
+    );
+    await widget.settingsService.saveUseSubscriptionApi(_useSubscription);
+    if (!mounted) return;
+    setState(() {
+      _savingSampling = false;
+      _temperatureController.text = temperature.clamp(0.0, 2.0).toString();
+      _topPController.text = topP.clamp(0.0, 1.0).toString();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Sampling & API settings saved.')),
+    );
+  }
+
+  Future<void> _saveLook() async {
+    setState(() => _savingLook = true);
+    await widget.settingsService.saveThemeModeName(_themeMode);
+    await widget.settingsService.saveTtsEnabled(_ttsEnabled);
+    if (!mounted) return;
+    setState(() => _savingLook = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Look & sound saved.')),
+    );
+    Navigator.of(context).pop(true);
+  }
+
   @override
   void dispose() {
     _keyController.dispose();
     _modelController.dispose();
     _userNameController.dispose();
     _personaController.dispose();
+    _temperatureController.dispose();
+    _topPController.dispose();
+    _maxTokensController.dispose();
     super.dispose();
   }
 
@@ -204,6 +276,125 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Text('Save model'),
+                ),
+                const SizedBox(height: 32),
+                Text(
+                  'Sampling',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Controls how creative or focused replies feel (SillyTavern-style knobs).',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _temperatureController,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  ],
+                  decoration: const InputDecoration(
+                    labelText: 'Temperature (0–2)',
+                    helperText: 'Higher = more creative / random. Default 0.8',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _topPController,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  ],
+                  decoration: const InputDecoration(
+                    labelText: 'Top P (0–1)',
+                    helperText: 'Nucleus sampling. Default 0.95',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _maxTokensController,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: const InputDecoration(
+                    labelText: 'Max tokens (optional)',
+                    helperText: 'Leave blank to use the model default',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Use subscription API'),
+                  subtitle: Text(
+                    _useSubscription
+                        ? SettingsService.subscriptionBaseUrl
+                        : SettingsService.defaultBaseUrl,
+                  ),
+                  value: _useSubscription,
+                  onChanged: (v) => setState(() => _useSubscription = v),
+                ),
+                Text(
+                  'Turn this on if you have a NanoGPT subscription and want '
+                  'requests limited to subscription-included models.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: _savingSampling ? null : _saveSampling,
+                  child: _savingSampling
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Save sampling & API'),
+                ),
+                const SizedBox(height: 32),
+                Text(
+                  'Look & sound',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 12),
+                Text('Theme', style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 8),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'system', label: Text('System')),
+                    ButtonSegment(value: 'light', label: Text('Light')),
+                    ButtonSegment(value: 'dark', label: Text('Dark')),
+                  ],
+                  selected: {_themeMode},
+                  onSelectionChanged: (selected) {
+                    setState(() => _themeMode = selected.first);
+                  },
+                ),
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Read replies aloud (TTS)'),
+                  subtitle: const Text(
+                    'Uses your phone’s voice. Long-press a message → Speak.',
+                  ),
+                  value: _ttsEnabled,
+                  onChanged: (v) => setState(() => _ttsEnabled = v),
+                ),
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: _savingLook ? null : _saveLook,
+                  child: _savingLook
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Save look & sound'),
                 ),
                 const SizedBox(height: 32),
                 Text(

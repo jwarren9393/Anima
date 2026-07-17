@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 import 'api_key_service.dart';
+import 'settings_service.dart';
 
 /// Talks to the NanoGPT chat API (OpenAI-compatible).
 ///
@@ -13,12 +14,12 @@ class NanoGptService {
   NanoGptService({
     required this._apiKeyService,
     http.Client? httpClient,
-    this.baseUrl = 'https://nano-gpt.com/api/v1',
+    this.defaultBaseUrl = SettingsService.defaultBaseUrl,
   }) : _http = httpClient ?? http.Client();
 
   final ApiKeyService _apiKeyService;
   final http.Client _http;
-  final String baseUrl;
+  final String defaultBaseUrl;
 
   /// Streams an assistant reply as plain text chunks (SillyTavern-style live typing).
   ///
@@ -26,6 +27,8 @@ class NanoGptService {
   Stream<String> streamCompletion({
     required String model,
     required List<Map<String, String>> messages,
+    String? baseUrl,
+    SamplingSettings sampling = const SamplingSettings(),
   }) async* {
     final apiKey = await _apiKeyService.getApiKey();
     if (apiKey == null) {
@@ -37,18 +40,27 @@ class NanoGptService {
       throw NanoGptException('Nothing to send to NanoGPT yet.');
     }
 
-    final uri = Uri.parse('$baseUrl/chat/completions');
+    final root = (baseUrl ?? defaultBaseUrl).trim().replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$root/chat/completions');
+
+    final body = <String, dynamic>{
+      'model': model,
+      'messages': messages,
+      'stream': true,
+      'temperature': sampling.temperature,
+      'top_p': sampling.topP,
+    };
+    if (sampling.maxTokens != null && sampling.maxTokens! > 0) {
+      body['max_tokens'] = sampling.maxTokens;
+    }
+
     final request = http.Request('POST', uri)
       ..headers.addAll({
         'Authorization': 'Bearer $apiKey',
         'Content-Type': 'application/json',
         'Accept': 'text/event-stream',
       })
-      ..body = jsonEncode({
-        'model': model,
-        'messages': messages,
-        'stream': true,
-      });
+      ..body = jsonEncode(body);
 
     late final http.StreamedResponse response;
     try {
@@ -89,11 +101,11 @@ class NanoGptService {
       );
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      final body = await response.stream.bytesToString();
+      final errBody = await response.stream.bytesToString();
       throw NanoGptException(
         'NanoGPT returned an error (${response.statusCode}). '
         'If this keeps happening, try a different model name in Settings.\n\n'
-        '${_shortBody(body)}',
+        '${_shortBody(errBody)}',
       );
     }
 
@@ -154,9 +166,16 @@ class NanoGptService {
   Future<String> complete({
     required String model,
     required List<Map<String, String>> messages,
+    String? baseUrl,
+    SamplingSettings sampling = const SamplingSettings(),
   }) async {
     final parts = <String>[];
-    await for (final chunk in streamCompletion(model: model, messages: messages)) {
+    await for (final chunk in streamCompletion(
+      model: model,
+      messages: messages,
+      baseUrl: baseUrl,
+      sampling: sampling,
+    )) {
       parts.add(chunk);
     }
     final text = parts.join().trim();

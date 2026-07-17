@@ -1,3 +1,5 @@
+import 'lorebook.dart';
+
 /// Anima character stored on device, mapped to SillyTavern Character Card fields.
 ///
 /// Card specs supported for import/export:
@@ -52,11 +54,30 @@ class Character {
   final String characterVersion;
   final List<String> tags;
 
-  /// Embedded lorebook from the card (Phase 6 will use this; preserved on export).
+  /// Embedded lorebook from the card (World Info); preserved on export.
   final Map<String, dynamic>? characterBook;
 
   /// Spec `extensions` object — unknown keys must be preserved.
   final Map<String, dynamic> extensions;
+
+  /// Typed view of [characterBook], or null if missing/empty.
+  Lorebook? get lorebook {
+    final raw = characterBook;
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final book = Lorebook.fromJson(raw);
+      return book;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// How many lore entries are enabled (for UI badges).
+  int get enabledLoreEntryCount {
+    final book = lorebook;
+    if (book == null) return 0;
+    return book.entries.where((e) => e.enabled).length;
+  }
 
   /// All greetings: primary first message + alternates (empty strings dropped).
   List<String> get allGreetings {

@@ -30,7 +30,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
 
     expect(find.byTooltip('Characters'), findsOneWidget);
-    expect(find.byTooltip('Settings'), findsOneWidget);
+    expect(find.byTooltip('More'), findsOneWidget);
     expect(find.byTooltip('New chat'), findsOneWidget);
     expect(find.byTooltip('Saved chats'), findsOneWidget);
   });

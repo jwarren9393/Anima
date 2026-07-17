@@ -209,4 +209,68 @@ class ChatService {
     final min = stamp.minute.toString().padLeft(2, '0');
     return '${character.name} · $mm/$dd $hh:$min';
   }
+
+  /// Storage bucket for multi-character group chats.
+  static const groupsKey = '__groups__';
+
+  /// All group chats, newest first.
+  Future<List<ChatSession>> listGroupChats() => listChats(groupsKey);
+
+  /// Start a group chat with 2+ characters (round-robin replies).
+  Future<ChatSession> startGroupChat(
+    List<Character> members, {
+    String userName = 'User',
+  }) async {
+    if (members.length < 2) {
+      throw ArgumentError('Group chats need at least two characters.');
+    }
+    final builder = const PromptBuilder();
+    final first = members.first;
+    final greetings = first.allGreetings
+        .map(
+          (g) => builder.expandGreeting(
+            greeting: g,
+            character: first,
+            userName: userName,
+          ),
+        )
+        .where((g) => g.trim().isNotEmpty)
+        .toList();
+
+    final messages = <ChatMessage>[];
+    if (greetings.isNotEmpty) {
+      messages.add(
+        ChatMessage(
+          id: ChatMessage.newId(),
+          role: ChatRole.assistant,
+          text: greetings.first,
+          swipes: greetings,
+          swipeIndex: 0,
+          speakerId: first.id,
+          speakerName: first.name,
+        ),
+      );
+    }
+
+    final names = members.map((m) => m.name.trim()).where((n) => n.isNotEmpty);
+    final stamp = DateTime.now();
+    final mm = stamp.month.toString().padLeft(2, '0');
+    final dd = stamp.day.toString().padLeft(2, '0');
+    final hh = stamp.hour.toString().padLeft(2, '0');
+    final min = stamp.minute.toString().padLeft(2, '0');
+
+    final session = ChatSession(
+      id: ChatSession.newId(),
+      characterId: groupsKey,
+      title: 'Group · ${names.join(', ')} · $mm/$dd $hh:$min',
+      updatedAt: DateTime.now(),
+      messages: messages,
+      participantIds: members.map((m) => m.id).toList(),
+      nextSpeakerIndex: greetings.isEmpty ? 0 : 1 % members.length,
+    );
+
+    await saveChat(session);
+    await setActiveChatId(groupsKey, session.id);
+    return session;
+  }
 }

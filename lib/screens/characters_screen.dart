@@ -62,7 +62,10 @@ class _CharactersScreenState extends State<CharactersScreen> {
         : character.personality.trim().isNotEmpty
             ? character.personality
             : character.creatorNotes;
-    return text.trim().isEmpty ? 'No description yet' : text.trim();
+    final base = text.trim().isEmpty ? 'No description yet' : text.trim();
+    final lore = character.enabledLoreEntryCount;
+    if (lore <= 0) return base;
+    return '$base · Lorebook ($lore)';
   }
 
   Future<void> _select(Character character) async {
@@ -199,32 +202,56 @@ class _CharactersScreenState extends State<CharactersScreen> {
                 subtitle: const Text('Newer SillyTavern format'),
                 onTap: () => Navigator.pop(context, 'v3'),
               ),
+              ListTile(
+                title: const Text('Export as PNG card'),
+                subtitle: const Text('Embedded chara chunk (ST import)'),
+                onTap: () => Navigator.pop(context, 'png'),
+              ),
+              ListTile(
+                title: const Text('Export as PNG card (V3)'),
+                subtitle: const Text('Includes chara + ccv3 chunks'),
+                onTap: () => Navigator.pop(context, 'png_v3'),
+              ),
             ],
           ),
         ),
       );
       if (format == null) return;
 
-      final json = format == 'v3'
-          ? _codec.toCardV3Json(character)
-          : _codec.toCardV2Json(character);
-
       final dir = await getTemporaryDirectory();
       final safeName = character.name
           .replaceAll(RegExp(r'[^\w\-]+'), '_')
           .replaceAll(RegExp(r'_+'), '_');
-      final file = File(
-        '${dir.path}/${safeName.isEmpty ? 'character' : safeName}_card_$format.json',
-      );
-      await file.writeAsString(json);
+      final base = safeName.isEmpty ? 'character' : safeName;
 
-      await SharePlus.instance.share(
-        ShareParams(
-          files: [XFile(file.path, mimeType: 'application/json')],
-          subject: '${character.name} character card',
-          text: 'SillyTavern-compatible character card ($format)',
-        ),
-      );
+      if (format == 'png' || format == 'png_v3') {
+        final bytes = _codec.toCardPng(
+          character,
+          asV3: format == 'png_v3',
+        );
+        final file = File('${dir.path}/${base}_card.png');
+        await file.writeAsBytes(bytes);
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [XFile(file.path, mimeType: 'image/png')],
+            subject: '${character.name} character card',
+            text: 'SillyTavern-compatible PNG character card',
+          ),
+        );
+      } else {
+        final json = format == 'v3'
+            ? _codec.toCardV3Json(character)
+            : _codec.toCardV2Json(character);
+        final file = File('${dir.path}/${base}_card_$format.json');
+        await file.writeAsString(json);
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [XFile(file.path, mimeType: 'application/json')],
+            subject: '${character.name} character card',
+            text: 'SillyTavern-compatible character card ($format)',
+          ),
+        );
+      }
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

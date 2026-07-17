@@ -9,6 +9,8 @@ class ChatMessage {
     required this.text,
     List<String>? swipes,
     this.swipeIndex = 0,
+    this.speakerId,
+    this.speakerName,
   }) : swipes = List<String>.unmodifiable(
           _normalizeSwipes(text: text, swipes: swipes, swipeIndex: swipeIndex),
         );
@@ -28,6 +30,10 @@ class ChatMessage {
   /// Which swipe is visible right now.
   final int swipeIndex;
 
+  /// Group chats: which character said this (assistant bubbles).
+  final String? speakerId;
+  final String? speakerName;
+
   bool get isUser => role == ChatRole.user;
 
   bool get canSwipe => !isUser && swipes.length > 1;
@@ -38,6 +44,9 @@ class ChatMessage {
     String? text,
     List<String>? swipes,
     int? swipeIndex,
+    String? speakerId,
+    String? speakerName,
+    bool clearSpeaker = false,
   }) {
     final nextText = text ?? this.text;
     final nextSwipes = swipes ?? this.swipes;
@@ -48,6 +57,8 @@ class ChatMessage {
       text: nextText,
       swipes: nextSwipes,
       swipeIndex: nextIndex.clamp(0, (nextSwipes.length - 1).clamp(0, 9999)),
+      speakerId: clearSpeaker ? null : (speakerId ?? this.speakerId),
+      speakerName: clearSpeaker ? null : (speakerName ?? this.speakerName),
     );
   }
 
@@ -66,6 +77,8 @@ class ChatMessage {
       text: trimmed,
       swipes: updated,
       swipeIndex: index,
+      speakerId: speakerId,
+      speakerName: speakerName,
     );
   }
 
@@ -79,6 +92,8 @@ class ChatMessage {
       text: trimmed,
       swipes: updated,
       swipeIndex: updated.length - 1,
+      speakerId: speakerId,
+      speakerName: speakerName,
     );
   }
 
@@ -91,6 +106,8 @@ class ChatMessage {
       text: swipes[clamped],
       swipes: swipes,
       swipeIndex: clamped,
+      speakerId: speakerId,
+      speakerName: speakerName,
     );
   }
 
@@ -105,6 +122,9 @@ class ChatMessage {
         'text': text,
         'swipes': swipes,
         'swipeIndex': swipeIndex,
+        if (speakerId != null && speakerId!.isNotEmpty) 'speakerId': speakerId,
+        if (speakerName != null && speakerName!.isNotEmpty)
+          'speakerName': speakerName,
       };
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
@@ -120,6 +140,8 @@ class ChatMessage {
       text: text,
       swipes: swipes.isEmpty && text.isNotEmpty ? [text] : swipes,
       swipeIndex: json['swipeIndex'] as int? ?? 0,
+      speakerId: (json['speakerId'] as String?)?.trim(),
+      speakerName: (json['speakerName'] as String?)?.trim(),
     );
   }
 
@@ -135,7 +157,6 @@ class ChatMessage {
     }
     final cleaned = List<String>.from(swipes);
     final index = swipeIndex.clamp(0, cleaned.length - 1);
-    // Keep the visible slot aligned with [text] when the caller updates text.
     if (index >= 0 && index < cleaned.length) {
       cleaned[index] = text;
     }

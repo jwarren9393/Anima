@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../models/character.dart';
+import '../models/lorebook.dart';
 import '../services/character_service.dart';
+import 'lorebook_edit_screen.dart';
 
 /// Form to create/edit a SillyTavern-style character card.
 class CharacterEditScreen extends StatefulWidget {
@@ -33,6 +35,8 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
   final _version = TextEditingController();
   final _tags = TextEditingController();
   bool _saving = false;
+  Lorebook? _lorebook;
+  Map<String, dynamic> _extensions = const {};
 
   bool get _isEditing => widget.existing != null;
 
@@ -54,6 +58,8 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
       _creator.text = existing.creator;
       _version.text = existing.characterVersion;
       _tags.text = existing.tags.join(', ');
+      _lorebook = existing.lorebook;
+      _extensions = Map<String, dynamic>.from(existing.extensions);
     }
   }
 
@@ -69,6 +75,31 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
       .where((l) => l.isNotEmpty)
       .toList();
 
+  Future<void> _openLorebook() async {
+    final initial = _lorebook ??
+        Lorebook.empty(
+          name: _name.text.trim().isEmpty
+              ? 'Character lore'
+              : '${_name.text.trim()} lore',
+        );
+    final result = await Navigator.of(context).push<Lorebook>(
+      MaterialPageRoute(
+        builder: (_) => LorebookEditScreen(
+          initial: initial,
+          characterName: _name.text.trim(),
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _lorebook = result.entries.isEmpty &&
+              result.name.isEmpty &&
+              result.description.isEmpty
+          ? null
+          : result;
+    });
+  }
+
   Future<void> _save() async {
     final name = _name.text.trim();
     if (name.isEmpty) {
@@ -80,6 +111,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
 
     setState(() => _saving = true);
     final existing = widget.existing;
+    final book = _lorebook;
     final character = Character(
       id: existing?.id ?? widget.characterService.newId(),
       name: name,
@@ -95,8 +127,8 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
       creator: _creator.text.trim(),
       characterVersion: _version.text.trim(),
       tags: _csv(_tags.text),
-      characterBook: existing?.characterBook,
-      extensions: existing?.extensions ?? const {},
+      characterBook: book?.toJson(),
+      extensions: _extensions,
     );
     await widget.characterService.upsert(character);
     if (!mounted) return;
@@ -158,6 +190,10 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final loreCount = _lorebook?.entries.length ?? 0;
+    final loreEnabled =
+        _lorebook?.entries.where((e) => e.enabled).length ?? 0;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(_isEditing ? 'Edit character card' : 'New character card'),
@@ -234,6 +270,24 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
             minLines: 2,
             maxLines: 6,
           ),
+          OutlinedButton.icon(
+            onPressed: _openLorebook,
+            icon: const Icon(Icons.menu_book_outlined),
+            label: Text(
+              loreCount == 0
+                  ? 'World Info / lorebook'
+                  : 'World Info / lorebook ($loreEnabled/$loreCount on)',
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 6, bottom: 16),
+            child: Text(
+              loreCount == 0
+                  ? 'Optional keyword lore (also used for imported character_book).'
+                  : 'Keyword lore is injected during chat when keys match.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
           _field(
             _creatorNotes,
             label: 'Creator notes',
@@ -248,15 +302,6 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
             label: 'Tags',
             hint: 'comma, separated, tags',
           ),
-          if (widget.existing?.characterBook != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                'This card has an embedded lorebook. Anima keeps it for export; '
-                'full lorebook playback comes in Phase 6.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ),
           FilledButton(
             onPressed: _saving ? null : _save,
             child: _saving
