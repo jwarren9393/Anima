@@ -8,10 +8,12 @@ import '../models/persona.dart';
 import '../services/avatar_prompt_builder.dart';
 import '../services/avatar_service.dart';
 import '../services/nanogpt_service.dart';
+import '../services/persona_collaborator.dart';
 import '../services/persona_service.dart';
 import '../services/settings_service.dart';
 import '../widgets/anima_avatar.dart';
 import '../widgets/generate_avatar_sheet.dart';
+import '../widgets/keyboard_inset.dart';
 import 'settings_ui.dart';
 
 /// Create or edit one user persona.
@@ -37,6 +39,7 @@ class PersonaEditScreen extends StatefulWidget {
 
 class _PersonaEditScreenState extends State<PersonaEditScreen> {
   static const _avatarPromptBuilder = AvatarPromptBuilder();
+  static const _collaborator = PersonaCollaborator();
 
   final _avatarService = AvatarService();
   final _nameController = TextEditingController();
@@ -47,10 +50,12 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
   final _goalsController = TextEditingController();
   bool _saving = false;
   bool _avatarBusy = false;
+  PersonaCollaboratorField? _wandBusy;
   String? _avatarFileName;
   late final String _personaId;
 
   bool get _isEditing => widget.existing != null;
+  bool get _busy => _saving || _avatarBusy || _wandBusy != null;
 
   @override
   void initState() {
@@ -68,8 +73,85 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
     }
   }
 
+  PersonaDraftContext _draftContext() {
+    return PersonaDraftContext(
+      name: _nameController.text,
+      description: _descriptionController.text,
+      appearance: _appearanceController.text,
+      personality: _personalityController.text,
+      background: _backgroundController.text,
+      goals: _goalsController.text,
+    );
+  }
+
+  TextEditingController _controllerFor(PersonaCollaboratorField field) {
+    switch (field) {
+      case PersonaCollaboratorField.description:
+        return _descriptionController;
+      case PersonaCollaboratorField.appearance:
+        return _appearanceController;
+      case PersonaCollaboratorField.personality:
+        return _personalityController;
+      case PersonaCollaboratorField.background:
+        return _backgroundController;
+      case PersonaCollaboratorField.goals:
+        return _goalsController;
+    }
+  }
+
+  Future<void> _runWand(PersonaCollaboratorField field) async {
+    if (_wandBusy != null || _saving || _avatarBusy) return;
+
+    setState(() => _wandBusy = field);
+    try {
+      final collaborator = await widget.settingsService
+          .getCollaboratorSettings();
+      final messages = _collaborator.buildMessages(
+        field: field,
+        draft: _draftContext(),
+        guidanceNote: collaborator.guidanceNote,
+      );
+      final model = await widget.settingsService.getModel();
+      final sampling = await widget.settingsService.getSampling();
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+      final generated = await widget.nanoGptService.complete(
+        model: model,
+        messages: messages,
+        baseUrl: baseUrl,
+        sampling: sampling,
+      );
+      if (!mounted) return;
+      final controller = _controllerFor(field);
+      controller.text = _collaborator.appendGenerated(
+        controller.text,
+        generated,
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Appended AI text to ${_collaborator.fieldLabel(field)}.',
+          ),
+        ),
+      );
+    } on NanoGptCancelledException {
+      // Ignore.
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Wand failed: $error')));
+    } finally {
+      if (mounted) setState(() => _wandBusy = null);
+    }
+  }
+
   Future<void> _pickAvatar() async {
-    if (_avatarBusy || _saving) return;
+    if (_busy) return;
 
     final result = await FilePicker.platform.pickFiles(
       type: FileType.image,
@@ -112,7 +194,7 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
   }
 
   Future<void> _clearAvatar() async {
-    if (_avatarBusy || _saving) return;
+    if (_busy) return;
     final previous = _avatarFileName;
     if (previous != null) {
       await _avatarService.delete(previous);
@@ -122,7 +204,7 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
   }
 
   Future<void> _generateAvatar() async {
-    if (_avatarBusy || _saving) return;
+    if (_busy) return;
 
     final promptController = TextEditingController(
       text: _avatarPromptBuilder.buildPersonaPrompt(
@@ -173,6 +255,7 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
   }
 
   Future<void> _save() async {
+    if (_busy) return;
     final name = _nameController.text.trim();
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -208,6 +291,51 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
     super.dispose();
   }
 
+  Widget _field(
+    TextEditingController controller, {
+    required String label,
+    String? hint,
+    int minLines = 1,
+    int maxLines = 1,
+    PersonaCollaboratorField? wandField,
+    TextCapitalization textCapitalization = TextCapitalization.sentences,
+    ValueChanged<String>? onChanged,
+  }) {
+    final wandBusy = wandField != null && _wandBusy == wandField;
+    final anyWandBusy = _wandBusy != null;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: controller,
+        minLines: minLines,
+        maxLines: maxLines,
+        scrollPadding: kAnimaKeyboardScrollPadding,
+        textCapitalization: textCapitalization,
+        onChanged: onChanged,
+        decoration: SettingsUi.fieldDecoration(label: label, hintText: hint)
+            .copyWith(
+              alignLabelWithHint: minLines > 1,
+              suffixIcon: wandField == null
+                  ? null
+                  : IconButton(
+                      tooltip: 'AI wand — expand this field',
+                      onPressed: anyWandBusy || _saving || _avatarBusy
+                          ? null
+                          : () => _runWand(wandField),
+                      icon: wandBusy
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.auto_awesome),
+                    ),
+            ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -224,7 +352,8 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
           SettingsUi.sectionHint(
             context,
             'This is who you are in chat ({{user}}). You can switch personas '
-            'per chat session.',
+            'per chat session. Tap the wand on a creative field to append AI '
+            'text (uses your NanoGPT model + Settings → AI collaborator).',
           ),
           const SizedBox(height: 20),
           Center(
@@ -243,16 +372,14 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
                   alignment: WrapAlignment.center,
                   children: [
                     OutlinedButton.icon(
-                      onPressed: (_avatarBusy || _saving) ? null : _pickAvatar,
+                      onPressed: _busy ? null : _pickAvatar,
                       icon: const Icon(Icons.photo),
                       label: Text(
                         _avatarFileName == null ? 'Add photo' : 'Change photo',
                       ),
                     ),
                     OutlinedButton.icon(
-                      onPressed: (_avatarBusy || _saving)
-                          ? null
-                          : _generateAvatar,
+                      onPressed: _busy ? null : _generateAvatar,
                       icon: _avatarBusy
                           ? const SizedBox(
                               width: 18,
@@ -264,9 +391,7 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
                     ),
                     if (_avatarFileName != null)
                       TextButton(
-                        onPressed: (_avatarBusy || _saving)
-                            ? null
-                            : _clearAvatar,
+                        onPressed: _busy ? null : _clearAvatar,
                         child: const Text('Remove'),
                       ),
                   ],
@@ -282,72 +407,60 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          TextField(
-            controller: _nameController,
+          _field(
+            _nameController,
+            label: 'Name',
+            hint: 'e.g. Sam',
             textCapitalization: TextCapitalization.words,
             onChanged: (_) => setState(() {}),
-            decoration: SettingsUi.fieldDecoration(
-              label: 'Name',
-              hintText: 'e.g. Sam',
-            ),
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _descriptionController,
+          _field(
+            _descriptionController,
+            label: 'Identity and role (optional)',
+            hint: 'Who they are and their place in the setting…',
             minLines: 3,
             maxLines: 6,
-            decoration: SettingsUi.fieldDecoration(
-              label: 'Identity and role (optional)',
-              hintText: 'Who they are and their place in the setting…',
-            ).copyWith(alignLabelWithHint: true),
+            wandField: PersonaCollaboratorField.description,
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _appearanceController,
+          _field(
+            _appearanceController,
+            label: 'Appearance (optional)',
+            hint: 'Physical features, clothing, distinguishing details…',
             minLines: 2,
             maxLines: 5,
-            decoration: SettingsUi.fieldDecoration(
-              label: 'Appearance (optional)',
-              hintText: 'Physical features, clothing, distinguishing details…',
-            ).copyWith(alignLabelWithHint: true),
+            wandField: PersonaCollaboratorField.appearance,
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _personalityController,
+          _field(
+            _personalityController,
+            label: 'Personality (optional)',
+            hint: 'Traits, habits, temperament, manner of speaking…',
             minLines: 2,
             maxLines: 5,
-            decoration: SettingsUi.fieldDecoration(
-              label: 'Personality (optional)',
-              hintText: 'Traits, habits, temperament, manner of speaking…',
-            ).copyWith(alignLabelWithHint: true),
+            wandField: PersonaCollaboratorField.personality,
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _backgroundController,
+          _field(
+            _backgroundController,
+            label: 'Background (optional)',
+            hint: 'History, relationships, abilities, important facts…',
             minLines: 3,
             maxLines: 7,
-            decoration: SettingsUi.fieldDecoration(
-              label: 'Background (optional)',
-              hintText: 'History, relationships, abilities, important facts…',
-            ).copyWith(alignLabelWithHint: true),
+            wandField: PersonaCollaboratorField.background,
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _goalsController,
+          _field(
+            _goalsController,
+            label: 'Goals and motivations (optional)',
+            hint: 'What they want, fear, protect, or are working toward…',
             minLines: 2,
             maxLines: 5,
-            decoration: SettingsUi.fieldDecoration(
-              label: 'Goals and motivations (optional)',
-              hintText: 'What they want, fear, protect, or are working toward…',
-            ).copyWith(alignLabelWithHint: true),
+            wandField: PersonaCollaboratorField.goals,
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 12),
           SettingsUi.saveButton(
             saving: _saving,
             label: widget.generatedDraft
                 ? 'Save to Personas'
                 : (_isEditing ? 'Save persona' : 'Create persona'),
-            onPressed: (_saving || _avatarBusy) ? null : _save,
+            onPressed: _busy ? null : _save,
           ),
         ],
       ),

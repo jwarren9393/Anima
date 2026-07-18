@@ -60,14 +60,14 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-18  
-**Last agent action:** Added Obsidian & Gold launcher icon and refreshed the **v1.0.0** APK on GitHub Releases.
+**Last agent action:** Shipped persona AI wand into refreshed **v1.0.0** APK.
 
 ### What works today
 
 - **Home screen** — chat history, Settings, New chat
 - **New chat** — choose **Solo** or **Group**; if the character has several greetings, a **Choose opening** sheet picks which one starts (others stay as swipes)
 - **Settings hub** — separate menus:
-  - **Personas** — create multiple {{user}} identities with separate identity/role, appearance, personality, background, goals, and photo fields; **Generate avatar** from persona details; set a default for new chats; all filled fields are labeled and sent on every chat generation
+  - **Personas** — create multiple {{user}} identities with separate identity/role, appearance, personality, background, goals, and photo fields; **AI wand** on creative fields (appends text like Characters); **Generate avatar** from persona details; set a default for new chats; all filled fields are labeled and sent on every chat generation
   - **Characters** — character cards + **categories** (custom lists; one character can be in several); filter dropdown; **consistency check** (checklist icon) = read-only AI report; **Generate avatar** from card text
   - **World Info & lore** — **global lorebooks** (create / import ST JSON / export / on-off) + scan depth/budget + link to per-character books; **entry AI wand** + **Suggest keywords from content**
   - **Creation Center** — chat with AI to invent a world; **Import lorebook** (JSON file or choose an existing World Info book); **Create/Update lorebook** saves keyword entries as a selectable global lorebook (one workshop = one book); the people menu can **Create AI characters** (multi-select + review each card) or **Create my persona** (choose one person from workshop chat + linked lore, generate player-focused fields, then review before saving); **context estimate** banner (tap for details) shows ~messages/tokens vs model window
@@ -235,7 +235,7 @@ lib/
     characters_screen.dart        List / categories / import / export (JSON + PNG)
     character_edit_screen.dart    Full card field editor (+ lorebook + avatar + AI wand)
     personas_screen.dart          Persona list / default / pick-for-chat
-    persona_edit_screen.dart      Create/edit/review generated persona fields (+ Generate avatar)
+    persona_edit_screen.dart      Create/edit/review generated persona fields (+ AI wand + Generate avatar)
     lorebook_edit_screen.dart     World Info entry list + entry editor (+ AI wand)
     lorebooks_screen.dart         Global lorebook list / create / import / export
     world_workshop_list_screen.dart Creation Center workshop list + import lorebook (file / World Info)
@@ -266,6 +266,7 @@ lib/
     character_category_service.dart Anima-only category lists (multi-membership)
     character_card_codec.dart     ST Card V1/V2/V3 + PNG import/export
     character_collaborator.dart   Field-aware prompts + consistency-check report
+    persona_collaborator.dart     Field-aware prompts for persona AI wand
     lore_collaborator.dart        Field-aware prompts + keyword-from-content suggest
     message_formatter.dart        Composer AI format (*actions* / "dialogue")
     roadway_service.dart          Paths / Roadway brainstorm + combine prompts + parse
@@ -335,8 +336,8 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. Install **v1.0.0** from [Releases](https://github.com/jwarren9393/Anima/releases) (Obsidian & Gold launcher icon).
-2. Spot-check Creation Center → people icon → **Create my persona**; review, save, and select that persona in a chat with the linked lorebook enabled.
+1. Install **v1.0.0** from [Releases](https://github.com/jwarren9393/Anima/releases) (includes persona AI wand).
+2. Spot-check Personas → edit → sparkle wand on Identity / Appearance / Personality / Background / Goals.
 3. Optional: upload `assets/branding/anima_icon.png` as the GitHub repo Social preview (Settings → General → Social preview).
 4. Optional QoL backlog when you want more: undo send, last-chat resume, pinned Author’s Note / mood chips, memory preview panel.
 
