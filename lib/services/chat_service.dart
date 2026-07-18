@@ -121,10 +121,14 @@ class ChatService {
   }
 
   /// Starts a fresh chat (keeps older chats). Adds greeting swipe(s) if set.
+  ///
+  /// [greetingIndex] picks which greeting is shown first when the character has
+  /// several (primary + alternates). Other greetings stay available as swipes.
   Future<ChatSession> startNewChat(
     Character character, {
     String userName = 'User',
     String? personaId,
+    int greetingIndex = 0,
   }) async {
     final builder = const PromptBuilder();
     final greetings = character.allGreetings
@@ -140,13 +144,14 @@ class ChatService {
 
     final messages = <ChatMessage>[];
     if (greetings.isNotEmpty) {
+      final index = greetingIndex.clamp(0, greetings.length - 1);
       messages.add(
         ChatMessage(
           id: ChatMessage.newId(),
           role: ChatRole.assistant,
-          text: greetings.first,
+          text: greetings[index],
           swipes: greetings,
-          swipeIndex: 0,
+          swipeIndex: index,
         ),
       );
     }
@@ -233,13 +238,16 @@ class ChatService {
   Future<List<ChatSession>> listGroupChats() => listChats(groupsKey);
 
   /// Start a group chat with 2+ characters (round-robin replies).
+  ///
+  /// [greetingIndex] picks which of the first member's greetings opens the chat.
   Future<ChatSession> startGroupChat(
     List<Character> members, {
     String userName = 'User',
     String? personaId,
     String authorsNote = '',
-    bool autoReply = true,
+    bool autoReply = false,
     List<String>? lorebookIds,
+    int greetingIndex = 0,
   }) async {
     if (members.length < 2) {
       throw ArgumentError('Group chats need at least two characters.');
@@ -259,13 +267,14 @@ class ChatService {
 
     final messages = <ChatMessage>[];
     if (greetings.isNotEmpty) {
+      final index = greetingIndex.clamp(0, greetings.length - 1);
       messages.add(
         ChatMessage(
           id: ChatMessage.newId(),
           role: ChatRole.assistant,
-          text: greetings.first,
+          text: greetings[index],
           swipes: greetings,
-          swipeIndex: 0,
+          swipeIndex: index,
           speakerId: first.id,
           speakerName: first.name,
         ),

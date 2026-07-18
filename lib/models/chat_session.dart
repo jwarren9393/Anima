@@ -12,7 +12,7 @@ class ChatSession {
     List<String>? participantIds,
     this.nextSpeakerIndex = 0,
     this.personaId,
-    this.autoReply = true,
+    this.autoReply = false,
     List<String>? lorebookIds,
     this.memorySummary = '',
     this.memoryCoveredCount = 0,
@@ -44,6 +44,7 @@ class ChatSession {
 
   /// When true, sending a message also generates an AI reply. When false,
   /// your message is saved only — tap a name (group) or Continue to reply.
+  /// New chats default to off; older saves without this field stay on.
   final bool autoReply;
 
   /// Global lorebook ids active for this chat.

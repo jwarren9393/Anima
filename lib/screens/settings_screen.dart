@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/api_key_service.dart';
+import '../services/character_category_service.dart';
 import '../services/character_service.dart';
 import '../services/nanogpt_service.dart';
 import '../services/persona_service.dart';
@@ -23,6 +24,7 @@ class SettingsScreen extends StatelessWidget {
     required this.apiKeyService,
     required this.settingsService,
     required this.characterService,
+    required this.characterCategoryService,
     required this.personaService,
     required this.nanoGptService,
     required this.worldInfoService,
@@ -32,6 +34,7 @@ class SettingsScreen extends StatelessWidget {
   final ApiKeyService apiKeyService;
   final SettingsService settingsService;
   final CharacterService characterService;
+  final CharacterCategoryService characterCategoryService;
   final PersonaService personaService;
   final NanoGptService nanoGptService;
   final WorldInfoService worldInfoService;
@@ -87,6 +90,7 @@ class SettingsScreen extends StatelessWidget {
               MaterialPageRoute(
                 builder: (_) => CharactersScreen(
                   characterService: characterService,
+                  categoryService: characterCategoryService,
                   settingsService: settingsService,
                   nanoGptService: nanoGptService,
                 ),
@@ -102,6 +106,7 @@ class SettingsScreen extends StatelessWidget {
                 builder: (_) => LoreSettingsScreen(
                   settingsService: settingsService,
                   characterService: characterService,
+                  characterCategoryService: characterCategoryService,
                   worldInfoService: worldInfoService,
                   nanoGptService: nanoGptService,
                 ),
@@ -138,7 +143,7 @@ class SettingsScreen extends StatelessWidget {
           _SettingsTile(
             icon: Icons.auto_awesome,
             title: 'AI collaborator',
-            subtitle: 'Wand note + composer Format note',
+            subtitle: 'Wand + Format + Roadway notes',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => CollaboratorSettingsScreen(

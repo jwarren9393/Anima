@@ -59,19 +59,19 @@ High-value SillyTavern concepts to aim for over time:
 
 **Phase:** Post-roadmap tweaks
 
-**Last updated:** 2026-07-17  
-**Last agent action:** Composer Format got its own AI collaborator note (caps/punctuation/*quotes* only — no rewording) + cooler sampling on Format taps.
+**Last updated:** 2026-07-18  
+**Last agent action:** Full feature README + commit/push (Paths, categories, drafts, credits, etc.).
 
 ### What works today
 
 - **Home screen** — chat history, Settings, New chat
-- **New chat** — choose **Solo** or **Group**; group setup sets reply order, auto-reply, Author’s Note, and which global lorebooks apply
+- **New chat** — choose **Solo** or **Group**; if the character has several greetings, a **Choose opening** sheet picks which one starts (others stay as swipes)
 - **Settings hub** — separate menus:
   - **Personas** — create multiple {{user}} identities (name, bio, photo); set a default for new chats
-  - **Characters** — character cards only
-  - **World Info & lore** — **global lorebooks** (create / import ST JSON / export / on-off) + scan depth/budget + link to per-character books; **entry AI wand** when editing entries
+  - **Characters** — character cards + **categories** (custom lists; one character can be in several); filter dropdown; **consistency check** (checklist icon) = read-only AI report
+  - **World Info & lore** — **global lorebooks** (create / import ST JSON / export / on-off) + scan depth/budget + link to per-character books; **entry AI wand** + **Suggest keywords from content**
   - **Creation Center** — chat with AI to invent a world; **Create lorebook** saves keyword entries as a selectable global lorebook (one workshop = one book)
-  - **AI collaborator** — wand guidance note + separate **Composer Format** note (Format button in chat)
+  - **AI collaborator** — wand guidance note + **Composer Format** note + **Roadway / Paths** note
   - **Appearance** — chat avatar shape/size only (theme is fixed Obsidian & Gold)
   - API, Generation parameters
 - **Look** — single dark glass theme (black + gold accents, gold glow backdrop); no parchment / Middle-earth look; no light mode or color studio
@@ -80,16 +80,20 @@ High-value SillyTavern concepts to aim for over time:
 - **Text presets** — expanded Author’s Note / System prompt / Post-history / collaborator guidance sheets
 - **Character AI wand** — sparkle icon on creative card fields; sends all filled fields as context; appends NanoGPT text below what’s already there (uses chat model + sampling)
 - **World Info entry AI wand** — sparkle on Label / Keywords / Lore content (and Secondary keywords when Selective); uses book + sibling entry context; appends (keywords merge comma-separated); same model + collaborator guidance
-- **API & connection** — live NanoGPT model catalog: **Auto** provider (auto-model / basic / standard / premium) listed first, then providers A–Z; refresh; custom model id; subscription toggle reloads catalog
+- **API & connection** — live NanoGPT model catalog: **Auto** provider (auto-model / basic / standard / premium) listed first, then providers A–Z; refresh; custom model id; subscription toggle reloads catalog; **See remaining credits** shows wallet USD/NANO + weekly/daily/monthly subscription allowance data returned by NanoGPT
 - **Chat stop** — while a reply streams, the send button becomes **Stop** (keeps any partial text)
-- **Composer shortcuts** — **Format** (✨) lightly fixes caps/punctuation and adds `*actions*` / `"dialogue"` (own note under Settings → AI collaborator; does not use the creative wand note); **Continue** (▶) next to Send
+- **Composer shortcuts** — **OOC**, **Format** (✨), **Continue** (▶), Send/Stop; Format has its own collaborator note
+- **Draft autosave** — composer text saved per chat (survives leaving chat/app); cleared on send
+- **Character categories** — Anima-only lists (not ST card tags); **All characters** master view + custom categories; filter in Characters (manage/pick) and Group setup; membership via row menu → Categories
+- **Paths (Roadway)** — long-press a message → **Paths** (sheet + ✨ generate); tap a tile → composer; check **two or more** + **Combine selected** to AI-merge them into one composer draft; options **stay cached** until the chat moves on, or you clear / refresh; note under AI collaborator
+- **Auto-reply** — long-press → toggle; **new chats default to off** (send alone; Continue or tap a name for a reply)
 - **RP message look** — bubbles style `*narration*` in soft italic gold and `"spoken lines"` in bolder text
-- **Message actions** — **tap** a bubble to edit; **long-press** for Delete, Rewind, Branch, Continue, Impersonate, Regen/Swipe (delete / rewind / branch run immediately — no confirm dialog)
+- **Message actions** — **tap** a bubble to edit; **long-press** for Delete, Rewind, Branch, Continue, Impersonate, Paths, Auto-reply, Regen/Swipe (delete / rewind / branch run immediately — no confirm dialog)
 - **Quick swipe** — on the **latest** AI message, ◀ **1/N** ▶ always shows; ▶ on the last version generates a new swipe (older multi-swipe bubbles still show arrows to browse only)
 - **Clean chat chrome** — no Swipe/Regen/Continue bar under messages (those live in the long-press menu; compact swipe arrows under bubbles)
 - **Per-chat persona** — in a chat, ⋮ menu → **Persona: …** to switch who you are for that thread (saved on the chat)
-- **Group chat controls** — tap a character name chip to choose who speaks next; forum icon toggles auto-reply (off = your message posts alone; tap a name or Continue for a reply)
-- **Avatars** — persona + character photos; PNG card import still grabs the card image; chat bubble shape/size via Appearance
+- **Group chat controls** — tap a character name chip to choose who speaks next; auto-reply off by default (send only; tap a name or Continue for a reply; toggle via long-press)
+- **Avatars** — persona + character photos; **tap an AI avatar in chat** to edit that character card (tap yours to edit the persona); PNG card import still grabs the card image; chat bubble shape/size via Appearance
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar
 - **Smoke:** `flutter test` + `flutter analyze` pass; Android + Linux desktop debug work
 
@@ -101,6 +105,8 @@ High-value SillyTavern concepts to aim for over time:
 - Recursive lore scanning toggle saved but not implemented yet
 - NovelAI / Agnai / Risu lorebook converters not implemented (ST JSON + character_book shapes work)
 - No TTS (removed — Speak was not useful enough to keep)
+- Paths open from the long-press menu (not always on the composer chrome)
+- Back-burner QoL not started: undo send/delete, last-chat resume, pinned Author’s Note / mood chips, memory preview, lore-hit toast, etc.
 
 ---
 
@@ -210,6 +216,7 @@ lib/
     chat_message.dart             Bubble + swipes + optional speaker
     chat_session.dart             Thread + authorsNote + group + lorebookIds + autoReply + memorySummary
     character.dart                ST-compatible card fields (+ Anima id)
+    character_category.dart       Anima-only category lists + memberships
     lorebook.dart                 CharacterBook / World Info entries (+ ST import aliases)
     global_lorebook.dart          Standalone global lorebook (id + enabled + book)
     world_workshop.dart           Creation Center workshop chat (one chat → one lorebook)
@@ -220,7 +227,7 @@ lib/
     home_screen.dart              Default landing — chat history + New chat Solo/Group
     chat_screen.dart              Chat UI + ST actions + group + persona switch
     group_chat_setup_screen.dart  New group: members, order, auto-reply, lore, note
-    characters_screen.dart        List / import / export (JSON + PNG)
+    characters_screen.dart        List / categories / import / export (JSON + PNG)
     character_edit_screen.dart    Full card field editor (+ lorebook + avatar + AI wand)
     personas_screen.dart          Persona list / default / pick-for-chat
     persona_edit_screen.dart      Create/edit one persona
@@ -229,16 +236,18 @@ lib/
     world_workshop_list_screen.dart Creation Center workshop list
     world_workshop_chat_screen.dart Workshop chat + Create/Update lorebook
     settings_screen.dart          Settings hub (Personas + Characters + Creation Center + AI collaborator)
-    api_settings_screen.dart      API key, model catalog dropdowns, subscription URL
+    api_settings_screen.dart      API key, model catalog, subscription URL + remaining credits
     lore_settings_screen.dart     Global books + scan/budget + character books link
     sampling_settings_screen.dart ST-style generation parameters
-    collaborator_settings_screen.dart AI wand + workshop guidance note
+    collaborator_settings_screen.dart AI wand + Format + Roadway notes
     appearance_settings_screen.dart Chat avatars (theme is fixed)
     settings_ui.dart              Shared settings form helpers
   widgets/
     anima_avatar.dart             Local-file / initial avatar (circle or rect via style)
     keyboard_inset.dart           Lift UI above keyboard (chat composers)
     rp_rich_text.dart             *action* / "dialogue" styled message text
+    greeting_picker.dart          Multi-greeting sheet when starting a chat
+    character_category_controls.dart Category filter + manage / assign sheets
     preset_picker.dart            Preset button + bottom sheets (sampling / text)
   services/
     api_key_service.dart          Secure storage for NanoGPT API key
@@ -246,10 +255,14 @@ lib/
     persona_service.dart          Multi-persona load/save + default active id
     avatar_service.dart           Local avatar files under documents/avatars
     character_service.dart        Load/save characters JSON on device
+    character_category_service.dart Anima-only category lists (multi-membership)
     character_card_codec.dart     ST Card V1/V2/V3 + PNG import/export
-    character_collaborator.dart   Field-aware prompts for the character-editor AI wand
-    lore_collaborator.dart        Field-aware prompts for World Info entry AI wand
+    character_collaborator.dart   Field-aware prompts + consistency-check report
+    lore_collaborator.dart        Field-aware prompts + keyword-from-content suggest
     message_formatter.dart        Composer AI format (*actions* / "dialogue")
+    roadway_service.dart          Paths / Roadway brainstorm + combine prompts + parse
+    roadway_cache_service.dart    Per-chat cached Path options (survive sheet close)
+    composer_draft_service.dart   Per-chat composer draft autosave
     chat_service.dart             Chats per character + group bucket (+ personaId, autoReply, lorebookIds)
     chat_context_service.dart     History trim + memory summarize helpers
     prompt_builder.dart           System prompt, modes, group, authors note
@@ -258,7 +271,7 @@ lib/
     world_workshop_service.dart   Persist Creation Center workshops
     world_workshop_builder.dart   Workshop prompts + lorebook JSON parse
     chat_transcript_codec.dart    Chat JSON / plain-text import/export
-    nanogpt_service.dart          Streaming + model catalog + sampling + plain-English errors
+    nanogpt_service.dart          Streaming + model catalog + credit usage + sampling + plain-English errors
 ```
 
 **Dependencies in use:** `flutter_secure_storage`, `http`, `path_provider`, `file_picker`, `share_plus`, `path`, `google_fonts`
@@ -312,8 +325,9 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. Hot restart → in chat try Format (✨) on a rough draft, Continue (▶), and check *action* / "dialogue" styling in bubbles.
-2. Tell the next agent what small tweak you want (UI polish, format style, bugs, commit, etc.).
+1. Hot restart → Settings → Characters → folder icon → create a category → ⋮ → Categories → assign → filter.
+2. New chat Solo / Group — confirm category filter; Paths combine + cache still work.
+3. README is now a full feature overview for sharing with humans / AI assistants.
 
 ---
 

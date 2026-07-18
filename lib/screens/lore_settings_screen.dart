@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/character_category_service.dart';
 import '../services/character_service.dart';
 import '../services/nanogpt_service.dart';
 import '../services/settings_service.dart';
@@ -14,12 +15,14 @@ class LoreSettingsScreen extends StatefulWidget {
     super.key,
     required this.settingsService,
     required this.characterService,
+    required this.characterCategoryService,
     required this.worldInfoService,
     required this.nanoGptService,
   });
 
   final SettingsService settingsService;
   final CharacterService characterService;
+  final CharacterCategoryService characterCategoryService;
   final WorldInfoService worldInfoService;
   final NanoGptService nanoGptService;
 
@@ -107,6 +110,7 @@ class _LoreSettingsScreenState extends State<LoreSettingsScreen> {
       MaterialPageRoute(
         builder: (_) => CharactersScreen(
           characterService: widget.characterService,
+          categoryService: widget.characterCategoryService,
           settingsService: widget.settingsService,
           nanoGptService: widget.nanoGptService,
         ),

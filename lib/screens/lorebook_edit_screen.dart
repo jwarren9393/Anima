@@ -329,6 +329,7 @@ class _LorebookEntryEditScreenState extends State<_LorebookEntryEditScreen> {
   late Map<String, dynamic> _extensions;
   int? _id;
   LoreCollaboratorField? _wandBusy;
+  bool _suggestKeysBusy = false;
 
   @override
   void initState() {
@@ -466,6 +467,57 @@ class _LorebookEntryEditScreenState extends State<_LorebookEntryEditScreen> {
     );
   }
 
+  Future<void> _suggestKeywordsFromContent() async {
+    if (_wandBusy != null || _suggestKeysBusy) return;
+    final content = _content.text.trim();
+    if (content.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Write lore content first, then suggest keywords.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _suggestKeysBusy = true);
+    try {
+      final collaborator =
+          await widget.settingsService.getCollaboratorSettings();
+      final messages = _collaborator.buildKeywordSuggestMessages(
+        draft: _draftContext(),
+        guidanceNote: collaborator.guidanceNote,
+      );
+      final model = await widget.settingsService.getModel();
+      final sampling = await widget.settingsService.getSampling();
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+      final generated = await widget.nanoGptService.complete(
+        model: model,
+        messages: messages,
+        baseUrl: baseUrl,
+        sampling: sampling,
+      );
+      if (!mounted) return;
+      _keys.text = _collaborator.mergeKeywords(_keys.text, generated);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Merged suggested keywords.')),
+      );
+    } on NanoGptCancelledException {
+      // Ignore.
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Suggest keywords failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _suggestKeysBusy = false);
+    }
+  }
+
   void _save() {
     if (_wandBusy != null) return;
     final content = _content.text.trim();
@@ -565,6 +617,27 @@ class _LorebookEntryEditScreenState extends State<_LorebookEntryEditScreen> {
                   : 'Comma-separated. Any one match can fire this entry.',
               border: const OutlineInputBorder(),
               suffixIcon: _wandSuffix(LoreCollaboratorField.keys),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: (_wandBusy != null || _suggestKeysBusy)
+                  ? null
+                  : _suggestKeywordsFromContent,
+              icon: _suggestKeysBusy
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.key_outlined),
+              label: Text(
+                _suggestKeysBusy
+                    ? 'Suggesting…'
+                    : 'Suggest keywords from content',
+              ),
             ),
           ),
           const SizedBox(height: 12),

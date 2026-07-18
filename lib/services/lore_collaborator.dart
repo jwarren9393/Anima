@@ -196,6 +196,65 @@ class LoreCollaborator {
     ];
   }
 
+  /// Suggest trigger keywords from the entry's lore content (feature #15).
+  ///
+  /// Output is meant to be merged into the Keywords field — not a free rewrite.
+  List<Map<String, String>> buildKeywordSuggestMessages({
+    required LoreEntryDraftContext draft,
+    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+  }) {
+    final content = draft.content.trim();
+    final guidance = guidanceNote.trim().isEmpty
+        ? CollaboratorSettings.defaultGuidanceNote
+        : guidanceNote.trim();
+
+    final system = StringBuffer()
+      ..writeln(
+        'You extract SillyTavern World Info trigger keywords from lore text '
+        'for a private app called Anima.',
+      )
+      ..writeln()
+      ..writeln('Guidance note (follow closely):')
+      ..writeln(guidance)
+      ..writeln()
+      ..writeln('Hard rules:')
+      ..writeln(
+        '- Read the lore content and list concrete trigger words/phrases '
+        'that would appear in chat (names, places, items, titles, distinctive terms).',
+      )
+      ..writeln('- Prefer 4–12 keywords. Avoid generic words (the, he, magic).')
+      ..writeln(
+        '- Output a comma-separated list only — no quotes, bullets, or preamble.',
+      )
+      ..writeln('- Do not rewrite the lore content.');
+
+    final user = StringBuffer();
+    if (draft.bookName.trim().isNotEmpty) {
+      user.writeln('Lorebook: ${draft.bookName.trim()}');
+    }
+    if (draft.name.trim().isNotEmpty) {
+      user.writeln('Entry label: ${draft.name.trim()}');
+    }
+    if (draft.keys.trim().isNotEmpty) {
+      user.writeln('Existing keywords (do not simply repeat these):');
+      user.writeln(draft.keys.trim());
+      user.writeln();
+    }
+    user.writeln('Lore content:');
+    user.writeln(content.isEmpty ? '(empty)' : content);
+    user.writeln();
+    user.writeln('Suggest keywords as a comma-separated list:');
+
+    return [
+      {'role': 'system', 'content': system.toString().trim()},
+      {'role': 'user', 'content': user.toString().trim()},
+    ];
+  }
+
+  /// Merges suggested keywords into [existing] (deduped, comma-separated).
+  String mergeKeywords(String existing, String suggested) =>
+      _appendKeywords(existing, suggested);
+
   /// Appends [generated] under [existing], with a blank line when both have text.
   /// For keyword fields, joins with commas instead of a blank line.
   String appendGenerated(

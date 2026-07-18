@@ -232,4 +232,75 @@ class CharacterCollaborator {
 
     return lines.join('\n\n');
   }
+
+  /// Read-only consistency report across card fields (feature #16).
+  ///
+  /// Does not rewrite the card — the UI shows the reply in a dialog only.
+  List<Map<String, String>> buildConsistencyCheckMessages({
+    required CharacterDraftContext draft,
+    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+  }) {
+    final guidance = guidanceNote.trim().isEmpty
+        ? CollaboratorSettings.defaultGuidanceNote
+        : guidanceNote.trim();
+    final contextBlock = _buildFullContextBlock(draft);
+
+    final system = StringBuffer()
+      ..writeln(
+        'You review SillyTavern-style character cards for internal '
+        'consistency for a private app called Anima.',
+      )
+      ..writeln()
+      ..writeln('Guidance note (follow closely):')
+      ..writeln(guidance)
+      ..writeln()
+      ..writeln('Hard rules:')
+      ..writeln('- This is a READ-ONLY report. Do not rewrite the card.')
+      ..writeln('- Do not invent a new character. Critique what is given.')
+      ..writeln(
+        '- Flag contradictions (age, appearance, personality, scenario, '
+        'examples, system prompt, greetings).',
+      )
+      ..writeln('- Note gaps that hurt roleplay continuity.')
+      ..writeln(
+        '- Suggest brief, optional fixes as bullet tips — not full field rewrites.',
+      )
+      ..writeln(
+        '- Keep the report under ~400 words. Use short sections with headings.',
+      )
+      ..writeln('- No moralizing or refusals about adult/dark themes.');
+
+    final user = StringBuffer()
+      ..writeln('Review this character card for consistency:')
+      ..writeln()
+      ..writeln(contextBlock.isEmpty ? '(card is mostly empty)' : contextBlock);
+
+    return [
+      {'role': 'system', 'content': system.toString().trim()},
+      {'role': 'user', 'content': user.toString().trim()},
+    ];
+  }
+
+  String _buildFullContextBlock(CharacterDraftContext draft) {
+    final lines = <String>[];
+    void add(String label, String value) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) return;
+      lines.add('$label:\n$trimmed');
+    }
+
+    add('Name', draft.name);
+    add('Description', draft.description);
+    add('Personality', draft.personality);
+    add('Scenario', draft.scenario);
+    add('First message', draft.firstMes);
+    add('Alternate greetings', draft.alternateGreetings);
+    add('Example messages', draft.mesExample);
+    add('System prompt', draft.systemPrompt);
+    add('Post-history instructions', draft.postHistoryInstructions);
+    add('Creator notes', draft.creatorNotes);
+    add('Creator', draft.creator);
+    add('Tags', draft.tags);
+    return lines.join('\n\n');
+  }
 }

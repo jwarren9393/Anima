@@ -116,6 +116,14 @@ void main() {
       });
       expect(legacy.autoReply, isTrue);
       expect(legacy.lorebookIds, isNull);
+
+      final fresh = ChatSession(
+        id: 'new',
+        characterId: 'c1',
+        title: 'New',
+        updatedAt: DateTime.utc(2026, 7, 17),
+      );
+      expect(fresh.autoReply, isFalse);
     });
   });
 }

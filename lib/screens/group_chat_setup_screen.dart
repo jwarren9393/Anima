@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 
 import '../models/anima_presets.dart';
 import '../models/character.dart';
+import '../models/character_category.dart';
 import '../models/global_lorebook.dart';
+import '../services/character_category_service.dart';
 import '../services/character_service.dart';
 import '../services/chat_service.dart';
 import '../services/persona_service.dart';
 import '../services/world_info_service.dart';
 import '../widgets/anima_avatar.dart';
+import '../widgets/character_category_controls.dart';
+import '../widgets/greeting_picker.dart';
 import '../widgets/preset_picker.dart';
 
 /// Setup screen for starting a multi-character group chat from Home (or chat).
@@ -15,6 +19,7 @@ class GroupChatSetupScreen extends StatefulWidget {
   const GroupChatSetupScreen({
     super.key,
     required this.characterService,
+    required this.categoryService,
     required this.chatService,
     required this.personaService,
     required this.worldInfoService,
@@ -22,6 +27,7 @@ class GroupChatSetupScreen extends StatefulWidget {
   });
 
   final CharacterService characterService;
+  final CharacterCategoryService categoryService;
   final ChatService chatService;
   final PersonaService personaService;
   final WorldInfoService worldInfoService;
@@ -35,13 +41,34 @@ class GroupChatSetupScreen extends StatefulWidget {
 
 class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
   List<Character> _all = const [];
+  CharacterCategoryState _categoryState = CharacterCategoryState.empty;
+  String _filterCategoryId = CharacterCategoryService.allFilterId;
   List<GlobalLorebook> _lorebooks = const [];
   final List<Character> _ordered = [];
   final Set<String> _selectedLoreIds = {};
   final _authorsNoteController = TextEditingController();
-  bool _autoReply = true;
+  bool _autoReply = false;
   bool _loading = true;
   bool _starting = false;
+
+  /// Filtered catalog, plus any already-checked members so they stay visible.
+  List<Character> get _pickerCharacters {
+    final filtered = widget.categoryService.filterCharacters(
+      _all,
+      state: _categoryState,
+      categoryId: _filterCategoryId,
+    );
+    if (_filterCategoryId.isEmpty || _ordered.isEmpty) return filtered;
+    final seen = filtered.map((c) => c.id).toSet();
+    final extras = <Character>[];
+    for (final member in _ordered) {
+      if (seen.contains(member.id)) continue;
+      extras.add(member);
+      seen.add(member.id);
+    }
+    if (extras.isEmpty) return filtered;
+    return [...filtered, ...extras];
+  }
 
   @override
   void initState() {
@@ -51,6 +78,10 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
 
   Future<void> _load() async {
     final characters = await widget.characterService.loadCharacters();
+    var categoryState = await widget.categoryService.loadState();
+    categoryState = await widget.categoryService.prune(
+      existingCharacterIds: characters.map((c) => c.id),
+    );
     final lore = await widget.worldInfoService.loadBooks();
     if (!mounted) return;
 
@@ -66,6 +97,7 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
 
     setState(() {
       _all = characters;
+      _categoryState = categoryState;
       _lorebooks = lore;
       _ordered
         ..clear()
@@ -75,6 +107,26 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
         ..addAll(lore.where((b) => b.enabled).map((b) => b.id));
       _loading = false;
     });
+  }
+
+  Future<void> _manageCategories() async {
+    await showManageCharacterCategoriesSheet(
+      context: context,
+      categoryService: widget.categoryService,
+      state: _categoryState,
+      onChanged: (next) {
+        if (!mounted) return;
+        setState(() {
+          _categoryState = next;
+          final stillValid = _filterCategoryId.isEmpty ||
+              next.categories.any((c) => c.id == _filterCategoryId);
+          if (!stillValid) {
+            _filterCategoryId = CharacterCategoryService.allFilterId;
+          }
+        });
+      },
+    );
+    await _load();
   }
 
   @override
@@ -102,6 +154,20 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
     setState(() => _starting = true);
     try {
       final persona = await widget.personaService.getActivePersona();
+      if (!mounted) {
+        setState(() => _starting = false);
+        return;
+      }
+      final first = _ordered.first;
+      final greetingIndex = await pickGreetingIndex(
+        context,
+        character: first,
+        userName: persona.name,
+      );
+      if (greetingIndex == null || !mounted) {
+        setState(() => _starting = false);
+        return;
+      }
       final session = await widget.chatService.startGroupChat(
         List<Character>.from(_ordered),
         userName: persona.name,
@@ -111,6 +177,7 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
         lorebookIds: _lorebooks.isEmpty
             ? null
             : _selectedLoreIds.toList(growable: false),
+        greetingIndex: greetingIndex,
       );
       if (!mounted) return;
       Navigator.of(context).pop(session);
@@ -159,8 +226,15 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
                       'to set who speaks first (round-robin after that).',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
-                    const SizedBox(height: 8),
-                    ..._all.map((c) {
+                    CharacterCategoryFilterBar(
+                      state: _categoryState,
+                      selectedCategoryId: _filterCategoryId,
+                      onChanged: (id) =>
+                          setState(() => _filterCategoryId = id),
+                      onManage: _manageCategories,
+                    ),
+                    const SizedBox(height: 4),
+                    ..._pickerCharacters.map((c) {
                       final on = _ordered.any((m) => m.id == c.id);
                       return CheckboxListTile(
                         value: on,

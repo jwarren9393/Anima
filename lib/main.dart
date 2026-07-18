@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'screens/home_screen.dart';
 import 'services/api_key_service.dart';
+import 'services/character_category_service.dart';
 import 'services/character_service.dart';
 import 'services/chat_service.dart';
 import 'services/nanogpt_service.dart';
@@ -18,6 +19,7 @@ void main() {
   final apiKeyService = ApiKeyService();
   final settingsService = SettingsService();
   final characterService = CharacterService();
+  final characterCategoryService = CharacterCategoryService();
   final personaService = PersonaService(settingsService: settingsService);
   final chatService = ChatService();
   final nanoGptService = NanoGptService(apiKeyService: apiKeyService);
@@ -29,6 +31,7 @@ void main() {
       apiKeyService: apiKeyService,
       settingsService: settingsService,
       characterService: characterService,
+      characterCategoryService: characterCategoryService,
       personaService: personaService,
       chatService: chatService,
       nanoGptService: nanoGptService,
@@ -44,6 +47,7 @@ class AnimaApp extends StatelessWidget {
     required this.apiKeyService,
     required this.settingsService,
     required this.characterService,
+    required this.characterCategoryService,
     required this.personaService,
     required this.chatService,
     required this.nanoGptService,
@@ -54,6 +58,7 @@ class AnimaApp extends StatelessWidget {
   final ApiKeyService apiKeyService;
   final SettingsService settingsService;
   final CharacterService characterService;
+  final CharacterCategoryService characterCategoryService;
   final PersonaService personaService;
   final ChatService chatService;
   final NanoGptService nanoGptService;
@@ -77,6 +82,7 @@ class AnimaApp extends StatelessWidget {
         apiKeyService: apiKeyService,
         settingsService: settingsService,
         characterService: characterService,
+        characterCategoryService: characterCategoryService,
         personaService: personaService,
         chatService: chatService,
         nanoGptService: nanoGptService,

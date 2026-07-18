@@ -3,14 +3,18 @@ import 'package:flutter/material.dart';
 import '../models/character.dart';
 import '../models/chat_session.dart';
 import '../services/api_key_service.dart';
+import '../services/character_category_service.dart';
 import '../services/character_service.dart';
 import '../services/chat_service.dart';
+import '../services/composer_draft_service.dart';
 import '../services/nanogpt_service.dart';
+import '../services/roadway_cache_service.dart';
 import '../services/persona_service.dart';
 import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
 import '../services/world_workshop_service.dart';
 import '../widgets/anima_avatar.dart';
+import '../widgets/greeting_picker.dart';
 import 'characters_screen.dart';
 import 'chat_screen.dart';
 import 'group_chat_setup_screen.dart';
@@ -23,6 +27,7 @@ class HomeScreen extends StatefulWidget {
     required this.apiKeyService,
     required this.settingsService,
     required this.characterService,
+    required this.characterCategoryService,
     required this.personaService,
     required this.chatService,
     required this.nanoGptService,
@@ -33,6 +38,7 @@ class HomeScreen extends StatefulWidget {
   final ApiKeyService apiKeyService;
   final SettingsService settingsService;
   final CharacterService characterService;
+  final CharacterCategoryService characterCategoryService;
   final PersonaService personaService;
   final ChatService chatService;
   final NanoGptService nanoGptService;
@@ -47,6 +53,8 @@ class _HomeScreenState extends State<HomeScreen> {
   List<ChatSession> _chats = [];
   List<Character> _characters = [];
   bool _loading = true;
+  final _draftService = ComposerDraftService();
+  final _roadwayCache = RoadwayCacheService();
 
   @override
   void initState() {
@@ -114,6 +122,7 @@ class _HomeScreenState extends State<HomeScreen> {
           apiKeyService: widget.apiKeyService,
           settingsService: widget.settingsService,
           characterService: widget.characterService,
+          characterCategoryService: widget.characterCategoryService,
           personaService: widget.personaService,
           nanoGptService: widget.nanoGptService,
           worldInfoService: widget.worldInfoService,
@@ -130,6 +139,7 @@ class _HomeScreenState extends State<HomeScreen> {
           apiKeyService: widget.apiKeyService,
           settingsService: widget.settingsService,
           characterService: widget.characterService,
+          characterCategoryService: widget.characterCategoryService,
           personaService: widget.personaService,
           chatService: widget.chatService,
           nanoGptService: widget.nanoGptService,
@@ -181,18 +191,29 @@ class _HomeScreenState extends State<HomeScreen> {
       MaterialPageRoute(
         builder: (_) => CharactersScreen(
           characterService: widget.characterService,
+          categoryService: widget.characterCategoryService,
           settingsService: widget.settingsService,
           nanoGptService: widget.nanoGptService,
+          pickMode: true,
         ),
       ),
     );
     if (character == null || !mounted) return;
 
     final persona = await widget.personaService.getActivePersona();
+    if (!mounted) return;
+    final greetingIndex = await pickGreetingIndex(
+      context,
+      character: character,
+      userName: persona.name,
+    );
+    if (greetingIndex == null || !mounted) return;
+
     final session = await widget.chatService.startNewChat(
       character,
       userName: persona.name,
       personaId: persona.id,
+      greetingIndex: greetingIndex,
     );
     if (!mounted) return;
     await _openChat(session);
@@ -203,6 +224,7 @@ class _HomeScreenState extends State<HomeScreen> {
       MaterialPageRoute(
         builder: (_) => GroupChatSetupScreen(
           characterService: widget.characterService,
+          categoryService: widget.characterCategoryService,
           chatService: widget.chatService,
           personaService: widget.personaService,
           worldInfoService: widget.worldInfoService,
@@ -235,6 +257,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (confirmed != true || !mounted) return;
     await widget.chatService.deleteChat(chat.characterId, chat.id);
+    await _draftService.clearDraft(chat.id);
+    await _roadwayCache.clearOptions(chat.id);
     await _load();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(

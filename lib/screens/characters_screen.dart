@@ -7,26 +7,38 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models/character.dart';
+import '../models/character_category.dart';
 import '../services/avatar_service.dart';
 import '../services/character_card_codec.dart';
+import '../services/character_category_service.dart';
 import '../services/character_service.dart';
 import '../services/nanogpt_service.dart';
 import '../services/settings_service.dart';
 import '../widgets/anima_avatar.dart';
+import '../widgets/character_category_controls.dart';
 import 'character_edit_screen.dart';
 
 /// List of saved characters with SillyTavern card import/export.
+///
+/// [pickMode] true (Solo chat): tap a character to choose it and return.
+/// [pickMode] false (Settings / lore): tap opens edit; screen stays open.
 class CharactersScreen extends StatefulWidget {
   const CharactersScreen({
     super.key,
     required this.characterService,
+    required this.categoryService,
     required this.settingsService,
     required this.nanoGptService,
+    this.pickMode = false,
   });
 
   final CharacterService characterService;
+  final CharacterCategoryService categoryService;
   final SettingsService settingsService;
   final NanoGptService nanoGptService;
+
+  /// When true, tapping a row selects that character and pops the screen.
+  final bool pickMode;
 
   @override
   State<CharactersScreen> createState() => _CharactersScreenState();
@@ -36,9 +48,19 @@ class _CharactersScreenState extends State<CharactersScreen> {
   final _codec = CharacterCardCodec();
   final _avatarService = AvatarService();
   List<Character> _characters = [];
+  CharacterCategoryState _categoryState = CharacterCategoryState.empty;
+  String _filterCategoryId = CharacterCategoryService.allFilterId;
   String? _selectedId;
   bool _loading = true;
   bool _busy = false;
+
+  List<Character> get _visibleCharacters {
+    return widget.categoryService.filterCharacters(
+      _characters,
+      state: _categoryState,
+      categoryId: _filterCategoryId,
+    );
+  }
 
   @override
   void initState() {
@@ -48,6 +70,10 @@ class _CharactersScreenState extends State<CharactersScreen> {
 
   Future<void> _load() async {
     final characters = await widget.characterService.loadCharacters();
+    var categoryState = await widget.categoryService.loadState();
+    categoryState = await widget.categoryService.prune(
+      existingCharacterIds: characters.map((c) => c.id),
+    );
     var selectedId = await widget.settingsService.getSelectedCharacterId();
     final ids = characters.map((c) => c.id).toSet();
     if (selectedId == null || !ids.contains(selectedId)) {
@@ -55,9 +81,15 @@ class _CharactersScreenState extends State<CharactersScreen> {
       await widget.settingsService.saveSelectedCharacterId(selectedId);
     }
     if (!mounted) return;
+    final filterStillValid = _filterCategoryId.isEmpty ||
+        categoryState.categories.any((c) => c.id == _filterCategoryId);
     setState(() {
       _characters = characters;
+      _categoryState = categoryState;
       _selectedId = selectedId;
+      if (!filterStillValid) {
+        _filterCategoryId = CharacterCategoryService.allFilterId;
+      }
       _loading = false;
     });
   }
@@ -70,18 +102,40 @@ class _CharactersScreenState extends State<CharactersScreen> {
             : character.creatorNotes;
     final base = text.trim().isEmpty ? 'No description yet' : text.trim();
     final lore = character.enabledLoreEntryCount;
-    if (lore <= 0) return base;
-    return '$base · Lorebook ($lore)';
+    final cats = _categoryState.categoriesForCharacter(character.id);
+    final catNames = [
+      for (final id in cats)
+        for (final c in _categoryState.categories)
+          if (c.id == id) c.name,
+    ];
+    final parts = <String>[base];
+    if (lore > 0) parts.add('Lorebook ($lore)');
+    if (catNames.isNotEmpty) parts.add(catNames.join(', '));
+    return parts.join(' · ');
   }
 
   Future<void> _select(Character character) async {
     await widget.settingsService.saveSelectedCharacterId(character.id);
     if (!mounted) return;
     setState(() => _selectedId = character.id);
+    if (!widget.pickMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Selected ${character.name}')),
+      );
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Now chatting with ${character.name}')),
     );
     Navigator.of(context).pop(character);
+  }
+
+  Future<void> _onTileTap(Character character) async {
+    if (widget.pickMode) {
+      await _select(character);
+      return;
+    }
+    await _edit(character);
   }
 
   Future<void> _create() async {
@@ -98,7 +152,9 @@ class _CharactersScreenState extends State<CharactersScreen> {
     await widget.settingsService.saveSelectedCharacterId(created.id);
     await _load();
     if (!mounted) return;
-    Navigator.of(context).pop(created);
+    if (widget.pickMode) {
+      Navigator.of(context).pop(created);
+    }
   }
 
   Future<void> _edit(Character character) async {
@@ -113,6 +169,44 @@ class _CharactersScreenState extends State<CharactersScreen> {
       ),
     );
     if (updated == null) return;
+    await _load();
+  }
+
+  Future<void> _editCategories(Character character) async {
+    final initial =
+        _categoryState.categoriesForCharacter(character.id).toSet();
+    final picked = await showCharacterCategoryPicker(
+      context: context,
+      state: _categoryState,
+      initiallySelected: initial,
+      characterName: character.name,
+    );
+    if (picked == null || !mounted) return;
+    final next = await widget.categoryService.setCategoriesForCharacter(
+      character.id,
+      picked,
+    );
+    if (!mounted) return;
+    setState(() => _categoryState = next);
+  }
+
+  Future<void> _manageCategories() async {
+    await showManageCharacterCategoriesSheet(
+      context: context,
+      categoryService: widget.categoryService,
+      state: _categoryState,
+      onChanged: (next) {
+        if (!mounted) return;
+        setState(() {
+          _categoryState = next;
+          final stillValid = _filterCategoryId.isEmpty ||
+              next.categories.any((c) => c.id == _filterCategoryId);
+          if (!stillValid) {
+            _filterCategoryId = CharacterCategoryService.allFilterId;
+          }
+        });
+      },
+    );
     await _load();
   }
 
@@ -139,6 +233,7 @@ class _CharactersScreenState extends State<CharactersScreen> {
     );
     if (confirmed != true) return;
     final remaining = await widget.characterService.delete(character.id);
+    await widget.categoryService.removeCharacter(character.id);
     if (_selectedId == character.id) {
       await widget.settingsService.saveSelectedCharacterId(remaining.first.id);
     }
@@ -191,7 +286,9 @@ class _CharactersScreenState extends State<CharactersScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Imported “${character.name}”')),
       );
-      Navigator.of(context).pop(character);
+      if (widget.pickMode) {
+        Navigator.of(context).pop(character);
+      }
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -294,10 +391,11 @@ class _CharactersScreenState extends State<CharactersScreen> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final visible = _visibleCharacters;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Characters'),
+        title: Text(widget.pickMode ? 'Choose character' : 'Characters'),
         actions: [
           IconButton(
             tooltip: 'Import card',
@@ -316,59 +414,105 @@ class _CharactersScreenState extends State<CharactersScreen> {
           : Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                   child: Text(
-                    'Import SillyTavern cards (.json or .png). Export stays compatible with Card V2/V3.',
+                    widget.pickMode
+                        ? 'Pick who to chat with. Filter by category if you like.'
+                        : 'Import SillyTavern cards (.json or .png). Organize with '
+                            'categories — the same character can be in several lists.',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),
-                Expanded(
-                  child: ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 88),
-                    itemCount: _characters.length,
-                    separatorBuilder: (_, _) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final character = _characters[index];
-                      final selected = character.id == _selectedId;
-
-                      return ListTile(
-                        selected: selected,
-                        selectedTileColor:
-                            colorScheme.primaryContainer.withValues(alpha: 0.45),
-                        leading: AnimaAvatar(
-                          fileName: character.avatarFileName,
-                          label: character.name,
-                          radius: 22,
-                          avatarService: _avatarService,
-                        ),
-                        title: Text(character.name),
-                        subtitle: Text(
-                          _subtitle(character),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        trailing: PopupMenuButton<String>(
-                          onSelected: (value) {
-                            if (value == 'edit') _edit(character);
-                            if (value == 'export') _exportCard(character);
-                            if (value == 'delete') _delete(character);
-                          },
-                          itemBuilder: (context) => const [
-                            PopupMenuItem(value: 'edit', child: Text('Edit')),
-                            PopupMenuItem(
-                              value: 'export',
-                              child: Text('Export card'),
-                            ),
-                            PopupMenuItem(
-                              value: 'delete',
-                              child: Text('Delete'),
-                            ),
-                          ],
-                        ),
-                        onTap: () => _select(character),
-                      );
-                    },
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
+                  child: CharacterCategoryFilterBar(
+                    state: _categoryState,
+                    selectedCategoryId: _filterCategoryId,
+                    onChanged: (id) => setState(() => _filterCategoryId = id),
+                    onManage: _busy ? null : _manageCategories,
                   ),
+                ),
+                Expanded(
+                  child: visible.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(32),
+                            child: Text(
+                              _characters.isEmpty
+                                  ? 'No characters yet.'
+                                  : 'No characters in this category.',
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
+                          ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 88),
+                          itemCount: visible.length,
+                          separatorBuilder: (_, _) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final character = visible[index];
+                            final selected = character.id == _selectedId;
+
+                            return ListTile(
+                              selected: selected,
+                              selectedTileColor: colorScheme.primaryContainer
+                                  .withValues(alpha: 0.45),
+                              leading: AnimaAvatar(
+                                fileName: character.avatarFileName,
+                                label: character.name,
+                                radius: 22,
+                                avatarService: _avatarService,
+                              ),
+                              title: Text(character.name),
+                              subtitle: Text(
+                                _subtitle(character),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing: PopupMenuButton<String>(
+                                onSelected: (value) {
+                                  if (value == 'edit') _edit(character);
+                                  if (value == 'categories') {
+                                    _editCategories(character);
+                                  }
+                                  if (value == 'select') _select(character);
+                                  if (value == 'export') _exportCard(character);
+                                  if (value == 'delete') _delete(character);
+                                },
+                                itemBuilder: (context) => [
+                                  const PopupMenuItem(
+                                    value: 'edit',
+                                    child: Text('Edit'),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: 'categories',
+                                    child: Text('Categories'),
+                                  ),
+                                  if (!widget.pickMode)
+                                    const PopupMenuItem(
+                                      value: 'select',
+                                      child: Text('Set as selected'),
+                                    ),
+                                  const PopupMenuItem(
+                                    value: 'export',
+                                    child: Text('Export card'),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: 'delete',
+                                    child: Text('Delete'),
+                                  ),
+                                ],
+                              ),
+                              onTap: () => _onTileTap(character),
+                            );
+                          },
+                        ),
                 ),
               ],
             ),

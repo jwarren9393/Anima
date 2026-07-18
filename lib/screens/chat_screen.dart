@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -12,24 +13,31 @@ import '../models/chat_session.dart';
 import '../models/persona.dart';
 import '../models/ui_style_settings.dart';
 import '../services/api_key_service.dart';
+import '../services/character_category_service.dart';
 import '../services/character_service.dart';
 import '../services/chat_context_service.dart';
 import '../services/chat_service.dart';
 import '../services/chat_transcript_codec.dart';
+import '../services/composer_draft_service.dart';
 import '../services/lorebook_service.dart';
 import '../services/message_formatter.dart';
 import '../services/nanogpt_service.dart';
 import '../services/persona_service.dart';
 import '../services/prompt_builder.dart';
+import '../services/roadway_cache_service.dart';
+import '../services/roadway_service.dart';
 import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
 import '../services/world_workshop_service.dart';
 import '../widgets/anima_avatar.dart';
+import '../widgets/greeting_picker.dart';
 import '../widgets/keyboard_inset.dart';
 import '../widgets/preset_picker.dart';
 import '../widgets/rp_rich_text.dart';
 import 'characters_screen.dart';
+import 'character_edit_screen.dart';
 import 'group_chat_setup_screen.dart';
+import 'persona_edit_screen.dart';
 import 'personas_screen.dart';
 import 'settings_screen.dart';
 
@@ -40,6 +48,7 @@ class ChatScreen extends StatefulWidget {
     required this.apiKeyService,
     required this.settingsService,
     required this.characterService,
+    required this.characterCategoryService,
     required this.personaService,
     required this.chatService,
     required this.nanoGptService,
@@ -51,6 +60,7 @@ class ChatScreen extends StatefulWidget {
   final ApiKeyService apiKeyService;
   final SettingsService settingsService;
   final CharacterService characterService;
+  final CharacterCategoryService characterCategoryService;
   final PersonaService personaService;
   final ChatService chatService;
   final NanoGptService nanoGptService;
@@ -69,12 +79,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final _lorebookService = const LorebookService();
   final _contextService = const ChatContextService();
   final _transcriptCodec = ChatTranscriptCodec();
+  final _draftService = ComposerDraftService();
   static const _formatter = MessageFormatter();
 
   bool _hasApiKey = false;
   bool _loading = true;
   bool _busy = false;
   bool _formatting = false;
+  /// When on, Send wraps the message as `(OOC: …)` for out-of-character talk.
+  bool _oocMode = false;
   AvatarStyleSettings _avatarStyle = const AvatarStyleSettings();
   String? _error;
   Character? _character;
@@ -82,6 +95,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   ChatSession? _session;
   Persona? _persona;
   double _keyboardInset = 0;
+  Timer? _draftSaveTimer;
+  String _lastSavedDraft = '';
 
   List<ChatMessage> get _messages => _session?.messages ?? const [];
   bool get _isGroup => _session?.isGroup == true;
@@ -95,6 +110,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _inputController.addListener(_onComposerChanged);
     _bootstrap();
   }
 
@@ -111,6 +127,40 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     });
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden) {
+      _flushDraftNow();
+    }
+  }
+
+  void _onComposerChanged() {
+    _draftSaveTimer?.cancel();
+    _draftSaveTimer = Timer(const Duration(milliseconds: 450), _flushDraftNow);
+  }
+
+  Future<void> _flushDraftNow() async {
+    _draftSaveTimer?.cancel();
+    _draftSaveTimer = null;
+    final session = _session;
+    if (session == null) return;
+    final text = _inputController.text;
+    if (text == _lastSavedDraft) return;
+    _lastSavedDraft = text;
+    await _draftService.saveDraft(session.id, text);
+  }
+
+  Future<void> _clearSavedDraft() async {
+    _draftSaveTimer?.cancel();
+    _draftSaveTimer = null;
+    _lastSavedDraft = '';
+    final session = _session;
+    if (session == null) return;
+    await _draftService.clearDraft(session.id);
+  }
+
   Future<void> _bootstrap() async {
     final hasKey = await widget.apiKeyService.hasApiKey();
     var session = widget.initialSession;
@@ -124,7 +174,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       await widget.chatService.saveChat(session);
     }
     final participants = await _resolveParticipants(session, character);
+    final draft = await _draftService.loadDraft(session.id);
     if (!mounted) return;
+    if (draft.isNotEmpty) {
+      _inputController.text = draft;
+      _inputController.selection = TextSelection.collapsed(offset: draft.length);
+      _lastSavedDraft = draft;
+    }
     setState(() {
       _hasApiKey = hasKey;
       _character = character;
@@ -221,6 +277,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           apiKeyService: widget.apiKeyService,
           settingsService: widget.settingsService,
           characterService: widget.characterService,
+          characterCategoryService: widget.characterCategoryService,
           personaService: widget.personaService,
           nanoGptService: widget.nanoGptService,
           worldInfoService: widget.worldInfoService,
@@ -264,14 +321,97 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
+  /// Tap an AI avatar → edit that character card; changes apply on the next reply.
+  Future<void> _editCharacterFromAvatar(ChatMessage message) async {
+    if (_busy || message.isUser) return;
+
+    Character? target;
+    final speakerId = message.speakerId?.trim();
+    if (speakerId != null && speakerId.isNotEmpty) {
+      for (final c in _participants) {
+        if (c.id == speakerId) {
+          target = c;
+          break;
+        }
+      }
+      target ??= await widget.characterService.getById(speakerId);
+    }
+    target ??= _character;
+    if (target == null || !mounted) return;
+
+    final updated = await Navigator.of(context).push<Character>(
+      MaterialPageRoute(
+        builder: (_) => CharacterEditScreen(
+          characterService: widget.characterService,
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
+          existing: target,
+        ),
+      ),
+    );
+    if (updated == null || !mounted) return;
+
+    setState(() {
+      if (_character?.id == updated.id) {
+        _character = updated;
+      }
+      _participants = [
+        for (final c in _participants) c.id == updated.id ? updated : c,
+      ];
+      // Solo chats always keep the edited card as primary.
+      if (!_isGroup) {
+        _character = updated;
+        _participants = [updated];
+      }
+    });
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Updated “${updated.name}” — next replies use the new card.',
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  /// Tap your avatar → edit this chat’s persona.
+  Future<void> _editPersonaFromAvatar() async {
+    if (_busy) return;
+    final persona = _persona;
+    if (persona == null) return;
+
+    final updated = await Navigator.of(context).push<Persona>(
+      MaterialPageRoute(
+        builder: (_) => PersonaEditScreen(
+          personaService: widget.personaService,
+          existing: persona,
+        ),
+      ),
+    );
+    if (updated == null || !mounted) return;
+
+    setState(() => _persona = updated);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Updated persona “${updated.name}” — next replies use it.',
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   Future<void> _openCharacters() async {
     final previousId = _character?.id;
     final selected = await Navigator.of(context).push<Character>(
       MaterialPageRoute(
         builder: (_) => CharactersScreen(
           characterService: widget.characterService,
+          categoryService: widget.characterCategoryService,
           settingsService: widget.settingsService,
           nanoGptService: widget.nanoGptService,
+          pickMode: true,
         ),
       ),
     );
@@ -296,44 +436,71 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
     final participants = await _resolveParticipants(session, character);
     if (!mounted) return;
-    setState(() {
-      _character = character;
-      _participants = participants;
-      _session = session;
-      _error = null;
-    });
-    _scrollToBottom(jump: true);
+    await _flushDraftNow();
+    await _applySession(
+      session,
+      participants: participants,
+      character: character,
+    );
   }
 
   Future<void> _newChat() async {
     final character = _character;
     if (character == null || _busy) return;
+    await _flushDraftNow();
+    if (!mounted) return;
     if (_isGroup) {
+      final greetingIndex = await pickGreetingIndex(
+        context,
+        character: _participants.isNotEmpty ? _participants.first : character,
+        userName: _userName,
+      );
+      if (greetingIndex == null || !mounted) return;
       final session = await widget.chatService.startGroupChat(
         _participants,
         userName: _userName,
         personaId: _persona?.id,
         authorsNote: _session?.authorsNote ?? '',
-        autoReply: _session?.autoReply ?? true,
+        autoReply: _session?.autoReply ?? false,
         lorebookIds: _session?.lorebookIds,
+        greetingIndex: greetingIndex,
       );
       if (!mounted) return;
-      setState(() {
-        _session = session;
-        _error = null;
-      });
-      _scrollToBottom(jump: true);
+      await _applySession(session, participants: _participants);
       return;
     }
+    if (!mounted) return;
+    final greetingIndex = await pickGreetingIndex(
+      context,
+      character: character,
+      userName: _userName,
+    );
+    if (greetingIndex == null || !mounted) return;
     final session = await widget.chatService.startNewChat(
       character,
       userName: _userName,
       personaId: _persona?.id,
+      greetingIndex: greetingIndex,
     );
     if (!mounted) return;
+    await _applySession(session, participants: [character]);
+  }
+
+  /// Swap to another saved chat (or a brand-new one) and restore its draft.
+  Future<void> _applySession(
+    ChatSession session, {
+    List<Character>? participants,
+    Character? character,
+  }) async {
+    final draft = await _draftService.loadDraft(session.id);
+    if (!mounted) return;
+    _inputController.text = draft;
+    _inputController.selection = TextSelection.collapsed(offset: draft.length);
+    _lastSavedDraft = draft;
     setState(() {
+      if (character != null) _character = character;
+      if (participants != null) _participants = participants;
       _session = session;
-      _participants = [character];
       _error = null;
     });
     _scrollToBottom(jump: true);
@@ -381,6 +548,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
 
     if (chosen == null || !mounted) return;
+    await _flushDraftNow();
     await widget.chatService.setActiveChatId(chosen.characterId, chosen.id);
     final fallback = _character!;
     final participants = await _resolveParticipants(chosen, fallback);
@@ -389,13 +557,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         : (await widget.characterService.getById(chosen.characterId)) ??
             fallback;
     if (!mounted) return;
-    setState(() {
-      _session = chosen;
-      _participants = participants;
-      _character = primary;
-      _error = null;
-    });
-    _scrollToBottom(jump: true);
+    await _applySession(
+      chosen,
+      participants: participants,
+      character: primary,
+    );
   }
 
   Future<void> _exportChat() async {
@@ -538,7 +704,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _send() async {
-    final text = _inputController.text.trim();
+    var text = _inputController.text.trim();
     if (text.isEmpty ||
         _busy ||
         _formatting ||
@@ -554,8 +720,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       return;
     }
 
+    if (_oocMode) {
+      text = _wrapOoc(text);
+    }
+
     FocusScope.of(context).unfocus();
     _inputController.clear();
+    await _clearSavedDraft();
 
     final autoReply = _session!.autoReply;
     final speaker = _speakerForTurn();
@@ -592,6 +763,22 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       speakingAs: speaker,
       advanceGroupSpeaker: _isGroup,
     );
+  }
+
+  /// Wraps plain text as out-of-character. Skips if already tagged.
+  String _wrapOoc(String text) {
+    final trimmed = text.trim();
+    final lower = trimmed.toLowerCase();
+    if (lower.startsWith('(ooc:') ||
+        lower.startsWith('(ooc ') ||
+        lower.startsWith('ooc:')) {
+      return trimmed;
+    }
+    return '(OOC: $trimmed)';
+  }
+
+  void _toggleOocMode() {
+    setState(() => _oocMode = !_oocMode);
   }
 
   Future<void> _toggleAutoReply() async {
@@ -761,6 +948,44 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _showPathsSheet() async {
+    if (!mounted || _session == null) return;
+    if (!_hasApiKey) {
+      setState(() {
+        _error =
+            'Add your NanoGPT API key in Settings before you can use Paths.';
+      });
+      return;
+    }
+    if (_messages.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Need a bit of chat first.')),
+      );
+      return;
+    }
+
+    final charName = _character?.name.trim().isNotEmpty == true
+        ? _character!.name.trim()
+        : 'Character';
+    final chosen = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => _PathsSheet(
+        chatId: _session!.id,
+        nanoGptService: widget.nanoGptService,
+        settingsService: widget.settingsService,
+        recentMessages: List<ChatMessage>.from(_messages),
+        userName: _userName,
+        characterName: charName,
+        generationBlocked: _busy || _formatting,
+      ),
+    );
+    if (chosen == null || !mounted) return;
+    _inputController.text = chosen;
+    _inputController.selection = TextSelection.collapsed(offset: chosen.length);
+  }
+
   Future<void> _impersonate() async {
     if (_busy || _session == null || _character == null) return;
     if (!_hasApiKey) {
@@ -848,7 +1073,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         );
       },
     );
-    controller.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
     if (result == null || !mounted) return;
     setState(() {
       _session = session.copyWith(authorsNote: result.trim());
@@ -918,7 +1143,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         );
       },
     );
-    controller.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
     if (result == null || !mounted) return;
     final trimmed = result.trim();
     setState(() {
@@ -1043,6 +1268,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       MaterialPageRoute(
         builder: (_) => GroupChatSetupScreen(
           characterService: widget.characterService,
+          categoryService: widget.characterCategoryService,
           chatService: widget.chatService,
           personaService: widget.personaService,
           worldInfoService: widget.worldInfoService,
@@ -1053,16 +1279,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       ),
     );
     if (session == null || !mounted) return;
+    await _flushDraftNow();
     final fallback = _character ??
         Character(id: session.characterId, name: 'Character');
     final participants = await _resolveParticipants(session, fallback);
-    setState(() {
-      _session = session;
-      _participants = participants;
-      _character = participants.isNotEmpty ? participants.first : fallback;
-      _error = null;
-    });
-    _scrollToBottom(jump: true);
+    await _applySession(
+      session,
+      participants: participants,
+      character: participants.isNotEmpty ? participants.first : fallback,
+    );
   }
 
   Future<void> _regenerateOrSwipe({required bool asNewSwipe}) async {
@@ -1410,7 +1635,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         ],
       ),
     );
-    controller.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
     if (result == null || !mounted) return;
     final trimmed = result.trim();
     if (trimmed.isEmpty) return;
@@ -1514,10 +1739,19 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     });
   }
 
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     widget.nanoGptService.cancelActiveStream();
+    _draftSaveTimer?.cancel();
+    // Fire-and-forget final draft flush (async dispose is not allowed).
+    final session = _session;
+    final text = _inputController.text;
+    if (session != null && text != _lastSavedDraft) {
+      unawaited(_draftService.saveDraft(session.id, text));
+    }
+    _inputController.removeListener(_onComposerChanged);
     _inputController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -1705,6 +1939,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         onTap: (_busy || thinking)
                             ? null
                             : () => _editMessage(index),
+                        onAvatarTap: _busy
+                            ? null
+                            : () {
+                                if (message.isUser) {
+                                  _editPersonaFromAvatar();
+                                } else {
+                                  _editCharacterFromAvatar(message);
+                                }
+                              },
                         onLongPress: _busy
                             ? null
                             : () => _showMessageMenu(index),
@@ -1755,82 +1998,79 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (_isGroup || _session != null)
+                  if (_isGroup)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        children: [
-                          if (_isGroup)
-                            Expanded(
-                              child: SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: Row(
-                                  children: [
-                                    for (var i = 0;
-                                        i < _participants.length;
-                                        i++) ...[
-                                      if (i > 0) const SizedBox(width: 6),
-                                      InputChip(
-                                        label: ConstrainedBox(
-                                          constraints: const BoxConstraints(
-                                            maxWidth: 140,
-                                          ),
-                                          child: Text(
-                                            _participants[i].name.trim().isEmpty
-                                                ? 'Character ${i + 1}'
-                                                : _participants[i].name,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        selected:
-                                            (_session?.nextSpeakerIndex ?? 0)
-                                                    .clamp(
-                                                      0,
-                                                      _participants.length - 1,
-                                                    ) ==
-                                                i,
-                                        onPressed: _busy
-                                            ? null
-                                            : () => _selectSpeaker(i),
-                                        visualDensity: VisualDensity.compact,
-                                        materialTapTargetSize:
-                                            MaterialTapTargetSize.shrinkWrap,
-                                        labelPadding:
-                                            const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                        ),
-                                      ),
-                                    ],
-                                  ],
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            for (var i = 0; i < _participants.length; i++) ...[
+                              if (i > 0) const SizedBox(width: 6),
+                              InputChip(
+                                label: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 140,
+                                  ),
+                                  child: Text(
+                                    _participants[i].name.trim().isEmpty
+                                        ? 'Character ${i + 1}'
+                                        : _participants[i].name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                selected: (_session?.nextSpeakerIndex ?? 0)
+                                        .clamp(0, _participants.length - 1) ==
+                                    i,
+                                onPressed:
+                                    _busy ? null : () => _selectSpeaker(i),
+                                visualDensity: VisualDensity.compact,
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                labelPadding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
                                 ),
                               ),
-                            )
-                          else
-                            const Spacer(),
-                          IconButton(
-                            tooltip: (_session?.autoReply ?? true)
-                                ? 'Auto-reply on (tap to turn off)'
-                                : 'Auto-reply off (tap to turn on)',
-                            onPressed: _busy ? null : _toggleAutoReply,
-                            visualDensity: VisualDensity.compact,
-                            icon: Icon(
-                              (_session?.autoReply ?? true)
-                                  ? Icons.forum_outlined
-                                  : Icons.chat_bubble_outline,
-                              color: (_session?.autoReply ?? true)
-                                  ? colorScheme.primary
-                                  : colorScheme.outline,
-                            ),
-                          ),
-                        ],
+                            ],
+                          ],
+                        ),
                       ),
                     ),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
+                      Tooltip(
+                        message: _oocMode
+                            ? 'OOC on — message will send as (OOC: …)'
+                            : 'OOC off — tap for out-of-character',
+                        child: TextButton(
+                          onPressed:
+                              _busy || _formatting ? null : _toggleOocMode,
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 12,
+                            ),
+                            minimumSize: const Size(40, 48),
+                            foregroundColor: _oocMode
+                                ? colorScheme.primary
+                                : colorScheme.outline,
+                          ),
+                          child: Text(
+                            'OOC',
+                            style: TextStyle(
+                              fontWeight:
+                                  _oocMode ? FontWeight.w700 : FontWeight.w500,
+                              fontSize: 12,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                        ),
+                      ),
                       Expanded(
                         child: TextField(
                           controller: _inputController,
@@ -1839,13 +2079,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                           maxLines: 5,
                           textInputAction: .newline,
                           decoration: InputDecoration(
-                            hintText: _isGroup
-                                ? ((_session?.autoReply ?? true)
-                                    ? 'Message the group…'
-                                    : 'Send only — tap a name to reply…')
-                                : ((_session?.autoReply ?? true)
-                                    ? 'Message $characterName…'
-                                    : 'Send only — tap Continue or long-press…'),
+                            hintText: _oocMode
+                                ? 'Out-of-character note…'
+                                : _isGroup
+                                    ? ((_session?.autoReply ?? false)
+                                        ? 'Message the group…'
+                                        : 'Send only — tap a name to reply…')
+                                    : ((_session?.autoReply ?? false)
+                                        ? 'Message $characterName…'
+                                        : 'Send only — tap Continue or long-press…'),
                             filled: true,
                             border: const OutlineInputBorder(),
                             isDense: true,
@@ -1966,6 +2208,32 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   subtitle: const Text('Write your next line as you'),
                   onTap: () => Navigator.pop(context, 'impersonate'),
                 ),
+                ListTile(
+                  leading: const Icon(Icons.alt_route),
+                  title: const Text('Paths'),
+                  subtitle: const Text(
+                    'Brainstorm what you could do or say next',
+                  ),
+                  onTap: () => Navigator.pop(context, 'paths'),
+                ),
+                ListTile(
+                  leading: Icon(
+                    (_session?.autoReply ?? false)
+                        ? Icons.forum_outlined
+                        : Icons.chat_bubble_outline,
+                  ),
+                  title: Text(
+                    (_session?.autoReply ?? false)
+                        ? 'Auto-reply: on'
+                        : 'Auto-reply: off',
+                  ),
+                  subtitle: Text(
+                    (_session?.autoReply ?? false)
+                        ? 'Tap to turn off — send without an AI reply'
+                        : 'Tap to turn on — characters answer when you send',
+                  ),
+                  onTap: () => Navigator.pop(context, 'auto_reply'),
+                ),
                 if (!message.isUser && isLast) ...[
                   ListTile(
                     leading: const Icon(Icons.refresh),
@@ -2012,6 +2280,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (action == 'branch') await _branchFromMessage(index);
     if (action == 'continue') await _continueScene();
     if (action == 'impersonate') await _impersonate();
+    if (action == 'paths') await _showPathsSheet();
+    if (action == 'auto_reply') await _toggleAutoReply();
     if (action == 'regen') await _regenerateOrSwipe(asNewSwipe: false);
     if (action == 'swipe') await _regenerateOrSwipe(asNewSwipe: true);
     if (action == 'swipe_prev') _shiftSwipe(index, -1);
@@ -2097,6 +2367,7 @@ class _MessageBubble extends StatelessWidget {
     this.avatarLabel = '',
     this.avatarStyle = const AvatarStyleSettings(),
     this.onTap,
+    this.onAvatarTap,
     this.onLongPress,
     this.onSwipePrev,
     this.onSwipeNext,
@@ -2110,6 +2381,7 @@ class _MessageBubble extends StatelessWidget {
   final String avatarLabel;
   final AvatarStyleSettings avatarStyle;
   final VoidCallback? onTap;
+  final VoidCallback? onAvatarTap;
   final VoidCallback? onLongPress;
   final VoidCallback? onSwipePrev;
   final VoidCallback? onSwipeNext;
@@ -2129,12 +2401,31 @@ class _MessageBubble extends StatelessWidget {
         (Theme.of(context).textTheme.bodyLarge?.fontSize ?? 16) *
             ui.chatFontScale;
 
-    final avatar = AnimaAvatar(
+    final avatarCore = AnimaAvatar(
       fileName: avatarFileName,
       label: avatarLabel,
       style: avatarStyle,
       icon: isUser ? Icons.person : Icons.smart_toy_outlined,
     );
+    final avatar = onAvatarTap == null
+        ? avatarCore
+        : Tooltip(
+            message: isUser ? 'Edit persona' : 'Edit character card',
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onAvatarTap,
+                customBorder: avatarStyle.shape == AvatarShape.circle
+                    ? const CircleBorder()
+                    : RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(
+                          avatarStyle.shape == AvatarShape.square ? 8 : 12,
+                        ),
+                      ),
+                child: avatarCore,
+              ),
+            ),
+          );
 
     final bubble = ConstrainedBox(
       constraints: BoxConstraints(
@@ -2316,6 +2607,449 @@ class _SwipePager extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Self-contained Paths sheet — owns its own loading/options so generating
+/// never calls setState on the chat screen under an open modal (that caused
+/// `_dependents.isEmpty` crashes).
+///
+/// Generated options are cached per chat (and scene) so closing the sheet and
+/// reopening it does not force another NanoGPT call.
+class _PathsSheet extends StatefulWidget {
+  const _PathsSheet({
+    required this.chatId,
+    required this.nanoGptService,
+    required this.settingsService,
+    required this.recentMessages,
+    required this.userName,
+    required this.characterName,
+    required this.generationBlocked,
+  });
+
+  final String chatId;
+  final NanoGptService nanoGptService;
+  final SettingsService settingsService;
+  final List<ChatMessage> recentMessages;
+  final String userName;
+  final String characterName;
+  final bool generationBlocked;
+
+  @override
+  State<_PathsSheet> createState() => _PathsSheetState();
+}
+
+class _PathsSheetState extends State<_PathsSheet> {
+  static const _roadway = RoadwayService();
+  final _cache = RoadwayCacheService();
+
+  bool _loading = false;
+  bool _combining = false;
+  bool _restoring = true;
+  List<String> _options = const [];
+  final Set<int> _selected = <int>{};
+
+  String get _anchorMessageId {
+    if (widget.recentMessages.isEmpty) return '';
+    return widget.recentMessages.last.id;
+  }
+
+  bool get _busy => _loading || _combining || _restoring;
+
+  List<String> get _selectedOptions {
+    final out = <String>[];
+    for (final i in _selected.toList()..sort()) {
+      if (i < 0 || i >= _options.length) continue;
+      final text = _options[i].trim();
+      if (text.isNotEmpty) out.add(text);
+    }
+    return out;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreCached();
+  }
+
+  Future<void> _restoreCached() async {
+    final cached = await _cache.loadOptions(
+      widget.chatId,
+      anchorMessageId: _anchorMessageId,
+    );
+    if (!mounted) return;
+    setState(() {
+      if (cached != null && cached.isNotEmpty) {
+        _options = cached;
+      }
+      _selected.clear();
+      _restoring = false;
+    });
+  }
+
+  Future<void> _persistOptions(List<String> options) async {
+    await _cache.saveOptions(
+      widget.chatId,
+      options: options,
+      anchorMessageId: _anchorMessageId,
+    );
+  }
+
+  Future<void> _clearOptions() async {
+    setState(() {
+      _options = const [];
+      _selected.clear();
+    });
+    await _cache.clearOptions(widget.chatId);
+  }
+
+  void _toggleSelected(int index) {
+    if (_busy || index < 0 || index >= _options.length) return;
+    setState(() {
+      if (_selected.contains(index)) {
+        _selected.remove(index);
+      } else {
+        _selected.add(index);
+      }
+    });
+  }
+
+  Future<void> _generate() async {
+    if (_busy || widget.generationBlocked) return;
+    setState(() {
+      _loading = true;
+      _selected.clear();
+    });
+    try {
+      final collaborator =
+          await widget.settingsService.getCollaboratorSettings();
+      final model = await widget.settingsService.getModel();
+      final sampling = await widget.settingsService.getSampling();
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+      final messages = _roadway.buildMessages(
+        userName: widget.userName,
+        characterName: widget.characterName,
+        recentMessages: widget.recentMessages,
+        roadwayNote: collaborator.roadwayNote,
+      );
+      final raw = await widget.nanoGptService.complete(
+        model: model,
+        messages: messages,
+        baseUrl: baseUrl,
+        sampling: sampling,
+      );
+      if (!mounted) return;
+      final options = _roadway.parseOptions(raw);
+      if (options.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Paths came back empty — try again.')),
+        );
+        setState(() {
+          _options = const [];
+          _selected.clear();
+        });
+        await _cache.clearOptions(widget.chatId);
+        return;
+      }
+      setState(() {
+        _options = options;
+        _selected.clear();
+      });
+      await _persistOptions(options);
+    } on NanoGptCancelledException {
+      // Ignore.
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Paths failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _combineSelected() async {
+    if (_busy || widget.generationBlocked) return;
+    final selected = _selectedOptions;
+    if (selected.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Check at least two paths to combine.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _combining = true);
+    try {
+      final collaborator =
+          await widget.settingsService.getCollaboratorSettings();
+      final model = await widget.settingsService.getModel();
+      final sampling = await widget.settingsService.getSampling();
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+      final messages = _roadway.buildCombineMessages(
+        userName: widget.userName,
+        characterName: widget.characterName,
+        recentMessages: widget.recentMessages,
+        selectedOptions: selected,
+        roadwayNote: collaborator.roadwayNote,
+      );
+      if (messages.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Check at least two paths to combine.'),
+          ),
+        );
+        return;
+      }
+      final raw = await widget.nanoGptService.complete(
+        model: model,
+        messages: messages,
+        baseUrl: baseUrl,
+        sampling: sampling,
+      );
+      if (!mounted) return;
+      final combined = _roadway.parseCombinedMessage(raw);
+      if (combined.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Combine came back empty — try again.'),
+          ),
+        );
+        return;
+      }
+      Navigator.pop(context, combined);
+    } on NanoGptCancelledException {
+      // Ignore.
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Combine failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _combining = false);
+    }
+  }
+
+  Future<void> _editOption(int index) async {
+    if (_busy || index < 0 || index >= _options.length) return;
+    final controller = TextEditingController(text: _options[index]);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit path'),
+        content: TextField(
+          controller: controller,
+          maxLines: 5,
+          autofocus: true,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            hintText: 'What you might say or do…',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Use in composer'),
+          ),
+        ],
+      ),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
+    if (result == null || !mounted || result.isEmpty) return;
+    final next = List<String>.from(_options);
+    next[index] = result;
+    setState(() => _options = next);
+    await _persistOptions(next);
+    if (!mounted) return;
+    Navigator.pop(context, result);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final height = MediaQuery.sizeOf(context).height * 0.7;
+    final canCombine = _selectedOptions.length >= 2 &&
+        !_busy &&
+        !widget.generationBlocked;
+
+    return SafeArea(
+      child: SizedBox(
+        height: height,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 8, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Paths',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  if (_busy)
+                    const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  else
+                    IconButton(
+                      tooltip: _options.isEmpty
+                          ? 'Generate story paths'
+                          : 'Refresh paths',
+                      onPressed:
+                          widget.generationBlocked ? null : _generate,
+                      icon: Icon(
+                        _options.isEmpty
+                            ? Icons.auto_awesome
+                            : Icons.refresh,
+                      ),
+                    ),
+                  if (_options.isNotEmpty)
+                    IconButton(
+                      tooltip: 'Clear paths',
+                      onPressed: _busy ? null : _clearOptions,
+                      icon: const Icon(Icons.close),
+                    ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                'AI “what next?” options. Tap a path to use it, or check '
+                'two or more and tap Combine. Closing this sheet keeps them '
+                'until the chat moves on or you clear / refresh.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+              ),
+            ),
+            Expanded(
+              child: _options.isEmpty
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          _loading
+                              ? 'Brainstorming paths…'
+                              : _combining
+                                  ? 'Combining selected paths…'
+                                  : _restoring
+                                      ? 'Loading saved paths…'
+                                      : 'Tap ✨ to generate paths for this scene.',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                      ),
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                      itemCount: _options.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
+                      itemBuilder: (context, i) {
+                        final selected = _selected.contains(i);
+                        return Material(
+                          color: colorScheme.surfaceContainerHighest
+                              .withValues(alpha: 0.55),
+                          borderRadius: BorderRadius.circular(10),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: _busy
+                                ? null
+                                : () => Navigator.pop(context, _options[i]),
+                            onLongPress:
+                                _busy ? null : () => _editOption(i),
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                4,
+                                8,
+                                4,
+                                8,
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Checkbox(
+                                    value: selected,
+                                    onChanged: _busy
+                                        ? null
+                                        : (_) => _toggleSelected(i),
+                                  ),
+                                  Expanded(
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(top: 12),
+                                      child: Text(_options[i]),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Edit path',
+                                    onPressed:
+                                        _busy ? null : () => _editOption(i),
+                                    icon: const Icon(
+                                      Icons.edit_outlined,
+                                      size: 18,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+            if (_options.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: FilledButton.icon(
+                  onPressed: canCombine ? _combineSelected : null,
+                  icon: _combining
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.merge_type),
+                  label: Text(
+                    _combining
+                        ? 'Combining…'
+                        : _selected.isEmpty
+                            ? 'Combine selected'
+                            : 'Combine selected (${_selected.length})',
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

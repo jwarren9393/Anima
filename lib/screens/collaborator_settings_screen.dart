@@ -23,6 +23,7 @@ class _CollaboratorSettingsScreenState
     extends State<CollaboratorSettingsScreen> {
   final _guidanceController = TextEditingController();
   final _composerFormatController = TextEditingController();
+  final _roadwayController = TextEditingController();
   bool _loading = true;
   bool _saving = false;
 
@@ -38,6 +39,7 @@ class _CollaboratorSettingsScreenState
     setState(() {
       _guidanceController.text = settings.guidanceNote;
       _composerFormatController.text = settings.composerFormatNote;
+      _roadwayController.text = settings.roadwayNote;
       _loading = false;
     });
   }
@@ -48,6 +50,7 @@ class _CollaboratorSettingsScreenState
       CollaboratorSettings(
         guidanceNote: _guidanceController.text,
         composerFormatNote: _composerFormatController.text,
+        roadwayNote: _roadwayController.text,
       ),
     );
     if (!mounted) return;
@@ -70,6 +73,12 @@ class _CollaboratorSettingsScreenState
     });
   }
 
+  Future<void> _resetRoadwayDefault() async {
+    setState(() {
+      _roadwayController.text = CollaboratorSettings.defaultRoadwayNote;
+    });
+  }
+
   Future<void> _pickPreset() async {
     final preset = await pickTextPreset(
       context: context,
@@ -84,6 +93,7 @@ class _CollaboratorSettingsScreenState
   void dispose() {
     _guidanceController.dispose();
     _composerFormatController.dispose();
+    _roadwayController.dispose();
     super.dispose();
   }
 
@@ -149,11 +159,36 @@ class _CollaboratorSettingsScreenState
                   onPressed: _saving ? null : _resetComposerDefault,
                   child: const Text('Reset Format note to default'),
                 ),
+                const SizedBox(height: 32),
+                SettingsUi.sectionTitle(context, 'Roadway / Paths'),
+                const SizedBox(height: 8),
+                SettingsUi.sectionHint(
+                  context,
+                  'Used by the Paths button in chat. Asks the AI for several '
+                  '“what could {{user}} do next?” options you can tap into '
+                  'the composer and edit before sending.',
+                ),
+                TextField(
+                  controller: _roadwayController,
+                  minLines: 4,
+                  maxLines: 10,
+                  scrollPadding: SettingsUi.keyboardScrollPadding,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: SettingsUi.fieldDecoration(
+                    label: 'Roadway note',
+                    hintText: 'How Paths should brainstorm…',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton(
+                  onPressed: _saving ? null : _resetRoadwayDefault,
+                  child: const Text('Reset Roadway note to default'),
+                ),
                 const SizedBox(height: 8),
                 Text(
-                  'Both use your normal NanoGPT model and generation '
-                  'parameters from Settings. Format also cools temperature '
-                  'slightly so it stays closer to your words.',
+                  'Wand, Format, and Paths use your normal NanoGPT model and '
+                  'generation parameters from Settings. Format also cools '
+                  'temperature slightly so it stays closer to your words.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 24),

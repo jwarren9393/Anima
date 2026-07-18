@@ -72,5 +72,21 @@ void main() {
       expect(user, contains('OLD DESC'));
       expect(user, isNot(contains('Description:\nOLD DESC')));
     });
+
+    test('consistency check is read-only and includes full card', () {
+      final messages = collaborator.buildConsistencyCheckMessages(
+        draft: const CharacterDraftContext(
+          name: 'Rin',
+          description: 'Tall scout.',
+          personality: 'Quiet.',
+          firstMes: '*waves* "Hi."',
+        ),
+      );
+      expect(messages[0]['content'], contains('READ-ONLY'));
+      expect(messages[0]['content'], contains('Do not rewrite'));
+      expect(messages[1]['content'], contains('Tall scout'));
+      expect(messages[1]['content'], contains('Quiet'));
+      expect(messages[1]['content'], contains('waves'));
+    });
   });
 }

@@ -33,6 +33,52 @@ class NanoGptModelInfo {
   }
 }
 
+/// One allowance window returned by NanoGPT subscription usage.
+class NanoGptUsageWindow {
+  const NanoGptUsageWindow({
+    required this.used,
+    required this.remaining,
+    required this.limit,
+    this.resetAt,
+  });
+
+  final double used;
+  final double remaining;
+  final double limit;
+  final DateTime? resetAt;
+
+  double get percentUsed => limit <= 0 ? 0 : (used / limit).clamp(0, 1);
+}
+
+/// Wallet and subscription credit information for the saved NanoGPT key.
+class NanoGptCredits {
+  const NanoGptCredits({
+    this.usdBalance,
+    this.nanoBalance,
+    this.subscriptionActive = false,
+    this.subscriptionState = '',
+    this.weeklyTokens,
+    this.dailyTokens,
+    this.dailyImages,
+    this.monthlyUsage,
+    this.currentPeriodEnd,
+    this.balanceUnavailable = false,
+    this.subscriptionUnavailable = false,
+  });
+
+  final double? usdBalance;
+  final double? nanoBalance;
+  final bool subscriptionActive;
+  final String subscriptionState;
+  final NanoGptUsageWindow? weeklyTokens;
+  final NanoGptUsageWindow? dailyTokens;
+  final NanoGptUsageWindow? dailyImages;
+  final NanoGptUsageWindow? monthlyUsage;
+  final DateTime? currentPeriodEnd;
+  final bool balanceUnavailable;
+  final bool subscriptionUnavailable;
+}
+
 /// Talks to the NanoGPT chat API (OpenAI-compatible).
 ///
 /// Docs: https://docs.nano-gpt.com/api-reference/endpoint/chat-completion
@@ -77,6 +123,118 @@ class NanoGptService {
   /// Client used for the in-flight stream — closed by [cancelActiveStream].
   http.Client? _streamClient;
   bool _cancelRequested = false;
+
+  /// Loads wallet dollars and subscription allowance usage for the saved key.
+  ///
+  /// NanoGPT currently exposes these from two endpoints. A missing/inactive
+  /// subscription does not prevent the wallet balance from being displayed.
+  Future<NanoGptCredits> getCredits() async {
+    final apiKey = await _apiKeyService.getApiKey();
+    if (apiKey == null) {
+      throw NanoGptException(
+        'Add your NanoGPT API key in Settings before checking credits.',
+      );
+    }
+
+    final headers = <String, String>{
+      'Accept': 'application/json',
+      'Authorization': 'Bearer $apiKey',
+      'x-api-key': apiKey,
+    };
+
+    late final List<http.Response> responses;
+    try {
+      responses = await Future.wait([
+        _http
+            .post(
+              Uri.parse('https://nano-gpt.com/api/check-balance'),
+              headers: headers,
+            )
+            .timeout(const Duration(seconds: 30)),
+        _http
+            .get(
+              Uri.parse('https://nano-gpt.com/api/subscription/v1/usage'),
+              headers: headers,
+            )
+            .timeout(const Duration(seconds: 30)),
+      ]);
+    } on SocketException {
+      throw NanoGptException(
+        'Could not reach NanoGPT to check credits. Check your internet.',
+      );
+    } on TimeoutException {
+      throw NanoGptException(
+        'Checking NanoGPT credits took too long. Try again.',
+      );
+    } on http.ClientException {
+      throw NanoGptException(
+        'Could not reach NanoGPT to check credits. Check your internet.',
+      );
+    }
+
+    final balanceResponse = responses[0];
+    final subscriptionResponse = responses[1];
+    if (balanceResponse.statusCode == 401 ||
+        subscriptionResponse.statusCode == 401) {
+      throw NanoGptException(
+        'NanoGPT rejected the API key. Check the saved key in Settings.',
+      );
+    }
+
+    Map<String, dynamic>? balance;
+    Map<String, dynamic>? subscription;
+    if (_isSuccess(balanceResponse.statusCode)) {
+      balance = _decodeJsonMap(balanceResponse.body);
+    }
+    if (_isSuccess(subscriptionResponse.statusCode)) {
+      subscription = _decodeJsonMap(subscriptionResponse.body);
+    }
+    if (balance == null && subscription == null) {
+      throw NanoGptException(
+        'NanoGPT could not return credit information right now.',
+      );
+    }
+
+    final limits = _mapAt(subscription, 'limits');
+    return NanoGptCredits(
+      usdBalance: _numberAt(balance, 'usd_balance'),
+      nanoBalance: _numberAt(balance, 'nano_balance'),
+      subscriptionActive: subscription?['active'] == true,
+      subscriptionState: '${subscription?['state'] ?? ''}'.trim(),
+      weeklyTokens: _usageWindow(
+        subscription,
+        'weeklyInputTokens',
+        limit: _numberAt(limits, 'weeklyInputTokens'),
+      ),
+      dailyTokens:
+          _usageWindow(
+            subscription,
+            'dailyInputTokens',
+            limit: _numberAt(limits, 'dailyInputTokens'),
+          ) ??
+          _usageWindow(
+            subscription,
+            'daily',
+            limit: _numberAt(limits, 'daily'),
+          ),
+      dailyImages: _usageWindow(
+        subscription,
+        'dailyImages',
+        limit: _numberAt(limits, 'dailyImages'),
+      ),
+      // Supports NanoGPT's documented generic daily/monthly response too.
+      monthlyUsage: _usageWindow(
+        subscription,
+        'monthly',
+        limit: _numberAt(limits, 'monthly'),
+      ),
+      currentPeriodEnd: _dateValue(
+        _mapAt(subscription, 'period')?['currentPeriodEnd'],
+      ),
+      balanceUnavailable: balance == null,
+      subscriptionUnavailable: subscription == null,
+    );
+  }
 
   /// Fetches available text models, optionally from the subscription catalog.
   ///
@@ -403,6 +561,69 @@ class NanoGptService {
       throw NanoGptException('NanoGPT returned an empty reply. Try again.');
     }
     return text;
+  }
+
+  bool _isSuccess(int statusCode) =>
+      statusCode >= 200 && statusCode < 300;
+
+  Map<String, dynamic>? _decodeJsonMap(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    } catch (_) {
+      // Treat malformed optional credit data as unavailable.
+    }
+    return null;
+  }
+
+  Map<String, dynamic>? _mapAt(
+    Map<String, dynamic>? source,
+    String key,
+  ) {
+    final value = source?[key];
+    if (value is Map) return Map<String, dynamic>.from(value);
+    return null;
+  }
+
+  double? _numberAt(Map<String, dynamic>? source, String key) {
+    final value = source?[key];
+    if (value is num) return value.toDouble();
+    return double.tryParse('$value');
+  }
+
+  NanoGptUsageWindow? _usageWindow(
+    Map<String, dynamic>? source,
+    String key, {
+    double? limit,
+  }) {
+    final window = _mapAt(source, key);
+    if (window == null) return null;
+    final used = _numberAt(window, 'used') ?? 0;
+    final explicitRemaining = _numberAt(window, 'remaining');
+    final explicitLimit = _numberAt(window, 'limit') ?? limit;
+    final resolvedLimit =
+        explicitLimit ?? (explicitRemaining == null ? 0 : used + explicitRemaining);
+    final remaining =
+        explicitRemaining ?? (resolvedLimit - used).clamp(0, double.infinity);
+    return NanoGptUsageWindow(
+      used: used,
+      remaining: remaining,
+      limit: resolvedLimit,
+      resetAt: _dateValue(window['resetAt']),
+    );
+  }
+
+  DateTime? _dateValue(Object? value) {
+    if (value is num) {
+      return DateTime.fromMillisecondsSinceEpoch(value.toInt(), isUtc: true);
+    }
+    final raw = '${value ?? ''}'.trim();
+    if (raw.isEmpty) return null;
+    final epoch = int.tryParse(raw);
+    if (epoch != null) {
+      return DateTime.fromMillisecondsSinceEpoch(epoch, isUtc: true);
+    }
+    return DateTime.tryParse(raw);
   }
 
   String _shortBody(String body) {

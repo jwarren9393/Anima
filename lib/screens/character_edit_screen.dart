@@ -49,16 +49,21 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
   final _mesExample = TextEditingController();
   final _systemPrompt = TextEditingController();
   final _postHistory = TextEditingController();
-  final _creatorNotes = TextEditingController();
-  final _creator = TextEditingController();
-  final _version = TextEditingController();
-  final _tags = TextEditingController();
   bool _saving = false;
+  bool _consistencyBusy = false;
   CharacterCollaboratorField? _wandBusy;
   Lorebook? _lorebook;
   Map<String, dynamic> _extensions = const {};
   String? _avatarFileName;
   late final String _characterId;
+
+  /// Kept from import / prior saves — not shown in the editor UI.
+  /// (Named distinctly from the old TextEditingControllers to avoid hot-reload
+  /// type crashes after the UI fields were removed.)
+  String _preservedCreatorNotes = '';
+  String _preservedCreator = '';
+  String _preservedCharacterVersion = '';
+  List<String> _preservedTags = const [];
 
   bool get _isEditing => widget.existing != null;
 
@@ -77,10 +82,10 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
       _mesExample.text = existing.mesExample;
       _systemPrompt.text = existing.systemPrompt;
       _postHistory.text = existing.postHistoryInstructions;
-      _creatorNotes.text = existing.creatorNotes;
-      _creator.text = existing.creator;
-      _version.text = existing.characterVersion;
-      _tags.text = existing.tags.join(', ');
+      _preservedCreatorNotes = existing.creatorNotes;
+      _preservedCreator = existing.creator;
+      _preservedCharacterVersion = existing.characterVersion;
+      _preservedTags = List<String>.from(existing.tags);
       _lorebook = existing.lorebook;
       _extensions = Map<String, dynamic>.from(existing.extensions);
       _avatarFileName = existing.avatarFileName;
@@ -89,12 +94,6 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
 
   List<String> _lines(String raw) => raw
       .split('\n')
-      .map((l) => l.trim())
-      .where((l) => l.isNotEmpty)
-      .toList();
-
-  List<String> _csv(String raw) => raw
-      .split(RegExp(r'[,;]'))
       .map((l) => l.trim())
       .where((l) => l.isNotEmpty)
       .toList();
@@ -110,9 +109,9 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
       mesExample: _mesExample.text,
       systemPrompt: _systemPrompt.text,
       postHistoryInstructions: _postHistory.text,
-      creatorNotes: _creatorNotes.text,
-      creator: _creator.text,
-      tags: _tags.text,
+      creatorNotes: _preservedCreatorNotes,
+      creator: _preservedCreator,
+      tags: _preservedTags.join(', '),
     );
   }
 
@@ -138,7 +137,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
   }
 
   Future<void> _runWand(CharacterCollaboratorField field) async {
-    if (_wandBusy != null) return;
+    if (_wandBusy != null || _consistencyBusy) return;
 
     setState(() => _wandBusy = field);
     try {
@@ -183,6 +182,61 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
       );
     } finally {
       if (mounted) setState(() => _wandBusy = null);
+    }
+  }
+
+  Future<void> _runConsistencyCheck() async {
+    if (_wandBusy != null || _consistencyBusy) return;
+    setState(() => _consistencyBusy = true);
+    try {
+      final collaborator =
+          await widget.settingsService.getCollaboratorSettings();
+      final messages = _collaborator.buildConsistencyCheckMessages(
+        draft: _draftContext(),
+        guidanceNote: collaborator.guidanceNote,
+      );
+      final model = await widget.settingsService.getModel();
+      final sampling = await widget.settingsService.getSampling();
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+      final report = await widget.nanoGptService.complete(
+        model: model,
+        messages: messages,
+        baseUrl: baseUrl,
+        sampling: sampling,
+      );
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Consistency check'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: SelectableText(report.trim()),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+    } on NanoGptCancelledException {
+      // Ignore.
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Consistency check failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _consistencyBusy = false);
     }
   }
 
@@ -288,10 +342,10 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
       mesExample: _mesExample.text.trim(),
       systemPrompt: _systemPrompt.text.trim(),
       postHistoryInstructions: _postHistory.text.trim(),
-      creatorNotes: _creatorNotes.text.trim(),
-      creator: _creator.text.trim(),
-      characterVersion: _version.text.trim(),
-      tags: _csv(_tags.text),
+      creatorNotes: _preservedCreatorNotes.trim(),
+      creator: _preservedCreator.trim(),
+      characterVersion: _preservedCharacterVersion.trim(),
+      tags: List<String>.from(_preservedTags),
       characterBook: book?.toJson(),
       extensions: _extensions,
       avatarFileName: _avatarFileName,
@@ -312,10 +366,6 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
     _mesExample.dispose();
     _systemPrompt.dispose();
     _postHistory.dispose();
-    _creatorNotes.dispose();
-    _creator.dispose();
-    _version.dispose();
-    _tags.dispose();
     super.dispose();
   }
 
@@ -396,6 +446,21 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_isEditing ? 'Edit character card' : 'New character card'),
+        actions: [
+          IconButton(
+            tooltip: 'Consistency check (read-only report)',
+            onPressed: (_wandBusy != null || _consistencyBusy || _saving)
+                ? null
+                : _runConsistencyCheck,
+            icon: _consistencyBusy
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.fact_check_outlined),
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(20),
@@ -404,7 +469,8 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
             'Fields match SillyTavern Character Cards (V2/V3). '
             'You can use {{char}} and {{user}} in the text. '
             'Tap the wand on a creative field to append AI text '
-            '(uses your NanoGPT model + Settings → AI collaborator).',
+            '(uses your NanoGPT model + Settings → AI collaborator). '
+            'Use the checklist icon for a read-only consistency report.',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 20),
@@ -541,20 +607,6 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
                   : 'Keyword lore is injected during chat when keys match.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
-          ),
-          _field(
-            _creatorNotes,
-            label: 'Creator notes',
-            hint: 'Notes for humans (not sent to the AI)…',
-            minLines: 2,
-            maxLines: 5,
-          ),
-          _field(_creator, label: 'Creator', hint: 'Your name or handle'),
-          _field(_version, label: 'Character version', hint: 'e.g. 1.0'),
-          _field(
-            _tags,
-            label: 'Tags',
-            hint: 'comma, separated, tags',
           ),
           FilledButton(
             onPressed: _saving || _wandBusy != null ? null : _save,

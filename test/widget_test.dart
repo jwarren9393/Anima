@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:anima/main.dart';
 import 'package:anima/services/api_key_service.dart';
+import 'package:anima/services/character_category_service.dart';
 import 'package:anima/services/character_service.dart';
 import 'package:anima/services/chat_service.dart';
 import 'package:anima/services/nanogpt_service.dart';
@@ -21,6 +22,7 @@ void main() {
     final apiKeyService = ApiKeyService();
     final settingsService = SettingsService();
     final characterService = CharacterService();
+    final characterCategoryService = CharacterCategoryService();
     final personaService = PersonaService(settingsService: settingsService);
     final chatService = ChatService();
     final nanoGptService = NanoGptService(apiKeyService: apiKeyService);
@@ -32,6 +34,7 @@ void main() {
         apiKeyService: apiKeyService,
         settingsService: settingsService,
         characterService: characterService,
+        characterCategoryService: characterCategoryService,
         personaService: personaService,
         chatService: chatService,
         nanoGptService: nanoGptService,

@@ -29,6 +29,7 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
   bool _loading = true;
   bool _savingKey = false;
   bool _savingModel = false;
+  bool _checkingCredits = false;
   bool _hasKey = false;
   bool _useSubscription = false;
 
@@ -196,6 +197,33 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
     await _loadModels();
   }
 
+  Future<void> _showCredits() async {
+    if (_checkingCredits || !_hasKey) return;
+    setState(() => _checkingCredits = true);
+    try {
+      final credits = await widget.nanoGptService.getCredits();
+      if (!mounted) return;
+      await showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        isScrollControlled: true,
+        builder: (context) => _CreditsSheet(credits: credits),
+      );
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not check NanoGPT credits: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _checkingCredits = false);
+    }
+  }
+
   @override
   void dispose() {
     _keyController.dispose();
@@ -250,6 +278,24 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
                   onPressed: _savingKey ? null : _saveKey,
                 ),
                 if (_hasKey) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: (_savingKey || _checkingCredits)
+                        ? null
+                        : _showCredits,
+                    icon: _checkingCredits
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.account_balance_wallet_outlined),
+                    label: Text(
+                      _checkingCredits
+                          ? 'Checking credits…'
+                          : 'See remaining credits',
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   OutlinedButton(
                     onPressed: _savingKey ? null : _clearKey,
@@ -410,6 +456,193 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
                 ),
               ],
             ),
+    );
+  }
+}
+
+class _CreditsSheet extends StatelessWidget {
+  const _CreditsSheet({required this.credits});
+
+  final NanoGptCredits credits;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final usage = <Widget>[
+      if (credits.weeklyTokens != null)
+        _UsageCard(
+          title: 'Weekly input credits',
+          usage: credits.weeklyTokens!,
+        ),
+      if (credits.dailyTokens != null)
+        _UsageCard(
+          title: 'Daily input credits',
+          usage: credits.dailyTokens!,
+        ),
+      if (credits.dailyImages != null)
+        _UsageCard(
+          title: 'Daily images',
+          usage: credits.dailyImages!,
+        ),
+      if (credits.monthlyUsage != null)
+        _UsageCard(
+          title: 'Monthly usage',
+          usage: credits.monthlyUsage!,
+        ),
+    ];
+
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.82,
+        ),
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          children: [
+            Text('NanoGPT credits', style: theme.textTheme.titleLarge),
+            const SizedBox(height: 16),
+            Text('Wallet', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 8),
+            if (credits.balanceUnavailable)
+              const Text('Wallet balance is temporarily unavailable.')
+            else
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.account_balance_wallet_outlined),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          credits.usdBalance == null
+                              ? 'USD balance unavailable'
+                              : '\$${credits.usdBalance!.toStringAsFixed(2)}',
+                          style: theme.textTheme.headlineSmall,
+                        ),
+                      ),
+                      if (credits.nanoBalance != null)
+                        Text(
+                          '${_compact(credits.nanoBalance!)} NANO',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Subscription usage',
+                    style: theme.textTheme.titleMedium,
+                  ),
+                ),
+                Text(
+                  credits.subscriptionActive
+                      ? 'Active'
+                      : (credits.subscriptionState.isEmpty
+                          ? 'Not active'
+                          : credits.subscriptionState),
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: credits.subscriptionActive
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (credits.subscriptionUnavailable)
+              const Text('Subscription usage is temporarily unavailable.')
+            else if (usage.isEmpty)
+              Text(
+                credits.subscriptionActive
+                    ? 'NanoGPT did not return allowance details for this plan.'
+                    : 'No active subscription allowance was found.',
+              )
+            else
+              ...usage,
+            if (credits.currentPeriodEnd != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Current period ends ${_date(credits.currentPeriodEnd!)}',
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+            const SizedBox(height: 16),
+            Text(
+              'Values come directly from NanoGPT and refresh each time you '
+              'open this sheet.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _compact(double value) {
+    if (value == value.roundToDouble()) return _whole(value);
+    return value.toStringAsFixed(3).replaceFirst(RegExp(r'0+$'), '');
+  }
+
+  static String _whole(double value) {
+    final raw = value.round().toString();
+    return raw.replaceAllMapped(
+      RegExp(r'\B(?=(\d{3})+(?!\d))'),
+      (_) => ',',
+    );
+  }
+
+  static String _date(DateTime value) {
+    final local = value.toLocal();
+    return '${local.month}/${local.day}/${local.year} '
+        '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+class _UsageCard extends StatelessWidget {
+  const _UsageCard({required this.title, required this.usage});
+
+  final String title;
+  final NanoGptUsageWindow usage;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(title, style: theme.textTheme.labelLarge),
+            const SizedBox(height: 8),
+            LinearProgressIndicator(value: usage.percentUsed),
+            const SizedBox(height: 8),
+            Text(
+              '${_CreditsSheet._whole(usage.used)} used · '
+              '${_CreditsSheet._whole(usage.remaining)} remaining',
+            ),
+            Text(
+              '${_CreditsSheet._whole(usage.limit)} total · '
+              '${(usage.percentUsed * 100).toStringAsFixed(1)}% used',
+              style: theme.textTheme.bodySmall,
+            ),
+            if (usage.resetAt != null)
+              Text(
+                'Resets ${_CreditsSheet._date(usage.resetAt!)}',
+                style: theme.textTheme.bodySmall,
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

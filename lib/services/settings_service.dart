@@ -159,11 +159,12 @@ class LoreSettings {
   }
 }
 
-  /// Guidance for the character-editor / World Info wand, plus composer format.
+  /// Guidance for the character-editor / World Info wand, plus composer helpers.
 class CollaboratorSettings {
   const CollaboratorSettings({
     this.guidanceNote = defaultGuidanceNote,
     this.composerFormatNote = defaultComposerFormatNote,
+    this.roadwayNote = defaultRoadwayNote,
   });
 
   /// Default “Author’s Note” for the wand — keep replies raw, don’t sanitize.
@@ -181,19 +182,31 @@ class CollaboratorSettings {
       'Keep every word the user chose whenever possible. Output only the '
       'formatted message.';
 
+  /// Default for Roadway / Paths brainstorming in chat.
+  static const defaultRoadwayNote =
+      'You are a brainstorming partner for immersive roleplay. Given the '
+      'recent scene, invent unpredictable and engaging options for what '
+      '{{user}} could do or say next. Mix dialogue, action, and curiosity. '
+      'Keep options distinct from each other — no near-duplicates.';
+
   /// Injected into character / lore / Creation Center wand requests.
   final String guidanceNote;
 
   /// Injected into the chat composer Format button request.
   final String composerFormatNote;
 
+  /// Injected into Roadway path-suggestion requests.
+  final String roadwayNote;
+
   CollaboratorSettings copyWith({
     String? guidanceNote,
     String? composerFormatNote,
+    String? roadwayNote,
   }) {
     return CollaboratorSettings(
       guidanceNote: guidanceNote ?? this.guidanceNote,
       composerFormatNote: composerFormatNote ?? this.composerFormatNote,
+      roadwayNote: roadwayNote ?? this.roadwayNote,
     );
   }
 }
@@ -246,6 +259,7 @@ class SettingsService {
   static const _personaAvatarKey = 'persona_avatar_file';
   static const _collaboratorGuidanceKey = 'collaborator_guidance_note';
   static const _composerFormatNoteKey = 'composer_format_guidance_note';
+  static const _roadwayNoteKey = 'roadway_guidance_note';
   static const _contextHistoryTokensKey = 'context_history_token_budget';
   static const _contextAutoSummarizeKey = 'context_auto_summarize';
   static const _contextSummarizeEveryKey = 'context_summarize_every';
@@ -466,10 +480,11 @@ class SettingsService {
     );
   }
 
-  /// AI wand + composer Format guidance notes.
+  /// AI wand + composer Format + Roadway guidance notes.
   Future<CollaboratorSettings> getCollaboratorSettings() async {
     final wandRaw = await _storage.read(key: _collaboratorGuidanceKey);
     final formatRaw = await _storage.read(key: _composerFormatNoteKey);
+    final roadwayRaw = await _storage.read(key: _roadwayNoteKey);
     return CollaboratorSettings(
       guidanceNote: (wandRaw == null || wandRaw.trim().isEmpty)
           ? CollaboratorSettings.defaultGuidanceNote
@@ -477,6 +492,9 @@ class SettingsService {
       composerFormatNote: (formatRaw == null || formatRaw.trim().isEmpty)
           ? CollaboratorSettings.defaultComposerFormatNote
           : formatRaw,
+      roadwayNote: (roadwayRaw == null || roadwayRaw.trim().isEmpty)
+          ? CollaboratorSettings.defaultRoadwayNote
+          : roadwayRaw,
     );
   }
 
@@ -494,6 +512,13 @@ class SettingsService {
       await _storage.delete(key: _composerFormatNoteKey);
     } else {
       await _storage.write(key: _composerFormatNoteKey, value: format);
+    }
+
+    final roadway = settings.roadwayNote.trim();
+    if (roadway.isEmpty || roadway == CollaboratorSettings.defaultRoadwayNote) {
+      await _storage.delete(key: _roadwayNoteKey);
+    } else {
+      await _storage.write(key: _roadwayNoteKey, value: roadway);
     }
   }
 

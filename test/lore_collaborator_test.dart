@@ -138,5 +138,26 @@ void main() {
       expect(summary.contentPreview.endsWith('…'), isTrue);
       expect(summary.label, 'Long');
     });
+
+    test('keyword suggest asks for comma-separated triggers from content', () {
+      final messages = collaborator.buildKeywordSuggestMessages(
+        draft: const LoreEntryDraftContext(
+          bookName: 'Faerun',
+          content: 'The Blacksword of Vael hangs in the vault.',
+          keys: 'vault',
+        ),
+      );
+      expect(messages[0]['content'], contains('trigger keywords'));
+      expect(messages[0]['content'], contains('comma-separated'));
+      expect(messages[1]['content'], contains('Blacksword'));
+      expect(messages[1]['content'], contains('Existing keywords'));
+    });
+
+    test('mergeKeywords dedupes suggestions', () {
+      expect(
+        collaborator.mergeKeywords('sword', 'Sword, Vael, blade'),
+        'sword, Vael, blade',
+      );
+    });
   });
 }
