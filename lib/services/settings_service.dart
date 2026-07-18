@@ -614,7 +614,7 @@ class SettingsService {
     return subscription ? subscriptionBaseUrl : defaultBaseUrl;
   }
 
-  /// Appearance prefs — currently chat avatars (theme is fixed Obsidian & Gold).
+  /// Appearance prefs — Theme Studio (presets, colors, fonts) + chat avatars.
   Future<UiStyleSettings> getUiStyle() async {
     final raw = await _storage.read(key: _uiStyleKey);
     if (raw != null && raw.trim().isNotEmpty) {
@@ -626,7 +626,7 @@ class SettingsService {
       } catch (_) {}
     }
     final avatar = await getAvatarStyle();
-    return UiStyleSettings(avatarStyle: avatar);
+    return UiStyleSettings.defaults(avatarStyle: avatar);
   }
 
   Future<void> saveUiStyle(UiStyleSettings style) async {

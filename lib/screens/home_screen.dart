@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/character.dart';
 import '../models/chat_session.dart';
 import '../services/api_key_service.dart';
+import '../services/appearance_controller.dart';
 import '../services/character_category_service.dart';
 import '../services/character_service.dart';
 import '../services/chat_service.dart';
@@ -33,6 +34,7 @@ class HomeScreen extends StatefulWidget {
     required this.nanoGptService,
     required this.worldInfoService,
     required this.worldWorkshopService,
+    required this.appearanceController,
   });
 
   final ApiKeyService apiKeyService;
@@ -44,6 +46,7 @@ class HomeScreen extends StatefulWidget {
   final NanoGptService nanoGptService;
   final WorldInfoService worldInfoService;
   final WorldWorkshopService worldWorkshopService;
+  final AppearanceController appearanceController;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -127,6 +130,7 @@ class _HomeScreenState extends State<HomeScreen> {
           nanoGptService: widget.nanoGptService,
           worldInfoService: widget.worldInfoService,
           worldWorkshopService: widget.worldWorkshopService,
+          appearanceController: widget.appearanceController,
         ),
       ),
     );
@@ -147,6 +151,7 @@ class _HomeScreenState extends State<HomeScreen> {
           nanoGptService: widget.nanoGptService,
           worldInfoService: widget.worldInfoService,
           worldWorkshopService: widget.worldWorkshopService,
+          appearanceController: widget.appearanceController,
           initialSession: session,
         ),
       ),
@@ -263,9 +268,9 @@ class _HomeScreenState extends State<HomeScreen> {
     await _roadwayCache.clearOptions(chat.id);
     await _load();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Chat deleted.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Chat deleted.')));
   }
 
   @override
@@ -284,64 +289,64 @@ class _HomeScreenState extends State<HomeScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _chats.isEmpty
-              ? _EmptyHome(onStartChat: _startNewChat)
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView.separated(
-                    padding: const EdgeInsets.only(bottom: 88),
-                    itemCount: _chats.length,
-                    separatorBuilder: (_, _) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final chat = _chats[index];
-                      final preview = _lastMessagePreview(chat);
-                      final solo = chat.isGroup
-                          ? null
-                          : _characterById[chat.characterId];
-                      return ListTile(
-                        leading: chat.isGroup
-                            ? CircleAvatar(
-                                child: Icon(
-                                  Icons.groups,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onPrimaryContainer,
-                                ),
-                              )
-                            : AnimaAvatar(
-                                fileName: solo?.avatarFileName,
-                                label: solo?.name ?? chat.title,
-                                radius: 22,
-                              ),
-                        title: Text(
-                          chat.title,
+          ? _EmptyHome(onStartChat: _startNewChat)
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView.separated(
+                padding: const EdgeInsets.only(bottom: 88),
+                itemCount: _chats.length,
+                separatorBuilder: (_, _) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final chat = _chats[index];
+                  final preview = _lastMessagePreview(chat);
+                  final solo = chat.isGroup
+                      ? null
+                      : _characterById[chat.characterId];
+                  return ListTile(
+                    leading: chat.isGroup
+                        ? CircleAvatar(
+                            child: Icon(
+                              Icons.groups,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onPrimaryContainer,
+                            ),
+                          )
+                        : AnimaAvatar(
+                            fileName: solo?.avatarFileName,
+                            label: solo?.name ?? chat.title,
+                            radius: 22,
+                          ),
+                    title: Text(
+                      chat.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _chatLabel(chat),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _chatLabel(chat),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              preview == null
-                                  ? _chatSubtitle(chat)
-                                  : '$preview\n${_chatSubtitle(chat)}',
-                              maxLines: preview == null ? 1 : 3,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
+                        const SizedBox(height: 2),
+                        Text(
+                          preview == null
+                              ? _chatSubtitle(chat)
+                              : '$preview\n${_chatSubtitle(chat)}',
+                          maxLines: preview == null ? 1 : 3,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        isThreeLine: preview != null,
-                        onTap: () => _openChat(chat),
-                        onLongPress: () => _deleteChat(chat),
-                      );
-                    },
-                  ),
-                ),
+                      ],
+                    ),
+                    isThreeLine: preview != null,
+                    onTap: () => _openChat(chat),
+                    onLongPress: () => _deleteChat(chat),
+                  );
+                },
+              ),
+            ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _startNewChat,
         icon: const Icon(Icons.add_comment_outlined),

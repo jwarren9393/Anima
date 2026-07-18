@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../models/ui_style_settings.dart';
+
 /// Kind of RP markup segment.
 enum RpSegmentKind {
   /// Unmarked leftover text.
@@ -85,6 +87,7 @@ class RpRichText extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final ui = AnimaUiTheme.of(context);
     final segments = parseRpSegments(text);
     if (segments.isEmpty) {
       return Text(text, style: baseStyle);
@@ -93,10 +96,10 @@ class RpRichText extends StatelessWidget {
     // Dialogue: bright, solid. Actions: softer italic. Plain: in between.
     final dialogueColor = baseStyle.color ?? scheme.onSurface;
     final actionColor = isUser
-        ? (baseStyle.color ?? scheme.onPrimary).withValues(alpha: 0.78)
-        : scheme.primary.withValues(alpha: 0.9);
+        ? (baseStyle.color ?? ui.userBubbleForeground).withValues(alpha: 0.78)
+        : ui.actionColor.withValues(alpha: 0.9);
     final plainColor = isUser
-        ? (baseStyle.color ?? scheme.onPrimary).withValues(alpha: 0.92)
+        ? (baseStyle.color ?? ui.userBubbleForeground).withValues(alpha: 0.92)
         : scheme.onSurfaceVariant;
 
     final spans = <InlineSpan>[];

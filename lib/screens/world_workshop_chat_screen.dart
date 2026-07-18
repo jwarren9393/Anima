@@ -15,7 +15,6 @@ import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
 import '../services/world_workshop_builder.dart';
 import '../services/world_workshop_service.dart';
-import '../theme/anima_theme.dart';
 import '../widgets/keyboard_inset.dart';
 import 'character_edit_screen.dart';
 import 'persona_edit_screen.dart';
@@ -561,7 +560,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('${candidate.name}: ${error.message}'),
-              backgroundColor: AnimaTheme.glassHigh,
+              backgroundColor: Theme.of(
+                context,
+              ).colorScheme.surfaceContainerHigh,
             ),
           );
         } on NanoGptException catch (error) {
@@ -570,7 +571,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('${candidate.name}: ${error.message}'),
-              backgroundColor: AnimaTheme.glassHigh,
+              backgroundColor: Theme.of(
+                context,
+              ).colorScheme.surfaceContainerHigh,
             ),
           );
         }
@@ -1098,7 +1101,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                           style: theme.textTheme.labelSmall?.copyWith(
                             color: (_estimate.fillRatio ?? 0) >= 0.85
                                 ? theme.colorScheme.error
-                                : AnimaTheme.goldSoft,
+                                : Theme.of(context).colorScheme.tertiary,
                           ),
                         ),
                       ],

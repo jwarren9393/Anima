@@ -60,7 +60,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-18  
-**Last agent action:** Shipped persona AI wand into refreshed **v1.0.0** APK.
+**Last agent action:** Shipped Theme Studio (presets + custom colors/fonts) as **v1.1.0**.
 
 ### What works today
 
@@ -72,10 +72,10 @@ High-value SillyTavern concepts to aim for over time:
   - **World Info & lore** — **global lorebooks** (create / import ST JSON / export / on-off) + scan depth/budget + link to per-character books; **entry AI wand** + **Suggest keywords from content**
   - **Creation Center** — chat with AI to invent a world; **Import lorebook** (JSON file or choose an existing World Info book); **Create/Update lorebook** saves keyword entries as a selectable global lorebook (one workshop = one book); the people menu can **Create AI characters** (multi-select + review each card) or **Create my persona** (choose one person from workshop chat + linked lore, generate player-focused fields, then review before saving); **context estimate** banner (tap for details) shows ~messages/tokens vs model window
   - **AI collaborator** — wand guidance note + **Composer Format** note + **Roadway / Paths** note
-  - **Appearance** — chat avatar shape/size only (theme is fixed Obsidian & Gold)
+  - **Appearance (Theme Studio)** — 8 global presets (glass + solid), custom background/accent/header/menu/text/bubble colors, fonts, text scales, glass opacity/blur, chat avatars; live preview + immediate app-wide apply
   - **Backup & restore** — one `.anima-backup` JSON file (chats, characters, personas, categories, lorebooks, workshops, drafts, roadway cache, avatars, settings); **API key is not included** — re-enter after restore; restore replaces Anima data only (whitelist), then returns to Home
   - API, Generation parameters
-- **Look** — single dark glass theme (black + gold accents, gold glow backdrop); no parchment / Middle-earth look; no light mode or color studio
+- **Look** — Theme Studio with glass and solid presets (default Obsidian Gold soft-glow, no sparkle texture); Ivory Ink light preset + full color/font customization
 - **Generation parameters** — detailed help + many sampling presets; **context size in tokens** + presets (1K–24K); **auto-summarize** every N messages
 - **Memory summary** — per chat (⋮ → Memory summary to edit; Summarize now); injected into prompts; auto-updates when enabled
 - **Text presets** — expanded Author’s Note / System prompt / Post-history / collaborator guidance sheets
@@ -213,10 +213,10 @@ Goal: bring characters in/out of the SillyTavern ecosystem; tune generation.
 
 ```
 lib/
-  main.dart                       App entry — fixed Obsidian & Gold theme
+  main.dart                       App entry — AppearanceController + runtime ThemeData
   theme/
-    anima_theme.dart              Fixed Obsidian & Gold glass ThemeData
-    glass_backdrop.dart           Dark gold-glow backdrop (+ GlassPanel helper)
+    anima_theme.dart              Settings-driven ThemeData factory
+    glass_backdrop.dart           Configurable solid/gradient/soft-glow backdrop
   models/
     chat_message.dart             Bubble + swipes + optional speaker
     chat_session.dart             Thread + authorsNote + group + lorebookIds + autoReply + memorySummary
@@ -225,7 +225,8 @@ lib/
     lorebook.dart                 CharacterBook / World Info entries (+ ST import aliases)
     global_lorebook.dart          Standalone global lorebook (id + enabled + book)
     world_workshop.dart           Creation Center workshop chat (one chat → one lorebook)
-    ui_style_settings.dart        Chat avatar prefs + fixed AnimaUiTheme extension
+    ui_style_settings.dart        Theme Studio settings + AnimaUiTheme extension + avatars
+    theme_palette.dart            VisualStyle / BackgroundMode / fonts + 8 ThemePresets
     anima_presets.dart            Built-in sampling + text presets (Author’s Note, prompts, guidance)
     persona.dart                  Structured user persona ({{user}}) fields + prompt text + optional avatar
   screens/
@@ -245,7 +246,7 @@ lib/
     lore_settings_screen.dart     Global books + scan/budget + character books link
     sampling_settings_screen.dart ST-style generation parameters
     collaborator_settings_screen.dart AI wand + Format + Roadway notes
-    appearance_settings_screen.dart Chat avatars (theme is fixed)
+    appearance_settings_screen.dart Theme Studio (presets + colors/fonts + avatars)
     backup_restore_screen.dart    Full-app backup / restore (.anima-backup JSON; no API key)
     settings_ui.dart              Shared settings form helpers
   widgets/
@@ -258,7 +259,8 @@ lib/
     preset_picker.dart            Preset button + bottom sheets (sampling / text)
   services/
     api_key_service.dart          Secure storage for NanoGPT API key
-    settings_service.dart         Model, image model, sampling, context, lore, avatars, collaborator (+ legacy persona migrate)
+    settings_service.dart         Model, image model, sampling, context, lore, Theme Studio, collaborator (+ legacy persona migrate)
+    appearance_controller.dart    Root appearance state — save/reload notifies MaterialApp
     persona_service.dart          Multi-persona load/save + default active id
     avatar_service.dart           Local avatar files under documents/avatars
     avatar_prompt_builder.dart    Text prompt for NanoGPT character/persona avatar generation
@@ -336,8 +338,8 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. Install **v1.0.0** from [Releases](https://github.com/jwarren9393/Anima/releases) (includes persona AI wand).
-2. Spot-check Personas → edit → sparkle wand on Identity / Appearance / Personality / Background / Goals.
+1. Install **v1.1.0** from [Releases](https://github.com/jwarren9393/Anima/releases) (Theme Studio).
+2. Spot-check Settings → Appearance: try a glass preset, a solid preset, Ivory Ink, and a custom accent color.
 3. Optional: upload `assets/branding/anima_icon.png` as the GitHub repo Social preview (Settings → General → Social preview).
 4. Optional QoL backlog when you want more: undo send, last-chat resume, pinned Author’s Note / mood chips, memory preview panel.
 

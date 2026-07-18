@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../services/nanogpt_service.dart';
 import '../services/settings_service.dart';
-import '../theme/anima_theme.dart';
 
 /// Bottom sheet: edit prompt, pick model, generate, preview, accept.
 class GenerateAvatarSheet extends StatefulWidget {
@@ -41,8 +40,8 @@ class _GenerateAvatarSheetState extends State<GenerateAvatarSheet> {
 
   Future<void> _bootstrap() async {
     final savedModel = await widget.settingsService.getImageModel();
-    final subscriptionOnly =
-        await widget.settingsService.getUseSubscriptionApi();
+    final subscriptionOnly = await widget.settingsService
+        .getUseSubscriptionApi();
     try {
       final models = await widget.nanoGptService.listImageModels(
         subscriptionOnly: subscriptionOnly,
@@ -165,7 +164,9 @@ class _GenerateAvatarSheetState extends State<GenerateAvatarSheet> {
     if (model.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Choose an image model in Settings → API & connection.'),
+          content: Text(
+            'Choose an image model in Settings → API & connection.',
+          ),
         ),
       );
       return;
@@ -208,7 +209,7 @@ class _GenerateAvatarSheetState extends State<GenerateAvatarSheet> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(error.message),
-          backgroundColor: AnimaTheme.glassHigh,
+          backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
         ),
       );
     } catch (error) {
@@ -216,7 +217,7 @@ class _GenerateAvatarSheetState extends State<GenerateAvatarSheet> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Image generation failed: $error'),
-          backgroundColor: AnimaTheme.glassHigh,
+          backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
         ),
       );
     } finally {
@@ -250,10 +251,10 @@ class _GenerateAvatarSheetState extends State<GenerateAvatarSheet> {
               Text(
                 _subscriptionOnly
                     ? 'Subscription mode: only NanoGPT subscription image '
-                        'models are shown (image allowance, not wallet money).'
+                          'models are shown (image allowance, not wallet money).'
                     : 'Subscription mode is off — paid image models can charge '
-                        'wallet money. Turn on Use subscription API in Settings '
-                        'to hide them.',
+                          'wallet money. Turn on Use subscription API in Settings '
+                          'to hide them.',
                 style: theme.textTheme.bodySmall,
               ),
               if (_creditsHint != null) ...[
@@ -261,7 +262,7 @@ class _GenerateAvatarSheetState extends State<GenerateAvatarSheet> {
                 Text(
                   _creditsHint!,
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: AnimaTheme.goldSoft,
+                    color: Theme.of(context).colorScheme.tertiary,
                   ),
                 ),
               ],
@@ -273,7 +274,8 @@ class _GenerateAvatarSheetState extends State<GenerateAvatarSheet> {
                 )
               else if (_models.isNotEmpty)
                 DropdownButtonFormField<String>(
-                  initialValue: _selectedModelId != null &&
+                  initialValue:
+                      _selectedModelId != null &&
                           _models.any((m) => m.id == _selectedModelId)
                       ? _selectedModelId
                       : null,
@@ -327,10 +329,7 @@ class _GenerateAvatarSheetState extends State<GenerateAvatarSheet> {
                   borderRadius: BorderRadius.circular(12),
                   child: AspectRatio(
                     aspectRatio: 1,
-                    child: Image.memory(
-                      _preview!.bytes,
-                      fit: BoxFit.cover,
-                    ),
+                    child: Image.memory(_preview!.bytes, fit: BoxFit.cover),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -339,8 +338,9 @@ class _GenerateAvatarSheetState extends State<GenerateAvatarSheet> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed:
-                          _generating ? null : () => Navigator.pop(context),
+                      onPressed: _generating
+                          ? null
+                          : () => Navigator.pop(context),
                       child: const Text('Cancel'),
                     ),
                   ),
@@ -354,9 +354,7 @@ class _GenerateAvatarSheetState extends State<GenerateAvatarSheet> {
                               height: 18,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : Text(
-                              _preview == null ? 'Generate' : 'Regenerate',
-                            ),
+                          : Text(_preview == null ? 'Generate' : 'Regenerate'),
                     ),
                   ),
                 ],

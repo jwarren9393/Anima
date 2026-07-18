@@ -1,183 +1,207 @@
-import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
-import 'anima_theme.dart';
+import '../models/theme_palette.dart';
+import '../models/ui_style_settings.dart';
 
-/// Vibrant dark glass backdrop — black depth with living gold light.
+/// App-wide backdrop driven by Theme Studio settings.
+///
+/// Glass presets get a soft accent glow. Solid presets stay clean and opaque.
+/// The old sparkle / diagonal grid texture is intentionally gone.
 class GlassBackdrop extends StatelessWidget {
-  const GlassBackdrop({super.key, required this.child});
+  const GlassBackdrop({super.key, required this.child, this.settings});
 
   final Widget child;
+  final UiStyleSettings? settings;
 
   @override
   Widget build(BuildContext context) {
+    final ui = AnimaUiTheme.of(context);
+    final style =
+        settings ??
+        UiStyleSettings(
+          visualStyle: ui.visualStyle,
+          backgroundMode: ui.backgroundMode,
+          palette: ThemePalette(
+            background: ui.background,
+            backgroundAlt: ui.backgroundAlt,
+            surface: Theme.of(context).colorScheme.surface,
+            surfaceHigh: Theme.of(context).colorScheme.surfaceContainerHigh,
+            accent: Theme.of(context).colorScheme.primary,
+            accentDeep: ui.accentDeep,
+            header: Theme.of(context).colorScheme.surface,
+            text: Theme.of(context).colorScheme.onSurface,
+            textMuted: Theme.of(context).colorScheme.onSurfaceVariant,
+            userBubble: ui.userBubbleColor,
+            aiBubble: ui.aiBubbleColor,
+            brightness: Theme.of(context).brightness,
+          ),
+          glassOpacity: ui.glassOpacity,
+          glassBlur: ui.glassBlur,
+          cornerRadius: ui.cornerRadius,
+        );
+
+    final palette = style.palette;
+    final showGlow =
+        style.backgroundMode == BackgroundMode.softGlow ||
+        (style.isGlass && style.backgroundMode != BackgroundMode.solid);
+
     return Stack(
       fit: StackFit.expand,
       children: [
-        const DecoratedBox(
+        DecoratedBox(
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Color(0xFF050508),
-                Color(0xFF0A0A12),
-                Color(0xFF08060A),
-                Color(0xFF030306),
-              ],
-              stops: [0.0, 0.35, 0.7, 1.0],
-            ),
+            color: style.backgroundMode == BackgroundMode.solid
+                ? palette.background
+                : null,
+            gradient: style.backgroundMode == BackgroundMode.solid
+                ? null
+                : LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      palette.background,
+                      palette.backgroundAlt,
+                      Color.lerp(palette.background, palette.surface, 0.35)!,
+                      palette.background,
+                    ],
+                    stops: const [0.0, 0.35, 0.7, 1.0],
+                  ),
           ),
         ),
-        const CustomPaint(painter: _GoldGlowPainter(), child: SizedBox.expand()),
-        const CustomPaint(painter: _GlassSheenPainter(), child: SizedBox.expand()),
+        if (showGlow)
+          CustomPaint(
+            painter: _SoftGlowPainter(
+              accent: palette.accent,
+              accentDeep: palette.accentDeep,
+              depth: palette.background,
+            ),
+            child: const SizedBox.expand(),
+          ),
+        if (style.backgroundMode != BackgroundMode.solid)
+          CustomPaint(
+            painter: _VignettePainter(depth: palette.background),
+            child: const SizedBox.expand(),
+          ),
         child,
       ],
     );
   }
 }
 
-class _GoldGlowPainter extends CustomPainter {
-  const _GoldGlowPainter();
+class _SoftGlowPainter extends CustomPainter {
+  const _SoftGlowPainter({
+    required this.accent,
+    required this.accentDeep,
+    required this.depth,
+  });
+
+  final Color accent;
+  final Color accentDeep;
+  final Color depth;
 
   @override
   void paint(Canvas canvas, Size size) {
     final soft = Paint()
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 80)
-      ..color = AnimaTheme.gold.withValues(alpha: 0.16);
-    final hotter = Paint()
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 50)
-      ..color = AnimaTheme.goldDeep.withValues(alpha: 0.22);
-    final cool = Paint()
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 90)
-      ..color = const Color(0xFF3A2A80).withValues(alpha: 0.12);
+      ..color = accent.withValues(alpha: 0.14);
+    final hotter = Paint()
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 60)
+      ..color = accentDeep.withValues(alpha: 0.16);
 
     canvas.drawCircle(
-      Offset(size.width * 0.15, size.height * 0.08),
-      size.shortestSide * 0.45,
+      Offset(size.width * 0.18, size.height * 0.1),
+      size.shortestSide * 0.42,
       soft,
     );
     canvas.drawCircle(
-      Offset(size.width * 0.92, size.height * 0.22),
-      size.shortestSide * 0.38,
+      Offset(size.width * 0.9, size.height * 0.28),
+      size.shortestSide * 0.34,
       hotter,
     );
     canvas.drawCircle(
-      Offset(size.width * 0.75, size.height * 0.85),
-      size.shortestSide * 0.5,
-      cool,
-    );
-    canvas.drawCircle(
-      Offset(size.width * 0.05, size.height * 0.65),
-      size.shortestSide * 0.28,
-      hotter..color = AnimaTheme.gold.withValues(alpha: 0.1),
+      Offset(size.width * 0.7, size.height * 0.88),
+      size.shortestSide * 0.4,
+      soft..color = accent.withValues(alpha: 0.08),
     );
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _SoftGlowPainter oldDelegate) {
+    return oldDelegate.accent != accent ||
+        oldDelegate.accentDeep != accentDeep ||
+        oldDelegate.depth != depth;
+  }
 }
 
-class _GlassSheenPainter extends CustomPainter {
-  const _GlassSheenPainter();
+class _VignettePainter extends CustomPainter {
+  const _VignettePainter({required this.depth});
+
+  final Color depth;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final line = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1
-      ..color = AnimaTheme.gold.withValues(alpha: 0.04);
-
-    const step = 56.0;
-    for (var x = -size.height; x < size.width + size.height; x += step) {
-      canvas.drawLine(
-        Offset(x, 0),
-        Offset(x + size.height * 0.35, size.height),
-        line,
-      );
-    }
-
     final vignette = Paint()
       ..shader = RadialGradient(
-        colors: [
-          Colors.transparent,
-          AnimaTheme.obsidianDeep.withValues(alpha: 0.55),
-        ],
-        stops: const [0.45, 1.0],
+        colors: [Colors.transparent, depth.withValues(alpha: 0.45)],
+        stops: const [0.5, 1.0],
       ).createShader(Offset.zero & size);
     canvas.drawRect(Offset.zero & size, vignette);
-
-    // Soft top highlight like glass edge light.
-    final sheen = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.center,
-        colors: [
-          Colors.white.withValues(alpha: 0.05),
-          Colors.transparent,
-        ],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height * 0.35));
-    canvas.drawRect(
-      Rect.fromLTWH(0, 0, size.width, size.height * 0.35),
-      sheen,
-    );
-
-    // Tiny sparkles for a living feel.
-    final sparkle = Paint()..color = AnimaTheme.goldSoft.withValues(alpha: 0.35);
-    final rng = math.Random(17);
-    for (var i = 0; i < 28; i++) {
-      final dx = rng.nextDouble() * size.width;
-      final dy = rng.nextDouble() * size.height;
-      final r = 0.6 + rng.nextDouble() * 1.4;
-      canvas.drawCircle(Offset(dx, dy), r, sparkle);
-    }
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _VignettePainter oldDelegate) {
+    return oldDelegate.depth != depth;
+  }
 }
 
-/// Frosted glass panel helper for cards / sheets that want extra blur.
+/// Frosted / solid panel helper for cards that want extra emphasis.
 class GlassPanel extends StatelessWidget {
   const GlassPanel({
     super.key,
     required this.child,
-    this.borderRadius = 16,
+    this.borderRadius,
     this.padding,
   });
 
   final Widget child;
-  final double borderRadius;
+  final double? borderRadius;
   final EdgeInsetsGeometry? padding;
 
   @override
   Widget build(BuildContext context) {
-    final radius = BorderRadius.circular(borderRadius);
+    final ui = AnimaUiTheme.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final radius = BorderRadius.circular(borderRadius ?? ui.cornerRadius);
+    final fill = ui.visualStyle == VisualStyle.glass
+        ? scheme.surfaceContainerHigh.withValues(alpha: ui.glassOpacity * 0.65)
+        : scheme.surfaceContainerHigh;
+    final content = DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        color: fill,
+        border: Border.all(color: scheme.primary.withValues(alpha: 0.22)),
+        boxShadow: [
+          BoxShadow(
+            color: scheme.primary.withValues(alpha: 0.08),
+            blurRadius: 24,
+            spreadRadius: -4,
+          ),
+        ],
+      ),
+      child: padding == null ? child : Padding(padding: padding!, child: child),
+    );
+
+    if (ui.visualStyle != VisualStyle.glass || ui.glassBlur <= 0) {
+      return ClipRRect(borderRadius: radius, child: content);
+    }
+
     return ClipRRect(
       borderRadius: radius,
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: radius,
-            color: AnimaTheme.glassHigh.withValues(alpha: 0.45),
-            border: Border.all(
-              color: AnimaTheme.gold.withValues(alpha: 0.22),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: AnimaTheme.gold.withValues(alpha: 0.08),
-                blurRadius: 24,
-                spreadRadius: -4,
-              ),
-            ],
-          ),
-          child: padding == null
-              ? child
-              : Padding(padding: padding!, child: child),
-        ),
+        filter: ImageFilter.blur(sigmaX: ui.glassBlur, sigmaY: ui.glassBlur),
+        child: content,
       ),
     );
   }

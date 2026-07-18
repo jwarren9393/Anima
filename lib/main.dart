@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'screens/home_screen.dart';
 import 'services/api_key_service.dart';
+import 'services/appearance_controller.dart';
 import 'services/character_category_service.dart';
 import 'services/character_service.dart';
 import 'services/chat_service.dart';
@@ -25,6 +26,9 @@ void main() {
   final nanoGptService = NanoGptService(apiKeyService: apiKeyService);
   final worldInfoService = WorldInfoService();
   final worldWorkshopService = WorldWorkshopService();
+  final appearanceController = AppearanceController(
+    settingsService: settingsService,
+  );
 
   runApp(
     AnimaApp(
@@ -37,11 +41,12 @@ void main() {
       nanoGptService: nanoGptService,
       worldInfoService: worldInfoService,
       worldWorkshopService: worldWorkshopService,
+      appearanceController: appearanceController,
     ),
   );
 }
 
-class AnimaApp extends StatelessWidget {
+class AnimaApp extends StatefulWidget {
   const AnimaApp({
     super.key,
     required this.apiKeyService,
@@ -53,6 +58,7 @@ class AnimaApp extends StatelessWidget {
     required this.nanoGptService,
     required this.worldInfoService,
     required this.worldWorkshopService,
+    required this.appearanceController,
   });
 
   final ApiKeyService apiKeyService;
@@ -64,30 +70,61 @@ class AnimaApp extends StatelessWidget {
   final NanoGptService nanoGptService;
   final WorldInfoService worldInfoService;
   final WorldWorkshopService worldWorkshopService;
+  final AppearanceController appearanceController;
+
+  @override
+  State<AnimaApp> createState() => _AnimaAppState();
+}
+
+class _AnimaAppState extends State<AnimaApp> {
+  @override
+  void initState() {
+    super.initState();
+    widget.appearanceController.addListener(_onAppearanceChanged);
+    widget.appearanceController.load();
+  }
+
+  @override
+  void dispose() {
+    widget.appearanceController.removeListener(_onAppearanceChanged);
+    super.dispose();
+  }
+
+  void _onAppearanceChanged() {
+    if (mounted) setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
+    final style = widget.appearanceController.style;
+    final theme = AnimaTheme.fromSettings(style);
+    final mode = style.palette.brightness == Brightness.light
+        ? ThemeMode.light
+        : ThemeMode.dark;
+
     return MaterialApp(
       title: 'Anima',
       debugShowCheckedModeBanner: false,
-      theme: AnimaTheme.dark(),
-      darkTheme: AnimaTheme.dark(),
-      themeMode: ThemeMode.dark,
+      theme: theme,
+      darkTheme: theme,
+      themeMode: mode,
       builder: (context, child) {
         return GlassBackdrop(
+          settings: style,
           child: child ?? const SizedBox.shrink(),
         );
       },
       home: HomeScreen(
-        apiKeyService: apiKeyService,
-        settingsService: settingsService,
-        characterService: characterService,
-        characterCategoryService: characterCategoryService,
-        personaService: personaService,
-        chatService: chatService,
-        nanoGptService: nanoGptService,
-        worldInfoService: worldInfoService,
-        worldWorkshopService: worldWorkshopService,
+        apiKeyService: widget.apiKeyService,
+        settingsService: widget.settingsService,
+        characterService: widget.characterService,
+        characterCategoryService: widget.characterCategoryService,
+        personaService: widget.personaService,
+        chatService: widget.chatService,
+        nanoGptService: widget.nanoGptService,
+        worldInfoService: widget.worldInfoService,
+        worldWorkshopService: widget.worldWorkshopService,
+        appearanceController: widget.appearanceController,
       ),
     );
   }

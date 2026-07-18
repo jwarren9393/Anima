@@ -13,6 +13,7 @@ import '../models/chat_session.dart';
 import '../models/persona.dart';
 import '../models/ui_style_settings.dart';
 import '../services/api_key_service.dart';
+import '../services/appearance_controller.dart';
 import '../services/character_category_service.dart';
 import '../services/character_service.dart';
 import '../services/chat_context_service.dart';
@@ -29,7 +30,6 @@ import '../services/roadway_service.dart';
 import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
 import '../services/world_workshop_service.dart';
-import '../theme/anima_theme.dart';
 import '../widgets/anima_avatar.dart';
 import '../widgets/greeting_picker.dart';
 import '../widgets/keyboard_inset.dart';
@@ -55,6 +55,7 @@ class ChatScreen extends StatefulWidget {
     required this.nanoGptService,
     required this.worldInfoService,
     required this.worldWorkshopService,
+    required this.appearanceController,
     required this.initialSession,
   });
 
@@ -67,6 +68,7 @@ class ChatScreen extends StatefulWidget {
   final NanoGptService nanoGptService;
   final WorldInfoService worldInfoService;
   final WorldWorkshopService worldWorkshopService;
+  final AppearanceController appearanceController;
   final ChatSession initialSession;
 
   @override
@@ -312,14 +314,20 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: AnimaTheme.glassHigh.withValues(alpha: 0.96),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.surfaceContainerHigh.withValues(alpha: 0.96),
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: AnimaTheme.gold.withValues(alpha: 0.45),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.45),
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: AnimaTheme.gold.withValues(alpha: 0.12),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primary.withValues(alpha: 0.12),
                       blurRadius: 18,
                     ),
                   ],
@@ -335,9 +343,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AnimaTheme.ink,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      color: Theme.of(context).colorScheme.onSurface,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),
@@ -366,6 +374,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           nanoGptService: widget.nanoGptService,
           worldInfoService: widget.worldInfoService,
           worldWorkshopService: widget.worldWorkshopService,
+          appearanceController: widget.appearanceController,
         ),
       ),
     );
@@ -642,7 +651,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final primary = chosen.isGroup
         ? (participants.isNotEmpty ? participants.first : fallback)
         : (await widget.characterService.getById(chosen.characterId)) ??
-            fallback;
+              fallback;
     if (!mounted) return;
     await _applySession(chosen, participants: participants, character: primary);
   }
@@ -733,7 +742,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       );
       if (result == null || result.files.isEmpty) return;
       final file = result.files.first;
-      final bytes = file.bytes ??
+      final bytes =
+          file.bytes ??
           (file.path != null ? await File(file.path!).readAsBytes() : null);
       if (bytes == null) {
         if (!mounted) return;
@@ -982,8 +992,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _error = null;
     });
     try {
-      final collaborator =
-          await widget.settingsService.getCollaboratorSettings();
+      final collaborator = await widget.settingsService
+          .getCollaboratorSettings();
       final model = await widget.settingsService.getModel();
       final sampling = await widget.settingsService.getSampling();
       // Cooler sampling = less “creative rewrite,” closer to the draft.
@@ -1943,10 +1953,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       SnackBar(
         content: Text(message),
         duration: const Duration(seconds: 4),
-        backgroundColor: AnimaTheme.glassHigh,
+        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
         action: SnackBarAction(
           label: 'Undo',
-          textColor: AnimaTheme.gold,
+          textColor: Theme.of(context).colorScheme.primary,
           onPressed: () => _undoPendingRemoval(pending),
         ),
       ),
@@ -2001,8 +2011,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       copied.add(ChatMessage.fromJson(json));
     }
 
-    final baseTitle =
-        source.title.trim().isEmpty ? 'Chat' : source.title.trim();
+    final baseTitle = source.title.trim().isEmpty
+        ? 'Chat'
+        : source.title.trim();
     final branchTitle = baseTitle.toLowerCase().contains('branch')
         ? baseTitle
         : '$baseTitle (branch)';
@@ -2085,9 +2096,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final colorScheme = Theme.of(context).colorScheme;
     final characterName = _isGroup
         ? (_participants
-            .map((c) => c.name)
-            .where((n) => n.isNotEmpty)
-            .join(', '))
+              .map((c) => c.name)
+              .where((n) => n.isNotEmpty)
+              .join(', '))
         : (_character?.name ?? 'Anima');
     final titleName = _isGroup ? 'Group' : (_character?.name ?? 'Anima');
     return Scaffold(
@@ -2098,8 +2109,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         leading: IconButton(
           tooltip: 'Close chat',
           icon: const Icon(Icons.close),
-          onPressed:
-              _loading || _busy ? null : () => Navigator.of(context).pop(),
+          onPressed: _loading || _busy
+              ? null
+              : () => Navigator.of(context).pop(),
         ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2231,14 +2243,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         final thinking =
                             _busy && isLast && message.text.isEmpty;
                         final isLastAi = isLast && !message.isUser;
-                        final canGoPrev = !message.isUser &&
+                        final canGoPrev =
+                            !message.isUser &&
                             message.swipes.length > 1 &&
                             message.swipeIndex > 0;
-                        final canGoNextExisting = !message.isUser &&
+                        final canGoNextExisting =
+                            !message.isUser &&
                             message.swipes.length > 1 &&
                             message.swipeIndex < message.swipes.length - 1;
                         // On the latest AI bubble, ▶ past the last swipe = new generation.
-                        final canQuickSwipe = isLastAi &&
+                        final canQuickSwipe =
+                            isLastAi &&
                             !thinking &&
                             !_busy &&
                             message.swipeIndex >= message.swipes.length - 1;
@@ -2250,15 +2265,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                           child: _MessageBubble(
                             message: message,
                             showThinking: thinking,
-                            showSwipePager: !message.isUser &&
+                            showSwipePager:
+                                !message.isUser &&
                                 !thinking &&
                                 (message.canSwipe || isLastAi),
                             avatarFileName: _avatarForMessage(message),
                             avatarLabel: message.isUser
                                 ? _userName
                                 : (message.speakerName ??
-                                    _character?.name ??
-                                    'AI'),
+                                      _character?.name ??
+                                      'AI'),
                             avatarStyle: _avatarStyle,
                             onTap: (_busy || thinking)
                                 ? null
@@ -2272,18 +2288,19 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                       _editCharacterFromAvatar(message);
                                     }
                                   },
-                            onLongPress:
-                                _busy ? null : () => _showMessageMenu(index),
+                            onLongPress: _busy
+                                ? null
+                                : () => _showMessageMenu(index),
                             onSwipePrev: (!_busy && !thinking && canGoPrev)
                                 ? () => _shiftSwipe(index, -1)
                                 : null,
-                            onSwipeNext: (!_busy &&
-                                    !thinking &&
-                                    canGoNextExisting)
+                            onSwipeNext:
+                                (!_busy && !thinking && canGoNextExisting)
                                 ? () => _shiftSwipe(index, 1)
                                 : (canQuickSwipe
-                                    ? () => _regenerateOrSwipe(asNewSwipe: true)
-                                    : null),
+                                      ? () =>
+                                            _regenerateOrSwipe(asNewSwipe: true)
+                                      : null),
                             nextGeneratesSwipe: canQuickSwipe,
                           ),
                         );
@@ -2336,9 +2353,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                           scrollDirection: Axis.horizontal,
                           child: Row(
                             children: [
-                              for (var i = 0;
-                                  i < _participants.length;
-                                  i++) ...[
+                              for (
+                                var i = 0;
+                                i < _participants.length;
+                                i++
+                              ) ...[
                                 if (i > 0) const SizedBox(width: 6),
                                 InputChip(
                                   label: ConstrainedBox(
@@ -2355,12 +2374,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                   ),
                                   selected:
                                       (_session?.nextSpeakerIndex ?? 0).clamp(
-                                            0,
-                                            _participants.length - 1,
-                                          ) ==
-                                          i,
-                                  onPressed:
-                                      _busy ? null : () => _selectSpeaker(i),
+                                        0,
+                                        _participants.length - 1,
+                                      ) ==
+                                      i,
+                                  onPressed: _busy
+                                      ? null
+                                      : () => _selectSpeaker(i),
                                   visualDensity: VisualDensity.compact,
                                   materialTapTargetSize:
                                       MaterialTapTargetSize.shrinkWrap,
@@ -2381,8 +2401,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                               ? 'OOC on — message will send as (OOC: …)'
                               : 'OOC off — tap for out-of-character',
                           child: TextButton(
-                            onPressed:
-                                _busy || _formatting ? null : _toggleOocMode,
+                            onPressed: _busy || _formatting
+                                ? null
+                                : _toggleOocMode,
                             style: TextButton.styleFrom(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 8,
@@ -2416,12 +2437,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                               hintText: _oocMode
                                   ? 'Out-of-character note…'
                                   : _isGroup
-                                      ? ((_session?.autoReply ?? false)
-                                          ? 'Message the group…'
-                                          : 'Send only — tap a name to reply…')
-                                      : ((_session?.autoReply ?? false)
-                                          ? 'Message $characterName…'
-                                          : 'Send only — tap Continue or long-press…'),
+                                  ? ((_session?.autoReply ?? false)
+                                        ? 'Message the group…'
+                                        : 'Send only — tap a name to reply…')
+                                  : ((_session?.autoReply ?? false)
+                                        ? 'Message $characterName…'
+                                        : 'Send only — tap Continue or long-press…'),
                               filled: true,
                               border: const OutlineInputBorder(),
                               isDense: true,
@@ -2519,8 +2540,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         : 'Already the last message',
                   ),
                   enabled: canRewind,
-                  onTap:
-                      canRewind ? () => Navigator.pop(context, 'rewind') : null,
+                  onTap: canRewind
+                      ? () => Navigator.pop(context, 'rewind')
+                      : null,
                 ),
                 ListTile(
                   leading: const Icon(Icons.call_split_outlined),
@@ -2749,11 +2771,11 @@ class _MessageBubble extends StatelessWidget {
     final isUser = message.isUser;
     final alignment = isUser ? Alignment.centerRight : Alignment.centerLeft;
     final background = isUser ? ui.userBubbleColor : ui.aiBubbleColor;
-    final foreground = isUser ? colorScheme.onPrimary : colorScheme.onSurface;
+    final foreground = isUser ? ui.userBubbleForeground : ui.aiBubbleForeground;
     final bubbleRadius = BorderRadius.circular(ui.chatBubbleRadius);
     final chatFontSize =
         (Theme.of(context).textTheme.bodyLarge?.fontSize ?? 16) *
-            ui.chatFontScale;
+        ui.chatFontScale;
 
     final avatarCore = AnimaAvatar(
       fileName: avatarFileName,
@@ -2806,7 +2828,7 @@ class _MessageBubble extends StatelessWidget {
                 BoxShadow(
                   color: isUser
                       ? colorScheme.primary.withValues(alpha: 0.22)
-                      : Colors.black.withValues(alpha: 0.35),
+                      : ui.bubbleShadowColor,
                   blurRadius: isUser ? 14 : 10,
                   offset: const Offset(0, 3),
                 ),
@@ -2841,23 +2863,23 @@ class _MessageBubble extends StatelessWidget {
                           message.speakerName!.trim().isNotEmpty) ...[
                         Text(
                           message.speakerName!,
-                          style:
-                              Theme.of(context).textTheme.labelMedium?.copyWith(
-                                    color: colorScheme.primary,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(
+                                color: colorScheme.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
                         ),
                         const SizedBox(height: 4),
                       ],
                       RpRichText(
                         text: message.text,
                         isUser: isUser,
-                        baseStyle:
-                            Theme.of(context).textTheme.bodyLarge!.copyWith(
-                                  color: foreground,
-                                  height: 1.4,
-                                  fontSize: chatFontSize,
-                                ),
+                        baseStyle: Theme.of(context).textTheme.bodyLarge!
+                            .copyWith(
+                              color: foreground,
+                              height: 1.4,
+                              fontSize: chatFontSize,
+                            ),
                       ),
                     ],
                   ),
@@ -2868,8 +2890,9 @@ class _MessageBubble extends StatelessWidget {
 
     final column = Column(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment:
-          isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      crossAxisAlignment: isUser
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
       children: [
         bubble,
         if (showSwipePager)
@@ -2941,9 +2964,9 @@ class _SwipePager extends StatelessWidget {
           Text(
             '${index + 1}/$total',
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
-                ),
+              color: colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           IconButton(
             tooltip: nextGeneratesSwipe ? 'Generate new swipe' : 'Next swipe',
@@ -3075,8 +3098,8 @@ class _PathsSheetState extends State<_PathsSheet> {
       _selected.clear();
     });
     try {
-      final collaborator =
-          await widget.settingsService.getCollaboratorSettings();
+      final collaborator = await widget.settingsService
+          .getCollaboratorSettings();
       final model = await widget.settingsService.getModel();
       final sampling = await widget.settingsService.getSampling();
       final baseUrl = await widget.settingsService.getApiBaseUrl();
@@ -3139,8 +3162,8 @@ class _PathsSheetState extends State<_PathsSheet> {
 
     setState(() => _combining = true);
     try {
-      final collaborator =
-          await widget.settingsService.getCollaboratorSettings();
+      final collaborator = await widget.settingsService
+          .getCollaboratorSettings();
       final model = await widget.settingsService.getModel();
       final sampling = await widget.settingsService.getSampling();
       final baseUrl = await widget.settingsService.getApiBaseUrl();
@@ -3286,8 +3309,8 @@ class _PathsSheetState extends State<_PathsSheet> {
                 'two or more and tap Combine. Closing this sheet keeps them '
                 'until the chat moves on or you clear / refresh.',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
+                  color: colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
             Expanded(
@@ -3299,14 +3322,12 @@ class _PathsSheetState extends State<_PathsSheet> {
                           _loading
                               ? 'Brainstorming paths…'
                               : _combining
-                                  ? 'Combining selected paths…'
-                                  : _restoring
-                                      ? 'Loading saved paths…'
-                                      : 'Tap ✨ to generate paths for this scene.',
+                              ? 'Combining selected paths…'
+                              : _restoring
+                              ? 'Loading saved paths…'
+                              : 'Tap ✨ to generate paths for this scene.',
                           textAlign: TextAlign.center,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
+                          style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(color: colorScheme.onSurfaceVariant),
                         ),
                       ),
@@ -3347,8 +3368,9 @@ class _PathsSheetState extends State<_PathsSheet> {
                                   ),
                                   IconButton(
                                     tooltip: 'Edit path',
-                                    onPressed:
-                                        _busy ? null : () => _editOption(i),
+                                    onPressed: _busy
+                                        ? null
+                                        : () => _editOption(i),
                                     icon: const Icon(
                                       Icons.edit_outlined,
                                       size: 18,
@@ -3378,8 +3400,8 @@ class _PathsSheetState extends State<_PathsSheet> {
                     _combining
                         ? 'Combining…'
                         : _selected.isEmpty
-                            ? 'Combine selected'
-                            : 'Combine selected (${_selected.length})',
+                        ? 'Combine selected'
+                        : 'Combine selected (${_selected.length})',
                   ),
                 ),
               ),

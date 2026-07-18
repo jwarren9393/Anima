@@ -10,8 +10,8 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **Also builds** | Linux desktop (works); Windows desktop (needs a Windows host) |
 | **Distribution** | Personal use only — **not** published to app stores |
 | **Repo** | https://github.com/jwarren9393/Anima (private) |
-| **Theme** | Fixed dark **Obsidian & Gold** glass UI (no light mode / theme studio) |
-| **Version** | **1.0.0** (official APK on [GitHub Releases](https://github.com/jwarren9393/Anima/releases)) |
+| **Theme** | **Theme Studio** — 8 global presets (glass + solid), custom colors/fonts, chat avatars |
+| **Version** | **1.1.0** (official APK on [GitHub Releases](https://github.com/jwarren9393/Anima/releases)) |
 
 API base (pay-as-you-go): `https://nano-gpt.com/api/v1/chat/completions`  
 Auth: `Authorization: Bearer <API_KEY>`  
@@ -21,20 +21,20 @@ Optional subscription base: `https://nano-gpt.com/api/subscription/v1`
 
 ## Download (Android APK)
 
-Official **v1.0.0** builds are published on the repo’s **[Releases](https://github.com/jwarren9393/Anima/releases)** page (not committed into source).
+Official **v1.1.0** builds are published on the repo’s **[Releases](https://github.com/jwarren9393/Anima/releases)** page (not committed into source).
 
-1. Open release **v1.0.0**.
-2. Download **`Anima-1.0.0.apk`**.
+1. Open release **v1.1.0**.
+2. Download **`Anima-1.1.0.apk`**.
 3. On your phone: allow install from this source if Android asks, then open the APK.
 4. First launch → **Settings → API & connection** → paste your NanoGPT key → Save.
 
-### What’s in v1.0.0
+### What’s in v1.1.0
 
-- Full chat app: solo/group, streaming, swipes, Paths, drafts, personas, characters, World Info
-- Creation Center: invent worlds, **import lorebooks** (JSON file or existing World Info), create/update lorebooks, create character cards
-- Generate avatars (characters + personas) with subscription-safe image models
-- Backup & restore (`.anima-backup`, API key not included)
-- **Context estimate** gauges (Creation Center banner + chat ⋮ menu) and model **context window** labels in API settings
+- Everything from v1.0.0, plus **Theme Studio** (Settings → Appearance)
+- 8 global presets (glass + solid), custom colors/fonts/sizes, clean backgrounds (no sparkle texture)
+- Full chat app: solo/group, streaming, swipes, Paths, drafts, structured personas + AI wand, characters, World Info
+- Creation Center: invent worlds, import lorebooks, create/update lorebooks, create AI characters or your persona
+- Generate avatars, backup & restore, context estimates
 
 This is a **personal / sideload** build (not Play Store). Rebuild locally anytime with:
 
@@ -276,12 +276,14 @@ Three editable guidance notes (each with presets / reset):
 
 All use the normal model + sampling (Format uses lower temperature to stay close to the draft).
 
-### 3.8 Appearance
+### 3.8 Appearance (Theme Studio)
 
-`appearance_settings_screen.dart`
+`appearance_settings_screen.dart` / `theme_palette.dart` / `appearance_controller.dart`
 
-- Theme is fixed Obsidian & Gold.
-- Chat avatars only: **shape**, **size tier**, fine **scale** slider (persona + character photos in bubbles).
+- **Global presets** (8): Obsidian Gold, Midnight Sapphire, Emerald Noir, Rose Aurora (glass); Slate Minimal, Ivory Ink, Cyber Violet, Forest Dusk (solid).
+- **Customize:** background mode/colors, accent/header/menu/text/bubble colors, fonts, text scales, corner roundness, glass opacity/blur.
+- Live preview in the menu; Save applies app-wide immediately.
+- Chat avatars: **shape**, **size tier**, fine **scale** slider.
 
 ### 3.9 Backup & restore
 
@@ -449,7 +451,7 @@ Other services (no separate “user screen”): `NanoGptService` (API/stream/cre
 
 ```
 lib/
-  main.dart                 # Entry, Obsidian & Gold theme wiring
+  main.dart                 # Entry, runtime Theme Studio wiring
   theme/                    # Theme + glass backdrop
   models/                   # Messages, sessions, characters, categories, lore, personas, presets
   screens/                  # Home, chat, settings tree, editors, Creation Center, backup

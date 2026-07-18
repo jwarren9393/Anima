@@ -7,9 +7,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../services/app_backup_service.dart';
+import '../services/appearance_controller.dart';
 import '../services/persona_service.dart';
 import '../services/settings_service.dart';
-import '../theme/anima_theme.dart';
 
 /// Export / restore all Anima data (except the API key) as one file.
 class BackupRestoreScreen extends StatefulWidget {
@@ -17,11 +17,13 @@ class BackupRestoreScreen extends StatefulWidget {
     super.key,
     required this.settingsService,
     required this.personaService,
+    this.appearanceController,
     this.backupService,
   });
 
   final SettingsService settingsService;
   final PersonaService personaService;
+  final AppearanceController? appearanceController;
   final AppBackupService? backupService;
 
   @override
@@ -29,7 +31,8 @@ class BackupRestoreScreen extends StatefulWidget {
 }
 
 class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
-  late final AppBackupService _backup = widget.backupService ??
+  late final AppBackupService _backup =
+      widget.backupService ??
       AppBackupService(
         settingsService: widget.settingsService,
         personaService: widget.personaService,
@@ -58,7 +61,6 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Backup ready · ${bundle.summary.shortDescription}'),
-          backgroundColor: AnimaTheme.glassHigh,
         ),
       );
 
@@ -76,12 +78,9 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Backup failed: $error'),
-          backgroundColor: AnimaTheme.glassHigh,
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Backup failed: $error')));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -105,10 +104,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     if (bytes == null || bytes.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not read that backup file.'),
-          backgroundColor: AnimaTheme.glassHigh,
-        ),
+        const SnackBar(content: Text('Could not read that backup file.')),
       );
       return;
     }
@@ -119,12 +115,9 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       summary = inspected.summary;
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('$error'),
-          backgroundColor: AnimaTheme.glassHigh,
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('$error')));
       return;
     }
 
@@ -158,23 +151,18 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     setState(() => _busy = true);
     try {
       final restored = await _backup.restoreBackup(bytes);
+      await widget.appearanceController?.reload();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Restored · ${restored.shortDescription}'),
-          backgroundColor: AnimaTheme.glassHigh,
-        ),
+        SnackBar(content: Text('Restored · ${restored.shortDescription}')),
       );
       // Pop back to Home so open screens cannot overwrite restored data.
       Navigator.of(context).popUntil((route) => route.isFirst);
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Restore failed: $error'),
-          backgroundColor: AnimaTheme.glassHigh,
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Restore failed: $error')));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -199,7 +187,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
             'The NanoGPT API key is not included — enter it again in '
             'API & connection after a restore.',
             style: theme.textTheme.bodySmall?.copyWith(
-              color: AnimaTheme.inkMuted,
+              color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 28),

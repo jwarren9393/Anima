@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/api_key_service.dart';
+import '../services/appearance_controller.dart';
 import '../services/character_category_service.dart';
 import '../services/character_service.dart';
 import '../services/nanogpt_service.dart';
@@ -30,6 +31,7 @@ class SettingsScreen extends StatelessWidget {
     required this.nanoGptService,
     required this.worldInfoService,
     required this.worldWorkshopService,
+    required this.appearanceController,
   });
 
   final ApiKeyService apiKeyService;
@@ -40,12 +42,15 @@ class SettingsScreen extends StatelessWidget {
   final NanoGptService nanoGptService;
   final WorldInfoService worldInfoService;
   final WorldWorkshopService worldWorkshopService;
+  final AppearanceController appearanceController;
 
   Future<void> _openAppearance(BuildContext context) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            AppearanceSettingsScreen(settingsService: settingsService),
+        builder: (_) => AppearanceSettingsScreen(
+          settingsService: settingsService,
+          appearanceController: appearanceController,
+        ),
       ),
     );
   }
@@ -158,7 +163,7 @@ class SettingsScreen extends StatelessWidget {
           _SettingsTile(
             icon: Icons.palette,
             title: 'Appearance',
-            subtitle: 'Chat avatars (Obsidian & Gold theme is fixed)',
+            subtitle: 'Theme presets, colors, fonts, chat avatars',
             onTap: () => _openAppearance(context),
           ),
           _SettingsTile(
@@ -170,6 +175,7 @@ class SettingsScreen extends StatelessWidget {
                 builder: (_) => BackupRestoreScreen(
                   settingsService: settingsService,
                   personaService: personaService,
+                  appearanceController: appearanceController,
                 ),
               ),
             ),

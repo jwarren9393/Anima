@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../models/theme_palette.dart';
 import '../models/ui_style_settings.dart';
 
-/// Anima’s single look: Obsidian & Gold — dark glassmorphism with gold accents.
+/// Builds Anima [ThemeData] from Theme Studio settings.
 class AnimaTheme {
   /// When true, skip Google Fonts (tests / offline) and use the platform typeface.
   static bool useSystemFonts = false;
 
+  /// Legacy constants kept for branding / fallbacks (launcher docs, tests).
   static const obsidian = Color(0xFF050508);
   static const obsidianDeep = Color(0xFF020204);
   static const glass = Color(0xFF14141A);
@@ -18,64 +20,111 @@ class AnimaTheme {
   static const ink = Color(0xFFF4F0E6);
   static const inkMuted = Color(0xFFB8B0A0);
 
-  static ThemeData dark() {
-    const scheme = ColorScheme(
-      brightness: Brightness.dark,
-      primary: gold,
-      onPrimary: Color(0xFF1A1400),
-      primaryContainer: Color(0xFF3D3208),
-      onPrimaryContainer: goldSoft,
-      secondary: goldDeep,
-      onSecondary: Color(0xFF1A1400),
-      secondaryContainer: Color(0xFF2A2410),
-      onSecondaryContainer: goldSoft,
-      tertiary: Color(0xFFFFD56A),
-      onTertiary: Color(0xFF1A1400),
-      tertiaryContainer: Color(0xFF4A3A10),
-      onTertiaryContainer: goldSoft,
-      error: Color(0xFFFF6B6B),
-      onError: Color(0xFF1A0505),
-      errorContainer: Color(0xFF5C1515),
-      onErrorContainer: Color(0xFFFFDAD6),
-      surface: glass,
-      onSurface: ink,
-      onSurfaceVariant: inkMuted,
-      surfaceContainerLowest: obsidianDeep,
-      surfaceContainerLow: Color(0xFF0C0C12),
-      surfaceContainer: glass,
-      surfaceContainerHigh: glassHigh,
-      surfaceContainerHighest: Color(0xFF2A2A36),
-      outline: Color(0xFF5C5340),
-      outlineVariant: Color(0xFF3A3428),
+  /// Default Obsidian Gold theme (clean soft-glow, no sparkle texture).
+  static ThemeData dark() => fromSettings(UiStyleSettings.defaults());
+
+  static ThemeData light() =>
+      fromSettings(UiStyleSettings.fromPreset(ThemePresets.ivoryInk));
+
+  static ThemeData fromSettings(UiStyleSettings settings) {
+    final palette = settings.palette;
+    final isGlass = settings.isGlass;
+    final radius = BorderRadius.circular(settings.cornerRadius);
+    final onAccent = _onColor(palette.accent);
+    final surfaceAlpha = isGlass
+        ? settings.glassOpacity.clamp(0.45, 0.95)
+        : 1.0;
+
+    final scheme = ColorScheme(
+      brightness: palette.brightness,
+      primary: palette.accent,
+      onPrimary: onAccent,
+      primaryContainer: Color.alphaBlend(
+        palette.accent.withValues(alpha: 0.28),
+        palette.surfaceHigh,
+      ),
+      onPrimaryContainer: palette.text,
+      secondary: palette.accentDeep,
+      onSecondary: _onColor(palette.accentDeep),
+      secondaryContainer: Color.alphaBlend(
+        palette.accentDeep.withValues(alpha: 0.22),
+        palette.surface,
+      ),
+      onSecondaryContainer: palette.text,
+      tertiary: Color.lerp(palette.accent, Colors.white, 0.25)!,
+      onTertiary: onAccent,
+      tertiaryContainer: Color.alphaBlend(
+        palette.accent.withValues(alpha: 0.18),
+        palette.surfaceHigh,
+      ),
+      onTertiaryContainer: palette.text,
+      error: const Color(0xFFFF6B6B),
+      onError: const Color(0xFF1A0505),
+      errorContainer: const Color(0xFF5C1515),
+      onErrorContainer: const Color(0xFFFFDAD6),
+      surface: palette.surface,
+      onSurface: palette.text,
+      onSurfaceVariant: palette.textMuted,
+      surfaceContainerLowest: palette.background,
+      surfaceContainerLow: Color.lerp(
+        palette.background,
+        palette.surface,
+        0.4,
+      )!,
+      surfaceContainer: palette.surface,
+      surfaceContainerHigh: palette.surfaceHigh,
+      surfaceContainerHighest: Color.lerp(
+        palette.surfaceHigh,
+        palette.accent,
+        0.08,
+      )!,
+      outline: Color.lerp(palette.textMuted, palette.accent, 0.25)!,
+      outlineVariant: Color.lerp(palette.surfaceHigh, palette.textMuted, 0.35)!,
       shadow: Colors.black,
       scrim: Colors.black,
-      inverseSurface: goldSoft,
-      onInverseSurface: obsidian,
-      inversePrimary: goldDeep,
-      surfaceTint: gold,
+      inverseSurface: palette.text,
+      onInverseSurface: palette.background,
+      inversePrimary: palette.accentDeep,
+      surfaceTint: palette.accent,
     );
 
-    final radius = BorderRadius.circular(16);
-    final textTheme = _textTheme(scheme);
-    final titleStyle = _titleStyle(scheme);
+    final textTheme = _textTheme(scheme, settings);
+    final titleStyle = _titleStyle(scheme, settings.headingFont);
+    final ui = AnimaUiTheme.fromSettings(settings);
+
+    final headerColor = isGlass
+        ? palette.header.withValues(alpha: surfaceAlpha)
+        : palette.header;
+    final cardColor = isGlass
+        ? palette.surfaceHigh.withValues(
+            alpha: (surfaceAlpha * 0.85).clamp(0.4, 1),
+          )
+        : palette.surfaceHigh;
+    final fieldFill = isGlass
+        ? palette.surfaceHigh.withValues(alpha: 0.45)
+        : palette.surfaceHigh;
 
     return ThemeData(
       colorScheme: scheme,
       useMaterial3: true,
-      brightness: Brightness.dark,
-      scaffoldBackgroundColor: Colors.transparent,
+      brightness: palette.brightness,
+      scaffoldBackgroundColor: isGlass
+          ? Colors.transparent
+          : palette.background,
       textTheme: textTheme,
       primaryTextTheme: textTheme,
-      extensions: const [AnimaUiTheme.standard],
+      extensions: [ui],
       appBarTheme: AppBarTheme(
         centerTitle: false,
-        backgroundColor: glass.withValues(alpha: 0.72),
-        foregroundColor: ink,
+        backgroundColor: headerColor,
+        foregroundColor: palette.text,
         elevation: 0,
         scrolledUnderElevation: 0,
-        titleTextStyle: titleStyle.copyWith(fontSize: 22),
-        iconTheme: const IconThemeData(color: gold),
-        actionsIconTheme: const IconThemeData(color: gold),
+        titleTextStyle: titleStyle.copyWith(
+          fontSize: 22 * settings.headingScale,
+        ),
+        iconTheme: IconThemeData(color: palette.accent),
+        actionsIconTheme: IconThemeData(color: palette.accent),
       ),
       dividerTheme: DividerThemeData(
         color: scheme.outlineVariant.withValues(alpha: 0.8),
@@ -83,22 +132,22 @@ class AnimaTheme {
         space: 1,
       ),
       listTileTheme: ListTileThemeData(
-        iconColor: gold,
-        textColor: ink,
+        iconColor: palette.accent,
+        textColor: palette.text,
         shape: RoundedRectangleBorder(borderRadius: radius),
       ),
       cardTheme: CardThemeData(
-        color: glassHigh.withValues(alpha: 0.55),
-        elevation: 0,
+        color: cardColor,
+        elevation: isGlass ? 0 : 1,
         shape: RoundedRectangleBorder(
           borderRadius: radius,
-          side: BorderSide(color: gold.withValues(alpha: 0.18)),
+          side: BorderSide(color: palette.accent.withValues(alpha: 0.18)),
         ),
         margin: const EdgeInsets.symmetric(vertical: 4),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: glassHigh.withValues(alpha: 0.45),
+        fillColor: fieldFill,
         border: OutlineInputBorder(borderRadius: radius),
         enabledBorder: OutlineInputBorder(
           borderRadius: radius,
@@ -106,15 +155,15 @@ class AnimaTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: radius,
-          borderSide: const BorderSide(color: gold, width: 1.6),
+          borderSide: BorderSide(color: palette.accent, width: 1.6),
         ),
-        labelStyle: TextStyle(color: inkMuted),
-        hintStyle: TextStyle(color: inkMuted.withValues(alpha: 0.7)),
+        labelStyle: TextStyle(color: palette.textMuted),
+        hintStyle: TextStyle(color: palette.textMuted.withValues(alpha: 0.7)),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: gold,
-          foregroundColor: const Color(0xFF1A1400),
+          backgroundColor: palette.accent,
+          foregroundColor: onAccent,
           shape: RoundedRectangleBorder(borderRadius: radius),
           padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
           elevation: 0,
@@ -122,144 +171,223 @@ class AnimaTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: gold,
+          foregroundColor: palette.accent,
           shape: RoundedRectangleBorder(borderRadius: radius),
-          side: BorderSide(color: gold.withValues(alpha: 0.55)),
+          side: BorderSide(color: palette.accent.withValues(alpha: 0.55)),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(foregroundColor: gold),
+        style: TextButton.styleFrom(foregroundColor: palette.accent),
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
-        backgroundColor: gold,
-        foregroundColor: const Color(0xFF1A1400),
+        backgroundColor: palette.accent,
+        foregroundColor: onAccent,
         elevation: 4,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(settings.cornerRadius + 2),
+        ),
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: glassHigh.withValues(alpha: 0.7),
-        selectedColor: goldDeep.withValues(alpha: 0.55),
+        backgroundColor: isGlass
+            ? palette.surfaceHigh.withValues(alpha: 0.7)
+            : palette.surfaceHigh,
+        selectedColor: palette.accentDeep.withValues(alpha: 0.55),
         labelStyle: textTheme.labelLarge,
-        side: BorderSide(color: gold.withValues(alpha: 0.25)),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        side: BorderSide(color: palette.accent.withValues(alpha: 0.25)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(settings.cornerRadius * 0.75),
+        ),
       ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) return gold;
-          return inkMuted;
+          if (states.contains(WidgetState.selected)) return palette.accent;
+          return palette.textMuted;
         }),
         trackColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return goldDeep.withValues(alpha: 0.55);
+            return palette.accentDeep.withValues(alpha: 0.55);
           }
-          return glassHigh;
+          return palette.surfaceHigh;
         }),
       ),
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: glassHigh,
-        contentTextStyle: textTheme.bodyMedium?.copyWith(color: ink),
-        actionTextColor: gold,
+        backgroundColor: palette.surfaceHigh,
+        contentTextStyle: textTheme.bodyMedium?.copyWith(color: palette.text),
+        actionTextColor: palette.accent,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(settings.cornerRadius * 0.85),
+        ),
       ),
       dialogTheme: DialogThemeData(
-        backgroundColor: glass,
+        backgroundColor: palette.surface,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: gold.withValues(alpha: 0.25)),
+          borderRadius: BorderRadius.circular(settings.cornerRadius + 4),
+          side: BorderSide(color: palette.accent.withValues(alpha: 0.25)),
         ),
       ),
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: glass,
-        modalBackgroundColor: glass,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        backgroundColor: palette.surface,
+        modalBackgroundColor: palette.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(settings.cornerRadius + 6),
+          ),
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: glass.withValues(alpha: 0.9),
-        indicatorColor: gold.withValues(alpha: 0.22),
+        backgroundColor: isGlass
+            ? palette.surface.withValues(alpha: 0.9)
+            : palette.surface,
+        indicatorColor: palette.accent.withValues(alpha: 0.22),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return const IconThemeData(color: gold);
+            return IconThemeData(color: palette.accent);
           }
-          return IconThemeData(color: inkMuted);
+          return IconThemeData(color: palette.textMuted);
         }),
       ),
-      progressIndicatorTheme: const ProgressIndicatorThemeData(color: gold),
-      iconTheme: const IconThemeData(color: gold),
+      progressIndicatorTheme: ProgressIndicatorThemeData(color: palette.accent),
+      iconTheme: IconThemeData(color: palette.accent),
       popupMenuTheme: PopupMenuThemeData(
-        color: glassHigh,
+        color: palette.surfaceHigh,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: BorderSide(color: gold.withValues(alpha: 0.2)),
+          borderRadius: BorderRadius.circular(settings.cornerRadius * 0.85),
+          side: BorderSide(color: palette.accent.withValues(alpha: 0.2)),
         ),
       ),
       sliderTheme: SliderThemeData(
-        activeTrackColor: gold,
-        thumbColor: gold,
+        activeTrackColor: palette.accent,
+        thumbColor: palette.accent,
         inactiveTrackColor: scheme.outlineVariant,
-        overlayColor: gold.withValues(alpha: 0.16),
+        overlayColor: palette.accent.withValues(alpha: 0.16),
       ),
       segmentedButtonTheme: SegmentedButtonThemeData(
         style: ButtonStyle(
           foregroundColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.selected)) {
-              return const Color(0xFF1A1400);
-            }
-            return ink;
+            if (states.contains(WidgetState.selected)) return onAccent;
+            return palette.text;
           }),
           backgroundColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.selected)) return gold;
-            return glassHigh.withValues(alpha: 0.5);
+            if (states.contains(WidgetState.selected)) return palette.accent;
+            return isGlass
+                ? palette.surfaceHigh.withValues(alpha: 0.5)
+                : palette.surfaceHigh;
           }),
         ),
       ),
     );
   }
 
-  /// Light is unused — Anima is always dark — but kept for ThemeData completeness.
-  static ThemeData light() => dark();
+  static Color _onColor(Color background) {
+    return background.computeLuminance() > 0.55
+        ? const Color(0xFF1A1400)
+        : const Color(0xFFF4F0E6);
+  }
 
-  static TextStyle _titleStyle(ColorScheme scheme) {
-    if (useSystemFonts) {
+  static TextStyle _titleStyle(ColorScheme scheme, AnimaFontChoice font) {
+    if (useSystemFonts || font == AnimaFontChoice.system) {
       return TextStyle(
         fontWeight: FontWeight.w700,
         color: scheme.onSurface,
         letterSpacing: 0.2,
       );
     }
-    return GoogleFonts.outfit(
+    try {
+      switch (font) {
+        case AnimaFontChoice.outfit:
+          return GoogleFonts.outfit(
+            fontWeight: FontWeight.w700,
+            color: scheme.onSurface,
+            letterSpacing: 0.2,
+          );
+        case AnimaFontChoice.plusJakartaSans:
+          return GoogleFonts.plusJakartaSans(
+            fontWeight: FontWeight.w700,
+            color: scheme.onSurface,
+            letterSpacing: 0.2,
+          );
+        case AnimaFontChoice.inter:
+          return GoogleFonts.inter(
+            fontWeight: FontWeight.w700,
+            color: scheme.onSurface,
+            letterSpacing: 0.2,
+          );
+        case AnimaFontChoice.merriweather:
+          return GoogleFonts.merriweather(
+            fontWeight: FontWeight.w700,
+            color: scheme.onSurface,
+            letterSpacing: 0.2,
+          );
+        case AnimaFontChoice.sourceSerif4:
+          return GoogleFonts.sourceSerif4(
+            fontWeight: FontWeight.w700,
+            color: scheme.onSurface,
+            letterSpacing: 0.2,
+          );
+        case AnimaFontChoice.system:
+          break;
+      }
+    } catch (_) {}
+    return TextStyle(
       fontWeight: FontWeight.w700,
       color: scheme.onSurface,
       letterSpacing: 0.2,
     );
   }
 
-  static TextTheme _textTheme(ColorScheme scheme) {
-    final base = useSystemFonts
-        ? Typography.material2021(platform: TargetPlatform.android).white
-        : GoogleFonts.plusJakartaSansTextTheme(
-            Typography.material2021(platform: TargetPlatform.android).white,
-          );
+  static TextTheme _bodyBase(AnimaFontChoice font) {
+    final white = Typography.material2021(
+      platform: TargetPlatform.android,
+    ).white;
+    if (useSystemFonts || font == AnimaFontChoice.system) {
+      return white;
+    }
+    try {
+      switch (font) {
+        case AnimaFontChoice.plusJakartaSans:
+          return GoogleFonts.plusJakartaSansTextTheme(white);
+        case AnimaFontChoice.inter:
+          return GoogleFonts.interTextTheme(white);
+        case AnimaFontChoice.merriweather:
+          return GoogleFonts.merriweatherTextTheme(white);
+        case AnimaFontChoice.sourceSerif4:
+          return GoogleFonts.sourceSerif4TextTheme(white);
+        case AnimaFontChoice.outfit:
+          return GoogleFonts.outfitTextTheme(white);
+        case AnimaFontChoice.system:
+          break;
+      }
+    } catch (_) {}
+    return white;
+  }
+
+  static TextTheme _textTheme(ColorScheme scheme, UiStyleSettings settings) {
+    final base = _bodyBase(settings.bodyFont);
+    final title = _titleStyle(scheme, settings.headingFont);
+    final textScale = settings.textScale;
+    final headingScale = settings.headingScale;
 
     return base
         .apply(
           bodyColor: scheme.onSurface,
           displayColor: scheme.onSurface,
+          fontSizeFactor: textScale,
         )
         .copyWith(
-          headlineLarge: _titleStyle(scheme).copyWith(fontSize: 32),
-          headlineMedium: _titleStyle(scheme).copyWith(fontSize: 26),
-          headlineSmall: _titleStyle(scheme).copyWith(fontSize: 22),
-          titleLarge: _titleStyle(scheme).copyWith(fontSize: 20),
+          headlineLarge: title.copyWith(fontSize: 32 * headingScale),
+          headlineMedium: title.copyWith(fontSize: 26 * headingScale),
+          headlineSmall: title.copyWith(fontSize: 22 * headingScale),
+          titleLarge: title.copyWith(fontSize: 20 * headingScale),
           titleMedium: base.titleMedium?.copyWith(
             fontWeight: FontWeight.w600,
             color: scheme.onSurface,
+            fontSize: (base.titleMedium?.fontSize ?? 16) * textScale,
           ),
           labelLarge: base.labelLarge?.copyWith(
             fontWeight: FontWeight.w600,
             color: scheme.primary,
+            fontSize: (base.labelLarge?.fontSize ?? 14) * textScale,
           ),
         );
   }
