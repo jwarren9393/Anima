@@ -44,9 +44,8 @@ class SettingsScreen extends StatelessWidget {
   Future<void> _openAppearance(BuildContext context) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => AppearanceSettingsScreen(
-          settingsService: settingsService,
-        ),
+        builder: (_) =>
+            AppearanceSettingsScreen(settingsService: settingsService),
       ),
     );
   }
@@ -126,6 +125,7 @@ class SettingsScreen extends StatelessWidget {
                   workshopService: worldWorkshopService,
                   worldInfoService: worldInfoService,
                   characterService: characterService,
+                  personaService: personaService,
                   settingsService: settingsService,
                   nanoGptService: nanoGptService,
                 ),
@@ -138,9 +138,8 @@ class SettingsScreen extends StatelessWidget {
             subtitle: 'Presets, context size, summarization, sampling help',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (_) => SamplingSettingsScreen(
-                  settingsService: settingsService,
-                ),
+                builder: (_) =>
+                    SamplingSettingsScreen(settingsService: settingsService),
               ),
             ),
           ),

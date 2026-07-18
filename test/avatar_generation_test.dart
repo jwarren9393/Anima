@@ -31,10 +31,7 @@ void main() {
 
     test('clips very long description', () {
       final long = List.filled(80, 'appearance detail').join(' ');
-      final prompt = builder.buildPrompt(
-        name: 'Vex',
-        description: long,
-      );
+      final prompt = builder.buildPrompt(name: 'Vex', description: long);
       expect(prompt.length, lessThan(long.length + 200));
       expect(prompt, contains('…'));
     });
@@ -43,10 +40,14 @@ void main() {
       final prompt = builder.buildPersonaPrompt(
         name: 'Sam',
         description: 'Soft-spoken cartographer with ink-stained fingers.',
+        appearance: 'Silver hair and a green travel cloak.',
+        personality: 'Patient and curious.',
       );
       expect(prompt, contains('Sam'));
       expect(prompt, contains('player / user persona'));
       expect(prompt, contains('cartographer'));
+      expect(prompt, contains('Silver hair'));
+      expect(prompt, contains('Patient and curious'));
       expect(prompt, contains('no watermark'));
     });
 

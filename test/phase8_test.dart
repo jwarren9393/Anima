@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:anima/models/character.dart';
 import 'package:anima/models/chat_session.dart';
+import 'package:anima/models/persona.dart';
 import 'package:anima/services/prompt_builder.dart';
 
 void main() {
@@ -124,6 +125,38 @@ void main() {
         updatedAt: DateTime.utc(2026, 7, 17),
       );
       expect(fresh.autoReply, isFalse);
+    });
+  });
+
+  group('Structured personas', () {
+    test('old persona JSON remains compatible', () {
+      final persona = Persona.fromJson({
+        'id': 'persona_old',
+        'name': 'Sam',
+        'description': 'A cartographer.',
+      });
+      expect(persona.appearance, isEmpty);
+      expect(persona.personality, isEmpty);
+      expect(persona.promptText, contains('A cartographer.'));
+    });
+
+    test('new fields round-trip and form a labeled prompt', () {
+      const original = Persona(
+        id: 'persona_valerius',
+        name: 'Valerius Blackwood',
+        description: 'Heir of House Blackwood.',
+        appearance: 'Tall, with dark hair.',
+        personality: 'Reserved and loyal.',
+        background: 'Raised at Blackwood Keep.',
+        goals: 'Protect his family.',
+      );
+      final restored = Persona.fromJson(original.toJson());
+      expect(restored.appearance, original.appearance);
+      expect(restored.personality, original.personality);
+      expect(restored.background, original.background);
+      expect(restored.goals, original.goals);
+      expect(restored.promptText, contains('Identity and role:'));
+      expect(restored.promptText, contains('Goals and motivations:'));
     });
   });
 }

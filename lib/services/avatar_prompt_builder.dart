@@ -46,6 +46,8 @@ class AvatarPromptBuilder {
   String buildPersonaPrompt({
     required String name,
     String description = '',
+    String appearance = '',
+    String personality = '',
   }) {
     final parts = <String>[
       'Portrait avatar of '
@@ -59,6 +61,14 @@ class AvatarPromptBuilder {
     final about = description.trim();
     if (about.isNotEmpty) {
       parts.add('About this persona: ${_clip(about, 500)}');
+    }
+    final look = appearance.trim();
+    if (look.isNotEmpty) {
+      parts.add('Appearance: ${_clip(look, 500)}');
+    }
+    final traits = personality.trim();
+    if (traits.isNotEmpty) {
+      parts.add('Personality / vibe: ${_clip(traits, 240)}');
     }
 
     return parts.join('\n');

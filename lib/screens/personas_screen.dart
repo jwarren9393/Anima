@@ -85,9 +85,9 @@ class _PersonasScreenState extends State<PersonasScreen> {
     await widget.personaService.setActivePersonaId(persona.id);
     await _load();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Default persona: ${persona.name}')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Default persona: ${persona.name}')));
   }
 
   Future<void> _delete(Persona persona) async {
@@ -181,18 +181,18 @@ class _PersonasScreenState extends State<PersonasScreen> {
                           [
                             if (isDefault && !widget.pickForChat)
                               'Default for new chats',
-                            if (persona.description.trim().isEmpty)
-                              'No description'
+                            if (persona.promptText.isEmpty)
+                              'No persona details'
                             else
-                              persona.description.trim(),
+                              persona.description.trim().isNotEmpty
+                                  ? persona.description.trim()
+                                  : persona.promptText.replaceAll('\n', ' '),
                           ].join(' · '),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
                         trailing: widget.pickForChat
-                            ? (selected
-                                ? const Icon(Icons.check)
-                                : null)
+                            ? (selected ? const Icon(Icons.check) : null)
                             : PopupMenuButton<String>(
                                 onSelected: (value) {
                                   if (value == 'edit') _edit(persona);

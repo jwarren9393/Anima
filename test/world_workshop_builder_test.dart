@@ -8,18 +8,19 @@ void main() {
   final builder = WorldWorkshopBuilder();
 
   List<ChatMessage> sampleConversation() => [
-        ChatMessage(
-          id: '1',
-          role: ChatRole.user,
-          text: 'Rainy city with guilds. Mira is a dock smuggler.',
-        ),
-        ChatMessage(
-          id: '2',
-          role: ChatRole.assistant,
-          text: 'Mira wears oilskin and owes the Tide Guild. '
-              'Captain Vex runs the night watch.',
-        ),
-      ];
+    ChatMessage(
+      id: '1',
+      role: ChatRole.user,
+      text: 'Rainy city with guilds. Mira is a dock smuggler.',
+    ),
+    ChatMessage(
+      id: '2',
+      role: ChatRole.assistant,
+      text:
+          'Mira wears oilskin and owes the Tide Guild. '
+          'Captain Vex runs the night watch.',
+    ),
+  ];
 
   const sourceLorebook = Lorebook(
     name: 'Imported Harbor',
@@ -101,9 +102,7 @@ Here you go:
     });
 
     test('linked lorebook is included in chat and update prompts', () {
-      final chat = builder.chatSystemPrompt(
-        sourceLorebook: sourceLorebook,
-      );
+      final chat = builder.chatSystemPrompt(sourceLorebook: sourceLorebook);
       final update = builder.buildExportMessages(
         conversation: sampleConversation(),
         sourceLorebook: sourceLorebook,
@@ -194,7 +193,10 @@ Here you go:
       expect(messages[0]['content'], contains('Mira'));
       expect(messages[0]['content'], contains('Dock smuggler'));
       expect(messages[0]['content'], contains('Do not sanitize.'));
-      expect(messages[0]['content'], contains('Do NOT include a character_book'));
+      expect(
+        messages[0]['content'],
+        contains('Do NOT include a character_book'),
+      );
       expect(messages[1]['content'], contains('Rainy city with guilds'));
     });
 
@@ -266,6 +268,63 @@ Here you go:
       );
       expect(character.id, 'char_safe');
       expect(character.name, 'Vex');
+    });
+  });
+
+  group('WorldWorkshopBuilder personas', () {
+    test(
+      'persona generation prompt stays player-focused and includes lore',
+      () {
+        final messages = builder.buildPersonaExportMessages(
+          conversation: sampleConversation(),
+          personaName: 'Mira',
+          personaSummary: 'Dock smuggler',
+          sourceLorebook: sourceLorebook,
+        );
+        expect(messages[0]['content'], contains('human user will play'));
+        expect(messages[0]['content'], contains('"appearance"'));
+        expect(messages[0]['content'], contains('Do not include greetings'));
+        expect(messages[1]['content'], contains('Imported Harbor'));
+        expect(messages[1]['content'], contains('Mira'));
+      },
+    );
+
+    test('parsePersonaJson builds structured persona with a fresh id', () {
+      const raw = '''
+```json
+{
+  "name": "Mira",
+  "description": "A smuggler tied to the Tide Guild.",
+  "appearance": "Dark hair and an oilskin coat.",
+  "personality": "Wry and loyal.",
+  "background": "Raised near the docks.",
+  "goals": "Protect her crew."
+}
+```
+''';
+      final persona = builder.parsePersonaJson(
+        raw,
+        preferredId: 'persona_mira',
+      );
+      expect(persona.id, 'persona_mira');
+      expect(persona.name, 'Mira');
+      expect(persona.appearance, contains('oilskin'));
+      expect(persona.personality, contains('loyal'));
+      expect(persona.background, contains('docks'));
+      expect(persona.goals, contains('crew'));
+      expect(persona.promptText, contains('Identity and role'));
+    });
+
+    test('parsePersonaJson supports fallback name and legacy aliases', () {
+      final persona = builder.parsePersonaJson(
+        '{"role":"Heir","backstory":"Old house","motivation":"Restore it"}',
+        preferredId: 'persona_heir',
+        fallbackName: 'Valerius Blackwood',
+      );
+      expect(persona.name, 'Valerius Blackwood');
+      expect(persona.description, 'Heir');
+      expect(persona.background, 'Old house');
+      expect(persona.goals, 'Restore it');
     });
   });
 }

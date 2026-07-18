@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 import '../models/character.dart';
 import '../models/chat_message.dart';
 import '../models/global_lorebook.dart';
+import '../models/persona.dart';
 import '../models/world_workshop.dart';
 import '../services/character_service.dart';
 import '../services/chat_context_service.dart';
 import '../services/nanogpt_service.dart';
+import '../services/persona_service.dart';
 import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
 import '../services/world_workshop_builder.dart';
@@ -16,6 +18,7 @@ import '../services/world_workshop_service.dart';
 import '../theme/anima_theme.dart';
 import '../widgets/keyboard_inset.dart';
 import 'character_edit_screen.dart';
+import 'persona_edit_screen.dart';
 
 /// Plain chat with the World Info collaborator; export lorebook / characters.
 class WorldWorkshopChatScreen extends StatefulWidget {
@@ -25,6 +28,7 @@ class WorldWorkshopChatScreen extends StatefulWidget {
     required this.workshopService,
     required this.worldInfoService,
     required this.characterService,
+    required this.personaService,
     required this.settingsService,
     required this.nanoGptService,
   });
@@ -33,6 +37,7 @@ class WorldWorkshopChatScreen extends StatefulWidget {
   final WorldWorkshopService workshopService;
   final WorldInfoService worldInfoService;
   final CharacterService characterService;
+  final PersonaService personaService;
   final SettingsService settingsService;
   final NanoGptService nanoGptService;
 
@@ -144,9 +149,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
               Text(
                 'Estimated send size: ~${ContextEstimate.formatTokenCount(estimate.estimatedSentTokens)} tokens',
               ),
-              if (_modelId.isNotEmpty) Text(
-                'Current model: $_modelId',
-              ),
+              if (_modelId.isNotEmpty) Text('Current model: $_modelId'),
               if (estimate.modelContextLength != null)
                 Text(
                   'Model context: ${ContextEstimate.formatTokenCount(estimate.modelContextLength!)} tokens'
@@ -179,6 +182,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       ),
     );
   }
+
   @override
   void didChangeMetrics() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -207,10 +211,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
 
   Future<void> _send() async {
     final text = _input.text.trim();
-    if (text.isEmpty ||
-        _sending ||
-        _exporting ||
-        _loadingLinkedLorebook) {
+    if (text.isEmpty || _sending || _exporting || _loadingLinkedLorebook) {
       return;
     }
 
@@ -246,8 +247,8 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     });
 
     try {
-      final collaborator =
-          await widget.settingsService.getCollaboratorSettings();
+      final collaborator = await widget.settingsService
+          .getCollaboratorSettings();
       final model = await widget.settingsService.getModel();
       final sampling = await widget.settingsService.getSampling();
       final baseUrl = await widget.settingsService.getApiBaseUrl();
@@ -296,15 +297,15 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     } on NanoGptException catch (error) {
       if (!mounted) return;
       _removeEmptyAssistant(assistantId);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (error) {
       if (!mounted) return;
       _removeEmptyAssistant(assistantId);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Something went wrong: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Something went wrong: $error')));
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -350,8 +351,8 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       _exportStatus = 'Creating lorebook…';
     });
     try {
-      final collaborator =
-          await widget.settingsService.getCollaboratorSettings();
+      final collaborator = await widget.settingsService
+          .getCollaboratorSettings();
       final model = await widget.settingsService.getModel();
       final sampling = await widget.settingsService.getSampling();
       final baseUrl = await widget.settingsService.getApiBaseUrl();
@@ -381,12 +382,11 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         setState(() => _linkedLorebook = global);
       }
 
-      final title = book.name.trim().isEmpty ? _workshop.title : book.name.trim();
+      final title = book.name.trim().isEmpty
+          ? _workshop.title
+          : book.name.trim();
       await _persist(
-        _workshop.copyWith(
-          title: title,
-          exportedLorebookId: global.id,
-        ),
+        _workshop.copyWith(title: title, exportedLorebookId: global.id),
       );
 
       if (!mounted) return;
@@ -400,14 +400,14 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       );
     } on FormatException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } on NanoGptException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -450,8 +450,8 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     });
 
     try {
-      final collaborator =
-          await widget.settingsService.getCollaboratorSettings();
+      final collaborator = await widget.settingsService
+          .getCollaboratorSettings();
       final model = await widget.settingsService.getModel();
       final sampling = await widget.settingsService.getSampling();
       final baseUrl = await widget.settingsService.getApiBaseUrl();
@@ -580,8 +580,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         if (i < selected.length - 1) {
           setState(() {
             _exporting = true;
-            _exportStatus =
-                'Generating ${i + 2} of ${selected.length}…';
+            _exportStatus = 'Generating ${i + 2} of ${selected.length}…';
           });
         }
       }
@@ -589,14 +588,10 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       if (!mounted) return;
       final parts = <String>[];
       if (savedCount > 0) {
-        parts.add(
-          'Saved $savedCount character${savedCount == 1 ? '' : 's'}',
-        );
+        parts.add('Saved $savedCount character${savedCount == 1 ? '' : 's'}');
       }
       if (skippedCount > 0) {
-        parts.add(
-          'skipped $skippedCount',
-        );
+        parts.add('skipped $skippedCount');
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -607,14 +602,14 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       );
     } on FormatException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } on NanoGptException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -630,6 +625,242 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     }
   }
 
+  Future<void> _createPersona() async {
+    if (_sending || _exporting || _loadingLinkedLorebook) return;
+    if (_workshop.exportedLorebookId != null && _linkedLorebook == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'The linked World Info lorebook is missing. Import or link it again.',
+          ),
+        ),
+      );
+      return;
+    }
+    if (!_hasSourceMaterial) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Chat a bit first, then create a persona.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _exporting = true;
+      _exportStatus = 'Finding persona candidates…';
+    });
+
+    try {
+      final collaborator = await widget.settingsService
+          .getCollaboratorSettings();
+      final model = await widget.settingsService.getModel();
+      final sampling = await widget.settingsService.getSampling();
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+      final existingPersonas = await widget.personaService.loadPersonas();
+      final existingNames = {
+        for (final p in existingPersonas) p.name.trim().toLowerCase(),
+      };
+
+      final detectRaw = await widget.nanoGptService.complete(
+        model: model,
+        messages: _builder.buildCharacterDetectMessages(
+          conversation: _workshop.messages,
+          guidanceNote: collaborator.guidanceNote,
+          sourceLorebook: _linkedLorebook?.book,
+        ),
+        baseUrl: baseUrl,
+        sampling: sampling,
+      );
+      final candidates = _builder.parseCharacterCandidatesJson(detectRaw);
+      if (!mounted) return;
+      if (candidates.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No clear people found yet. Add more about your player character, then try again.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      setState(() {
+        _exporting = false;
+        _exportStatus = null;
+      });
+      final selected = await _pickPersonaCandidate(
+        candidates: candidates,
+        existingNames: existingNames,
+      );
+      if (!mounted || selected == null) return;
+
+      setState(() {
+        _exporting = true;
+        _exportStatus = 'Generating persona: ${selected.name}…';
+      });
+      final personaRaw = await widget.nanoGptService.complete(
+        model: model,
+        messages: _builder.buildPersonaExportMessages(
+          conversation: _workshop.messages,
+          personaName: selected.name,
+          personaSummary: selected.summary,
+          guidanceNote: collaborator.guidanceNote,
+          sourceLorebook: _linkedLorebook?.book,
+        ),
+        baseUrl: baseUrl,
+        sampling: sampling,
+      );
+      final draft = _builder.parsePersonaJson(
+        personaRaw,
+        preferredId: widget.personaService.newId(),
+        fallbackName: selected.name,
+      );
+      if (!mounted) return;
+      setState(() {
+        _exporting = false;
+        _exportStatus = null;
+      });
+
+      final saved = await Navigator.of(context).push<Persona>(
+        MaterialPageRoute(
+          builder: (_) => PersonaEditScreen(
+            personaService: widget.personaService,
+            settingsService: widget.settingsService,
+            nanoGptService: widget.nanoGptService,
+            existing: draft,
+            generatedDraft: true,
+          ),
+        ),
+      );
+      if (!mounted || saved == null) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Saved ${saved.name} to Personas.')),
+      );
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not create persona: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _exporting = false;
+          _exportStatus = null;
+        });
+      }
+    }
+  }
+
+  Future<WorkshopCharacterCandidate?> _pickPersonaCandidate({
+    required List<WorkshopCharacterCandidate> candidates,
+    required Set<String> existingNames,
+  }) async {
+    WorkshopCharacterCandidate? selected = candidates.length == 1
+        ? candidates.first
+        : null;
+    return showModalBottomSheet<WorkshopCharacterCandidate>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final theme = Theme.of(context);
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Create your persona',
+                      style: theme.textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Choose the person you will play. Anima will generate '
+                      'player-focused fields, then let you review everything '
+                      'before saving.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 12),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.sizeOf(context).height * 0.5,
+                      ),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: candidates.length,
+                        itemBuilder: (context, index) {
+                          final candidate = candidates[index];
+                          final exists = existingNames.contains(
+                            candidate.name.trim().toLowerCase(),
+                          );
+                          final isSelected = identical(selected, candidate);
+                          return ListTile(
+                            leading: Icon(
+                              isSelected
+                                  ? Icons.radio_button_checked
+                                  : Icons.radio_button_off,
+                              color: isSelected
+                                  ? Theme.of(context).colorScheme.primary
+                                  : null,
+                            ),
+                            title: Text(candidate.name),
+                            subtitle: Text(
+                              [
+                                if (candidate.summary.isNotEmpty)
+                                  candidate.summary,
+                                if (exists)
+                                  'A persona with this name already exists; saving creates another.',
+                              ].join('\n'),
+                            ),
+                            selected: isSelected,
+                            onTap: () {
+                              setSheetState(() => selected = candidate);
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Cancel'),
+                        ),
+                        const Spacer(),
+                        FilledButton(
+                          onPressed: selected == null
+                              ? null
+                              : () => Navigator.pop(context, selected),
+                          child: const Text('Generate persona'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<List<WorkshopCharacterCandidate>?> _pickCandidates({
     required List<WorkshopCharacterCandidate> candidates,
     required Set<String> existingNames,
@@ -642,9 +873,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     // If everything already exists, still preselect all so the user can
     // intentionally create another version.
     if (selected.isEmpty) {
-      selected.addAll(
-        candidates.map((c) => c.name.trim().toLowerCase()),
-      );
+      selected.addAll(candidates.map((c) => c.name.trim().toLowerCase()));
     }
 
     return showModalBottomSheet<List<WorkshopCharacterCandidate>>(
@@ -736,9 +965,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                                       .toList();
                                   Navigator.pop(context, chosen);
                                 },
-                          child: Text(
-                            'Generate (${selected.length})',
-                          ),
+                          child: Text('Generate (${selected.length})'),
                         ),
                       ],
                     ),
@@ -779,11 +1006,17 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
             onPressed: _showContextEstimate,
             icon: const Icon(Icons.data_usage_outlined),
           ),
-          IconButton(
-            tooltip: 'Create characters',
-            onPressed: busy ? null : _createCharacters,
-            icon: _exporting &&
+          PopupMenuButton<String>(
+            tooltip: 'Create people',
+            enabled: !busy,
+            onSelected: (value) {
+              if (value == 'characters') _createCharacters();
+              if (value == 'persona') _createPersona();
+            },
+            icon:
+                _exporting &&
                     (_exportStatus?.contains('character') == true ||
+                        _exportStatus?.contains('persona') == true ||
                         _exportStatus?.contains('Finding') == true ||
                         _exportStatus?.contains('Generating') == true)
                 ? const SizedBox(
@@ -792,10 +1025,29 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.person_add_alt_1),
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: 'characters',
+                child: ListTile(
+                  leading: Icon(Icons.groups_outlined),
+                  title: Text('Create AI characters'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'persona',
+                child: ListTile(
+                  leading: Icon(Icons.person_outline),
+                  title: Text('Create my persona'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
           ),
           TextButton(
             onPressed: busy ? null : _createLorebook,
-            child: _exporting &&
+            child:
+                _exporting &&
                     (_exportStatus == null ||
                         _exportStatus!.contains('lorebook'))
                 ? const SizedBox(
@@ -821,8 +1073,10 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
               child: InkWell(
                 onTap: _showContextEstimate,
                 child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -830,11 +1084,11 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                         _exportStatus ??
                             (linkedName == null
                                 ? 'Talk about your world. Use Create lorebook for World Info, '
-                                    'or the person+ icon to turn people into character cards.'
+                                      'or the person+ icon to turn people into character cards.'
                                 : 'Linked to “$linkedName” '
-                                    '(${_linkedLorebook!.entryCount} entries). '
-                                    'Chat to revise it, Update lorebook to save changes, '
-                                    'or create character cards from it.'),
+                                      '(${_linkedLorebook!.entryCount} entries). '
+                                      'Chat to revise it, Update lorebook to save changes, '
+                                      'or create character cards from it.'),
                         style: theme.textTheme.bodySmall,
                       ),
                       if (_exportStatus == null) ...[
@@ -861,10 +1115,10 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                         child: Text(
                           linkedName == null
                               ? 'Example: “I want a rainy coastal city with rival '
-                                  'guilds and a buried god under the harbor…”'
+                                    'guilds and a buried god under the harbor…”'
                               : 'This workshop is ready to use “$linkedName”.\n\n'
-                                  'Ask the AI to explain, expand, rewrite, or reorganize '
-                                  'the lorebook—or create characters directly.',
+                                    'Ask the AI to explain, expand, rewrite, or reorganize '
+                                    'the lorebook—or create characters directly.',
                           textAlign: TextAlign.center,
                           style: theme.textTheme.bodyMedium,
                         ),
@@ -935,9 +1189,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                     ),
                     const SizedBox(width: 8),
                     IconButton.filled(
-                      onPressed: _exporting
-                          ? null
-                          : (_sending ? _stop : _send),
+                      onPressed: _exporting ? null : (_sending ? _stop : _send),
                       icon: Icon(_sending ? Icons.stop : Icons.send),
                       tooltip: _sending ? 'Stop' : 'Send',
                     ),

@@ -87,6 +87,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   bool _loading = true;
   bool _busy = false;
   bool _formatting = false;
+
   /// When on, Send wraps the message as `(OOC: …)` for out-of-character talk.
   bool _oocMode = false;
   AvatarStyleSettings _avatarStyle = const AvatarStyleSettings();
@@ -104,10 +105,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   List<ChatMessage> get _messages => _session?.messages ?? const [];
   bool get _isGroup => _session?.isGroup == true;
-  String get _userName =>
-      _persona?.name.trim().isNotEmpty == true
-          ? _persona!.name.trim()
-          : SettingsService.defaultUserName;
+  String get _userName => _persona?.name.trim().isNotEmpty == true
+      ? _persona!.name.trim()
+      : SettingsService.defaultUserName;
   String? get _personaAvatarFileName => _persona?.avatarFileName;
 
   @override
@@ -182,7 +182,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (!mounted) return;
     if (draft.isNotEmpty) {
       _inputController.text = draft;
-      _inputController.selection = TextSelection.collapsed(offset: draft.length);
+      _inputController.selection = TextSelection.collapsed(
+        offset: draft.length,
+      );
       _lastSavedDraft = draft;
     }
     setState(() {
@@ -231,8 +233,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (session == null || !_isGroup || _participants.isEmpty) {
       return _character!;
     }
-    final index =
-        session.nextSpeakerIndex.clamp(0, _participants.length - 1);
+    final index = session.nextSpeakerIndex.clamp(0, _participants.length - 1);
     return _participants[index];
   }
 
@@ -324,8 +325,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   ],
                 ),
                 child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 11,
+                  ),
                   child: Text(
                     message,
                     maxLines: 3,
@@ -368,8 +371,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
     final hasKey = await widget.apiKeyService.hasApiKey();
     final uiStyle = await widget.settingsService.getUiStyle();
-    final persona =
-        await widget.personaService.resolve(_session?.personaId);
+    final persona = await widget.personaService.resolve(_session?.personaId);
     if (!mounted) return;
     setState(() {
       _hasApiKey = hasKey;
@@ -516,8 +518,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final session = await widget.chatService.loadOrCreateActiveChat(
       character,
       userName: _userName,
-      personaId: _persona?.id ??
-          (await widget.personaService.getActivePersona()).id,
+      personaId:
+          _persona?.id ?? (await widget.personaService.getActivePersona()).id,
     );
     final participants = await _resolveParticipants(session, character);
     if (!mounted) return;
@@ -642,11 +644,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         : (await widget.characterService.getById(chosen.characterId)) ??
             fallback;
     if (!mounted) return;
-    await _applySession(
-      chosen,
-      participants: participants,
-      character: primary,
-    );
+    await _applySession(chosen, participants: participants, character: primary);
   }
 
   Future<void> _exportChat() async {
@@ -654,9 +652,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final character = _character;
     if (session == null || character == null || _busy) return;
     if (session.messages.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nothing to export yet.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Nothing to export yet.')));
       return;
     }
 
@@ -717,9 +715,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Export failed: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Export failed: $error')));
     }
   }
 
@@ -771,14 +769,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       );
     } on FormatException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Import failed: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Import failed: $error')));
     }
   }
 
@@ -898,9 +896,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     await _persist();
 
     final waitingForReply =
-        !_session!.autoReply &&
-        _messages.isNotEmpty &&
-        _messages.last.isUser;
+        !_session!.autoReply && _messages.isNotEmpty && _messages.last.isUser;
     if (!waitingForReply) return;
 
     if (!_hasApiKey) {
@@ -1020,14 +1016,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       // Ignore.
     } on NanoGptException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Format failed: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Format failed: $error')));
     } finally {
       if (mounted) setState(() => _formatting = false);
     }
@@ -1272,8 +1268,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       final baseUrl = await widget.settingsService.getApiBaseUrl();
       int? modelContext;
       try {
-        final models =
-            await widget.nanoGptService.listModels(baseUrl: baseUrl);
+        final models = await widget.nanoGptService.listModels(baseUrl: baseUrl);
         for (final model in models) {
           if (model.id == modelId) {
             modelContext = model.contextLength;
@@ -1494,16 +1489,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           chatService: widget.chatService,
           personaService: widget.personaService,
           worldInfoService: widget.worldInfoService,
-          preselectedIds: {
-            if (_character != null) _character!.id,
-          },
+          preselectedIds: {if (_character != null) _character!.id},
         ),
       ),
     );
     if (session == null || !mounted) return;
     await _flushDraftNow();
-    final fallback = _character ??
-        Character(id: session.characterId, name: 'Character');
+    final fallback =
+        _character ?? Character(id: session.characterId, name: 'Character');
     final participants = await _resolveParticipants(session, fallback);
     await _applySession(
       session,
@@ -1579,7 +1572,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }) async {
     final character = speakingAs ?? _speakerForTurn();
     final userName = _userName;
-    final persona = _persona?.description ?? '';
+    final persona = _persona?.promptText ?? '';
 
     final end = excludeLastAssistant ? _messages.length - 1 : _messages.length;
     final historyForScan = _messages.sublist(0, end);
@@ -1711,8 +1704,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         setState(() {
           final last = _messages.last;
           final swipes = List<String>.from(last.swipes);
-          final index =
-              last.swipeIndex.clamp(0, (swipes.length - 1).clamp(0, 9999));
+          final index = last.swipeIndex.clamp(
+            0,
+            (swipes.length - 1).clamp(0, 9999),
+          );
           if (swipes.isEmpty) {
             swipes.add(text);
           } else {
@@ -1774,7 +1769,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       if (!mounted) return;
       // Closing the HTTP client on Stop can surface as a network error.
       if (_looksLikeCancel(error)) {
-        await _finishStoppedGeneration(advanceGroupSpeaker: advanceGroupSpeaker);
+        await _finishStoppedGeneration(
+          advanceGroupSpeaker: advanceGroupSpeaker,
+        );
         return;
       }
       setState(() {
@@ -1954,9 +1951,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         ),
       ),
     );
-    unawaited(
-      controller.closed.then((_) => _commitPendingRemoval(pending)),
-    );
+    unawaited(controller.closed.then((_) => _commitPendingRemoval(pending)));
   }
 
   void _undoPendingRemoval(_PendingChatRemoval pending) {
@@ -2006,7 +2001,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       copied.add(ChatMessage.fromJson(json));
     }
 
-    final baseTitle = source.title.trim().isEmpty ? 'Chat' : source.title.trim();
+    final baseTitle =
+        source.title.trim().isEmpty ? 'Chat' : source.title.trim();
     final branchTitle = baseTitle.toLowerCase().contains('branch')
         ? baseTitle
         : '$baseTitle (branch)';
@@ -2031,9 +2027,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     await widget.chatService.setActiveChatId(branched.characterId, branched.id);
     if (!mounted) return;
     setState(() => _session = branched);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Branched to “${branched.title}”.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Branched to “${branched.title}”.')));
     _scrollToBottom(jump: true);
   }
 
@@ -2064,7 +2060,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     });
   }
 
-
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -2089,11 +2084,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final characterName = _isGroup
-        ? (_participants.map((c) => c.name).where((n) => n.isNotEmpty).join(', '))
+        ? (_participants
+            .map((c) => c.name)
+            .where((n) => n.isNotEmpty)
+            .join(', '))
         : (_character?.name ?? 'Anima');
-    final titleName = _isGroup
-        ? 'Group'
-        : (_character?.name ?? 'Anima');
+    final titleName = _isGroup ? 'Group' : (_character?.name ?? 'Anima');
     return Scaffold(
       // We lift the body ourselves via [KeyboardInset] so the composer stays
       // above the keyboard even with a transparent glass scaffold.
@@ -2102,7 +2098,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         leading: IconButton(
           tooltip: 'Close chat',
           icon: const Icon(Icons.close),
-          onPressed: _loading || _busy ? null : () => Navigator.of(context).pop(),
+          onPressed:
+              _loading || _busy ? null : () => Navigator.of(context).pop(),
         ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2181,304 +2178,310 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 child: Text('Start group chat'),
               ),
               const PopupMenuDivider(),
-              const PopupMenuItem(
-                value: 'export',
-                child: Text('Export chat'),
-              ),
-              const PopupMenuItem(
-                value: 'import',
-                child: Text('Import chat'),
-              ),
-              const PopupMenuItem(
-                value: 'settings',
-                child: Text('Settings'),
-              ),
+              const PopupMenuItem(value: 'export', child: Text('Export chat')),
+              const PopupMenuItem(value: 'import', child: Text('Import chat')),
+              const PopupMenuItem(value: 'settings', child: Text('Settings')),
             ],
           ),
         ],
       ),
       body: KeyboardInset(
         child: Column(
-        children: [
-          if (_loading)
-            const LinearProgressIndicator(minHeight: 2)
-          else if (!_hasApiKey)
-            Material(
-              color: colorScheme.errorContainer,
-              child: ListTile(
-                leading: Icon(Icons.key_off, color: colorScheme.onErrorContainer),
-                title: Text(
-                  'No API key yet',
-                  style: TextStyle(color: colorScheme.onErrorContainer),
-                ),
-                subtitle: Text(
-                  'Open Settings to paste your NanoGPT key, then you can chat.',
-                  style: TextStyle(color: colorScheme.onErrorContainer),
-                ),
-                trailing: TextButton(
-                  onPressed: _openSettings,
-                  child: const Text('Settings'),
+          children: [
+            if (_loading)
+              const LinearProgressIndicator(minHeight: 2)
+            else if (!_hasApiKey)
+              Material(
+                color: colorScheme.errorContainer,
+                child: ListTile(
+                  leading: Icon(
+                    Icons.key_off,
+                    color: colorScheme.onErrorContainer,
+                  ),
+                  title: Text(
+                    'No API key yet',
+                    style: TextStyle(color: colorScheme.onErrorContainer),
+                  ),
+                  subtitle: Text(
+                    'Open Settings to paste your NanoGPT key, then you can chat.',
+                    style: TextStyle(color: colorScheme.onErrorContainer),
+                  ),
+                  trailing: TextButton(
+                    onPressed: _openSettings,
+                    child: const Text('Settings'),
+                  ),
                 ),
               ),
-            ),
-          Expanded(
-            child: _messages.isEmpty && !_busy
-                ? _EmptyChat(
-                    hasApiKey: _hasApiKey,
-                    characterName: characterName,
-                    onOpenSettings: _openSettings,
-                    onOpenCharacters: _openCharacters,
-                    onNewChat: _newChat,
-                  )
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-                    itemCount: _messages.length,
-                    itemBuilder: (context, index) {
-                      final message = _messages[index];
-                      final isLast = index == _messages.length - 1;
-                      final thinking =
-                          _busy && isLast && message.text.isEmpty;
-                      final isLastAi = isLast && !message.isUser;
-                      final canGoPrev = !message.isUser &&
-                          message.swipes.length > 1 &&
-                          message.swipeIndex > 0;
-                      final canGoNextExisting = !message.isUser &&
-                          message.swipes.length > 1 &&
-                          message.swipeIndex < message.swipes.length - 1;
-                      // On the latest AI bubble, ▶ past the last swipe = new generation.
-                      final canQuickSwipe = isLastAi &&
-                          !thinking &&
-                          !_busy &&
-                          message.swipeIndex >=
-                              message.swipes.length - 1;
-                      return Padding(
-                        padding: EdgeInsets.symmetric(
-                          vertical: AnimaUiTheme.of(context).messageSpacing / 2,
-                        ),
-                        child: _MessageBubble(
-                        message: message,
-                        showThinking: thinking,
-                        showSwipePager: !message.isUser &&
+            Expanded(
+              child: _messages.isEmpty && !_busy
+                  ? _EmptyChat(
+                      hasApiKey: _hasApiKey,
+                      characterName: characterName,
+                      onOpenSettings: _openSettings,
+                      onOpenCharacters: _openCharacters,
+                      onNewChat: _newChat,
+                    )
+                  : ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                      itemCount: _messages.length,
+                      itemBuilder: (context, index) {
+                        final message = _messages[index];
+                        final isLast = index == _messages.length - 1;
+                        final thinking =
+                            _busy && isLast && message.text.isEmpty;
+                        final isLastAi = isLast && !message.isUser;
+                        final canGoPrev = !message.isUser &&
+                            message.swipes.length > 1 &&
+                            message.swipeIndex > 0;
+                        final canGoNextExisting = !message.isUser &&
+                            message.swipes.length > 1 &&
+                            message.swipeIndex < message.swipes.length - 1;
+                        // On the latest AI bubble, ▶ past the last swipe = new generation.
+                        final canQuickSwipe = isLastAi &&
                             !thinking &&
-                            (message.canSwipe || isLastAi),
-                        avatarFileName: _avatarForMessage(message),
-                        avatarLabel: message.isUser
-                            ? _userName
-                            : (message.speakerName ??
-                                _character?.name ??
-                                'AI'),
-                        avatarStyle: _avatarStyle,
-                        onTap: (_busy || thinking)
-                            ? null
-                            : () => _editMessage(index),
-                        onAvatarTap: _busy
-                            ? null
-                            : () {
-                                if (message.isUser) {
-                                  _editPersonaFromAvatar();
-                                } else {
-                                  _editCharacterFromAvatar(message);
-                                }
-                              },
-                        onLongPress: _busy
-                            ? null
-                            : () => _showMessageMenu(index),
-                        onSwipePrev: (!_busy && !thinking && canGoPrev)
-                            ? () => _shiftSwipe(index, -1)
-                            : null,
-                        onSwipeNext: (!_busy && !thinking && canGoNextExisting)
-                            ? () => _shiftSwipe(index, 1)
-                            : (canQuickSwipe
-                                ? () => _regenerateOrSwipe(asNewSwipe: true)
-                                : null),
-                        nextGeneratesSwipe: canQuickSwipe,
-                      ),
-                      );
-                    },
-                  ),
-          ),
-          if (_error != null)
-            Material(
-              color: colorScheme.errorContainer,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.error_outline, color: colorScheme.onErrorContainer),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        _error!,
-                        style: TextStyle(color: colorScheme.onErrorContainer),
-                      ),
+                            !_busy &&
+                            message.swipeIndex >= message.swipes.length - 1;
+                        return Padding(
+                          padding: EdgeInsets.symmetric(
+                            vertical:
+                                AnimaUiTheme.of(context).messageSpacing / 2,
+                          ),
+                          child: _MessageBubble(
+                            message: message,
+                            showThinking: thinking,
+                            showSwipePager: !message.isUser &&
+                                !thinking &&
+                                (message.canSwipe || isLastAi),
+                            avatarFileName: _avatarForMessage(message),
+                            avatarLabel: message.isUser
+                                ? _userName
+                                : (message.speakerName ??
+                                    _character?.name ??
+                                    'AI'),
+                            avatarStyle: _avatarStyle,
+                            onTap: (_busy || thinking)
+                                ? null
+                                : () => _editMessage(index),
+                            onAvatarTap: _busy
+                                ? null
+                                : () {
+                                    if (message.isUser) {
+                                      _editPersonaFromAvatar();
+                                    } else {
+                                      _editCharacterFromAvatar(message);
+                                    }
+                                  },
+                            onLongPress:
+                                _busy ? null : () => _showMessageMenu(index),
+                            onSwipePrev: (!_busy && !thinking && canGoPrev)
+                                ? () => _shiftSwipe(index, -1)
+                                : null,
+                            onSwipeNext: (!_busy &&
+                                    !thinking &&
+                                    canGoNextExisting)
+                                ? () => _shiftSwipe(index, 1)
+                                : (canQuickSwipe
+                                    ? () => _regenerateOrSwipe(asNewSwipe: true)
+                                    : null),
+                            nextGeneratesSwipe: canQuickSwipe,
+                          ),
+                        );
+                      },
                     ),
-                    IconButton(
-                      tooltip: 'Dismiss',
-                      onPressed: () => setState(() => _error = null),
-                      icon: Icon(
-                        Icons.close,
+            ),
+            if (_error != null)
+              Material(
+                color: colorScheme.errorContainer,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
                         color: colorScheme.onErrorContainer,
                       ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _error!,
+                          style: TextStyle(color: colorScheme.onErrorContainer),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Dismiss',
+                        onPressed: () => setState(() => _error = null),
+                        icon: Icon(
+                          Icons.close,
+                          color: colorScheme.onErrorContainer,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (_isGroup)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              for (var i = 0;
+                                  i < _participants.length;
+                                  i++) ...[
+                                if (i > 0) const SizedBox(width: 6),
+                                InputChip(
+                                  label: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 140,
+                                    ),
+                                    child: Text(
+                                      _participants[i].name.trim().isEmpty
+                                          ? 'Character ${i + 1}'
+                                          : _participants[i].name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  selected:
+                                      (_session?.nextSpeakerIndex ?? 0).clamp(
+                                            0,
+                                            _participants.length - 1,
+                                          ) ==
+                                          i,
+                                  onPressed:
+                                      _busy ? null : () => _selectSpeaker(i),
+                                  visualDensity: VisualDensity.compact,
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  labelPadding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Tooltip(
+                          message: _oocMode
+                              ? 'OOC on — message will send as (OOC: …)'
+                              : 'OOC off — tap for out-of-character',
+                          child: TextButton(
+                            onPressed:
+                                _busy || _formatting ? null : _toggleOocMode,
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 12,
+                              ),
+                              minimumSize: const Size(40, 48),
+                              foregroundColor: _oocMode
+                                  ? colorScheme.primary
+                                  : colorScheme.outline,
+                            ),
+                            child: Text(
+                              'OOC',
+                              style: TextStyle(
+                                fontWeight: _oocMode
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                fontSize: 12,
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: TextField(
+                            controller: _inputController,
+                            enabled: !_busy && !_formatting,
+                            minLines: 1,
+                            maxLines: 5,
+                            textInputAction: .newline,
+                            decoration: InputDecoration(
+                              hintText: _oocMode
+                                  ? 'Out-of-character note…'
+                                  : _isGroup
+                                      ? ((_session?.autoReply ?? false)
+                                          ? 'Message the group…'
+                                          : 'Send only — tap a name to reply…')
+                                      : ((_session?.autoReply ?? false)
+                                          ? 'Message $characterName…'
+                                          : 'Send only — tap Continue or long-press…'),
+                              filled: true,
+                              border: const OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            onSubmitted: (_) {
+                              if (!_busy && !_formatting) _send();
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        if (_busy)
+                          FilledButton(
+                            onPressed: _stopGeneration,
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.all(14),
+                              minimumSize: const Size(48, 48),
+                              backgroundColor: Theme.of(
+                                context,
+                              ).colorScheme.error,
+                              foregroundColor: Theme.of(
+                                context,
+                              ).colorScheme.onError,
+                            ),
+                            child: const Icon(Icons.stop),
+                          )
+                        else ...[
+                          IconButton(
+                            tooltip: 'Format draft (*actions* and "dialogue")',
+                            onPressed: _formatting ? null : _formatDraft,
+                            icon: _formatting
+                                ? const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.auto_awesome),
+                          ),
+                          IconButton(
+                            tooltip: 'Continue',
+                            onPressed: _formatting ? null : _continueScene,
+                            icon: const Icon(Icons.play_arrow),
+                          ),
+                          FilledButton(
+                            onPressed: _formatting ? null : _send,
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.all(14),
+                              minimumSize: const Size(48, 48),
+                            ),
+                            child: const Icon(Icons.send),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ),
               ),
             ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (_isGroup)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            for (var i = 0; i < _participants.length; i++) ...[
-                              if (i > 0) const SizedBox(width: 6),
-                              InputChip(
-                                label: ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    maxWidth: 140,
-                                  ),
-                                  child: Text(
-                                    _participants[i].name.trim().isEmpty
-                                        ? 'Character ${i + 1}'
-                                        : _participants[i].name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                selected: (_session?.nextSpeakerIndex ?? 0)
-                                        .clamp(0, _participants.length - 1) ==
-                                    i,
-                                onPressed:
-                                    _busy ? null : () => _selectSpeaker(i),
-                                visualDensity: VisualDensity.compact,
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                                labelPadding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Tooltip(
-                        message: _oocMode
-                            ? 'OOC on — message will send as (OOC: …)'
-                            : 'OOC off — tap for out-of-character',
-                        child: TextButton(
-                          onPressed:
-                              _busy || _formatting ? null : _toggleOocMode,
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 12,
-                            ),
-                            minimumSize: const Size(40, 48),
-                            foregroundColor: _oocMode
-                                ? colorScheme.primary
-                                : colorScheme.outline,
-                          ),
-                          child: Text(
-                            'OOC',
-                            style: TextStyle(
-                              fontWeight:
-                                  _oocMode ? FontWeight.w700 : FontWeight.w500,
-                              fontSize: 12,
-                              letterSpacing: 0.4,
-                            ),
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: TextField(
-                          controller: _inputController,
-                          enabled: !_busy && !_formatting,
-                          minLines: 1,
-                          maxLines: 5,
-                          textInputAction: .newline,
-                          decoration: InputDecoration(
-                            hintText: _oocMode
-                                ? 'Out-of-character note…'
-                                : _isGroup
-                                    ? ((_session?.autoReply ?? false)
-                                        ? 'Message the group…'
-                                        : 'Send only — tap a name to reply…')
-                                    : ((_session?.autoReply ?? false)
-                                        ? 'Message $characterName…'
-                                        : 'Send only — tap Continue or long-press…'),
-                            filled: true,
-                            border: const OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          onSubmitted: (_) {
-                            if (!_busy && !_formatting) _send();
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      if (_busy)
-                        FilledButton(
-                          onPressed: _stopGeneration,
-                          style: FilledButton.styleFrom(
-                            padding: const EdgeInsets.all(14),
-                            minimumSize: const Size(48, 48),
-                            backgroundColor:
-                                Theme.of(context).colorScheme.error,
-                            foregroundColor:
-                                Theme.of(context).colorScheme.onError,
-                          ),
-                          child: const Icon(Icons.stop),
-                        )
-                      else ...[
-                        IconButton(
-                          tooltip: 'Format draft (*actions* and "dialogue")',
-                          onPressed: _formatting ? null : _formatDraft,
-                          icon: _formatting
-                              ? const SizedBox(
-                                  width: 22,
-                                  height: 22,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.auto_awesome),
-                        ),
-                        IconButton(
-                          tooltip: 'Continue',
-                          onPressed: _formatting ? null : _continueScene,
-                          icon: const Icon(Icons.play_arrow),
-                        ),
-                        FilledButton(
-                          onPressed: _formatting ? null : _send,
-                          style: FilledButton.styleFrom(
-                            padding: const EdgeInsets.all(14),
-                            minimumSize: const Size(48, 48),
-                          ),
-                          child: const Icon(Icons.send),
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
+          ],
         ),
       ),
     );
@@ -2516,9 +2519,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         : 'Already the last message',
                   ),
                   enabled: canRewind,
-                  onTap: canRewind
-                      ? () => Navigator.pop(context, 'rewind')
-                      : null,
+                  onTap:
+                      canRewind ? () => Navigator.pop(context, 'rewind') : null,
                 ),
                 ListTile(
                   leading: const Icon(Icons.call_split_outlined),
@@ -2747,8 +2749,7 @@ class _MessageBubble extends StatelessWidget {
     final isUser = message.isUser;
     final alignment = isUser ? Alignment.centerRight : Alignment.centerLeft;
     final background = isUser ? ui.userBubbleColor : ui.aiBubbleColor;
-    final foreground =
-        isUser ? colorScheme.onPrimary : colorScheme.onSurface;
+    final foreground = isUser ? colorScheme.onPrimary : colorScheme.onSurface;
     final bubbleRadius = BorderRadius.circular(ui.chatBubbleRadius);
     final chatFontSize =
         (Theme.of(context).textTheme.bodyLarge?.fontSize ?? 16) *
@@ -2838,30 +2839,28 @@ class _MessageBubble extends StatelessWidget {
                       if (!isUser &&
                           message.speakerName != null &&
                           message.speakerName!.trim().isNotEmpty) ...[
-                      Text(
-                        message.speakerName!,
-                        style: Theme.of(context)
-                            .textTheme
-                            .labelMedium
-                            ?.copyWith(
-                              color: colorScheme.primary,
-                              fontWeight: FontWeight.w600,
-                            ),
+                        Text(
+                          message.speakerName!,
+                          style:
+                              Theme.of(context).textTheme.labelMedium?.copyWith(
+                                    color: colorScheme.primary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                        ),
+                        const SizedBox(height: 4),
+                      ],
+                      RpRichText(
+                        text: message.text,
+                        isUser: isUser,
+                        baseStyle:
+                            Theme.of(context).textTheme.bodyLarge!.copyWith(
+                                  color: foreground,
+                                  height: 1.4,
+                                  fontSize: chatFontSize,
+                                ),
                       ),
-                      const SizedBox(height: 4),
                     ],
-                    RpRichText(
-                      text: message.text,
-                      isUser: isUser,
-                      baseStyle:
-                          Theme.of(context).textTheme.bodyLarge!.copyWith(
-                                color: foreground,
-                                height: 1.4,
-                                fontSize: chatFontSize,
-                              ),
-                    ),
-                  ],
-                ),
+                  ),
           ),
         ),
       ),
@@ -3115,14 +3114,14 @@ class _PathsSheetState extends State<_PathsSheet> {
       // Ignore.
     } on NanoGptException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Paths failed: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Paths failed: $error')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -3133,9 +3132,7 @@ class _PathsSheetState extends State<_PathsSheet> {
     final selected = _selectedOptions;
     if (selected.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Check at least two paths to combine.'),
-        ),
+        const SnackBar(content: Text('Check at least two paths to combine.')),
       );
       return;
     }
@@ -3157,9 +3154,7 @@ class _PathsSheetState extends State<_PathsSheet> {
       if (messages.isEmpty) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Check at least two paths to combine.'),
-          ),
+          const SnackBar(content: Text('Check at least two paths to combine.')),
         );
         return;
       }
@@ -3173,9 +3168,7 @@ class _PathsSheetState extends State<_PathsSheet> {
       final combined = _roadway.parseCombinedMessage(raw);
       if (combined.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Combine came back empty — try again.'),
-          ),
+          const SnackBar(content: Text('Combine came back empty — try again.')),
         );
         return;
       }
@@ -3184,14 +3177,14 @@ class _PathsSheetState extends State<_PathsSheet> {
       // Ignore.
     } on NanoGptException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Combine failed: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Combine failed: $error')));
     } finally {
       if (mounted) setState(() => _combining = false);
     }
@@ -3239,9 +3232,8 @@ class _PathsSheetState extends State<_PathsSheet> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final height = MediaQuery.sizeOf(context).height * 0.7;
-    final canCombine = _selectedOptions.length >= 2 &&
-        !_busy &&
-        !widget.generationBlocked;
+    final canCombine =
+        _selectedOptions.length >= 2 && !_busy && !widget.generationBlocked;
 
     return SafeArea(
       child: SizedBox(
@@ -3273,12 +3265,9 @@ class _PathsSheetState extends State<_PathsSheet> {
                       tooltip: _options.isEmpty
                           ? 'Generate story paths'
                           : 'Refresh paths',
-                      onPressed:
-                          widget.generationBlocked ? null : _generate,
+                      onPressed: widget.generationBlocked ? null : _generate,
                       icon: Icon(
-                        _options.isEmpty
-                            ? Icons.auto_awesome
-                            : Icons.refresh,
+                        _options.isEmpty ? Icons.auto_awesome : Icons.refresh,
                       ),
                     ),
                   if (_options.isNotEmpty)
@@ -3318,9 +3307,7 @@ class _PathsSheetState extends State<_PathsSheet> {
                           style: Theme.of(context)
                               .textTheme
                               .bodyMedium
-                              ?.copyWith(
-                                color: colorScheme.onSurfaceVariant,
-                              ),
+                              ?.copyWith(color: colorScheme.onSurfaceVariant),
                         ),
                       ),
                     )
@@ -3331,23 +3318,18 @@ class _PathsSheetState extends State<_PathsSheet> {
                       itemBuilder: (context, i) {
                         final selected = _selected.contains(i);
                         return Material(
-                          color: colorScheme.surfaceContainerHighest
-                              .withValues(alpha: 0.55),
+                          color: colorScheme.surfaceContainerHighest.withValues(
+                            alpha: 0.55,
+                          ),
                           borderRadius: BorderRadius.circular(10),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(10),
                             onTap: _busy
                                 ? null
                                 : () => Navigator.pop(context, _options[i]),
-                            onLongPress:
-                                _busy ? null : () => _editOption(i),
+                            onLongPress: _busy ? null : () => _editOption(i),
                             child: Padding(
-                              padding: const EdgeInsets.fromLTRB(
-                                4,
-                                8,
-                                4,
-                                8,
-                              ),
+                              padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [

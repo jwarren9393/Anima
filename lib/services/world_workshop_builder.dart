@@ -3,23 +3,18 @@ import 'dart:convert';
 import '../models/character.dart';
 import '../models/chat_message.dart';
 import '../models/lorebook.dart';
+import '../models/persona.dart';
 import 'character_card_codec.dart';
 import 'settings_service.dart';
 
 /// One character spotted in a Creation Center workshop (before full card gen).
 class WorkshopCharacterCandidate {
-  const WorkshopCharacterCandidate({
-    required this.name,
-    this.summary = '',
-  });
+  const WorkshopCharacterCandidate({required this.name, this.summary = ''});
 
   final String name;
   final String summary;
 
-  WorkshopCharacterCandidate copyWith({
-    String? name,
-    String? summary,
-  }) {
+  WorkshopCharacterCandidate copyWith({String? name, String? summary}) {
     return WorkshopCharacterCandidate(
       name: name ?? this.name,
       summary: summary ?? this.summary,
@@ -29,9 +24,8 @@ class WorkshopCharacterCandidate {
 
 /// Builds prompts and parses lorebooks / characters for the Creation Center.
 class WorldWorkshopBuilder {
-  WorldWorkshopBuilder({
-    CharacterCardCodec? cardCodec,
-  }) : _cardCodec = cardCodec ?? CharacterCardCodec();
+  WorldWorkshopBuilder({CharacterCardCodec? cardCodec})
+    : _cardCodec = cardCodec ?? CharacterCardCodec();
 
   final CharacterCardCodec _cardCodec;
 
@@ -72,7 +66,8 @@ $guidance
 
 Keep replies conversational and useful on a phone — not huge walls of text
 unless the user asks for depth.
-'''.trim();
+'''
+        .trim();
   }
 
   /// Full workshop transcript as plain `User:` / `Assistant:` text.
@@ -102,7 +97,8 @@ unless the user asks for depth.
         ? CollaboratorSettings.defaultGuidanceNote
         : guidanceNote.trim();
 
-    final system = '''
+    final system =
+        '''
 You convert a world-building conversation into one SillyTavern-compatible
 World Info lorebook JSON object for the Anima app.
 
@@ -140,10 +136,12 @@ Output rules:
 - Use "constant": true only for a short always-on overview if helpful.
 - keys should be words/phrases that would appear in chat to trigger the entry.
 - content should be raw lore text (not JSON). Do not sanitize or moralize.
-'''.trim();
+'''
+            .trim();
 
     final source = formatLorebookContext(sourceLorebook);
-    final user = '''
+    final user =
+        '''
 ${source.isEmpty ? '' : '''
 This is the current linked lorebook. Preserve its entries, IDs, settings, and
 extensions unless the conversation explicitly asks to change or remove them:
@@ -153,7 +151,8 @@ $source
 '''}Turn this workshop conversation into one complete lorebook JSON object:
 
 ${formatTranscript(conversation)}
-'''.trim();
+'''
+            .trim();
 
     return [
       {'role': 'system', 'content': system},
@@ -171,7 +170,8 @@ ${formatTranscript(conversation)}
         ? CollaboratorSettings.defaultGuidanceNote
         : guidanceNote.trim();
 
-    final system = '''
+    final system =
+        '''
 You scan a world-building conversation and list distinct characters who are
 developed enough to become playable SillyTavern-style character cards.
 
@@ -199,10 +199,12 @@ Output rules:
 }
 - Use distinct names; do not duplicate the same person under aliases.
 - If none qualify, return {"characters":[]}.
-'''.trim();
+'''
+            .trim();
 
     final source = formatLorebookContext(sourceLorebook);
-    final user = '''
+    final user =
+        '''
 ${source.isEmpty ? '' : '''
 Use this linked lorebook as source material:
 
@@ -211,7 +213,8 @@ $source
 '''}List playable characters from the linked lorebook and workshop conversation:
 
 ${formatTranscript(conversation)}
-'''.trim();
+'''
+            .trim();
 
     return [
       {'role': 'system', 'content': system},
@@ -233,7 +236,8 @@ ${formatTranscript(conversation)}
     final name = characterName.trim();
     final summary = characterSummary.trim();
 
-    final system = '''
+    final system =
+        '''
 You convert a world-building conversation into ONE SillyTavern Character Card
 V2 JSON object for the Anima app (playable chat character).
 
@@ -269,10 +273,12 @@ Output rules:
 - Do NOT include a character_book / lorebook on the card — world lore stays in
   the separate global lorebook.
 - Do not sanitize or moralize. Output only the JSON object.
-'''.trim();
+'''
+            .trim();
 
     final source = formatLorebookContext(sourceLorebook);
-    final user = '''
+    final user =
+        '''
 ${source.isEmpty ? '' : '''
 Use this linked lorebook as source material:
 
@@ -281,7 +287,73 @@ $source
 '''}Build a full character card for "$name" from the linked lorebook and workshop conversation:
 
 ${formatTranscript(conversation)}
-'''.trim();
+'''
+            .trim();
+
+    return [
+      {'role': 'system', 'content': system},
+      {'role': 'user', 'content': user},
+    ];
+  }
+
+  /// Player-focused persona generation for one selected workshop character.
+  List<Map<String, String>> buildPersonaExportMessages({
+    required List<ChatMessage> conversation,
+    required String personaName,
+    String personaSummary = '',
+    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+    Lorebook? sourceLorebook,
+  }) {
+    final guidance = guidanceNote.trim().isEmpty
+        ? CollaboratorSettings.defaultGuidanceNote
+        : guidanceNote.trim();
+    final name = personaName.trim();
+    final summary = personaSummary.trim();
+
+    final system =
+        '''
+You convert a world-building conversation into ONE user persona JSON object
+for the Anima roleplay app. This is the identity the human user will play,
+not an AI-controlled character.
+
+Guidance note (follow closely):
+$guidance
+
+Target persona: $name
+${summary.isEmpty ? '' : 'Identity hint: $summary'}
+
+Output rules:
+- Reply with ONLY a single JSON object. No markdown fences. No preamble.
+- Shape:
+{
+  "name": "$name",
+  "description": "concise identity, title, occupation, and role in the setting",
+  "appearance": "physical features, clothing, and distinguishing details",
+  "personality": "traits, habits, temperament, and speech style",
+  "background": "history, relationships, abilities, and important personal facts",
+  "goals": "current goals, motives, fears, loyalties, and conflicts"
+}
+- Write facts about the target persona only. Keep broad world history in the
+  separate lorebook instead of repeating it here.
+- Do not include greetings, example dialogue, system instructions, or commands
+  telling the assistant to roleplay this persona.
+- Preserve established facts. Do not sanitize or moralize.
+'''
+            .trim();
+
+    final source = formatLorebookContext(sourceLorebook);
+    final user =
+        '''
+${source.isEmpty ? '' : '''
+Use this linked lorebook as source material:
+
+$source
+
+'''}Build the player persona "$name" from the linked lorebook and workshop conversation:
+
+${formatTranscript(conversation)}
+'''
+            .trim();
 
     return [
       {'role': 'system', 'content': system},
@@ -390,8 +462,44 @@ ${formatTranscript(conversation)}
     return cleaned;
   }
 
+  /// Parse one generated player persona. Always assigns [preferredId].
+  Persona parsePersonaJson(
+    String raw, {
+    String? preferredId,
+    String? fallbackName,
+  }) {
+    final map = _extractJsonObject(
+      raw,
+      emptyMessage: 'The AI returned an empty persona.',
+      missingMessage: 'Could not find persona JSON in the AI reply. Try again.',
+      notObjectMessage: 'Persona JSON must be an object.',
+    );
+    final id = (preferredId != null && preferredId.trim().isNotEmpty)
+        ? preferredId.trim()
+        : 'persona_${DateTime.now().microsecondsSinceEpoch}';
+    final generatedName = '${map['name'] ?? ''}'.trim();
+    final name = generatedName.isEmpty
+        ? (fallbackName?.trim() ?? '')
+        : generatedName;
+    if (name.isEmpty) {
+      throw const FormatException('The AI returned a persona without a name.');
+    }
+    return Persona(
+      id: id,
+      name: name,
+      description: '${map['description'] ?? map['role'] ?? ''}'.trim(),
+      appearance: '${map['appearance'] ?? ''}'.trim(),
+      personality: '${map['personality'] ?? ''}'.trim(),
+      background: '${map['background'] ?? map['backstory'] ?? ''}'.trim(),
+      goals: '${map['goals'] ?? map['motivation'] ?? ''}'.trim(),
+    );
+  }
+
   /// Guess a short workshop title from the first user message.
-  String suggestTitle(List<ChatMessage> messages, {String fallback = 'New workshop'}) {
+  String suggestTitle(
+    List<ChatMessage> messages, {
+    String fallback = 'New workshop',
+  }) {
     for (final message in messages) {
       if (!message.isUser) continue;
       final text = message.text.trim();
@@ -415,10 +523,7 @@ ${formatTranscript(conversation)}
     }
 
     // Strip ```json ... ``` if the model ignores instructions.
-    final fence = RegExp(
-      r'```(?:json)?\s*([\s\S]*?)```',
-      caseSensitive: false,
-    );
+    final fence = RegExp(r'```(?:json)?\s*([\s\S]*?)```', caseSensitive: false);
     final fenceMatch = fence.firstMatch(text);
     if (fenceMatch != null) {
       text = fenceMatch.group(1)!.trim();

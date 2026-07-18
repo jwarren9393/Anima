@@ -7,6 +7,7 @@ import '../models/global_lorebook.dart';
 import '../models/world_workshop.dart';
 import '../services/character_service.dart';
 import '../services/nanogpt_service.dart';
+import '../services/persona_service.dart';
 import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
 import '../services/world_workshop_service.dart';
@@ -19,6 +20,7 @@ class WorldWorkshopListScreen extends StatefulWidget {
     required this.workshopService,
     required this.worldInfoService,
     required this.characterService,
+    required this.personaService,
     required this.settingsService,
     required this.nanoGptService,
   });
@@ -26,6 +28,7 @@ class WorldWorkshopListScreen extends StatefulWidget {
   final WorldWorkshopService workshopService;
   final WorldInfoService worldInfoService;
   final CharacterService characterService;
+  final PersonaService personaService;
   final SettingsService settingsService;
   final NanoGptService nanoGptService;
 
@@ -62,6 +65,7 @@ class _WorldWorkshopListScreenState extends State<WorldWorkshopListScreen> {
           workshopService: widget.workshopService,
           worldInfoService: widget.worldInfoService,
           characterService: widget.characterService,
+          personaService: widget.personaService,
           settingsService: widget.settingsService,
           nanoGptService: widget.nanoGptService,
         ),
@@ -85,9 +89,9 @@ class _WorldWorkshopListScreenState extends State<WorldWorkshopListScreen> {
     }
 
     final workshop = await widget.workshopService.upsert(
-      WorldWorkshop.empty(title: book.displayName).copyWith(
-        exportedLorebookId: book.id,
-      ),
+      WorldWorkshop.empty(
+        title: book.displayName,
+      ).copyWith(exportedLorebookId: book.id),
     );
     if (!mounted) return;
     await _open(workshop);
@@ -192,9 +196,9 @@ class _WorldWorkshopListScreenState extends State<WorldWorkshopListScreen> {
       await _linkLorebook(imported);
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Import failed: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Import failed: $error')));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -261,9 +265,8 @@ class _WorldWorkshopListScreenState extends State<WorldWorkshopListScreen> {
 
   String _subtitle(WorldWorkshop workshop) {
     final count = workshop.messages.length;
-    final exported = workshop.exportedLorebookId != null
-        ? ' · Linked to World Info'
-        : '';
+    final exported =
+        workshop.exportedLorebookId != null ? ' · Linked to World Info' : '';
     if (count == 0) return 'No messages yet$exported';
     return '$count messages$exported';
   }
@@ -325,10 +328,7 @@ class _WorldWorkshopListScreenState extends State<WorldWorkshopListScreen> {
                           if (value == 'delete') _delete(workshop);
                         },
                         itemBuilder: (context) => const [
-                          PopupMenuItem(
-                            value: 'delete',
-                            child: Text('Delete'),
-                          ),
+                          PopupMenuItem(value: 'delete', child: Text('Delete')),
                         ],
                       ),
                       onTap: () => _open(workshop),

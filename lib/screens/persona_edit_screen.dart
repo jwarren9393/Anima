@@ -22,12 +22,14 @@ class PersonaEditScreen extends StatefulWidget {
     required this.settingsService,
     required this.nanoGptService,
     this.existing,
+    this.generatedDraft = false,
   });
 
   final PersonaService personaService;
   final SettingsService settingsService;
   final NanoGptService nanoGptService;
   final Persona? existing;
+  final bool generatedDraft;
 
   @override
   State<PersonaEditScreen> createState() => _PersonaEditScreenState();
@@ -39,6 +41,10 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
   final _avatarService = AvatarService();
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final _appearanceController = TextEditingController();
+  final _personalityController = TextEditingController();
+  final _backgroundController = TextEditingController();
+  final _goalsController = TextEditingController();
   bool _saving = false;
   bool _avatarBusy = false;
   String? _avatarFileName;
@@ -54,6 +60,10 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
     if (existing != null) {
       _nameController.text = existing.name;
       _descriptionController.text = existing.description;
+      _appearanceController.text = existing.appearance;
+      _personalityController.text = existing.personality;
+      _backgroundController.text = existing.background;
+      _goalsController.text = existing.goals;
       _avatarFileName = existing.avatarFileName;
     }
   }
@@ -118,6 +128,8 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
       text: _avatarPromptBuilder.buildPersonaPrompt(
         name: _nameController.text,
         description: _descriptionController.text,
+        appearance: _appearanceController.text,
+        personality: _personalityController.text,
       ),
     );
 
@@ -174,6 +186,10 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
       id: _personaId,
       name: name,
       description: _descriptionController.text.trim(),
+      appearance: _appearanceController.text.trim(),
+      personality: _personalityController.text.trim(),
+      background: _backgroundController.text.trim(),
+      goals: _goalsController.text.trim(),
       avatarFileName: _avatarFileName,
     );
     await widget.personaService.upsert(persona);
@@ -185,6 +201,10 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
   void dispose() {
     _nameController.dispose();
     _descriptionController.dispose();
+    _appearanceController.dispose();
+    _personalityController.dispose();
+    _backgroundController.dispose();
+    _goalsController.dispose();
     super.dispose();
   }
 
@@ -192,7 +212,11 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEditing ? 'Edit persona' : 'New persona'),
+        title: Text(
+          widget.generatedDraft
+              ? 'Review generated persona'
+              : (_isEditing ? 'Edit persona' : 'New persona'),
+        ),
       ),
       body: ListView(
         padding: SettingsUi.listPadding,
@@ -219,16 +243,16 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
                   alignment: WrapAlignment.center,
                   children: [
                     OutlinedButton.icon(
-                      onPressed:
-                          (_avatarBusy || _saving) ? null : _pickAvatar,
+                      onPressed: (_avatarBusy || _saving) ? null : _pickAvatar,
                       icon: const Icon(Icons.photo),
                       label: Text(
                         _avatarFileName == null ? 'Add photo' : 'Change photo',
                       ),
                     ),
                     OutlinedButton.icon(
-                      onPressed:
-                          (_avatarBusy || _saving) ? null : _generateAvatar,
+                      onPressed: (_avatarBusy || _saving)
+                          ? null
+                          : _generateAvatar,
                       icon: _avatarBusy
                           ? const SizedBox(
                               width: 18,
@@ -240,8 +264,9 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
                     ),
                     if (_avatarFileName != null)
                       TextButton(
-                        onPressed:
-                            (_avatarBusy || _saving) ? null : _clearAvatar,
+                        onPressed: (_avatarBusy || _saving)
+                            ? null
+                            : _clearAvatar,
                         child: const Text('Remove'),
                       ),
                   ],
@@ -249,7 +274,7 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
                 const SizedBox(height: 8),
                 Text(
                   'Pick a photo or generate one with NanoGPT from the name '
-                  'and About text.',
+                  'and persona details.',
                   style: Theme.of(context).textTheme.bodySmall,
                   textAlign: TextAlign.center,
                 ),
@@ -270,16 +295,58 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
           TextField(
             controller: _descriptionController,
             minLines: 3,
-            maxLines: 8,
+            maxLines: 6,
             decoration: SettingsUi.fieldDecoration(
-              label: 'About this persona (optional)',
-              hintText: 'Short description the AI should know…',
+              label: 'Identity and role (optional)',
+              hintText: 'Who they are and their place in the setting…',
+            ).copyWith(alignLabelWithHint: true),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _appearanceController,
+            minLines: 2,
+            maxLines: 5,
+            decoration: SettingsUi.fieldDecoration(
+              label: 'Appearance (optional)',
+              hintText: 'Physical features, clothing, distinguishing details…',
+            ).copyWith(alignLabelWithHint: true),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _personalityController,
+            minLines: 2,
+            maxLines: 5,
+            decoration: SettingsUi.fieldDecoration(
+              label: 'Personality (optional)',
+              hintText: 'Traits, habits, temperament, manner of speaking…',
+            ).copyWith(alignLabelWithHint: true),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _backgroundController,
+            minLines: 3,
+            maxLines: 7,
+            decoration: SettingsUi.fieldDecoration(
+              label: 'Background (optional)',
+              hintText: 'History, relationships, abilities, important facts…',
+            ).copyWith(alignLabelWithHint: true),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _goalsController,
+            minLines: 2,
+            maxLines: 5,
+            decoration: SettingsUi.fieldDecoration(
+              label: 'Goals and motivations (optional)',
+              hintText: 'What they want, fear, protect, or are working toward…',
             ).copyWith(alignLabelWithHint: true),
           ),
           const SizedBox(height: 24),
           SettingsUi.saveButton(
             saving: _saving,
-            label: _isEditing ? 'Save persona' : 'Create persona',
+            label: widget.generatedDraft
+                ? 'Save to Personas'
+                : (_isEditing ? 'Save persona' : 'Create persona'),
             onPressed: (_saving || _avatarBusy) ? null : _save,
           ),
         ],

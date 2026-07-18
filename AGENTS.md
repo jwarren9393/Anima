@@ -60,17 +60,17 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-18  
-**Last agent action:** Replaced GitHub Release **v1.0.0** with the intended “complete” APK (Creation Center lore import + context estimates + prior v1 features).
+**Last agent action:** Shipped structured personas + Creation Center “Create my persona” into an updated **v1.0.0** APK release (build `3`).
 
 ### What works today
 
 - **Home screen** — chat history, Settings, New chat
 - **New chat** — choose **Solo** or **Group**; if the character has several greetings, a **Choose opening** sheet picks which one starts (others stay as swipes)
 - **Settings hub** — separate menus:
-  - **Personas** — create multiple {{user}} identities (name, bio, photo); **Generate avatar** from name/About; set a default for new chats
+  - **Personas** — create multiple {{user}} identities with separate identity/role, appearance, personality, background, goals, and photo fields; **Generate avatar** from persona details; set a default for new chats; all filled fields are labeled and sent on every chat generation
   - **Characters** — character cards + **categories** (custom lists; one character can be in several); filter dropdown; **consistency check** (checklist icon) = read-only AI report; **Generate avatar** from card text
   - **World Info & lore** — **global lorebooks** (create / import ST JSON / export / on-off) + scan depth/budget + link to per-character books; **entry AI wand** + **Suggest keywords from content**
-  - **Creation Center** — chat with AI to invent a world; **Import lorebook** (JSON file or choose an existing World Info book); **Create/Update lorebook** saves keyword entries as a selectable global lorebook (one workshop = one book); **Create characters** (person+ icon) detects people from the chat + linked lore, lets you multi-select, generates each card one-by-one, and opens **Review generated character** before anything is saved to Characters; **context estimate** banner (tap for details) shows ~messages/tokens vs model window
+  - **Creation Center** — chat with AI to invent a world; **Import lorebook** (JSON file or choose an existing World Info book); **Create/Update lorebook** saves keyword entries as a selectable global lorebook (one workshop = one book); the people menu can **Create AI characters** (multi-select + review each card) or **Create my persona** (choose one person from workshop chat + linked lore, generate player-focused fields, then review before saving); **context estimate** banner (tap for details) shows ~messages/tokens vs model window
   - **AI collaborator** — wand guidance note + **Composer Format** note + **Roadway / Paths** note
   - **Appearance** — chat avatar shape/size only (theme is fixed Obsidian & Gold)
   - **Backup & restore** — one `.anima-backup` JSON file (chats, characters, personas, categories, lorebooks, workshops, drafts, roadway cache, avatars, settings); **API key is not included** — re-enter after restore; restore replaces Anima data only (whitelist), then returns to Home
@@ -169,7 +169,7 @@ Goal: characters closer to SillyTavern cards, still simple to edit on phone.
 - [x] Split fields: description, personality, scenario, first message, example dialogue
 - [x] Alternate greetings (pick/swipe opening)
 - [x] Simple macros: `{{user}}`, `{{char}}`
-- [x] User persona (your name + short description injected into prompts)
+- [x] Structured user personas (identity, appearance, personality, background, goals injected into prompts)
 - [ ] Optional avatar image per character (local file) — deferred
 - [x] Import Character Card V1/V2/V3 JSON + PNG (`chara`/`ccv3`) *(pulled forward from Phase 7)*
 - [x] Export Anima characters to ST-compatible V2/V3 JSON *(pulled forward from Phase 7)*
@@ -227,7 +227,7 @@ lib/
     world_workshop.dart           Creation Center workshop chat (one chat → one lorebook)
     ui_style_settings.dart        Chat avatar prefs + fixed AnimaUiTheme extension
     anima_presets.dart            Built-in sampling + text presets (Author’s Note, prompts, guidance)
-    persona.dart                  User persona ({{user}}) with optional avatar
+    persona.dart                  Structured user persona ({{user}}) fields + prompt text + optional avatar
   screens/
     home_screen.dart              Default landing — chat history + New chat Solo/Group
     chat_screen.dart              Chat UI + ST actions + group + persona switch
@@ -235,11 +235,11 @@ lib/
     characters_screen.dart        List / categories / import / export (JSON + PNG)
     character_edit_screen.dart    Full card field editor (+ lorebook + avatar + AI wand)
     personas_screen.dart          Persona list / default / pick-for-chat
-    persona_edit_screen.dart      Create/edit one persona (+ Generate avatar)
+    persona_edit_screen.dart      Create/edit/review generated persona fields (+ Generate avatar)
     lorebook_edit_screen.dart     World Info entry list + entry editor (+ AI wand)
     lorebooks_screen.dart         Global lorebook list / create / import / export
     world_workshop_list_screen.dart Creation Center workshop list + import lorebook (file / World Info)
-    world_workshop_chat_screen.dart Workshop chat + linked lore context + Create/Update lorebook + Create characters
+    world_workshop_chat_screen.dart Workshop chat + linked lore + Create/Update lorebook + AI characters/persona
     settings_screen.dart          Settings hub (Personas + Characters + Creation Center + AI collaborator + Backup)
     api_settings_screen.dart      API key, model catalog, subscription URL + remaining credits
     lore_settings_screen.dart     Global books + scan/budget + character books link
@@ -277,7 +277,7 @@ lib/
     lorebook_service.dart         Keyword scan, budget, merge global + character books
     world_info_service.dart       Persist global lorebooks (anima_lorebooks.json)
     world_workshop_service.dart   Persist Creation Center workshops
-    world_workshop_builder.dart   Workshop prompts + lorebook/character detect + card JSON parse
+    world_workshop_builder.dart   Workshop prompts + lorebook/people detect + character/persona JSON parse
     chat_transcript_codec.dart    Chat JSON / plain-text import/export
     app_backup_service.dart       Full-app backup/restore (whitelist JSON + avatars; no API key)
     nanogpt_service.dart          Streaming + text/image model catalogs + image generate + credit usage + sampling + plain-English errors
@@ -334,8 +334,8 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. Install **v1.0.0** from [Releases](https://github.com/jwarren9393/Anima/releases) (replaces the earlier APK).
-2. Spot-check: Creation Center → Import lorebook; chat ⋮ → Context estimate; API model dropdown context labels.
+1. Install the refreshed **v1.0.0** APK from [Releases](https://github.com/jwarren9393/Anima/releases) (build `3`; replaces the prior APK on the same tag).
+2. Spot-check Creation Center → people icon → **Create my persona**; review, save, and select that persona in a chat with the linked lorebook enabled.
 3. Optional QoL backlog when you want more: undo send, last-chat resume, pinned Author’s Note / mood chips, memory preview panel.
 
 ---
