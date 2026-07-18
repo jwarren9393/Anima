@@ -60,7 +60,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-18  
-**Last agent action:** Shipped structured personas + Creation Center “Create my persona” into an updated **v1.0.0** APK release (build `3`).
+**Last agent action:** Added Obsidian & Gold launcher icon and refreshed the **v1.0.0** APK on GitHub Releases.
 
 ### What works today
 
@@ -283,7 +283,8 @@ lib/
     nanogpt_service.dart          Streaming + text/image model catalogs + image generate + credit usage + sampling + plain-English errors
 ```
 
-**Dependencies in use:** `flutter_secure_storage`, `http`, `path_provider`, `file_picker`, `share_plus`, `path`, `google_fonts`
+**Dependencies in use:** `flutter_secure_storage`, `http`, `path_provider`, `file_picker`, `share_plus`, `path`, `google_fonts`  
+**Dev / branding:** `flutter_launcher_icons`; master icon at `assets/branding/anima_icon.png`
 
 ---
 
@@ -334,9 +335,10 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. Install the refreshed **v1.0.0** APK from [Releases](https://github.com/jwarren9393/Anima/releases) (build `3`; replaces the prior APK on the same tag).
+1. Install **v1.0.0** from [Releases](https://github.com/jwarren9393/Anima/releases) (Obsidian & Gold launcher icon).
 2. Spot-check Creation Center → people icon → **Create my persona**; review, save, and select that persona in a chat with the linked lorebook enabled.
-3. Optional QoL backlog when you want more: undo send, last-chat resume, pinned Author’s Note / mood chips, memory preview panel.
+3. Optional: upload `assets/branding/anima_icon.png` as the GitHub repo Social preview (Settings → General → Social preview).
+4. Optional QoL backlog when you want more: undo send, last-chat resume, pinned Author’s Note / mood chips, memory preview panel.
 
 ---
 
