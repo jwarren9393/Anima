@@ -38,11 +38,13 @@ class WorldWorkshopBuilder {
   /// System prompt for the ongoing workshop chat (questions + brainstorming).
   String chatSystemPrompt({
     String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+    Lorebook? sourceLorebook,
   }) {
     final guidance = guidanceNote.trim().isEmpty
         ? CollaboratorSettings.defaultGuidanceNote
         : guidanceNote.trim();
 
+    final source = formatLorebookContext(sourceLorebook);
     return '''
 You are Anima's World Info collaborator. You help the user invent a setting,
 factions, places, magic, history, and lore for a private roleplay app.
@@ -56,6 +58,14 @@ Your job in this chat:
   ask you for JSON later.
 - Do NOT dump finished character-card JSON unless they ask. The app has a
   separate "Create characters" action for that.
+${source.isEmpty ? '' : '''
+- A lorebook is linked below as the current source of truth. Discuss and revise
+  it according to the user's requests. Do not silently discard entries or
+  entry settings.
+
+CURRENT LINKED LOREBOOK:
+$source
+'''}
 
 Guidance note (follow closely):
 $guidance
@@ -76,10 +86,17 @@ unless the user asks for depth.
     return transcript.toString().trim();
   }
 
+  /// Structured source material for an imported / linked lorebook.
+  String formatLorebookContext(Lorebook? book) {
+    if (book == null) return '';
+    return const JsonEncoder.withIndent('  ').convert(book.toJson());
+  }
+
   /// Messages for the final “turn this chat into a lorebook” NanoGPT call.
   List<Map<String, String>> buildExportMessages({
     required List<ChatMessage> conversation,
     String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+    Lorebook? sourceLorebook,
   }) {
     final guidance = guidanceNote.trim().isEmpty
         ? CollaboratorSettings.defaultGuidanceNote
@@ -125,8 +142,15 @@ Output rules:
 - content should be raw lore text (not JSON). Do not sanitize or moralize.
 '''.trim();
 
+    final source = formatLorebookContext(sourceLorebook);
     final user = '''
-Turn this workshop conversation into one lorebook JSON object:
+${source.isEmpty ? '' : '''
+This is the current linked lorebook. Preserve its entries, IDs, settings, and
+extensions unless the conversation explicitly asks to change or remove them:
+
+$source
+
+'''}Turn this workshop conversation into one complete lorebook JSON object:
 
 ${formatTranscript(conversation)}
 '''.trim();
@@ -141,6 +165,7 @@ ${formatTranscript(conversation)}
   List<Map<String, String>> buildCharacterDetectMessages({
     required List<ChatMessage> conversation,
     String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+    Lorebook? sourceLorebook,
   }) {
     final guidance = guidanceNote.trim().isEmpty
         ? CollaboratorSettings.defaultGuidanceNote
@@ -176,8 +201,14 @@ Output rules:
 - If none qualify, return {"characters":[]}.
 '''.trim();
 
+    final source = formatLorebookContext(sourceLorebook);
     final user = '''
-List playable characters from this workshop conversation:
+${source.isEmpty ? '' : '''
+Use this linked lorebook as source material:
+
+$source
+
+'''}List playable characters from the linked lorebook and workshop conversation:
 
 ${formatTranscript(conversation)}
 '''.trim();
@@ -194,6 +225,7 @@ ${formatTranscript(conversation)}
     required String characterName,
     String characterSummary = '',
     String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+    Lorebook? sourceLorebook,
   }) {
     final guidance = guidanceNote.trim().isEmpty
         ? CollaboratorSettings.defaultGuidanceNote
@@ -239,8 +271,14 @@ Output rules:
 - Do not sanitize or moralize. Output only the JSON object.
 '''.trim();
 
+    final source = formatLorebookContext(sourceLorebook);
     final user = '''
-Build a full character card for "$name" from this workshop conversation:
+${source.isEmpty ? '' : '''
+Use this linked lorebook as source material:
+
+$source
+
+'''}Build a full character card for "$name" from the linked lorebook and workshop conversation:
 
 ${formatTranscript(conversation)}
 '''.trim();

@@ -1248,6 +1248,141 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _showContextEstimate() async {
+    final session = _session;
+    if (session == null) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 16),
+            Expanded(child: Text('Estimating context…')),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final contextSettings = await widget.settingsService.getContextSettings();
+      final modelId = await widget.settingsService.getModel();
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+      int? modelContext;
+      try {
+        final models =
+            await widget.nanoGptService.listModels(baseUrl: baseUrl);
+        for (final model in models) {
+          if (model.id == modelId) {
+            modelContext = model.contextLength;
+            break;
+          }
+        }
+      } catch (_) {}
+
+      // Approximate system / post-history size without rebuilding full lore.
+      final character = _character;
+      final systemApprox = character == null
+          ? ''
+          : [
+              character.name,
+              character.description,
+              character.personality,
+              character.scenario,
+              character.systemPrompt,
+              _persona?.description ?? '',
+            ].join('\n');
+      final postApprox = [
+        character?.postHistoryInstructions ?? '',
+        session.authorsNote,
+      ].join('\n');
+
+      final estimate = _contextService.estimateChat(
+        messages: _messages,
+        memoryCoveredCount: session.memoryCoveredCount,
+        historyTokenBudget: contextSettings.historyTokenBudget,
+        memorySummary: session.memorySummary,
+        systemPrompt: systemApprox,
+        postHistory: postApprox,
+        isGroup: session.isGroup,
+        modelContextLength: modelContext,
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).pop(); // loading dialog
+
+      final ratio = estimate.fillRatio;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Context estimate'),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Rough estimate only (≈ 1 token per 4 characters). '
+                  'This is a gauge, not an exact NanoGPT meter.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 12),
+                Text('Messages in chat: ${estimate.messageCount}'),
+                Text(
+                  'Full transcript: ~${ContextEstimate.formatTokenCount(estimate.fullTranscriptTokens)} tokens',
+                ),
+                Text(
+                  'Likely sent next reply: ~${ContextEstimate.formatTokenCount(estimate.estimatedSentTokens)} tokens',
+                ),
+                if (estimate.messagesInPrompt != null)
+                  Text(
+                    'Messages in prompt: ${estimate.messagesInPrompt}'
+                    '${estimate.messagesTrimmedAway > 0 ? ' (${estimate.messagesTrimmedAway} older trimmed)' : ''}',
+                  ),
+                if (estimate.memoryTokens > 0)
+                  Text(
+                    'Memory summary: ~${ContextEstimate.formatTokenCount(estimate.memoryTokens)} tokens',
+                  ),
+                if (estimate.historyBudgetTokens != null)
+                  Text(
+                    'History budget (Settings): ${ContextEstimate.formatTokenCount(estimate.historyBudgetTokens!)} tokens',
+                  ),
+                Text('Current model: $modelId'),
+                if (estimate.modelContextLength != null)
+                  Text(
+                    'Model context: ${ContextEstimate.formatTokenCount(estimate.modelContextLength!)} tokens'
+                    '${ratio == null ? '' : ' (~${(ratio * 100).round()}% of window vs send size)'}',
+                  )
+                else
+                  const Text(
+                    'Model context: unknown — open API & connection, refresh the catalog, and pick a listed model.',
+                  ),
+                if (estimate.notes.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(estimate.notes),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      Navigator.of(context).pop(); // loading dialog
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not estimate context: $error')),
+      );
+    }
+  }
+
   Future<void> _summarizeNow({bool quiet = false}) async {
     final session = _session;
     if (session == null || _character == null) return;
@@ -2001,6 +2136,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               if (value == 'authors_note') _editAuthorsNote();
               if (value == 'memory') _editMemorySummary();
               if (value == 'summarize') _summarizeNow();
+              if (value == 'context') _showContextEstimate();
               if (value == 'characters') _openCharacters();
               if (value == 'group') _startGroupChat();
               if (value == 'export') _exportChat();
@@ -2031,6 +2167,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               const PopupMenuItem(
                 value: 'summarize',
                 child: Text('Summarize now'),
+              ),
+              const PopupMenuItem(
+                value: 'context',
+                child: Text('Context estimate'),
               ),
               const PopupMenuItem(
                 value: 'characters',

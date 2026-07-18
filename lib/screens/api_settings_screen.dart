@@ -148,6 +148,15 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
     return null;
   }
 
+  NanoGptModelInfo? get _selectedModelInfo {
+    final id = _modelController.text.trim();
+    if (id.isEmpty) return null;
+    for (final model in _models) {
+      if (model.id == id) return model;
+    }
+    return null;
+  }
+
   Future<void> _loadImageModels() async {
     setState(() {
       _loadingImageModels = true;
@@ -459,7 +468,7 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
                         DropdownMenuItem(
                           value: model.id,
                           child: Text(
-                            model.displayName,
+                            model.displayNameWithContext,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -471,6 +480,16 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
                             setState(() => _modelController.text = id);
                           },
                   ),
+                  if (_selectedModelInfo?.contextLength != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      'Context window: '
+                      '${NanoGptModelInfo.formatTokenCount(_selectedModelInfo!.contextLength!)}'
+                      ' tokens'
+                      '${_selectedModelInfo!.maxOutputTokens == null ? '' : ' · max output ${_selectedModelInfo!.maxOutputTokens}'}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                   const SizedBox(height: 16),
                 ],
                 TextField(

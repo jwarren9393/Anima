@@ -90,4 +90,29 @@ void main() {
       expect(model.subscriptionIncluded, isTrue);
     });
   });
+
+  group('NanoGptModelInfo context', () {
+    test('parses context_length and formats labels', () {
+      expect(
+        NanoGptModelInfo.parseContextLength({'context_length': 128000}),
+        128000,
+      );
+      expect(
+        NanoGptModelInfo.parseContextLength({'contextLength': 16000}),
+        16000,
+      );
+      expect(NanoGptModelInfo.parseContextLength({}), isNull);
+
+      const model = NanoGptModelInfo(
+        id: 'demo',
+        ownedBy: 'openai',
+        name: 'Demo',
+        contextLength: 16000,
+        maxOutputTokens: 4096,
+      );
+      expect(model.contextLabel, '16K ctx');
+      expect(model.displayNameWithContext, 'Demo · 16K ctx');
+      expect(NanoGptModelInfo.formatTokenCount(128000), '128K');
+    });
+  });
 }

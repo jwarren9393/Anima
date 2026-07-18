@@ -138,4 +138,152 @@ Output ONLY the updated summary — no preamble.
       {'role': 'user', 'content': user.toString().trim()},
     ];
   }
+
+  /// Rough size of a full message list (saved transcript on device).
+  int estimateConversationTokens(
+    List<ChatMessage> messages, {
+    bool isGroup = false,
+  }) {
+    var total = 0;
+    for (final message in messages) {
+      total += estimateMessageTokens(message, isGroup: isGroup);
+    }
+    return total;
+  }
+
+  /// Estimate for Creation Center: chat + optional linked lorebook + prompt overhead.
+  ContextEstimate estimateWorkshop({
+    required List<ChatMessage> messages,
+    String linkedLorebookJson = '',
+    int? modelContextLength,
+    int systemOverheadTokens = 450,
+  }) {
+    final chatTokens = estimateConversationTokens(messages);
+    final loreTokens = estimateTokens(linkedLorebookJson);
+    final estimatedSent =
+        chatTokens + loreTokens + systemOverheadTokens.clamp(0, 5000);
+    return ContextEstimate(
+      messageCount: messages.where((m) => m.text.trim().isNotEmpty).length,
+      fullTranscriptTokens: chatTokens,
+      estimatedSentTokens: estimatedSent,
+      memoryTokens: 0,
+      loreTokens: loreTokens,
+      historyBudgetTokens: null,
+      modelContextLength: modelContextLength,
+      notes: loreTokens > 0
+          ? 'Includes the linked lorebook plus a small system-prompt cushion.'
+          : 'Includes a small system-prompt cushion. Creation Center sends the full chat.',
+    );
+  }
+
+  /// Estimate for a normal roleplay chat (full vs trimmed-to-budget send size).
+  ContextEstimate estimateChat({
+    required List<ChatMessage> messages,
+    required int memoryCoveredCount,
+    required int historyTokenBudget,
+    String memorySummary = '',
+    String systemPrompt = '',
+    String postHistory = '',
+    bool isGroup = false,
+    int? modelContextLength,
+  }) {
+    final full = estimateConversationTokens(messages, isGroup: isGroup);
+    final history = selectHistory(
+      messages: messages,
+      endExclusive: messages.length,
+      memoryCoveredCount: memoryCoveredCount,
+      historyTokenBudget: historyTokenBudget,
+      isGroup: isGroup,
+    );
+    final historyTokens =
+        estimateConversationTokens(history, isGroup: isGroup);
+    final memoryTokens = estimateTokens(memorySummary);
+    final extras = estimateTokens(systemPrompt) +
+        estimateTokens(postHistory) +
+        memoryTokens;
+    final estimatedSent = historyTokens + extras;
+    final trimmedAway = (messages.length - history.length).clamp(0, messages.length);
+
+    return ContextEstimate(
+      messageCount: messages.where((m) => m.text.trim().isNotEmpty).length,
+      fullTranscriptTokens: full,
+      estimatedSentTokens: estimatedSent,
+      memoryTokens: memoryTokens,
+      loreTokens: 0,
+      historyBudgetTokens: historyTokenBudget,
+      modelContextLength: modelContextLength,
+      messagesInPrompt: history.length,
+      messagesTrimmedAway: trimmedAway,
+      notes: trimmedAway > 0
+          ? 'Anima will only send the newest ~$historyTokenBudget tokens of '
+              'history (plus memory/system). Older raw lines stay on device.'
+          : 'Anima can currently send this whole chat within your history budget.',
+    );
+  }
+}
+
+/// Rough prompt/context size snapshot for UI (menu / Creation Center banner).
+class ContextEstimate {
+  const ContextEstimate({
+    required this.messageCount,
+    required this.fullTranscriptTokens,
+    required this.estimatedSentTokens,
+    required this.memoryTokens,
+    required this.loreTokens,
+    required this.historyBudgetTokens,
+    required this.modelContextLength,
+    this.messagesInPrompt,
+    this.messagesTrimmedAway = 0,
+    this.notes = '',
+  });
+
+  final int messageCount;
+  final int fullTranscriptTokens;
+  final int estimatedSentTokens;
+  final int memoryTokens;
+  final int loreTokens;
+  final int? historyBudgetTokens;
+  final int? modelContextLength;
+  final int? messagesInPrompt;
+  final int messagesTrimmedAway;
+  final String notes;
+
+  /// 0–1 when model context is known; null otherwise.
+  double? get fillRatio {
+    final max = modelContextLength;
+    if (max == null || max <= 0) return null;
+    return (estimatedSentTokens / max).clamp(0.0, 2.0);
+  }
+
+  String get compactBannerLine {
+    final bits = <String>[
+      '$messageCount msg${messageCount == 1 ? '' : 's'}',
+      '~${formatTokenCount(estimatedSentTokens)} tokens',
+    ];
+    final max = modelContextLength;
+    if (max != null && max > 0) {
+      final pct = ((estimatedSentTokens / max) * 100).clamp(0, 999).round();
+      bits.add('$pct% of ${formatTokenCount(max)} ctx');
+    }
+    return bits.join(' · ');
+  }
+
+  /// Formats a token count for UI: `850`, `1.2K`, `16K`, `128K`.
+  static String formatTokenCount(int tokens) {
+    final n = tokens < 0 ? 0 : tokens;
+    if (n < 1000) return '$n';
+    if (n < 10000) {
+      final k = n / 1000;
+      final text = k == k.roundToDouble()
+          ? '${k.round()}'
+          : k.toStringAsFixed(1);
+      return '${text}K';
+    }
+    if (n < 1000000) return '${(n / 1000).round()}K';
+    final m = n / 1000000;
+    final text = m == m.roundToDouble()
+        ? '${m.round()}'
+        : m.toStringAsFixed(1);
+    return '${text}M';
+  }
 }

@@ -14,6 +14,8 @@ class NanoGptModelInfo {
     required this.id,
     required this.ownedBy,
     required this.name,
+    this.contextLength,
+    this.maxOutputTokens,
   });
 
   /// Value sent as `model` on chat completions.
@@ -25,12 +27,83 @@ class NanoGptModelInfo {
   /// Human-friendly label when NanoGPT provides one.
   final String name;
 
+  /// Max context window in tokens when NanoGPT reports it (`context_length`).
+  final int? contextLength;
+
+  /// Max completion tokens when NanoGPT reports it (`max_output_tokens`).
+  final int? maxOutputTokens;
+
   String get displayName => name.trim().isEmpty ? id : name.trim();
+
+  /// Formats a token count for UI: `850`, `1.2K`, `16K`, `128K`.
+  static String formatTokenCount(int tokens) {
+    final n = tokens < 0 ? 0 : tokens;
+    if (n < 1000) return '$n';
+    if (n < 10000) {
+      final k = n / 1000;
+      final text = k == k.roundToDouble()
+          ? '${k.round()}'
+          : k.toStringAsFixed(1);
+      return '${text}K';
+    }
+    if (n < 1000000) return '${(n / 1000).round()}K';
+    final m = n / 1000000;
+    final text = m == m.roundToDouble()
+        ? '${m.round()}'
+        : m.toStringAsFixed(1);
+    return '${text}M';
+  }
+
+  /// Compact label like `16K ctx` for dropdowns; null when unknown.
+  String? get contextLabel {
+    final n = contextLength;
+    if (n == null || n <= 0) return null;
+    return '${formatTokenCount(n)} ctx';
+  }
+
+  /// Display name plus context when known (e.g. `GPT-4o Mini · 128K ctx`).
+  String get displayNameWithContext {
+    final ctx = contextLabel;
+    if (ctx == null) return displayName;
+    return '$displayName · $ctx';
+  }
 
   /// NanoGPT's automatic router models (`auto-model`, etc.).
   static bool isAutoModelId(String id) {
     final lower = id.trim().toLowerCase();
     return lower == 'auto-model' || lower.startsWith('auto-model-');
+  }
+
+  /// Read context fields from a NanoGPT `/models?detailed=true` object.
+  static int? parseContextLength(Map<String, dynamic> map) {
+    return _positiveInt(
+      map['context_length'] ??
+          map['contextLength'] ??
+          map['max_context'] ??
+          map['maxContext'] ??
+          map['context_window'] ??
+          map['contextWindow'],
+    );
+  }
+
+  static int? parseMaxOutputTokens(Map<String, dynamic> map) {
+    return _positiveInt(
+      map['max_output_tokens'] ??
+          map['maxOutputTokens'] ??
+          map['max_tokens'] ??
+          map['maxTokens'],
+    );
+  }
+
+  static int? _positiveInt(dynamic value) {
+    if (value is int) return value > 0 ? value : null;
+    if (value is num) {
+      final n = value.round();
+      return n > 0 ? n : null;
+    }
+    final parsed = int.tryParse('$value'.trim());
+    if (parsed == null || parsed <= 0) return null;
+    return parsed;
   }
 }
 
@@ -375,6 +448,8 @@ class NanoGptService {
             id: id,
             ownedBy: ownedBy,
             name: name.isEmpty ? id : name,
+            contextLength: NanoGptModelInfo.parseContextLength(map),
+            maxOutputTokens: NanoGptModelInfo.parseMaxOutputTokens(map),
           ),
         );
       }

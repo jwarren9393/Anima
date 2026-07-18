@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:anima/models/chat_message.dart';
+import 'package:anima/models/lorebook.dart';
 import 'package:anima/services/world_workshop_builder.dart';
 
 void main() {
@@ -19,6 +20,20 @@ void main() {
               'Captain Vex runs the night watch.',
         ),
       ];
+
+  const sourceLorebook = Lorebook(
+    name: 'Imported Harbor',
+    description: 'An imported setting',
+    entries: [
+      LorebookEntry(
+        id: 7,
+        name: 'Mira',
+        keys: ['Mira', 'dock smuggler'],
+        content: 'Mira runs contraband for the Tide Guild.',
+        priority: 25,
+      ),
+    ],
+  );
 
   group('WorldWorkshopBuilder lorebook', () {
     test('parseLorebookJson accepts plain JSON object', () {
@@ -84,6 +99,22 @@ Here you go:
       expect(messages[1]['content'], contains('Rainy city with guilds'));
       expect(messages[1]['content'], contains('Captain Vex'));
     });
+
+    test('linked lorebook is included in chat and update prompts', () {
+      final chat = builder.chatSystemPrompt(
+        sourceLorebook: sourceLorebook,
+      );
+      final update = builder.buildExportMessages(
+        conversation: sampleConversation(),
+        sourceLorebook: sourceLorebook,
+      );
+      expect(chat, contains('CURRENT LINKED LOREBOOK'));
+      expect(chat, contains('Imported Harbor'));
+      expect(chat, contains('Tide Guild'));
+      expect(update[1]['content'], contains('current linked lorebook'));
+      expect(update[1]['content'], contains('"priority": 25'));
+      expect(update[1]['content'], contains('Preserve its entries'));
+    });
   });
 
   group('WorldWorkshopBuilder characters', () {
@@ -102,6 +133,22 @@ Here you go:
       expect(messages[0]['content'], contains('Keep it raw.'));
       expect(messages[0]['content'], contains('characters'));
       expect(messages[1]['content'], contains('Mira is a dock smuggler'));
+    });
+
+    test('linked lorebook feeds character detection and generation', () {
+      final detect = builder.buildCharacterDetectMessages(
+        conversation: const [],
+        sourceLorebook: sourceLorebook,
+      );
+      final generate = builder.buildCharacterExportMessages(
+        conversation: const [],
+        characterName: 'Mira',
+        sourceLorebook: sourceLorebook,
+      );
+      expect(detect[1]['content'], contains('Imported Harbor'));
+      expect(detect[1]['content'], contains('Tide Guild'));
+      expect(generate[1]['content'], contains('Imported Harbor'));
+      expect(generate[1]['content'], contains('Tide Guild'));
     });
 
     test('parseCharacterCandidatesJson reads names and summaries', () {

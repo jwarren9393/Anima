@@ -11,7 +11,7 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **Distribution** | Personal use only — **not** published to app stores |
 | **Repo** | https://github.com/jwarren9393/Anima (private) |
 | **Theme** | Fixed dark **Obsidian & Gold** glass UI (no light mode / theme studio) |
-| **Version** | `1.0.0` (see [GitHub Releases](https://github.com/jwarren9393/Anima/releases) for the official APK) |
+| **Version** | **1.0.0** (official APK on [GitHub Releases](https://github.com/jwarren9393/Anima/releases)) |
 
 API base (pay-as-you-go): `https://nano-gpt.com/api/v1/chat/completions`  
 Auth: `Authorization: Bearer <API_KEY>`  
@@ -21,12 +21,20 @@ Optional subscription base: `https://nano-gpt.com/api/subscription/v1`
 
 ## Download (Android APK)
 
-Official builds are published on the repo’s **[Releases](https://github.com/jwarren9393/Anima/releases)** page (not committed into source).
+Official **v1.0.0** builds are published on the repo’s **[Releases](https://github.com/jwarren9393/Anima/releases)** page (not committed into source).
 
-1. Open the latest release (e.g. **v1.0.0**).
+1. Open release **v1.0.0**.
 2. Download **`Anima-1.0.0.apk`**.
 3. On your phone: allow install from this source if Android asks, then open the APK.
 4. First launch → **Settings → API & connection** → paste your NanoGPT key → Save.
+
+### What’s in v1.0.0
+
+- Full chat app: solo/group, streaming, swipes, Paths, drafts, personas, characters, World Info
+- Creation Center: invent worlds, **import lorebooks** (JSON file or existing World Info), create/update lorebooks, create character cards
+- Generate avatars (characters + personas) with subscription-safe image models
+- Backup & restore (`.anima-backup`, API key not included)
+- **Context estimate** gauges (Creation Center banner + chat ⋮ menu) and model **context window** labels in API settings
 
 This is a **personal / sideload** build (not Play Store). Rebuild locally anytime with:
 
@@ -133,6 +141,7 @@ Opened from Home or Chat ⋮ → **Settings** (`settings_screen.dart`). Each til
 - Provider list: **Auto** first, then providers A–Z.
 - Auto options include `auto-model`, `auto-model-basic`, `auto-model-standard`, `auto-model-premium`.
 - Model dropdown filtered by provider; refresh catalog; optional **custom model id**.
+- When NanoGPT’s detailed catalog includes `context_length`, the model row shows it (e.g. `Demo · 16K ctx`) and a short **Context window** line appears under the dropdown.
 
 **Image model (avatars)**
 
@@ -238,8 +247,11 @@ Imported creator notes, tags, extensions, etc. are **preserved** on save/export 
 
 - AI workshop chats to invent a world (setting, factions, places, rules, history, people, items…).
 - Streaming replies + Stop.
-- **Create lorebook** / **Update lorebook** — NanoGPT turns the workshop into keyword entries saved as one **enabled global lorebook** (one workshop ↔ one book).
-- **Create characters** (person+ icon) — detects named people in the workshop chat, lets you multi-select, generates each full card one-by-one, and opens **Review generated character** (same editor as Characters, including Generate avatar) before anything is saved. Saving a name that already exists creates a **second** card (no overwrite).
+- **Import lorebook** — open an existing World Info book **or** import a SillyTavern/Anima JSON file into a new workshop. File imports are saved to World Info **disabled** until you turn them on. Choosing a book that already has a workshop reopens that workshop.
+- Linked lore is fed into chat, **Update lorebook**, and **Create characters** (so you can revise an imported world and make cards from it without retyping everything).
+- **Create lorebook** / **Update lorebook** — NanoGPT turns the workshop (plus any linked book) into keyword entries saved as one global lorebook (one workshop ↔ one book). Updates keep the same book id and enabled/disabled state.
+- **Create characters** (person+ icon) — detects named people from the chat and linked lore, lets you multi-select, generates each full card one-by-one, and opens **Review generated character** (same editor as Characters, including Generate avatar) before anything is saved. Saving a name that already exists creates a **second** card (no overwrite).
+- **Context estimate** — live banner (~messages / ~tokens / % of model window when known). Tap the banner or the data-usage icon for a detailed breakdown. Rough gauge only (≈ 1 token ≈ 4 characters).
 - Deleting a workshop does **not** delete an already-created lorebook.
 
 ### 3.6 Generation parameters
@@ -295,6 +307,7 @@ All use the normal model + sampling (Format uses lower temperature to stay close
 - **Author’s Note** — per-chat instructions after history every turn (+ presets, macros).
 - **Memory summary** — edit the running summary injected into prompts.
 - **Summarize now** — force a NanoGPT memory update.
+- **Context estimate** — rough token/message gauge for this chat vs history budget and (when known) the model’s context window. Does not clutter the main screen.
 - **Characters** — pick/switch (pick mode).
 - **Start group chat**.
 - **Export chat** — Anima JSON (keeps swipes) or plain text.

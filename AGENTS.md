@@ -60,7 +60,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-18  
-**Last agent action:** Built release APK `Anima-1.0.0.apk` and published GitHub Release **v1.0.0**.
+**Last agent action:** Replaced GitHub Release **v1.0.0** with the intended “complete” APK (Creation Center lore import + context estimates + prior v1 features).
 
 ### What works today
 
@@ -70,7 +70,7 @@ High-value SillyTavern concepts to aim for over time:
   - **Personas** — create multiple {{user}} identities (name, bio, photo); **Generate avatar** from name/About; set a default for new chats
   - **Characters** — character cards + **categories** (custom lists; one character can be in several); filter dropdown; **consistency check** (checklist icon) = read-only AI report; **Generate avatar** from card text
   - **World Info & lore** — **global lorebooks** (create / import ST JSON / export / on-off) + scan depth/budget + link to per-character books; **entry AI wand** + **Suggest keywords from content**
-  - **Creation Center** — chat with AI to invent a world; **Create lorebook** saves keyword entries as a selectable global lorebook (one workshop = one book); **Create characters** (person+ icon) detects people in the chat, lets you multi-select, generates each card one-by-one, and opens **Review generated character** before anything is saved to Characters
+  - **Creation Center** — chat with AI to invent a world; **Import lorebook** (JSON file or choose an existing World Info book); **Create/Update lorebook** saves keyword entries as a selectable global lorebook (one workshop = one book); **Create characters** (person+ icon) detects people from the chat + linked lore, lets you multi-select, generates each card one-by-one, and opens **Review generated character** before anything is saved to Characters; **context estimate** banner (tap for details) shows ~messages/tokens vs model window
   - **AI collaborator** — wand guidance note + **Composer Format** note + **Roadway / Paths** note
   - **Appearance** — chat avatar shape/size only (theme is fixed Obsidian & Gold)
   - **Backup & restore** — one `.anima-backup` JSON file (chats, characters, personas, categories, lorebooks, workshops, drafts, roadway cache, avatars, settings); **API key is not included** — re-enter after restore; restore replaces Anima data only (whitelist), then returns to Home
@@ -81,7 +81,7 @@ High-value SillyTavern concepts to aim for over time:
 - **Text presets** — expanded Author’s Note / System prompt / Post-history / collaborator guidance sheets
 - **Character AI wand** — sparkle icon on creative card fields; sends all filled fields as context; appends NanoGPT text below what’s already there (uses chat model + sampling)
 - **World Info entry AI wand** — sparkle on Label / Keywords / Lore content (and Secondary keywords when Selective); uses book + sibling entry context; appends (keywords merge comma-separated); same model + collaborator guidance
-- **API & connection** — live NanoGPT model catalog: **Auto** provider (auto-model / basic / standard / premium) listed first, then providers A–Z; refresh; custom model id; subscription toggle reloads catalog; **image model** picker uses NanoGPT’s subscription image catalog when **Use subscription API** is on (hides paid models); otherwise full catalog with Paid/Included labels; **See remaining credits** shows wallet USD/NANO + weekly/daily/monthly + daily images allowance data returned by NanoGPT
+- **API & connection** — live NanoGPT model catalog: **Auto** provider (auto-model / basic / standard / premium) listed first, then providers A–Z; refresh; custom model id; subscription toggle reloads catalog; model dropdown shows **context window** when NanoGPT reports `context_length`; **image model** picker uses NanoGPT’s subscription image catalog when **Use subscription API** is on (hides paid models); otherwise full catalog with Paid/Included labels; **See remaining credits** shows wallet USD/NANO + weekly/daily/monthly + daily images allowance data returned by NanoGPT
 - **Chat stop** — while a reply streams, the send button becomes **Stop** (keeps any partial text)
 - **Composer shortcuts** — **OOC**, **Format** (✨), **Continue** (▶), Send/Stop; Format has its own collaborator note
 - **Draft autosave** — composer text saved per chat (survives leaving chat/app); cleared on send
@@ -98,6 +98,7 @@ High-value SillyTavern concepts to aim for over time:
 - **Per-chat persona** — in a chat, ⋮ menu → **Persona: …** to switch who you are for that thread (saved on the chat)
 - **Group chat controls** — tap a character name chip to choose who speaks next; auto-reply off by default (send only; tap a name or Continue for a reply; toggle via long-press)
 - **Avatars** — persona + character photos; **Generate avatar** on character and persona create/edit (and Creation Center character review) uses NanoGPT image models + an editable prompt; **tap an AI avatar in chat** to edit that character card (tap yours to edit the persona); PNG card import still grabs the card image; chat bubble shape/size via Appearance
+- **Context estimate** — chat ⋮ → **Context estimate** shows ~message/token gauges vs history budget and model window; Creation Center shows a live banner estimate
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar
 - **Smoke:** `flutter test` + `flutter analyze` pass; Android + Linux desktop debug work
 
@@ -237,8 +238,8 @@ lib/
     persona_edit_screen.dart      Create/edit one persona (+ Generate avatar)
     lorebook_edit_screen.dart     World Info entry list + entry editor (+ AI wand)
     lorebooks_screen.dart         Global lorebook list / create / import / export
-    world_workshop_list_screen.dart Creation Center workshop list
-    world_workshop_chat_screen.dart Workshop chat + Create/Update lorebook + Create characters
+    world_workshop_list_screen.dart Creation Center workshop list + import lorebook (file / World Info)
+    world_workshop_chat_screen.dart Workshop chat + linked lore context + Create/Update lorebook + Create characters
     settings_screen.dart          Settings hub (Personas + Characters + Creation Center + AI collaborator + Backup)
     api_settings_screen.dart      API key, model catalog, subscription URL + remaining credits
     lore_settings_screen.dart     Global books + scan/budget + character books link
@@ -333,8 +334,8 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. Install **v1.0.0** from [Releases](https://github.com/jwarren9393/Anima/releases) on your phone and confirm API key + a quick chat.
-2. Optional: Settings → Backup & restore → keep a `.anima-backup` somewhere safe.
+1. Install **v1.0.0** from [Releases](https://github.com/jwarren9393/Anima/releases) (replaces the earlier APK).
+2. Spot-check: Creation Center → Import lorebook; chat ⋮ → Context estimate; API model dropdown context labels.
 3. Optional QoL backlog when you want more: undo send, last-chat resume, pinned Author’s Note / mood chips, memory preview panel.
 
 ---

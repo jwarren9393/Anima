@@ -102,5 +102,44 @@ void main() {
       expect(service.estimateTokens('abcd'), 1);
       expect(service.estimateTokens('abcdefgh'), 2);
     });
+
+    test('estimateWorkshop and estimateChat produce usable gauges', () {
+      final messages = [
+        msg('1', 'Hello there, world builder.'),
+        msg('2', 'A rainy harbor city with rival guilds.', user: false),
+      ];
+      final workshop = service.estimateWorkshop(
+        messages: messages,
+        linkedLorebookJson: '{"name":"Harbor","entries":[{"content":"docks"}]}',
+        modelContextLength: 16000,
+      );
+      expect(workshop.messageCount, 2);
+      expect(workshop.estimatedSentTokens, greaterThan(workshop.fullTranscriptTokens));
+      expect(workshop.loreTokens, greaterThan(0));
+      expect(workshop.fillRatio, isNotNull);
+      expect(workshop.compactBannerLine, contains('2 msgs'));
+      expect(workshop.compactBannerLine, contains('16K'));
+
+      final chat = service.estimateChat(
+        messages: [
+          for (var i = 0; i < 30; i++)
+            msg('m$i', 'Pad this message with enough text $i ' * 10),
+        ],
+        memoryCoveredCount: 0,
+        historyTokenBudget: 200,
+        memorySummary: 'Earlier the party entered town.',
+        modelContextLength: 8000,
+      );
+      expect(chat.messageCount, 30);
+      expect(chat.messagesTrimmedAway, greaterThan(0));
+      expect(chat.estimatedSentTokens, lessThan(chat.fullTranscriptTokens));
+      expect(chat.memoryTokens, greaterThan(0));
+    });
+
+    test('ContextEstimate.formatTokenCount', () {
+      expect(ContextEstimate.formatTokenCount(850), '850');
+      expect(ContextEstimate.formatTokenCount(1200), '1.2K');
+      expect(ContextEstimate.formatTokenCount(16000), '16K');
+    });
   });
 }

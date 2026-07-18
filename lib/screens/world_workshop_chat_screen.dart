@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../models/character.dart';
@@ -5,6 +7,7 @@ import '../models/chat_message.dart';
 import '../models/global_lorebook.dart';
 import '../models/world_workshop.dart';
 import '../services/character_service.dart';
+import '../services/chat_context_service.dart';
 import '../services/nanogpt_service.dart';
 import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
@@ -41,10 +44,15 @@ class WorldWorkshopChatScreen extends StatefulWidget {
 class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     with WidgetsBindingObserver {
   final _builder = WorldWorkshopBuilder();
+  final _contextService = const ChatContextService();
 
   final _input = TextEditingController();
   final _scroll = ScrollController();
   late WorldWorkshop _workshop;
+  GlobalLorebook? _linkedLorebook;
+  bool _loadingLinkedLorebook = false;
+  int? _modelContextLength;
+  String _modelId = '';
   bool _sending = false;
   bool _exporting = false;
   String? _exportStatus;
@@ -55,8 +63,122 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _workshop = widget.workshop;
+    _loadLinkedLorebook();
+    _loadModelContext();
   }
 
+  Future<void> _loadLinkedLorebook() async {
+    final id = _workshop.exportedLorebookId;
+    if (id == null || id.isEmpty) return;
+    setState(() => _loadingLinkedLorebook = true);
+    final linked = await widget.worldInfoService.getById(id);
+    if (!mounted) return;
+    setState(() {
+      _linkedLorebook = linked;
+      _loadingLinkedLorebook = false;
+    });
+  }
+
+  Future<void> _loadModelContext() async {
+    try {
+      final modelId = await widget.settingsService.getModel();
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+      final models = await widget.nanoGptService.listModels(baseUrl: baseUrl);
+      if (!mounted) return;
+      int? contextLength;
+      for (final model in models) {
+        if (model.id == modelId) {
+          contextLength = model.contextLength;
+          break;
+        }
+      }
+      setState(() {
+        _modelId = modelId;
+        _modelContextLength = contextLength;
+      });
+    } catch (_) {
+      // Context length is optional UI polish.
+    }
+  }
+
+  bool get _hasSourceMaterial =>
+      _workshop.messages.isNotEmpty || _linkedLorebook != null;
+
+  ContextEstimate get _estimate {
+    final loreJson = _linkedLorebook == null
+        ? ''
+        : const JsonEncoder().convert(_linkedLorebook!.book.toJson());
+    return _contextService.estimateWorkshop(
+      messages: _workshop.messages,
+      linkedLorebookJson: loreJson,
+      modelContextLength: _modelContextLength,
+    );
+  }
+
+  Future<void> _showContextEstimate() async {
+    final estimate = _estimate;
+    final ratio = estimate.fillRatio;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Context estimate'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Rough estimate only (≈ 1 token per 4 characters). '
+                'Useful for spotting when a long workshop may start dropping early details.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 12),
+              Text('Messages: ${estimate.messageCount}'),
+              Text(
+                'Chat transcript: ~${ContextEstimate.formatTokenCount(estimate.fullTranscriptTokens)} tokens',
+              ),
+              if (estimate.loreTokens > 0)
+                Text(
+                  'Linked lorebook: ~${ContextEstimate.formatTokenCount(estimate.loreTokens)} tokens',
+                ),
+              Text(
+                'Estimated send size: ~${ContextEstimate.formatTokenCount(estimate.estimatedSentTokens)} tokens',
+              ),
+              if (_modelId.isNotEmpty) Text(
+                'Current model: $_modelId',
+              ),
+              if (estimate.modelContextLength != null)
+                Text(
+                  'Model context: ${ContextEstimate.formatTokenCount(estimate.modelContextLength!)} tokens'
+                  '${ratio == null ? '' : ' (~${(ratio * 100).round()}% used)'}',
+                )
+              else
+                const Text(
+                  'Model context: unknown (refresh models in API settings after picking a catalog model).',
+                ),
+              if (estimate.notes.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(estimate.notes),
+              ],
+              if (ratio != null && ratio >= 0.85) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Getting full — consider Update lorebook soon so early details stay in World Info.',
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
   @override
   void didChangeMetrics() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -85,7 +207,12 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
 
   Future<void> _send() async {
     final text = _input.text.trim();
-    if (text.isEmpty || _sending || _exporting) return;
+    if (text.isEmpty ||
+        _sending ||
+        _exporting ||
+        _loadingLinkedLorebook) {
+      return;
+    }
 
     final userMessage = ChatMessage(
       id: ChatMessage.newId(),
@@ -130,6 +257,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           'role': 'system',
           'content': _builder.chatSystemPrompt(
             guidanceNote: collaborator.guidanceNote,
+            sourceLorebook: _linkedLorebook?.book,
           ),
         },
         for (final message in messages) message.toApiMap(),
@@ -197,8 +325,18 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   }
 
   Future<void> _createLorebook() async {
-    if (_sending || _exporting) return;
-    if (_workshop.messages.isEmpty) {
+    if (_sending || _exporting || _loadingLinkedLorebook) return;
+    if (_workshop.exportedLorebookId != null && _linkedLorebook == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'The linked World Info lorebook is missing. Import or link it again.',
+          ),
+        ),
+      );
+      return;
+    }
+    if (!_hasSourceMaterial) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Chat a bit first, then create the lorebook.'),
@@ -223,6 +361,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         messages: _builder.buildExportMessages(
           conversation: _workshop.messages,
           guidanceNote: collaborator.guidanceNote,
+          sourceLorebook: _linkedLorebook?.book,
         ),
         baseUrl: baseUrl,
         sampling: sampling,
@@ -234,10 +373,13 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         id: (existingId != null && existingId.isNotEmpty)
             ? existingId
             : GlobalLorebook.newId(),
-        enabled: true,
+        enabled: _linkedLorebook?.enabled ?? true,
         book: book,
       );
       await widget.worldInfoService.upsert(global);
+      if (mounted) {
+        setState(() => _linkedLorebook = global);
+      }
 
       final title = book.name.trim().isEmpty ? _workshop.title : book.name.trim();
       await _persist(
@@ -282,8 +424,18 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   }
 
   Future<void> _createCharacters() async {
-    if (_sending || _exporting) return;
-    if (_workshop.messages.isEmpty) {
+    if (_sending || _exporting || _loadingLinkedLorebook) return;
+    if (_workshop.exportedLorebookId != null && _linkedLorebook == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'The linked World Info lorebook is missing. Import or link it again.',
+          ),
+        ),
+      );
+      return;
+    }
+    if (!_hasSourceMaterial) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Chat a bit first, then create characters.'),
@@ -313,6 +465,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         messages: _builder.buildCharacterDetectMessages(
           conversation: _workshop.messages,
           guidanceNote: collaborator.guidanceNote,
+          sourceLorebook: _linkedLorebook?.book,
         ),
         baseUrl: baseUrl,
         sampling: sampling,
@@ -367,6 +520,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
               characterName: candidate.name,
               characterSummary: candidate.summary,
               guidanceNote: collaborator.guidanceNote,
+              sourceLorebook: _linkedLorebook?.book,
             ),
             baseUrl: baseUrl,
             sampling: sampling,
@@ -612,13 +766,19 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final busy = _sending || _exporting;
+    final busy = _sending || _exporting || _loadingLinkedLorebook;
+    final linkedName = _linkedLorebook?.displayName;
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
       appBar: AppBar(
         title: Text(_workshop.title),
         actions: [
+          IconButton(
+            tooltip: 'Context estimate',
+            onPressed: _showContextEstimate,
+            icon: const Icon(Icons.data_usage_outlined),
+          ),
           IconButton(
             tooltip: 'Create characters',
             onPressed: busy ? null : _createCharacters,
@@ -658,14 +818,38 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
               color: theme.colorScheme.surfaceContainerHighest.withValues(
                 alpha: 0.5,
               ),
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                child: Text(
-                  _exportStatus ??
-                      'Talk about your world. Use Create lorebook for World Info, '
-                          'or the person+ icon to turn people into character cards.',
-                  style: theme.textTheme.bodySmall,
+              child: InkWell(
+                onTap: _showContextEstimate,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        _exportStatus ??
+                            (linkedName == null
+                                ? 'Talk about your world. Use Create lorebook for World Info, '
+                                    'or the person+ icon to turn people into character cards.'
+                                : 'Linked to “$linkedName” '
+                                    '(${_linkedLorebook!.entryCount} entries). '
+                                    'Chat to revise it, Update lorebook to save changes, '
+                                    'or create character cards from it.'),
+                        style: theme.textTheme.bodySmall,
+                      ),
+                      if (_exportStatus == null) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          _estimate.compactBannerLine,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: (_estimate.fillRatio ?? 0) >= 0.85
+                                ? theme.colorScheme.error
+                                : AnimaTheme.goldSoft,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -675,8 +859,12 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                       child: Padding(
                         padding: const EdgeInsets.all(24),
                         child: Text(
-                          'Example: “I want a rainy coastal city with rival '
-                          'guilds and a buried god under the harbor…”',
+                          linkedName == null
+                              ? 'Example: “I want a rainy coastal city with rival '
+                                  'guilds and a buried god under the harbor…”'
+                              : 'This workshop is ready to use “$linkedName”.\n\n'
+                                  'Ask the AI to explain, expand, rewrite, or reorganize '
+                                  'the lorebook—or create characters directly.',
                           textAlign: TextAlign.center,
                           style: theme.textTheme.bodyMedium,
                         ),
