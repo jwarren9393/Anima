@@ -642,6 +642,205 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     }
   }
 
+  Future<void> _updateExistingCharacter() async {
+    if (_sending || _exporting || _loadingLinkedLorebook) return;
+    if (_workshop.exportedLorebookId != null && _linkedLorebook == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'The linked World Info lorebook is missing. Import or link it again.',
+          ),
+        ),
+      );
+      return;
+    }
+    if (!_hasSourceMaterial) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Chat a bit first (or import a roleplay chat), then update a character.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _exporting = true;
+      _exportStatus = 'Loading characters…';
+    });
+
+    try {
+      final existingChars = await widget.characterService.loadCharacters();
+      if (!mounted) return;
+      if (existingChars.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No saved characters yet. Create one first, then update it here.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      final ordered = _builder.prioritizeCharactersForUpdate(
+        characters: existingChars,
+        importedSource: _workshop.importedSource,
+      );
+
+      setState(() {
+        _exporting = false;
+        _exportStatus = null;
+      });
+
+      final selected = await _pickExistingCharacter(ordered);
+      if (!mounted || selected == null) return;
+
+      setState(() {
+        _exporting = true;
+        _exportStatus = 'Updating ${selected.name}…';
+      });
+
+      final collaborator = await widget.settingsService
+          .getCollaboratorSettings();
+      final model = await widget.settingsService.getModel();
+      final sampling = await widget.settingsService.getSampling();
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+
+      final cardRaw = await widget.nanoGptService.complete(
+        model: model,
+        messages: _builder.buildCharacterUpdateMessages(
+          conversation: _workshop.messages,
+          existing: selected,
+          guidanceNote: collaborator.guidanceNote,
+          sourceLorebook: _linkedLorebook?.book,
+          importedSource: _workshop.importedSource,
+        ),
+        baseUrl: baseUrl,
+        sampling: sampling,
+      );
+
+      final draft = _builder.parseCharacterUpdateJson(
+        cardRaw,
+        original: selected,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _exporting = false;
+        _exportStatus = null;
+      });
+
+      final saved = await Navigator.of(context).push<Character>(
+        MaterialPageRoute(
+          builder: (_) => CharacterEditScreen(
+            characterService: widget.characterService,
+            settingsService: widget.settingsService,
+            nanoGptService: widget.nanoGptService,
+            existing: draft,
+            generatedDraft: true,
+            updatingExisting: true,
+          ),
+        ),
+      );
+
+      if (!mounted) return;
+      if (saved != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Updated “${saved.name}”.')),
+        );
+      }
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update character: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _exporting = false;
+          _exportStatus = null;
+        });
+      }
+    }
+  }
+
+  Future<Character?> _pickExistingCharacter(List<Character> characters) async {
+    return showModalBottomSheet<Character>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) {
+        final theme = Theme.of(context);
+        final maxHeight = MediaQuery.sizeOf(context).height * 0.7;
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxHeight),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+                  child: Text(
+                    'Update existing character',
+                    style: theme.textTheme.titleLarge,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                  child: Text(
+                    'Choose a saved card to revise from this workshop. '
+                    'You’ll review the merge before it overwrites the original.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ),
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: characters.length,
+                    itemBuilder: (context, index) {
+                      final character = characters[index];
+                      final fromImport = _builder.isImportedChatCharacter(
+                        character,
+                        _workshop.importedSource,
+                      );
+                      return ListTile(
+                        leading: const Icon(Icons.person_outline),
+                        title: Text(character.name),
+                        subtitle: Text(
+                          [
+                            if (character.description.trim().isNotEmpty)
+                              character.description.trim(),
+                            if (fromImport) 'In imported chat',
+                          ].join('\n'),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onTap: () => Navigator.pop(context, character),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _createPersona() async {
     if (_sending || _exporting || _loadingLinkedLorebook) return;
     if (_workshop.exportedLorebookId != null && _linkedLorebook == null) {
@@ -1119,6 +1318,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
             enabled: !busy,
             onSelected: (value) {
               if (value == 'characters') _createCharacters();
+              if (value == 'update') _updateExistingCharacter();
               if (value == 'persona') _createPersona();
             },
             icon:
@@ -1126,7 +1326,8 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                     (_exportStatus?.contains('character') == true ||
                         _exportStatus?.contains('persona') == true ||
                         _exportStatus?.contains('Finding') == true ||
-                        _exportStatus?.contains('Generating') == true)
+                        _exportStatus?.contains('Generating') == true ||
+                        _exportStatus?.contains('Updating') == true)
                 ? const SizedBox(
                     width: 18,
                     height: 18,
@@ -1139,6 +1340,14 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                 child: ListTile(
                   leading: Icon(Icons.groups_outlined),
                   title: Text('Create AI characters'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'update',
+                child: ListTile(
+                  leading: Icon(Icons.person_search_outlined),
+                  title: Text('Update existing character'),
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
@@ -1197,10 +1406,10 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                                     'or create character cards from it.'
                                 : hasImported
                                     ? 'Seeded from “${imported!.chatTitle}”. '
-                                        'Chat to refine ideas, then Create lorebook / '
-                                        'Create AI characters for NEW World Info cards.'
+                                        'Chat to refine ideas, then Create lorebook, '
+                                        'Create AI characters, or Update existing character.'
                                     : 'Talk about your world. Use Create lorebook for World Info, '
-                                        'or the person+ icon to turn people into character cards.'),
+                                        'or the person+ icon to create/update character cards.'),
                         style: theme.textTheme.bodySmall,
                       ),
                       if (_exportStatus == null) ...[

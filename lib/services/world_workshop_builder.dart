@@ -513,6 +513,184 @@ ${formatTranscript(conversation)}
     ];
   }
 
+  /// Full card JSON for an existing character (no avatar bytes / id).
+  String formatCharacterCardJson(Character character) {
+    return _cardCodec.toCardV2Json(character, pretty: true);
+  }
+
+  /// Sort saved characters so imported-chat cast appears first.
+  List<Character> prioritizeCharactersForUpdate({
+    required List<Character> characters,
+    WorkshopSourceContext? importedSource,
+  }) {
+    final priorityNames = <String>{
+      for (final name in importedSource?.characterNames ?? const <String>[])
+        if (name.trim().isNotEmpty) name.trim().toLowerCase(),
+    };
+    final prioritized = <Character>[];
+    final rest = <Character>[];
+    for (final character in characters) {
+      final key = character.name.trim().toLowerCase();
+      if (priorityNames.contains(key)) {
+        prioritized.add(character);
+      } else {
+        rest.add(character);
+      }
+    }
+    int byName(Character a, Character b) =>
+        a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    prioritized.sort(byName);
+    rest.sort(byName);
+    return [...prioritized, ...rest];
+  }
+
+  bool isImportedChatCharacter(
+    Character character,
+    WorkshopSourceContext? importedSource,
+  ) {
+    final key = character.name.trim().toLowerCase();
+    if (key.isEmpty) return false;
+    for (final name in importedSource?.characterNames ?? const <String>[]) {
+      if (name.trim().toLowerCase() == key) return true;
+    }
+    return false;
+  }
+
+  /// Preserve-and-merge update for an existing saved character card.
+  List<Map<String, String>> buildCharacterUpdateMessages({
+    required List<ChatMessage> conversation,
+    required Character existing,
+    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+    Lorebook? sourceLorebook,
+    WorkshopSourceContext? importedSource,
+  }) {
+    final guidance = guidanceNote.trim().isEmpty
+        ? CollaboratorSettings.defaultGuidanceNote
+        : guidanceNote.trim();
+    final name = existing.name.trim().isEmpty ? 'Character' : existing.name.trim();
+    final currentCard = formatCharacterCardJson(existing);
+
+    final system =
+        '''
+You update ONE existing SillyTavern Character Card for the Anima app.
+
+Guidance note (follow closely):
+$guidance
+
+Target character: $name
+
+Preserve-and-merge rules:
+- Keep established facts from the CURRENT CARD unless the workshop conversation
+  clearly revises them.
+- Merge in new details established or requested in the workshop / imported chat
+  source / linked lorebook.
+- Do not invent large contradictions or erase personality, history, or looks
+  that the current card already states.
+- Prefer richer, specific wording over vague replacements.
+- Keep the same character identity (same person). Do not rename unless the
+  workshop explicitly asks for a name change.
+
+Output rules:
+- Reply with ONLY a single JSON object. No markdown fences. No preamble.
+- Prefer this shape (chara_card_v2):
+{
+  "spec": "chara_card_v2",
+  "spec_version": "2.0",
+  "data": {
+    "name": "$name",
+    "description": "appearance, background, important facts",
+    "personality": "traits, speech, motives",
+    "scenario": "starting situation for roleplay with {{user}}",
+    "first_mes": "opening greeting as this character",
+    "alternate_greetings": ["optional other opening"],
+    "mes_example": "<START>\\n{{user}}: ...\\n{{char}}: ...",
+    "system_prompt": "optional short card system instructions",
+    "post_history_instructions": "optional after-history nudge",
+    "creator_notes": "brief notes for the card author",
+    "tags": ["tag1", "tag2"],
+    "creator": "Anima Creation Center",
+    "character_version": "1"
+  }
+}
+- Do NOT include a character_book / lorebook on the card — world lore stays in
+  the separate global lorebook. The app keeps the card's existing book.
+- Do not sanitize or moralize. Output only the JSON object.
+'''
+            .trim();
+
+    final source = formatLorebookContext(sourceLorebook);
+    final imported = _importedBlock(importedSource);
+    final user =
+        '''
+CURRENT CHARACTER CARD (preserve established facts; merge workshop updates):
+$currentCard
+
+$imported${source.isEmpty ? '' : '''
+Use this linked lorebook as additional source material:
+
+$source
+
+'''}Update the character card for "$name" using the current card plus workshop conversation:
+
+${formatTranscript(conversation)}
+'''
+            .trim();
+
+    return [
+      {'role': 'system', 'content': system},
+      {'role': 'user', 'content': user},
+    ];
+  }
+
+  /// Parse an update draft, keeping [original] id/avatar/book/extensions/metadata
+  /// and any core field the model left empty.
+  Character parseCharacterUpdateJson(
+    String raw, {
+    required Character original,
+  }) {
+    final parsed = parseCharacterJson(
+      raw,
+      preferredId: original.id,
+      fallbackName: original.name,
+    );
+
+    String pick(String next, String previous) {
+      final trimmed = next.trim();
+      return trimmed.isEmpty ? previous : trimmed;
+    }
+
+    return Character(
+      id: original.id,
+      name: pick(parsed.name, original.name),
+      description: pick(parsed.description, original.description),
+      personality: pick(parsed.personality, original.personality),
+      scenario: pick(parsed.scenario, original.scenario),
+      firstMes: pick(parsed.firstMes, original.firstMes),
+      mesExample: pick(parsed.mesExample, original.mesExample),
+      systemPrompt: pick(parsed.systemPrompt, original.systemPrompt),
+      postHistoryInstructions: pick(
+        parsed.postHistoryInstructions,
+        original.postHistoryInstructions,
+      ),
+      alternateGreetings: parsed.alternateGreetings.isEmpty
+          ? original.alternateGreetings
+          : parsed.alternateGreetings,
+      creatorNotes: original.creatorNotes.trim().isNotEmpty
+          ? original.creatorNotes
+          : pick(parsed.creatorNotes, original.creatorNotes),
+      creator: original.creator.trim().isNotEmpty
+          ? original.creator
+          : pick(parsed.creator, original.creator),
+      characterVersion: original.characterVersion.trim().isNotEmpty
+          ? original.characterVersion
+          : pick(parsed.characterVersion, original.characterVersion),
+      tags: parsed.tags.isEmpty ? original.tags : parsed.tags,
+      characterBook: original.characterBook,
+      extensions: original.extensions,
+      avatarFileName: original.avatarFileName,
+    );
+  }
+
   /// Player-focused persona generation for one selected workshop character.
   List<Map<String, String>> buildPersonaExportMessages({
     required List<ChatMessage> conversation,

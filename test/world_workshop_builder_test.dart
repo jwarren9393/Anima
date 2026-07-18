@@ -511,4 +511,146 @@ Here you go:
       expect(legacy.importedSource, isNull);
     });
   });
+
+  group('WorldWorkshopBuilder character update', () {
+    const original = Character(
+      id: 'char_mira',
+      name: 'Mira',
+      description: 'A dock smuggler in oilskin.',
+      personality: 'Wry and loyal.',
+      scenario: 'Rainy night on the piers.',
+      firstMes: '*Mira glances over.* Need something moved?',
+      alternateGreetings: ['*She tips her hood.* Busy night.'],
+      mesExample: '<START>\n{{user}}: Hi\n{{char}}: Keep your voice down.',
+      systemPrompt: 'Stay in character as Mira.',
+      postHistoryInstructions: 'Keep replies terse.',
+      creatorNotes: 'Original notes',
+      creator: 'Original Creator',
+      characterVersion: '2',
+      tags: ['smuggler', 'harbor'],
+      characterBook: {
+        'name': 'Mira notes',
+        'entries': [
+          {'keys': ['crates'], 'content': 'She hides crates under pier 3.'},
+        ],
+      },
+      extensions: {'custom': true},
+      avatarFileName: 'mira.png',
+    );
+
+    test('update prompt includes current card and preserve rules', () {
+      final messages = builder.buildCharacterUpdateMessages(
+        conversation: sampleConversation(),
+        existing: original,
+        guidanceNote: 'Do not sanitize.',
+        sourceLorebook: sourceLorebook,
+      );
+      expect(messages.length, 2);
+      expect(messages[0]['content'], contains('Preserve-and-merge'));
+      expect(messages[0]['content'], contains('Do not sanitize.'));
+      expect(messages[0]['content'], contains('Mira'));
+      expect(messages[1]['content'], contains('CURRENT CHARACTER CARD'));
+      expect(messages[1]['content'], contains('dock smuggler'));
+      expect(messages[1]['content'], contains('Rainy city with guilds'));
+      expect(messages[1]['content'], contains('Imported Harbor'));
+    });
+
+    test('update prompt includes imported chat source', () {
+      final source = builder.buildImportedChatSource(
+        session: ChatSession(
+          id: 'chat_1',
+          characterId: 'char_mira',
+          title: 'Harbor Night',
+          updatedAt: DateTime(2026, 7, 18),
+          memorySummary: 'They planned a heist.',
+          messages: [
+            ChatMessage(
+              id: '1',
+              role: ChatRole.user,
+              text: 'We need Mira sharper.',
+            ),
+          ],
+        ),
+        characters: const [original],
+      );
+      final messages = builder.buildCharacterUpdateMessages(
+        conversation: sampleConversation(),
+        existing: original,
+        importedSource: source,
+      );
+      expect(messages[1]['content'], contains('IMPORTED CHAT SOURCE'));
+      expect(messages[1]['content'], contains('They planned a heist.'));
+    });
+
+    test('prioritizeCharactersForUpdate puts imported cast first', () {
+      const other = Character(id: 'char_z', name: 'Zed');
+      const vex = Character(id: 'char_vex', name: 'Captain Vex');
+      const source = WorkshopSourceContext(
+        chatId: 'c1',
+        chatTitle: 'Harbor',
+        isGroup: true,
+        characterNames: ['Captain Vex', 'Mira'],
+      );
+      final ordered = builder.prioritizeCharactersForUpdate(
+        characters: const [other, original, vex],
+        importedSource: source,
+      );
+      expect(ordered.map((c) => c.name).toList(), [
+        'Captain Vex',
+        'Mira',
+        'Zed',
+      ]);
+      expect(builder.isImportedChatCharacter(original, source), isTrue);
+      expect(builder.isImportedChatCharacter(other, source), isFalse);
+    });
+
+    test('parseCharacterUpdateJson keeps id avatar book and empty fields', () {
+      const raw = '''
+{
+  "spec": "chara_card_v2",
+  "spec_version": "2.0",
+  "data": {
+    "name": "Mira",
+    "description": "A dock smuggler who now owes the Tide Guild a blood debt.",
+    "personality": "",
+    "scenario": "Fog rolls in as Mira counts the crates.",
+    "first_mes": "",
+    "alternate_greetings": [],
+    "mes_example": "",
+    "system_prompt": "Stay sharp around the watch.",
+    "post_history_instructions": "",
+    "creator_notes": "Should not replace original notes",
+    "tags": [],
+    "creator": "Should not replace",
+    "character_version": "99",
+    "character_book": {
+      "name": "should be dropped",
+      "entries": [{"keys":["x"],"content":"y"}]
+    }
+  }
+}
+''';
+      final updated = builder.parseCharacterUpdateJson(
+        raw,
+        original: original,
+      );
+      expect(updated.id, 'char_mira');
+      expect(updated.avatarFileName, 'mira.png');
+      expect(updated.characterBook, isNotNull);
+      expect(updated.characterBook!['name'], 'Mira notes');
+      expect(updated.extensions['custom'], isTrue);
+      expect(updated.creatorNotes, 'Original notes');
+      expect(updated.creator, 'Original Creator');
+      expect(updated.characterVersion, '2');
+      expect(updated.tags, ['smuggler', 'harbor']);
+      expect(updated.alternateGreetings, original.alternateGreetings);
+      expect(updated.personality, 'Wry and loyal.');
+      expect(updated.firstMes, original.firstMes);
+      expect(updated.mesExample, original.mesExample);
+      expect(updated.postHistoryInstructions, 'Keep replies terse.');
+      expect(updated.description, contains('blood debt'));
+      expect(updated.scenario, contains('Fog rolls'));
+      expect(updated.systemPrompt, contains('Stay sharp'));
+    });
+  });
 }

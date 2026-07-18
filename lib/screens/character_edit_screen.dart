@@ -28,6 +28,7 @@ class CharacterEditScreen extends StatefulWidget {
     required this.nanoGptService,
     this.existing,
     this.generatedDraft = false,
+    this.updatingExisting = false,
   });
 
   final CharacterService characterService;
@@ -38,6 +39,10 @@ class CharacterEditScreen extends StatefulWidget {
   /// True when opened from Creation Center (or similar) with AI-filled fields
   /// that are not saved until the user taps Save.
   final bool generatedDraft;
+
+  /// True when reviewing a Creation Center update to an already-saved card.
+  /// Save overwrites that same character id after review.
+  final bool updatingExisting;
 
   @override
   State<CharacterEditScreen> createState() => _CharacterEditScreenState();
@@ -74,9 +79,14 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
   String _preservedCharacterVersion = '';
   List<String> _preservedTags = const [];
 
-  bool get _isEditing => widget.existing != null && !widget.generatedDraft;
+  bool get _isEditing =>
+      widget.existing != null &&
+      !widget.generatedDraft &&
+      !widget.updatingExisting;
 
-  bool get _isGeneratedDraft => widget.generatedDraft;
+  bool get _isGeneratedDraft => widget.generatedDraft || widget.updatingExisting;
+
+  bool get _isUpdatingExisting => widget.updatingExisting;
 
   @override
   void initState() {
@@ -506,18 +516,25 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
     final loreEnabled =
         _lorebook?.entries.where((e) => e.enabled).length ?? 0;
 
-    final title = _isGeneratedDraft
-        ? 'Review generated character'
-        : (_isEditing ? 'Edit character card' : 'New character card');
-    final intro = _isGeneratedDraft
-        ? 'Review this AI draft from Creation Center. Edit anything you like, '
-            'then Save to add it to Characters — or go back to skip it. '
+    final title = _isUpdatingExisting
+        ? 'Review character update'
+        : (_isGeneratedDraft
+            ? 'Review generated character'
+            : (_isEditing ? 'Edit character card' : 'New character card'));
+    final intro = _isUpdatingExisting
+        ? 'Review this AI update from Creation Center. Established facts were '
+            'kept where possible; edit anything you like, then Save to update '
+            'the original character — or go back to leave it unchanged. '
             'You can use {{char}} and {{user}} in the text.'
-        : 'Fields match SillyTavern Character Cards (V2/V3). '
-            'You can use {{char}} and {{user}} in the text. '
-            'Tap the wand on a creative field to append AI text '
-            '(uses your NanoGPT model + Settings → AI collaborator). '
-            'Use the checklist icon for a read-only consistency report.';
+        : (_isGeneratedDraft
+            ? 'Review this AI draft from Creation Center. Edit anything you like, '
+                'then Save to add it to Characters — or go back to skip it. '
+                'You can use {{char}} and {{user}} in the text.'
+            : 'Fields match SillyTavern Character Cards (V2/V3). '
+                'You can use {{char}} and {{user}} in the text. '
+                'Tap the wand on a creative field to append AI text '
+                '(uses your NanoGPT model + Settings → AI collaborator). '
+                'Use the checklist icon for a read-only consistency report.');
 
     return Scaffold(
       appBar: AppBar(
@@ -704,7 +721,9 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : Text(
-                    _isGeneratedDraft || _isEditing
+                    _isUpdatingExisting
+                        ? 'Save update'
+                        : _isGeneratedDraft || _isEditing
                         ? 'Save character'
                         : 'Create character',
                   ),
