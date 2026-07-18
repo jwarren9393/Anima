@@ -88,7 +88,9 @@ class PromptBuilder {
           .join(', ');
       chunks.add(
         'This is a group chat. Other people present: $names. '
-        'Right now you are only writing as $charName.',
+        'Right now you are only writing as $charName. '
+        'Do not start your reply with "$charName:" or your name — '
+        'the app already labels who is speaking.',
       );
       for (final other in others) {
         final summary = _shortCard(other);

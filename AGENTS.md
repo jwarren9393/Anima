@@ -60,7 +60,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-18  
-**Last agent action:** Shipped Theme Studio (presets + custom colors/fonts) as **v1.1.0**.
+**Last agent action:** Strip duplicate `Name:` prefixes from group AI replies (display + save + prompt nudge).
 
 ### What works today
 
@@ -96,7 +96,7 @@ High-value SillyTavern concepts to aim for over time:
 - **Quick swipe** — on the **latest** AI message, ◀ **1/N** ▶ always shows; ▶ on the last version generates a new swipe (older multi-swipe bubbles still show arrows to browse only)
 - **Clean chat chrome** — no Swipe/Regen/Continue bar under messages (those live in the long-press menu; compact swipe arrows under bubbles)
 - **Per-chat persona** — in a chat, ⋮ menu → **Persona: …** to switch who you are for that thread (saved on the chat)
-- **Group chat controls** — tap a character name chip to choose who speaks next; auto-reply off by default (send only; tap a name or Continue for a reply; toggle via long-press)
+- **Group chat controls** — tap a character name chip to choose who speaks next; auto-reply off by default (send only; tap a name or Continue for a reply; toggle via long-press); leading `Name:` is stripped from replies so the bubble header isn’t duplicated
 - **Avatars** — persona + character photos; **Generate avatar** on character and persona create/edit (and Creation Center character review) uses NanoGPT image models + an editable prompt; **tap an AI avatar in chat** to edit that character card (tap yours to edit the persona); PNG card import still grabs the card image; chat bubble shape/size via Appearance
 - **Context estimate** — chat ⋮ → **Context estimate** shows ~message/token gauges vs history budget and model window; Creation Center shows a live banner estimate
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar
@@ -272,9 +272,10 @@ lib/
     lore_collaborator.dart        Field-aware prompts + keyword-from-content suggest
     message_formatter.dart        Composer AI format (*actions* / "dialogue")
     roadway_service.dart          Paths / Roadway brainstorm + combine prompts + parse
-    roadway_cache_service.dart    Per-chat cached Path options (survive sheet close)
-    composer_draft_service.dart   Per-chat composer draft autosave
-    chat_service.dart             Chats per character + group bucket (+ personaId, autoReply, lorebookIds)
+  roadway_cache_service.dart    Per-chat cached Path options (survive sheet close)
+  composer_draft_service.dart   Per-chat composer draft autosave
+  speaker_prefix.dart           Strip leading "Name:" from AI replies (group immersion)
+  chat_service.dart             Chats per character + group bucket (+ personaId, autoReply, lorebookIds)
     chat_context_service.dart     History trim + memory summarize helpers
     prompt_builder.dart           System prompt, modes, group, authors note
     lorebook_service.dart         Keyword scan, budget, merge global + character books

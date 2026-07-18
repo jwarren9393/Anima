@@ -28,6 +28,7 @@ import '../services/prompt_builder.dart';
 import '../services/roadway_cache_service.dart';
 import '../services/roadway_service.dart';
 import '../services/settings_service.dart';
+import '../services/speaker_prefix.dart';
 import '../services/world_info_service.dart';
 import '../services/world_workshop_service.dart';
 import '../widgets/anima_avatar.dart';
@@ -1641,13 +1642,19 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     for (final message in history) {
       // Prefixed speaker names help group chats stay clear in the history.
+      // Strip any name the model already put in the body so we don't send
+      // "Name: Name: …" and teach the habit again.
       if (!message.isUser &&
           message.speakerName != null &&
           message.speakerName!.trim().isNotEmpty &&
           _isGroup) {
+        final body = stripLeadingSpeakerPrefix(
+          message.text,
+          message.speakerName,
+        );
         msgs.add({
           'role': 'assistant',
-          'content': '${message.speakerName}: ${message.text}',
+          'content': '${message.speakerName}: $body',
         });
       } else {
         msgs.add(message.toApiMap());
@@ -1710,7 +1717,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       )) {
         if (!mounted) return;
         buffer.write(chunk);
-        final text = buffer.toString();
+        final speakerLabel = speaker.name;
+        final text = stripLeadingSpeakerPrefix(buffer.toString(), speakerLabel);
         setState(() {
           final last = _messages.last;
           final swipes = List<String>.from(last.swipes);
@@ -1737,6 +1745,32 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       }
 
       if (!mounted) return;
+      final last = _messages.last;
+      final cleaned = stripLeadingSpeakerPrefix(
+        last.text.trim(),
+        last.speakerName ?? speaker.name,
+      );
+      if (cleaned != last.text) {
+        setState(() {
+          final swipes = List<String>.from(last.swipes);
+          final index = last.swipeIndex.clamp(
+            0,
+            (swipes.length - 1).clamp(0, 9999),
+          );
+          if (swipes.isNotEmpty) {
+            swipes[index] = cleaned;
+          }
+          _session!.messages[_messages.length - 1] = ChatMessage(
+            id: last.id,
+            role: last.role,
+            text: cleaned,
+            swipes: swipes.isEmpty ? [cleaned] : swipes,
+            swipeIndex: index,
+            speakerId: last.speakerId ?? speaker.id,
+            speakerName: last.speakerName ?? speaker.name,
+          );
+        });
+      }
       final finalText = _messages.last.text.trim();
       if (finalText.isEmpty) {
         throw NanoGptException('NanoGPT returned an empty reply. Try again.');
@@ -2872,7 +2906,12 @@ class _MessageBubble extends StatelessWidget {
                         const SizedBox(height: 4),
                       ],
                       RpRichText(
-                        text: message.text,
+                        text: !isUser
+                            ? stripLeadingSpeakerPrefix(
+                                message.text,
+                                message.speakerName,
+                              )
+                            : message.text,
                         isUser: isUser,
                         baseStyle: Theme.of(context).textTheme.bodyLarge!
                             .copyWith(
