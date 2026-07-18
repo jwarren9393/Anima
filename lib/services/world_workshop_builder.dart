@@ -2,8 +2,11 @@ import 'dart:convert';
 
 import '../models/character.dart';
 import '../models/chat_message.dart';
+import '../models/chat_session.dart';
+import '../models/global_lorebook.dart';
 import '../models/lorebook.dart';
 import '../models/persona.dart';
+import '../models/world_workshop.dart';
 import 'character_card_codec.dart';
 import 'settings_service.dart';
 
@@ -29,16 +32,24 @@ class WorldWorkshopBuilder {
 
   final CharacterCardCodec _cardCodec;
 
+  /// Newest raw messages kept when a memory summary already covers the rest.
+  static const importKeepWhenCovered = 12;
+
+  /// Cap for recent raw messages when a chat has no memory summary yet.
+  static const importFallbackRecent = 40;
+
   /// System prompt for the ongoing workshop chat (questions + brainstorming).
   String chatSystemPrompt({
     String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
     Lorebook? sourceLorebook,
+    WorkshopSourceContext? importedSource,
   }) {
     final guidance = guidanceNote.trim().isEmpty
         ? CollaboratorSettings.defaultGuidanceNote
         : guidanceNote.trim();
 
     final source = formatLorebookContext(sourceLorebook);
+    final imported = formatImportedSource(importedSource);
     return '''
 You are Anima's World Info collaborator. You help the user invent a setting,
 factions, places, magic, history, and lore for a private roleplay app.
@@ -52,6 +63,13 @@ Your job in this chat:
   ask you for JSON later.
 - Do NOT dump finished character-card JSON unless they ask. The app has a
   separate "Create characters" action for that.
+${imported.isEmpty ? '' : '''
+- An existing roleplay chat was imported below as read-only source material.
+  Use it to propose a NEW lorebook and optional NEW characters. Do not treat
+  imported roleplay lines as prior workshop assistant replies.
+
+$imported
+'''}
 ${source.isEmpty ? '' : '''
 - A lorebook is linked below as the current source of truth. Discuss and revise
   it according to the user's requests. Do not silently discard entries or
@@ -68,6 +86,199 @@ Keep replies conversational and useful on a phone — not huge walls of text
 unless the user asks for depth.
 '''
         .trim();
+  }
+
+  /// Build read-only Creation Center source from a saved roleplay chat.
+  WorkshopSourceContext buildImportedChatSource({
+    required ChatSession session,
+    required List<Character> characters,
+    Persona? persona,
+    List<GlobalLorebook> linkedLorebooks = const [],
+    List<String> skippedNotes = const [],
+  }) {
+    final recent = selectRecentMessagesForImport(session);
+    final userName = persona?.name.trim().isNotEmpty == true
+        ? persona!.name.trim()
+        : 'User';
+    final characterNames = [
+      for (final c in characters)
+        if (c.name.trim().isNotEmpty) c.name.trim(),
+    ];
+    final loreNames = [
+      for (final g in linkedLorebooks)
+        if (g.displayName.trim().isNotEmpty) g.displayName.trim(),
+    ];
+
+    return WorkshopSourceContext(
+      chatId: session.id,
+      chatTitle: session.title.trim().isEmpty ? 'Chat' : session.title.trim(),
+      isGroup: session.isGroup,
+      memorySummary: session.memorySummary.trim(),
+      recentTranscript: formatRoleplayTranscript(
+        recent,
+        userName: userName,
+      ),
+      recentMessageCount: recent.length,
+      charactersText: formatCharactersForImport(characters),
+      characterNames: characterNames,
+      personaText: formatPersonaForImport(persona),
+      personaName: persona?.name.trim().isEmpty == false
+          ? persona!.name.trim()
+          : null,
+      loreReferenceText: formatLorebooksForImport(
+        linkedLorebooks: linkedLorebooks,
+        characters: characters,
+      ),
+      lorebookNames: loreNames,
+      authorsNote: session.authorsNote.trim(),
+      skippedNotes: skippedNotes,
+    );
+  }
+
+  /// Recent uncovered messages, or a capped fallback when there is no summary.
+  List<ChatMessage> selectRecentMessagesForImport(ChatSession session) {
+    final all = session.messages;
+    final end = all.length;
+    if (end == 0) return const [];
+
+    final hasSummary = session.memorySummary.trim().isNotEmpty;
+    final recent = <ChatMessage>[];
+
+    if (hasSummary) {
+      final covered = session.memoryCoveredCount.clamp(0, end);
+      for (var i = covered; i < end; i++) {
+        if (all[i].text.trim().isEmpty) continue;
+        recent.add(all[i]);
+      }
+      if (recent.isEmpty) {
+        for (var i = end - 1;
+            i >= 0 && recent.length < importKeepWhenCovered;
+            i--) {
+          if (all[i].text.trim().isEmpty) continue;
+          recent.insert(0, all[i]);
+        }
+      }
+      return recent;
+    }
+
+    for (var i = end - 1; i >= 0 && recent.length < importFallbackRecent; i--) {
+      if (all[i].text.trim().isEmpty) continue;
+      recent.insert(0, all[i]);
+    }
+    return recent;
+  }
+
+  /// Roleplay transcript with group speaker labels preserved.
+  String formatRoleplayTranscript(
+    List<ChatMessage> messages, {
+    String userName = 'User',
+  }) {
+    final transcript = StringBuffer();
+    final safeUser =
+        userName.trim().isEmpty ? 'User' : userName.trim();
+    for (final message in messages) {
+      final text = message.text.trim();
+      if (text.isEmpty) continue;
+      final who = message.isUser
+          ? safeUser
+          : (message.speakerName?.trim().isNotEmpty == true
+              ? message.speakerName!.trim()
+              : 'Character');
+      transcript.writeln('$who: $text');
+      transcript.writeln();
+    }
+    return transcript.toString().trim();
+  }
+
+  String formatPersonaForImport(Persona? persona) {
+    if (persona == null) return '';
+    final body = persona.promptText.trim();
+    if (body.isEmpty && persona.name.trim().isEmpty) return '';
+    final buffer = StringBuffer();
+    buffer.writeln('Player persona ({{user}}):');
+    buffer.writeln('Name: ${persona.name.trim()}');
+    if (body.isNotEmpty) {
+      buffer.writeln(body);
+    }
+    return buffer.toString().trim();
+  }
+
+  String formatCharactersForImport(List<Character> characters) {
+    if (characters.isEmpty) return '';
+    final buffer = StringBuffer('Character cards:');
+    for (final character in characters) {
+      buffer.writeln();
+      buffer.writeln();
+      buffer.writeln('### ${character.name.trim().isEmpty ? 'Unnamed' : character.name.trim()}');
+      void field(String label, String value) {
+        final trimmed = value.trim();
+        if (trimmed.isEmpty) return;
+        buffer.writeln('$label:');
+        buffer.writeln(trimmed);
+        buffer.writeln();
+      }
+
+      field('Description', character.description);
+      field('Personality', character.personality);
+      field('Scenario', character.scenario);
+      field('First message', character.firstMes);
+      field('Example dialogue', character.mesExample);
+      field('System prompt', character.systemPrompt);
+      field('Post-history instructions', character.postHistoryInstructions);
+      field('Creator notes', character.creatorNotes);
+      if (character.tags.isNotEmpty) {
+        buffer.writeln('Tags: ${character.tags.join(', ')}');
+      }
+    }
+    return buffer.toString().trim();
+  }
+
+  String formatLorebooksForImport({
+    required List<GlobalLorebook> linkedLorebooks,
+    required List<Character> characters,
+  }) {
+    final buffer = StringBuffer();
+    if (linkedLorebooks.isNotEmpty) {
+      buffer.writeln(
+        'Linked World Info lorebooks (reference only — create a NEW book '
+        'unless the user asks to revise an existing linked workshop book):',
+      );
+      for (final global in linkedLorebooks) {
+        buffer.writeln();
+        buffer.writeln('## ${global.displayName}');
+        buffer.writeln(formatLorebookContext(global.book));
+      }
+    }
+
+    final embedded = <String>[];
+    for (final character in characters) {
+      final book = character.lorebook;
+      if (book == null || book.entries.isEmpty) continue;
+      embedded.add(
+        '## Embedded on ${character.name.trim().isEmpty ? 'character' : character.name.trim()}\n'
+        '${formatLorebookContext(book)}',
+      );
+    }
+    if (embedded.isNotEmpty) {
+      if (buffer.isNotEmpty) buffer.writeln();
+      buffer.writeln('Character-embedded lorebooks (reference only):');
+      for (final block in embedded) {
+        buffer.writeln();
+        buffer.writeln(block);
+      }
+    }
+    return buffer.toString().trim();
+  }
+
+  String formatImportedSource(WorkshopSourceContext? source) {
+    if (source == null || !source.hasContent) return '';
+    return source.promptText;
+  }
+
+  String _importedBlock(WorkshopSourceContext? importedSource) {
+    final text = formatImportedSource(importedSource);
+    if (text.isEmpty) return '';
+    return '$text\n\n';
   }
 
   /// Full workshop transcript as plain `User:` / `Assistant:` text.
@@ -92,6 +303,7 @@ unless the user asks for depth.
     required List<ChatMessage> conversation,
     String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
     Lorebook? sourceLorebook,
+    WorkshopSourceContext? importedSource,
   }) {
     final guidance = guidanceNote.trim().isEmpty
         ? CollaboratorSettings.defaultGuidanceNote
@@ -140,15 +352,16 @@ Output rules:
             .trim();
 
     final source = formatLorebookContext(sourceLorebook);
+    final imported = _importedBlock(importedSource);
     final user =
         '''
-${source.isEmpty ? '' : '''
+$imported${source.isEmpty ? '' : '''
 This is the current linked lorebook. Preserve its entries, IDs, settings, and
 extensions unless the conversation explicitly asks to change or remove them:
 
 $source
 
-'''}Turn this workshop conversation into one complete lorebook JSON object:
+'''}Turn this workshop conversation${imported.isEmpty ? '' : ' (and imported chat source)'} into one complete lorebook JSON object:
 
 ${formatTranscript(conversation)}
 '''
@@ -165,6 +378,7 @@ ${formatTranscript(conversation)}
     required List<ChatMessage> conversation,
     String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
     Lorebook? sourceLorebook,
+    WorkshopSourceContext? importedSource,
   }) {
     final guidance = guidanceNote.trim().isEmpty
         ? CollaboratorSettings.defaultGuidanceNote
@@ -203,14 +417,15 @@ Output rules:
             .trim();
 
     final source = formatLorebookContext(sourceLorebook);
+    final imported = _importedBlock(importedSource);
     final user =
         '''
-${source.isEmpty ? '' : '''
+$imported${source.isEmpty ? '' : '''
 Use this linked lorebook as source material:
 
 $source
 
-'''}List playable characters from the linked lorebook and workshop conversation:
+'''}List playable characters from the linked lorebook, imported chat source, and workshop conversation:
 
 ${formatTranscript(conversation)}
 '''
@@ -229,6 +444,7 @@ ${formatTranscript(conversation)}
     String characterSummary = '',
     String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
     Lorebook? sourceLorebook,
+    WorkshopSourceContext? importedSource,
   }) {
     final guidance = guidanceNote.trim().isEmpty
         ? CollaboratorSettings.defaultGuidanceNote
@@ -277,14 +493,15 @@ Output rules:
             .trim();
 
     final source = formatLorebookContext(sourceLorebook);
+    final imported = _importedBlock(importedSource);
     final user =
         '''
-${source.isEmpty ? '' : '''
+$imported${source.isEmpty ? '' : '''
 Use this linked lorebook as source material:
 
 $source
 
-'''}Build a full character card for "$name" from the linked lorebook and workshop conversation:
+'''}Build a full character card for "$name" from the linked lorebook, imported chat source, and workshop conversation:
 
 ${formatTranscript(conversation)}
 '''
@@ -303,6 +520,7 @@ ${formatTranscript(conversation)}
     String personaSummary = '',
     String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
     Lorebook? sourceLorebook,
+    WorkshopSourceContext? importedSource,
   }) {
     final guidance = guidanceNote.trim().isEmpty
         ? CollaboratorSettings.defaultGuidanceNote
@@ -342,14 +560,15 @@ Output rules:
             .trim();
 
     final source = formatLorebookContext(sourceLorebook);
+    final imported = _importedBlock(importedSource);
     final user =
         '''
-${source.isEmpty ? '' : '''
+$imported${source.isEmpty ? '' : '''
 Use this linked lorebook as source material:
 
 $source
 
-'''}Build the player persona "$name" from the linked lorebook and workshop conversation:
+'''}Build the player persona "$name" from the linked lorebook, imported chat source, and workshop conversation:
 
 ${formatTranscript(conversation)}
 '''

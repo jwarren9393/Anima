@@ -372,6 +372,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           characterService: widget.characterService,
           characterCategoryService: widget.characterCategoryService,
           personaService: widget.personaService,
+          chatService: widget.chatService,
           nanoGptService: widget.nanoGptService,
           worldInfoService: widget.worldInfoService,
           worldWorkshopService: widget.worldWorkshopService,

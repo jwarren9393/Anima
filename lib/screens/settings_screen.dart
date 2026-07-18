@@ -4,6 +4,7 @@ import '../services/api_key_service.dart';
 import '../services/appearance_controller.dart';
 import '../services/character_category_service.dart';
 import '../services/character_service.dart';
+import '../services/chat_service.dart';
 import '../services/nanogpt_service.dart';
 import '../services/persona_service.dart';
 import '../services/settings_service.dart';
@@ -28,6 +29,7 @@ class SettingsScreen extends StatelessWidget {
     required this.characterService,
     required this.characterCategoryService,
     required this.personaService,
+    required this.chatService,
     required this.nanoGptService,
     required this.worldInfoService,
     required this.worldWorkshopService,
@@ -39,6 +41,7 @@ class SettingsScreen extends StatelessWidget {
   final CharacterService characterService;
   final CharacterCategoryService characterCategoryService;
   final PersonaService personaService;
+  final ChatService chatService;
   final NanoGptService nanoGptService;
   final WorldInfoService worldInfoService;
   final WorldWorkshopService worldWorkshopService;
@@ -123,7 +126,7 @@ class SettingsScreen extends StatelessWidget {
           _SettingsTile(
             icon: Icons.travel_explore,
             title: 'Creation Center',
-            subtitle: 'Chat with AI to build lorebooks and characters',
+            subtitle: 'Build lorebooks/characters; import chat or lorebook',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => WorldWorkshopListScreen(
@@ -131,6 +134,7 @@ class SettingsScreen extends StatelessWidget {
                   worldInfoService: worldInfoService,
                   characterService: characterService,
                   personaService: personaService,
+                  chatService: chatService,
                   settingsService: settingsService,
                   nanoGptService: nanoGptService,
                 ),

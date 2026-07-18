@@ -155,24 +155,37 @@ Output ONLY the updated summary — no preamble.
   ContextEstimate estimateWorkshop({
     required List<ChatMessage> messages,
     String linkedLorebookJson = '',
+    String importedSourceText = '',
     int? modelContextLength,
     int systemOverheadTokens = 450,
   }) {
     final chatTokens = estimateConversationTokens(messages);
     final loreTokens = estimateTokens(linkedLorebookJson);
-    final estimatedSent =
-        chatTokens + loreTokens + systemOverheadTokens.clamp(0, 5000);
+    final importedTokens = estimateTokens(importedSourceText);
+    final estimatedSent = chatTokens +
+        loreTokens +
+        importedTokens +
+        systemOverheadTokens.clamp(0, 5000);
+    final notes = <String>[
+      'Includes a small system-prompt cushion. Creation Center sends the full chat.',
+    ];
+    if (importedTokens > 0) {
+      notes.add(
+        'Imported chat source: ~${ContextEstimate.formatTokenCount(importedTokens)} tokens.',
+      );
+    }
+    if (loreTokens > 0) {
+      notes.add('Includes the linked lorebook.');
+    }
     return ContextEstimate(
       messageCount: messages.where((m) => m.text.trim().isNotEmpty).length,
       fullTranscriptTokens: chatTokens,
       estimatedSentTokens: estimatedSent,
-      memoryTokens: 0,
+      memoryTokens: importedTokens,
       loreTokens: loreTokens,
       historyBudgetTokens: null,
       modelContextLength: modelContextLength,
-      notes: loreTokens > 0
-          ? 'Includes the linked lorebook plus a small system-prompt cushion.'
-          : 'Includes a small system-prompt cushion. Creation Center sends the full chat.',
+      notes: notes.join(' '),
     );
   }
 

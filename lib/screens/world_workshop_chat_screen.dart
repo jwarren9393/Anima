@@ -106,15 +106,19 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   }
 
   bool get _hasSourceMaterial =>
-      _workshop.messages.isNotEmpty || _linkedLorebook != null;
+      _workshop.messages.isNotEmpty ||
+      _linkedLorebook != null ||
+      (_workshop.importedSource?.hasContent ?? false);
 
   ContextEstimate get _estimate {
     final loreJson = _linkedLorebook == null
         ? ''
         : const JsonEncoder().convert(_linkedLorebook!.book.toJson());
+    final imported = _workshop.importedSource?.promptText ?? '';
     return _contextService.estimateWorkshop(
       messages: _workshop.messages,
       linkedLorebookJson: loreJson,
+      importedSourceText: imported,
       modelContextLength: _modelContextLength,
     );
   }
@@ -141,6 +145,10 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
               Text(
                 'Chat transcript: ~${ContextEstimate.formatTokenCount(estimate.fullTranscriptTokens)} tokens',
               ),
+              if (estimate.memoryTokens > 0)
+                Text(
+                  'Imported chat source: ~${ContextEstimate.formatTokenCount(estimate.memoryTokens)} tokens',
+                ),
               if (estimate.loreTokens > 0)
                 Text(
                   'Linked lorebook: ~${ContextEstimate.formatTokenCount(estimate.loreTokens)} tokens',
@@ -258,6 +266,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           'content': _builder.chatSystemPrompt(
             guidanceNote: collaborator.guidanceNote,
             sourceLorebook: _linkedLorebook?.book,
+            importedSource: _workshop.importedSource,
           ),
         },
         for (final message in messages) message.toApiMap(),
@@ -339,7 +348,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     if (!_hasSourceMaterial) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Chat a bit first, then create the lorebook.'),
+          content: Text(
+            'Chat a bit first (or import a roleplay chat), then create the lorebook.',
+          ),
         ),
       );
       return;
@@ -362,6 +373,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           conversation: _workshop.messages,
           guidanceNote: collaborator.guidanceNote,
           sourceLorebook: _linkedLorebook?.book,
+          importedSource: _workshop.importedSource,
         ),
         baseUrl: baseUrl,
         sampling: sampling,
@@ -465,6 +477,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           conversation: _workshop.messages,
           guidanceNote: collaborator.guidanceNote,
           sourceLorebook: _linkedLorebook?.book,
+          importedSource: _workshop.importedSource,
         ),
         baseUrl: baseUrl,
         sampling: sampling,
@@ -520,6 +533,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
               characterSummary: candidate.summary,
               guidanceNote: collaborator.guidanceNote,
               sourceLorebook: _linkedLorebook?.book,
+              importedSource: _workshop.importedSource,
             ),
             baseUrl: baseUrl,
             sampling: sampling,
@@ -671,6 +685,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           conversation: _workshop.messages,
           guidanceNote: collaborator.guidanceNote,
           sourceLorebook: _linkedLorebook?.book,
+          importedSource: _workshop.importedSource,
         ),
         baseUrl: baseUrl,
         sampling: sampling,
@@ -710,6 +725,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           personaSummary: selected.summary,
           guidanceNote: collaborator.guidanceNote,
           sourceLorebook: _linkedLorebook?.book,
+          importedSource: _workshop.importedSource,
         ),
         baseUrl: baseUrl,
         sampling: sampling,
@@ -993,11 +1009,100 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     });
   }
 
+  Future<void> _showImportedSourceDetails() async {
+    final source = _workshop.importedSource;
+    if (source == null) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Imported: ${source.chatTitle}'),
+        content: SingleChildScrollView(
+          child: SelectableText(
+            source.promptText,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _importedSourceCard(ThemeData theme) {
+    final source = _workshop.importedSource;
+    if (source == null || !source.hasContent) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Material(
+        color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: _showImportedSourceDetails,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.forum_outlined,
+                  color: theme.colorScheme.onSecondaryContainer,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Imported from chat',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: theme.colorScheme.onSecondaryContainer,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${source.chatTitle} · ${source.compactSummary}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSecondaryContainer,
+                        ),
+                      ),
+                      if (source.skippedNotes.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          '${source.skippedNotes.length} missing reference'
+                          '${source.skippedNotes.length == 1 ? '' : 's'} skipped',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.error,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right,
+                  color: theme.colorScheme.onSecondaryContainer,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final busy = _sending || _exporting || _loadingLinkedLorebook;
     final linkedName = _linkedLorebook?.displayName;
+    final imported = _workshop.importedSource;
+    final hasImported = imported?.hasContent ?? false;
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
@@ -1085,13 +1190,17 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                     children: [
                       Text(
                         _exportStatus ??
-                            (linkedName == null
-                                ? 'Talk about your world. Use Create lorebook for World Info, '
-                                      'or the person+ icon to turn people into character cards.'
-                                : 'Linked to “$linkedName” '
-                                      '(${_linkedLorebook!.entryCount} entries). '
-                                      'Chat to revise it, Update lorebook to save changes, '
-                                      'or create character cards from it.'),
+                            (linkedName != null
+                                ? 'Linked to “$linkedName” '
+                                    '(${_linkedLorebook!.entryCount} entries). '
+                                    'Chat to revise it, Update lorebook to save changes, '
+                                    'or create character cards from it.'
+                                : hasImported
+                                    ? 'Seeded from “${imported!.chatTitle}”. '
+                                        'Chat to refine ideas, then Create lorebook / '
+                                        'Create AI characters for NEW World Info cards.'
+                                    : 'Talk about your world. Use Create lorebook for World Info, '
+                                        'or the person+ icon to turn people into character cards.'),
                         style: theme.textTheme.bodySmall,
                       ),
                       if (_exportStatus == null) ...[
@@ -1110,18 +1219,23 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                 ),
               ),
             ),
+            _importedSourceCard(theme),
             Expanded(
               child: _workshop.messages.isEmpty
                   ? Center(
                       child: Padding(
                         padding: const EdgeInsets.all(24),
                         child: Text(
-                          linkedName == null
-                              ? 'Example: “I want a rainy coastal city with rival '
-                                    'guilds and a buried god under the harbor…”'
-                              : 'This workshop is ready to use “$linkedName”.\n\n'
-                                    'Ask the AI to explain, expand, rewrite, or reorganize '
-                                    'the lorebook—or create characters directly.',
+                          linkedName != null
+                              ? 'This workshop is ready to use “$linkedName”.\n\n'
+                                  'Ask the AI to explain, expand, rewrite, or reorganize '
+                                  'the lorebook—or create characters directly.'
+                              : hasImported
+                                  ? 'Your imported chat is ready as source material.\n\n'
+                                      'Ask the AI what to extract into a lorebook, or tap '
+                                      'Create lorebook / the person+ icon when you’re ready.'
+                                  : 'Example: “I want a rainy coastal city with rival '
+                                      'guilds and a buried god under the harbor…”',
                           textAlign: TextAlign.center,
                           style: theme.textTheme.bodyMedium,
                         ),

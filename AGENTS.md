@@ -60,7 +60,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-18  
-**Last agent action:** Strip duplicate `Name:` prefixes from group AI replies (display + save + prompt nudge).
+**Last agent action:** Creation Center can import an existing chat as read-only workshop source.
 
 ### What works today
 
@@ -70,7 +70,7 @@ High-value SillyTavern concepts to aim for over time:
   - **Personas** — create multiple {{user}} identities with separate identity/role, appearance, personality, background, goals, and photo fields; **AI wand** on creative fields (appends text like Characters); **Generate avatar** from persona details; set a default for new chats; all filled fields are labeled and sent on every chat generation
   - **Characters** — character cards + **categories** (custom lists; one character can be in several); filter dropdown; **consistency check** (checklist icon) = read-only AI report; **Generate avatar** from card text
   - **World Info & lore** — **global lorebooks** (create / import ST JSON / export / on-off) + scan depth/budget + link to per-character books; **entry AI wand** + **Suggest keywords from content**
-  - **Creation Center** — chat with AI to invent a world; **Import lorebook** (JSON file or choose an existing World Info book); **Create/Update lorebook** saves keyword entries as a selectable global lorebook (one workshop = one book); the people menu can **Create AI characters** (multi-select + review each card) or **Create my persona** (choose one person from workshop chat + linked lore, generate player-focused fields, then review before saving); **context estimate** banner (tap for details) shows ~messages/tokens vs model window
+  - **Creation Center** — chat with AI to invent a world; **Import** can seed from an **existing chat** (memory summary + recent messages + characters/persona + linked lore as read-only source), a World Info lorebook, or a JSON file; **Create/Update lorebook** saves keyword entries as a selectable global lorebook (one workshop = one book); the people menu can **Create AI characters** (multi-select + review each card) or **Create my persona** (choose one person from workshop chat + linked lore, generate player-focused fields, then review before saving); **context estimate** banner (tap for details) shows ~messages/tokens vs model window
   - **AI collaborator** — wand guidance note + **Composer Format** note + **Roadway / Paths** note
   - **Appearance (Theme Studio)** — 8 global presets (glass + solid), custom background/accent/header/menu/text/bubble colors, fonts, text scales, glass opacity/blur, chat avatars; live preview + immediate app-wide apply
   - **Backup & restore** — one `.anima-backup` JSON file (chats, characters, personas, categories, lorebooks, workshops, drafts, roadway cache, avatars, settings); **API key is not included** — re-enter after restore; restore replaces Anima data only (whitelist), then returns to Home
@@ -224,7 +224,7 @@ lib/
     character_category.dart       Anima-only category lists + memberships
     lorebook.dart                 CharacterBook / World Info entries (+ ST import aliases)
     global_lorebook.dart          Standalone global lorebook (id + enabled + book)
-    world_workshop.dart           Creation Center workshop chat (one chat → one lorebook)
+    world_workshop.dart           Creation Center workshop + optional imported chat source
     ui_style_settings.dart        Theme Studio settings + AnimaUiTheme extension + avatars
     theme_palette.dart            VisualStyle / BackgroundMode / fonts + 8 ThemePresets
     anima_presets.dart            Built-in sampling + text presets (Author’s Note, prompts, guidance)
@@ -239,8 +239,8 @@ lib/
     persona_edit_screen.dart      Create/edit/review generated persona fields (+ AI wand + Generate avatar)
     lorebook_edit_screen.dart     World Info entry list + entry editor (+ AI wand)
     lorebooks_screen.dart         Global lorebook list / create / import / export
-    world_workshop_list_screen.dart Creation Center workshop list + import lorebook (file / World Info)
-    world_workshop_chat_screen.dart Workshop chat + linked lore + Create/Update lorebook + AI characters/persona
+    world_workshop_list_screen.dart Creation Center list + import chat / lorebook (file / World Info)
+    world_workshop_chat_screen.dart Workshop chat + imported source card + lorebook/characters/persona
     settings_screen.dart          Settings hub (Personas + Characters + Creation Center + AI collaborator + Backup)
     api_settings_screen.dart      API key, model catalog, subscription URL + remaining credits
     lore_settings_screen.dart     Global books + scan/budget + character books link
@@ -281,7 +281,7 @@ lib/
     lorebook_service.dart         Keyword scan, budget, merge global + character books
     world_info_service.dart       Persist global lorebooks (anima_lorebooks.json)
     world_workshop_service.dart   Persist Creation Center workshops
-    world_workshop_builder.dart   Workshop prompts + lorebook/people detect + character/persona JSON parse
+    world_workshop_builder.dart   Workshop prompts + chat-import source + lorebook/people JSON parse
     chat_transcript_codec.dart    Chat JSON / plain-text import/export
     app_backup_service.dart       Full-app backup/restore (whitelist JSON + avatars; no API key)
     nanogpt_service.dart          Streaming + text/image model catalogs + image generate + credit usage + sampling + plain-English errors
@@ -339,8 +339,8 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. Install **v1.1.0** from [Releases](https://github.com/jwarren9393/Anima/releases) (Theme Studio).
-2. Spot-check Settings → Appearance: try a glass preset, a solid preset, Ivory Ink, and a custom accent color.
+1. Spot-check Creation Center → Import → **Existing chat**: pick a long RP thread, confirm the source card, then Create lorebook / Create AI characters.
+2. Optional: install latest **v1.1.0** from [Releases](https://github.com/jwarren9393/Anima/releases) when a build with this feature is published.
 3. Optional: upload `assets/branding/anima_icon.png` as the GitHub repo Social preview (Settings → General → Social preview).
 4. Optional QoL backlog when you want more: undo send, last-chat resume, pinned Author’s Note / mood chips, memory preview panel.
 

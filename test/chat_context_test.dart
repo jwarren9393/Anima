@@ -111,11 +111,14 @@ void main() {
       final workshop = service.estimateWorkshop(
         messages: messages,
         linkedLorebookJson: '{"name":"Harbor","entries":[{"content":"docks"}]}',
+        importedSourceText: 'IMPORTED CHAT SOURCE\nMemory summary: dock heist.',
         modelContextLength: 16000,
       );
       expect(workshop.messageCount, 2);
       expect(workshop.estimatedSentTokens, greaterThan(workshop.fullTranscriptTokens));
       expect(workshop.loreTokens, greaterThan(0));
+      expect(workshop.memoryTokens, greaterThan(0));
+      expect(workshop.notes, contains('Imported chat source'));
       expect(workshop.fillRatio, isNotNull);
       expect(workshop.compactBannerLine, contains('2 msgs'));
       expect(workshop.compactBannerLine, contains('16K'));

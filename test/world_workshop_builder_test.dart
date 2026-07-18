@@ -1,7 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:anima/models/character.dart';
 import 'package:anima/models/chat_message.dart';
+import 'package:anima/models/chat_session.dart';
+import 'package:anima/models/global_lorebook.dart';
 import 'package:anima/models/lorebook.dart';
+import 'package:anima/models/persona.dart';
+import 'package:anima/models/world_workshop.dart';
 import 'package:anima/services/world_workshop_builder.dart';
 
 void main() {
@@ -325,6 +330,185 @@ Here you go:
       expect(persona.description, 'Heir');
       expect(persona.background, 'Old house');
       expect(persona.goals, 'Restore it');
+    });
+  });
+
+  group('WorldWorkshopBuilder chat import', () {
+    ChatSession sampleSession({
+      String summary = '',
+      int covered = 0,
+      List<ChatMessage>? messages,
+    }) {
+      return ChatSession(
+        id: 'chat_1',
+        characterId: 'char_a',
+        title: 'Harbor Night',
+        updatedAt: DateTime(2026, 7, 18),
+        personaId: 'persona_1',
+        authorsNote: 'Keep it rainy.',
+        participantIds: const ['char_a', 'char_b'],
+        lorebookIds: const ['lore_1'],
+        memorySummary: summary,
+        memoryCoveredCount: covered,
+        messages: messages ??
+            [
+              ChatMessage(
+                id: 'm1',
+                role: ChatRole.assistant,
+                text: 'Old covered line.',
+                speakerId: 'char_a',
+                speakerName: 'Mira',
+              ),
+              ChatMessage(
+                id: 'm2',
+                role: ChatRole.user,
+                text: 'We slip past the watch.',
+              ),
+              ChatMessage(
+                id: 'm3',
+                role: ChatRole.assistant,
+                text: 'Stay low near the crates.',
+                speakerId: 'char_b',
+                speakerName: 'Captain Vex',
+              ),
+            ],
+      );
+    }
+
+    test('selectRecentMessages prefers uncovered after summary', () {
+      final recent = builder.selectRecentMessagesForImport(
+        sampleSession(summary: 'They smuggled crates.', covered: 1),
+      );
+      expect(recent, hasLength(2));
+      expect(recent.first.text, contains('slip past'));
+      expect(recent.last.speakerName, 'Captain Vex');
+    });
+
+    test('selectRecentMessages falls back when no summary', () {
+      final many = <ChatMessage>[
+        for (var i = 0; i < 50; i++)
+          ChatMessage(
+            id: 'n$i',
+            role: i.isEven ? ChatRole.user : ChatRole.assistant,
+            text: 'Line $i',
+            speakerName: i.isEven ? null : 'Mira',
+          ),
+      ];
+      final recent = builder.selectRecentMessagesForImport(
+        sampleSession(messages: many),
+      );
+      expect(recent, hasLength(WorldWorkshopBuilder.importFallbackRecent));
+      expect(recent.first.text, 'Line 10');
+      expect(recent.last.text, 'Line 49');
+    });
+
+    test('buildImportedChatSource packs cards, persona, lore, speakers', () {
+      final source = builder.buildImportedChatSource(
+        session: sampleSession(summary: 'Dock heist in progress.', covered: 1),
+        characters: const [
+          Character(
+            id: 'char_a',
+            name: 'Mira',
+            description: 'Dock smuggler',
+            personality: 'Wry',
+          ),
+          Character(
+            id: 'char_b',
+            name: 'Captain Vex',
+            description: 'Night watch',
+            characterBook: {
+              'name': 'Vex notes',
+              'entries': [
+                {
+                  'keys': ['watch'],
+                  'content': 'Vex bribes the watch captains.',
+                },
+              ],
+            },
+          ),
+        ],
+        persona: const Persona(
+          id: 'persona_1',
+          name: 'Ash',
+          description: 'A quiet fixer',
+        ),
+        linkedLorebooks: const [
+          GlobalLorebook(
+            id: 'lore_1',
+            book: Lorebook(
+              name: 'Harbor',
+              entries: [
+                LorebookEntry(
+                  id: 1,
+                  keys: ['harbor'],
+                  content: 'Salt and iron.',
+                ),
+              ],
+            ),
+          ),
+        ],
+        skippedNotes: const ['Character id char_missing (deleted)'],
+      );
+
+      expect(source.hasContent, isTrue);
+      expect(source.chatTitle, 'Harbor Night');
+      expect(source.isGroup, isTrue);
+      expect(source.memorySummary, contains('Dock heist'));
+      expect(source.recentTranscript, contains('Ash: We slip past'));
+      expect(source.recentTranscript, contains('Captain Vex: Stay low'));
+      expect(source.charactersText, contains('### Mira'));
+      expect(source.personaText, contains('Player persona'));
+      expect(source.loreReferenceText, contains('Harbor'));
+      expect(source.loreReferenceText, contains('Embedded on Captain Vex'));
+      expect(source.skippedNotes, contains('Character id char_missing (deleted)'));
+      expect(source.promptText, contains('IMPORTED CHAT SOURCE'));
+    });
+
+    test('imported source appears in workshop prompts', () {
+      final source = builder.buildImportedChatSource(
+        session: sampleSession(summary: 'Summary text.', covered: 1),
+        characters: const [
+          Character(id: 'char_a', name: 'Mira', description: 'Smuggler'),
+        ],
+        persona: const Persona(id: 'persona_1', name: 'Ash'),
+      );
+      final chat = builder.chatSystemPrompt(importedSource: source);
+      final export = builder.buildExportMessages(
+        conversation: sampleConversation(),
+        importedSource: source,
+      );
+      final detect = builder.buildCharacterDetectMessages(
+        conversation: const [],
+        importedSource: source,
+      );
+      expect(chat, contains('IMPORTED CHAT SOURCE'));
+      expect(chat, contains('Harbor Night'));
+      expect(export[1]['content'], contains('IMPORTED CHAT SOURCE'));
+      expect(export[1]['content'], contains('Summary text.'));
+      expect(detect[1]['content'], contains('Mira'));
+    });
+
+    test('WorldWorkshop JSON round-trips imported source', () {
+      final source = builder.buildImportedChatSource(
+        session: sampleSession(summary: 'Kept.', covered: 0),
+        characters: const [Character(id: 'char_a', name: 'Mira')],
+      );
+      final workshop = WorldWorkshop.empty(title: 'From chat').copyWith(
+        importedSource: source,
+      );
+      final restored = WorldWorkshop.fromJson(workshop.toJson());
+      expect(restored.importedSource, isNotNull);
+      expect(restored.importedSource!.chatTitle, 'Harbor Night');
+      expect(restored.importedSource!.memorySummary, 'Kept.');
+      expect(restored.importedSource!.characterNames, contains('Mira'));
+
+      final legacy = WorldWorkshop.fromJson({
+        'id': 'ws_old',
+        'title': 'Old',
+        'messages': [],
+        'updatedAt': DateTime(2026, 1, 1).toIso8601String(),
+      });
+      expect(legacy.importedSource, isNull);
     });
   });
 }
