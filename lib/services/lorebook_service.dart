@@ -2,12 +2,15 @@ import '../models/character.dart';
 import '../models/chat_message.dart';
 import '../models/lorebook.dart';
 
+typedef LoreTriggerListener = void Function(List<String> labels);
+
 /// Result of scanning chat history against a lorebook.
 class LorebookInjection {
   const LorebookInjection({
     this.beforeChar = '',
     this.afterChar = '',
     this.matchedCount = 0,
+    this.triggeredLabels = const [],
   });
 
   /// Lore placed before the character description block.
@@ -17,6 +20,9 @@ class LorebookInjection {
   final String afterChar;
 
   final int matchedCount;
+
+  /// Human-readable book / entry labels approved by the token budget.
+  final List<String> triggeredLabels;
 
   bool get isEmpty => beforeChar.isEmpty && afterChar.isEmpty;
 }
@@ -57,6 +63,8 @@ class LorebookService {
     List<Lorebook> extraBooks = const [],
     int? scanDepthOverride,
     int? tokenBudgetOverride,
+    bool? recursiveScanningOverride,
+    LoreTriggerListener? onTriggered,
   }) {
     final books = <Lorebook>[
       ...extraBooks,
@@ -69,33 +77,43 @@ class LorebookService {
         (scanDepthOverride ?? firstBook.scanDepth).clamp(1, 50);
     final resolvedBudget =
         (tokenBudgetOverride ?? firstBook.tokenBudget).clamp(10, 4000);
+    final recursiveScanning = recursiveScanningOverride ??
+        books.any((book) => book.recursiveScanning);
 
     final haystack = _scanText(messages, resolvedDepth);
-
-    final triggered = <LorebookEntry>[];
+    final candidates = <_LoreCandidate>[];
+    var ordinal = 0;
     for (final book in books) {
       for (final entry in book.entries) {
         if (!entry.enabled) continue;
         if (entry.content.trim().isEmpty) continue;
-        if (_entryMatches(entry, haystack)) {
-          triggered.add(entry);
-        }
+        candidates.add(
+          _LoreCandidate(book: book, entry: entry, ordinal: ordinal++),
+        );
       }
     }
 
+    final triggered = <_LoreMatch>[
+      for (final candidate in candidates)
+        if (_entryMatches(candidate.entry, haystack))
+          _LoreMatch(candidate: candidate, depth: 0),
+    ];
     if (triggered.isEmpty) return const LorebookInjection();
 
-    // insertion_order: lower → earlier in the prompt.
-    triggered.sort((a, b) {
-      final byOrder = a.insertionOrder.compareTo(b.insertionOrder);
-      if (byOrder != 0) return byOrder;
-      return (a.id ?? 0).compareTo(b.id ?? 0);
-    });
+    var kept = _applyBudget(triggered, resolvedBudget);
+    if (recursiveScanning && kept.isNotEmpty) {
+      kept = _expandRecursively(
+        candidates: candidates,
+        directMatches: triggered,
+        initiallyKept: kept,
+        budget: resolvedBudget,
+      );
+    }
 
-    final kept = _applyBudget(triggered, resolvedBudget);
     final before = <String>[];
     final after = <String>[];
-    for (final entry in kept) {
+    for (final match in kept) {
+      final entry = match.candidate.entry;
       final text = entry.content.trim();
       if (entry.position == LorebookPosition.afterChar) {
         after.add(text);
@@ -104,11 +122,56 @@ class LorebookService {
       }
     }
 
+    final labels = List<String>.unmodifiable(
+      kept.map((match) => match.candidate.displayLabel),
+    );
+    if (labels.isNotEmpty) onTriggered?.call(labels);
+
     return LorebookInjection(
       beforeChar: before.join('\n\n'),
       afterChar: after.join('\n\n'),
       matchedCount: kept.length,
+      triggeredLabels: labels,
     );
+  }
+
+  List<_LoreMatch> _expandRecursively({
+    required List<_LoreCandidate> candidates,
+    required List<_LoreMatch> directMatches,
+    required List<_LoreMatch> initiallyKept,
+    required int budget,
+  }) {
+    final discovered = <int, _LoreMatch>{
+      for (final match in directMatches) match.candidate.ordinal: match,
+    };
+    final scanned = <int>{};
+    var kept = initiallyKept;
+
+    while (true) {
+      final frontier = kept
+          .where((match) => !scanned.contains(match.candidate.ordinal))
+          .toList();
+      if (frontier.isEmpty) break;
+
+      var added = false;
+      for (final source in frontier) {
+        scanned.add(source.candidate.ordinal);
+        final sourceText = source.candidate.entry.content;
+        for (final candidate in candidates) {
+          if (discovered.containsKey(candidate.ordinal)) continue;
+          if (!_entryMatches(candidate.entry, sourceText)) continue;
+          discovered[candidate.ordinal] = _LoreMatch(
+            candidate: candidate,
+            depth: source.depth + 1,
+          );
+          added = true;
+        }
+      }
+      if (!added) continue;
+      kept = _applyBudget(discovered.values.toList(), budget);
+    }
+
+    return kept;
   }
 
   /// Rough token estimate (good enough for a phone budget, not exact).
@@ -155,53 +218,66 @@ class LorebookService {
     return false;
   }
 
-  /// Keep entries until the budget is full; drop lowest [priority] first if needed.
-  List<LorebookEntry> _applyBudget(List<LorebookEntry> ordered, int budget) {
+  /// Keep the highest-priority entries that fit, then restore prompt order.
+  ///
+  /// Direct matches win ties over deeper recursive matches. Within an equal
+  /// priority and depth, lower insertion order wins.
+  List<_LoreMatch> _applyBudget(List<_LoreMatch> matches, int budget) {
     var used = 0;
-    final kept = <LorebookEntry>[];
+    final kept = <_LoreMatch>[];
+    final ranked = List<_LoreMatch>.from(matches)
+      ..sort((a, b) {
+        final byPriority =
+            b.candidate.entry.priority.compareTo(a.candidate.entry.priority);
+        if (byPriority != 0) return byPriority;
+        final byDepth = a.depth.compareTo(b.depth);
+        if (byDepth != 0) return byDepth;
+        final byOrder = a.candidate.entry.insertionOrder
+            .compareTo(b.candidate.entry.insertionOrder);
+        if (byOrder != 0) return byOrder;
+        return a.candidate.ordinal.compareTo(b.candidate.ordinal);
+      });
 
-    for (final entry in ordered) {
+    for (final match in ranked) {
+      final entry = match.candidate.entry;
       final cost = estimateTokens(entry.content);
       if (used + cost <= budget) {
-        kept.add(entry);
+        kept.add(match);
         used += cost;
-        continue;
-      }
-
-      // Over budget: try dropping a lower-priority kept entry to make room.
-      if (kept.isEmpty) {
-        // First entry alone is huge — still include a trimmed slice? Skip.
-        continue;
-      }
-
-      final droppable = List<LorebookEntry>.from(kept)
-        ..sort((a, b) {
-          final byPriority = a.priority.compareTo(b.priority);
-          if (byPriority != 0) return byPriority;
-          return b.insertionOrder.compareTo(a.insertionOrder);
-        });
-
-      var freed = false;
-      for (final victim in droppable) {
-        if (victim.priority >= entry.priority) continue;
-        final victimCost = estimateTokens(victim.content);
-        if (used - victimCost + cost <= budget) {
-          kept.remove(victim);
-          used -= victimCost;
-          kept.add(entry);
-          used += cost;
-          freed = true;
-          break;
-        }
-      }
-      if (!freed) {
-        // Cannot fit — stop adding further (later insertion_order is less critical).
-        break;
       }
     }
 
-    // Re-sort by insertion_order after possible swaps.
-    kept.sort((a, b) => a.insertionOrder.compareTo(b.insertionOrder));
+    kept.sort((a, b) {
+      final byOrder = a.candidate.entry.insertionOrder
+          .compareTo(b.candidate.entry.insertionOrder);
+      if (byOrder != 0) return byOrder;
+      return a.candidate.ordinal.compareTo(b.candidate.ordinal);
+    });
     return kept;
   }
+}
+
+class _LoreCandidate {
+  const _LoreCandidate({
+    required this.book,
+    required this.entry,
+    required this.ordinal,
+  });
+
+  final Lorebook book;
+  final LorebookEntry entry;
+  final int ordinal;
+
+  String get displayLabel {
+    final bookName = book.name.trim();
+    final entryName = entry.displayLabel;
+    return bookName.isEmpty ? entryName : '$bookName — $entryName';
+  }
+}
+
+class _LoreMatch {
+  const _LoreMatch({required this.candidate, required this.depth});
+
+  final _LoreCandidate candidate;
+  final int depth;
 }

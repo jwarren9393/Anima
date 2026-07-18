@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -30,6 +31,67 @@ class NanoGptModelInfo {
   static bool isAutoModelId(String id) {
     final lower = id.trim().toLowerCase();
     return lower == 'auto-model' || lower.startsWith('auto-model-');
+  }
+}
+
+/// One image model from NanoGPT's image-model catalog.
+class NanoGptImageModelInfo {
+  const NanoGptImageModelInfo({
+    required this.id,
+    required this.ownedBy,
+    required this.name,
+    this.resolutions = const [],
+    this.nsfw = false,
+    this.supportsGeneration = true,
+    this.subscriptionIncluded = false,
+    this.pricePerImageUsd,
+  });
+
+  final String id;
+  final String ownedBy;
+  final String name;
+  final List<String> resolutions;
+  final bool nsfw;
+  final bool supportsGeneration;
+
+  /// True when loaded from NanoGPT's subscription image catalog.
+  final bool subscriptionIncluded;
+
+  /// Cheapest public per-image USD price when NanoGPT provides pricing.
+  final double? pricePerImageUsd;
+
+  String get displayName => name.trim().isEmpty ? id : name.trim();
+
+  /// Prefer a square size when the model lists one.
+  String? get preferredSquareResolution {
+    for (final value in resolutions) {
+      final lower = value.toLowerCase();
+      if (lower == '1024x1024' || lower == '1024*1024') return '1024x1024';
+      if (lower == 'square' || lower == 'square_hd') return value;
+    }
+    for (final value in resolutions) {
+      final parts = value.toLowerCase().split(RegExp(r'[x*]'));
+      if (parts.length == 2 && parts[0] == parts[1]) return value;
+    }
+    return resolutions.isEmpty ? null : resolutions.first;
+  }
+}
+
+/// Bytes returned from a successful image generation.
+class NanoGptGeneratedImage {
+  const NanoGptGeneratedImage({
+    required this.bytes,
+    this.mimeType = 'image/png',
+  });
+
+  final Uint8List bytes;
+  final String mimeType;
+
+  String get fileExtension {
+    final mime = mimeType.toLowerCase();
+    if (mime.contains('jpeg') || mime.contains('jpg')) return '.jpg';
+    if (mime.contains('webp')) return '.webp';
+    return '.png';
   }
 }
 
@@ -336,6 +398,486 @@ class NanoGptService {
     } catch (error) {
       throw NanoGptException('Could not read the NanoGPT models list: $error');
     }
+  }
+
+  /// Live image-model catalog for avatar generation.
+  ///
+  /// When [subscriptionOnly] is true, uses NanoGPT's subscription image
+  /// catalog (`GET /api/subscription/v1/image-models`) so only models that
+  /// draw from subscription image allowance are listed.
+  ///
+  /// Otherwise loads the full public catalog and marks models that also
+  /// appear in the subscription catalog.
+  Future<List<NanoGptImageModelInfo>> listImageModels({
+    bool subscriptionOnly = false,
+  }) async {
+    final apiKey = await _apiKeyService.getApiKey();
+    final headers = <String, String>{
+      'Accept': 'application/json',
+    };
+    if (apiKey != null) {
+      headers['Authorization'] = 'Bearer $apiKey';
+      headers['x-api-key'] = apiKey;
+    }
+
+    if (subscriptionOnly) {
+      return _fetchImageModels(
+        uri: Uri.parse('https://nano-gpt.com/api/subscription/v1/image-models'),
+        headers: headers,
+        subscriptionIncluded: true,
+      );
+    }
+
+    // Full catalog + subscription ids for Paid / Included labels.
+    Set<String> includedIds = {};
+    try {
+      final included = await _fetchImageModels(
+        uri: Uri.parse('https://nano-gpt.com/api/subscription/v1/image-models'),
+        headers: headers,
+        subscriptionIncluded: true,
+      );
+      includedIds = {for (final m in included) m.id};
+    } catch (_) {
+      // Labels degrade gracefully if the subscription catalog is unavailable.
+    }
+
+    NanoGptException? lastError;
+    for (final uri in [
+      Uri.parse('https://nano-gpt.com/api/v1/images/models'),
+      Uri.parse('https://nano-gpt.com/api/v1/image-models')
+          .replace(queryParameters: const {'detailed': 'true'}),
+    ]) {
+      try {
+        final models = await _fetchImageModels(
+          uri: uri,
+          headers: headers,
+          subscriptionIncluded: false,
+        );
+        return [
+          for (final model in models)
+            NanoGptImageModelInfo(
+              id: model.id,
+              ownedBy: model.ownedBy,
+              name: model.name,
+              resolutions: model.resolutions,
+              nsfw: model.nsfw,
+              supportsGeneration: model.supportsGeneration,
+              subscriptionIncluded: includedIds.contains(model.id),
+              pricePerImageUsd: model.pricePerImageUsd,
+            ),
+        ];
+      } on NanoGptException catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError ??
+        NanoGptException('Could not load NanoGPT image models.');
+  }
+
+  Future<List<NanoGptImageModelInfo>> _fetchImageModels({
+    required Uri uri,
+    required Map<String, String> headers,
+    required bool subscriptionIncluded,
+  }) async {
+    late final http.Response response;
+    try {
+      response = await _http
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 45));
+    } on SocketException {
+      throw NanoGptException(
+        'Could not reach NanoGPT to load image models. Check your internet.',
+      );
+    } on TimeoutException {
+      throw NanoGptException(
+        'Loading image models took too long. Try again.',
+      );
+    } on http.ClientException {
+      throw NanoGptException(
+        'Could not reach NanoGPT to load image models. Check your internet.',
+      );
+    }
+
+    if (response.statusCode == 401) {
+      throw NanoGptException(
+        'NanoGPT rejected the API key while loading image models. Check Settings.',
+      );
+    }
+    if (!_isSuccess(response.statusCode)) {
+      throw NanoGptException(
+        'Could not load image models (${response.statusCode}). '
+        '${_shortBody(response.body)}',
+      );
+    }
+    return _parseImageModels(
+      response.body,
+      subscriptionIncluded: subscriptionIncluded,
+    );
+  }
+
+  /// Text-to-image generation via NanoGPT Image API.
+  ///
+  /// Tries `POST /api/v1/images` first, then the OpenAI-compatible
+  /// `POST /api/v1/images/generations` for broader response compatibility.
+  Future<NanoGptGeneratedImage> generateImage({
+    required String model,
+    required String prompt,
+    String? resolution,
+    bool subscriptionOnly = false,
+  }) async {
+    final trimmedPrompt = prompt.trim();
+    if (trimmedPrompt.isEmpty) {
+      throw NanoGptException('Enter a prompt before generating an image.');
+    }
+    final trimmedModel = model.trim();
+    if (trimmedModel.isEmpty) {
+      throw NanoGptException('Choose an image model in Settings first.');
+    }
+
+    if (subscriptionOnly) {
+      final included = await listImageModels(subscriptionOnly: true);
+      final allowed = included.any((m) => m.id == trimmedModel);
+      if (!allowed) {
+        throw NanoGptException(
+          '“$trimmedModel” is not on NanoGPT’s subscription image list. '
+          'Turn off Use subscription API, or pick a subscription image model.',
+        );
+      }
+    }
+
+    final apiKey = await _apiKeyService.getApiKey();
+    if (apiKey == null) {
+      throw NanoGptException(
+        'Add your NanoGPT API key in Settings before generating images.',
+      );
+    }
+
+    final headers = <String, String>{
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $apiKey',
+      'x-api-key': apiKey,
+    };
+
+    final size = (resolution == null || resolution.trim().isEmpty)
+        ? '1024x1024'
+        : resolution.trim();
+
+    // Prefer the dedicated Image API.
+    try {
+      final body = <String, dynamic>{
+        'model': trimmedModel,
+        'prompt': trimmedPrompt,
+        'n': 1,
+        'resolution': size,
+      };
+      final response = await _http
+          .post(
+            Uri.parse('https://nano-gpt.com/api/v1/images'),
+            headers: headers,
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 120));
+      if (_isSuccess(response.statusCode)) {
+        return await _parseGeneratedImage(response.body);
+      }
+      // Fall through to OpenAI-compatible route for some models/errors.
+      if (response.statusCode == 401) {
+        throw NanoGptException(
+          'NanoGPT rejected the API key while generating an image. Check Settings.',
+        );
+      }
+      if (response.statusCode == 402) {
+        throw NanoGptException(
+          'NanoGPT says payment or image allowance is required for this model.',
+        );
+      }
+    } on NanoGptException {
+      rethrow;
+    } on SocketException {
+      throw NanoGptException(
+        'Could not reach NanoGPT to generate an image. Check your internet.',
+      );
+    } on TimeoutException {
+      throw NanoGptException(
+        'Image generation took too long. Try again.',
+      );
+    } on http.ClientException {
+      throw NanoGptException(
+        'Could not reach NanoGPT to generate an image. Check your internet.',
+      );
+    }
+
+    // OpenAI-compatible fallback.
+    try {
+      final body = <String, dynamic>{
+        'model': trimmedModel,
+        'prompt': trimmedPrompt,
+        'n': 1,
+        'size': size,
+        'response_format': 'b64_json',
+      };
+      final response = await _http
+          .post(
+            Uri.parse('https://nano-gpt.com/api/v1/images/generations'),
+            headers: headers,
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 120));
+      if (response.statusCode == 401) {
+        throw NanoGptException(
+          'NanoGPT rejected the API key while generating an image. Check Settings.',
+        );
+      }
+      if (response.statusCode == 402) {
+        throw NanoGptException(
+          'NanoGPT says payment or image allowance is required for this model.',
+        );
+      }
+      if (!_isSuccess(response.statusCode)) {
+        throw NanoGptException(
+          'Image generation failed (${response.statusCode}). '
+          '${_shortBody(response.body)}',
+        );
+      }
+      return await _parseGeneratedImage(response.body);
+    } on NanoGptException {
+      rethrow;
+    } on SocketException {
+      throw NanoGptException(
+        'Could not reach NanoGPT to generate an image. Check your internet.',
+      );
+    } on TimeoutException {
+      throw NanoGptException(
+        'Image generation took too long. Try again.',
+      );
+    } on http.ClientException {
+      throw NanoGptException(
+        'Could not reach NanoGPT to generate an image. Check your internet.',
+      );
+    }
+  }
+
+  List<NanoGptImageModelInfo> _parseImageModels(
+    String body, {
+    bool subscriptionIncluded = false,
+  }) {
+    final decoded = jsonDecode(body);
+    if (decoded is! Map) {
+      throw NanoGptException('NanoGPT returned an unexpected image models list.');
+    }
+    final data = decoded['data'];
+    if (data is! List) {
+      throw NanoGptException('NanoGPT returned an unexpected image models list.');
+    }
+
+    final models = <NanoGptImageModelInfo>[];
+    final seen = <String>{};
+    for (final item in data) {
+      if (item is! Map) continue;
+      final map = Map<String, dynamic>.from(item);
+      final id = '${map['id'] ?? ''}'.trim();
+      if (id.isEmpty || !seen.add(id)) continue;
+
+      final capabilities = map['capabilities'];
+      final caps = capabilities is Map
+          ? Map<String, dynamic>.from(capabilities)
+          : const <String, dynamic>{};
+      final supportsGeneration = caps['image_generation'] != false;
+      if (!supportsGeneration) continue;
+
+      final params = map['supported_parameters'];
+      final paramMap = params is Map
+          ? Map<String, dynamic>.from(params)
+          : const <String, dynamic>{};
+      final resolutions = <String>[];
+      void addResolutions(Object? raw) {
+        if (raw is List) {
+          for (final value in raw) {
+            final text = '$value'.trim();
+            if (text.isNotEmpty) resolutions.add(text);
+          }
+        } else if (raw is Map) {
+          final values = raw['values'];
+          if (values is List) {
+            for (final value in values) {
+              final text = '$value'.trim();
+              if (text.isNotEmpty) resolutions.add(text);
+            }
+          }
+        }
+      }
+
+      addResolutions(paramMap['resolutions']);
+      addResolutions(paramMap['resolution']);
+
+      final ownedBy = '${map['owned_by'] ?? 'other'}'.trim();
+      final name = '${map['name'] ?? ''}'.trim();
+      models.add(
+        NanoGptImageModelInfo(
+          id: id,
+          ownedBy: ownedBy.isEmpty ? 'other' : ownedBy,
+          name: name.isEmpty ? id : name,
+          resolutions: resolutions,
+          nsfw: caps['nsfw'] == true,
+          supportsGeneration: supportsGeneration,
+          subscriptionIncluded: subscriptionIncluded,
+          pricePerImageUsd: _cheapestImagePriceUsd(map['pricing']),
+        ),
+      );
+    }
+
+    models.sort((a, b) {
+      // Subscription-included models first when the full catalog is shown.
+      if (a.subscriptionIncluded != b.subscriptionIncluded) {
+        return a.subscriptionIncluded ? -1 : 1;
+      }
+      final byOwner = a.ownedBy.toLowerCase().compareTo(b.ownedBy.toLowerCase());
+      if (byOwner != 0) return byOwner;
+      return a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
+    });
+    return models;
+  }
+
+  double? _cheapestImagePriceUsd(Object? pricing) {
+    if (pricing is! Map) return null;
+    final nums = <double>[];
+    void walk(Object? value) {
+      if (value is num) {
+        nums.add(value.toDouble());
+      } else if (value is Map) {
+        for (final child in value.values) {
+          walk(child);
+        }
+      } else if (value is List) {
+        for (final child in value) {
+          walk(child);
+        }
+      }
+    }
+
+    walk(pricing);
+    if (nums.isEmpty) return null;
+    nums.sort();
+    return nums.first;
+  }
+
+  Future<NanoGptGeneratedImage> _parseGeneratedImage(String body) async {
+    late final Object? decoded;
+    try {
+      decoded = jsonDecode(body);
+    } catch (_) {
+      throw NanoGptException('NanoGPT returned an unreadable image response.');
+    }
+    if (decoded is! Map) {
+      throw NanoGptException('NanoGPT returned an unexpected image response.');
+    }
+    final map = Map<String, dynamic>.from(decoded);
+
+    // OpenAI-style: data: [{ b64_json / url }]
+    final data = map['data'];
+    if (data is List && data.isNotEmpty) {
+      final first = data.first;
+      if (first is Map) {
+        final item = Map<String, dynamic>.from(first);
+        final b64 = '${item['b64_json'] ?? item['b64'] ?? ''}'.trim();
+        if (b64.isNotEmpty) {
+          return NanoGptGeneratedImage(
+            bytes: Uint8List.fromList(base64Decode(_stripDataUrl(b64))),
+            mimeType: _mimeFromDataUrl(b64) ?? 'image/png',
+          );
+        }
+        final url = '${item['url'] ?? ''}'.trim();
+        if (url.isNotEmpty) {
+          return _downloadImage(url);
+        }
+      }
+    }
+
+    // Alternate shapes: images / output / result
+    for (final key in ['images', 'output', 'result']) {
+      final value = map[key];
+      if (value is String && value.trim().isNotEmpty) {
+        final text = value.trim();
+        if (text.startsWith('http')) {
+          return _downloadImage(text);
+        }
+        return NanoGptGeneratedImage(
+          bytes: Uint8List.fromList(base64Decode(_stripDataUrl(text))),
+          mimeType: _mimeFromDataUrl(text) ?? 'image/png',
+        );
+      }
+      if (value is List && value.isNotEmpty) {
+        final first = value.first;
+        if (first is String && first.trim().isNotEmpty) {
+          final text = first.trim();
+          if (text.startsWith('http')) {
+            return _downloadImage(text);
+          }
+          return NanoGptGeneratedImage(
+            bytes: Uint8List.fromList(base64Decode(_stripDataUrl(text))),
+            mimeType: _mimeFromDataUrl(text) ?? 'image/png',
+          );
+        }
+        if (first is Map) {
+          final item = Map<String, dynamic>.from(first);
+          final b64 = '${item['b64_json'] ?? item['b64'] ?? item['base64'] ?? ''}'
+              .trim();
+          if (b64.isNotEmpty) {
+            return NanoGptGeneratedImage(
+              bytes: Uint8List.fromList(base64Decode(_stripDataUrl(b64))),
+              mimeType: _mimeFromDataUrl(b64) ?? 'image/png',
+            );
+          }
+          final url = '${item['url'] ?? ''}'.trim();
+          if (url.isNotEmpty) return _downloadImage(url);
+        }
+      }
+    }
+
+    throw NanoGptException(
+      'NanoGPT returned no image data. Try another image model.',
+    );
+  }
+
+  Future<NanoGptGeneratedImage> _downloadImage(String url) async {
+    try {
+      final response = await _http
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 60));
+      if (!_isSuccess(response.statusCode) || response.bodyBytes.isEmpty) {
+        throw NanoGptException(
+          'Could not download the generated image from NanoGPT.',
+        );
+      }
+      final contentType = response.headers['content-type'] ?? 'image/png';
+      return NanoGptGeneratedImage(
+        bytes: response.bodyBytes,
+        mimeType: contentType.split(';').first.trim(),
+      );
+    } on NanoGptException {
+      rethrow;
+    } catch (_) {
+      throw NanoGptException(
+        'Could not download the generated image from NanoGPT.',
+      );
+    }
+  }
+
+  String _stripDataUrl(String value) {
+    final comma = value.indexOf(',');
+    if (value.startsWith('data:') && comma > 0) {
+      return value.substring(comma + 1).trim();
+    }
+    return value.trim();
+  }
+
+  String? _mimeFromDataUrl(String value) {
+    if (!value.startsWith('data:')) return null;
+    final semi = value.indexOf(';');
+    if (semi <= 5) return null;
+    return value.substring(5, semi).trim();
   }
 
   /// Abort the current streaming reply (if any). Safe to call when idle.

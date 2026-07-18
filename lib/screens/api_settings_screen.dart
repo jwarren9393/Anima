@@ -25,6 +25,7 @@ class ApiSettingsScreen extends StatefulWidget {
 class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
   final _keyController = TextEditingController();
   final _modelController = TextEditingController();
+  final _imageModelController = TextEditingController();
   bool _obscure = true;
   bool _loading = true;
   bool _savingKey = false;
@@ -38,6 +39,10 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
   List<NanoGptModelInfo> _models = const [];
   String? _selectedProvider;
 
+  bool _loadingImageModels = false;
+  String? _imageModelsError;
+  List<NanoGptImageModelInfo> _imageModels = const [];
+
   @override
   void initState() {
     super.initState();
@@ -47,15 +52,17 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
   Future<void> _load() async {
     final key = await widget.apiKeyService.getApiKey();
     final model = await widget.settingsService.getModel();
+    final imageModel = await widget.settingsService.getImageModel();
     final subscription = await widget.settingsService.getUseSubscriptionApi();
     if (!mounted) return;
     setState(() {
       _hasKey = key != null;
       _modelController.text = model;
+      _imageModelController.text = imageModel;
       _useSubscription = subscription;
       _loading = false;
     });
-    await _loadModels();
+    await Future.wait([_loadModels(), _loadImageModels()]);
   }
 
   String _baseUrlForCatalog() => _useSubscription
@@ -141,6 +148,53 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
     return null;
   }
 
+  Future<void> _loadImageModels() async {
+    setState(() {
+      _loadingImageModels = true;
+      _imageModelsError = null;
+    });
+    try {
+      final models = await widget.nanoGptService.listImageModels(
+        subscriptionOnly: _useSubscription,
+      );
+      if (!mounted) return;
+      setState(() {
+        _imageModels = models;
+        _loadingImageModels = false;
+        final current = _imageModelController.text.trim();
+        final known = models.any((m) => m.id == current);
+        if (!known) {
+          _imageModelController.text = models.isNotEmpty
+              ? models.first.id
+              : SettingsService.defaultImageModel;
+        }
+      });
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadingImageModels = false;
+        _imageModelsError = error.message;
+        _imageModels = const [];
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadingImageModels = false;
+        _imageModelsError = 'Could not load image models: $error';
+        _imageModels = const [];
+      });
+    }
+  }
+
+  String? get _selectedImageModelId {
+    final current = _imageModelController.text.trim();
+    if (current.isEmpty) return null;
+    for (final model in _imageModels) {
+      if (model.id == current) return current;
+    }
+    return null;
+  }
+
   Future<void> _saveKey() async {
     setState(() => _savingKey = true);
     await widget.apiKeyService.saveApiKey(_keyController.text);
@@ -158,6 +212,7 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
       ),
     );
     await _loadModels();
+    await _loadImageModels();
   }
 
   Future<void> _clearKey() async {
@@ -184,6 +239,9 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
     }
     setState(() => _savingModel = true);
     await widget.settingsService.saveModel(model);
+    await widget.settingsService.saveImageModel(
+      _imageModelController.text.trim(),
+    );
     await widget.settingsService.saveUseSubscriptionApi(_useSubscription);
     if (!mounted) return;
     setState(() => _savingModel = false);
@@ -194,7 +252,7 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
 
   Future<void> _onSubscriptionChanged(bool value) async {
     setState(() => _useSubscription = value);
-    await _loadModels();
+    await Future.wait([_loadModels(), _loadImageModels()]);
   }
 
   Future<void> _showCredits() async {
@@ -228,6 +286,7 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
   void dispose() {
     _keyController.dispose();
     _modelController.dispose();
+    _imageModelController.dispose();
     super.dispose();
   }
 
@@ -448,6 +507,99 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
                   'requests limited to subscription-included models. The model '
                   'list refreshes for that catalog.',
                 ),
+                const SizedBox(height: 32),
+                SettingsUi.sectionTitle(context, 'Image model (avatars)'),
+                const SizedBox(height: 8),
+                SettingsUi.sectionHint(
+                  context,
+                  _useSubscription
+                      ? 'Use subscription API is ON — only NanoGPT subscription '
+                          'image models are listed (uses your image allowance, '
+                          'not wallet money).'
+                      : 'Use subscription API is OFF — the full image catalog is '
+                          'shown. Paid models can charge wallet money. Turn the '
+                          'toggle on above to hide them.',
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _loadingImageModels
+                            ? 'Loading image models…'
+                            : _imageModelsError != null
+                                ? 'Could not load image catalog'
+                                : _useSubscription
+                                    ? '${_imageModels.length} subscription image models'
+                                    : '${_imageModels.length} image models',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Refresh image models',
+                      onPressed:
+                          _loadingImageModels ? null : _loadImageModels,
+                      icon: _loadingImageModels
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.refresh),
+                    ),
+                  ],
+                ),
+                if (_imageModelsError != null) ...[
+                  Text(
+                    _imageModelsError!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                if (!_loadingImageModels && _imageModels.isNotEmpty) ...[
+                  DropdownButtonFormField<String>(
+                    key: ValueKey(
+                      'image-model-$_useSubscription-$_selectedImageModelId',
+                    ),
+                    initialValue: _selectedImageModelId,
+                    isExpanded: true,
+                    decoration: SettingsUi.fieldDecoration(
+                      label: 'Image model',
+                      helperText: _useSubscription
+                          ? 'Subscription-included only'
+                          : 'Included models listed first',
+                    ),
+                    items: [
+                      for (final model in _imageModels)
+                        DropdownMenuItem(
+                          value: model.id,
+                          child: Text(
+                            _imageModelLabel(model),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                    onChanged: (id) {
+                      if (id == null) return;
+                      setState(() => _imageModelController.text = id);
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                TextField(
+                  controller: _imageModelController,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: SettingsUi.fieldDecoration(
+                    label: 'Image model id (saved value)',
+                    hintText: SettingsService.defaultImageModel,
+                    helperText: _useSubscription
+                        ? 'Must be a subscription image model while the toggle is on'
+                        : 'Filled by the dropdown, or type a custom image model id',
+                  ),
+                ),
                 const SizedBox(height: 16),
                 SettingsUi.saveButton(
                   saving: _savingModel,
@@ -457,6 +609,20 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
               ],
             ),
     );
+  }
+
+  String _imageModelLabel(NanoGptImageModelInfo model) {
+    final bits = <String>[model.displayName];
+    if (model.subscriptionIncluded) {
+      bits.add('Included');
+    } else if (!_useSubscription) {
+      bits.add('Paid');
+    }
+    if (model.nsfw) bits.add('NSFW');
+    if (!model.subscriptionIncluded && model.pricePerImageUsd != null) {
+      bits.add('\$${model.pricePerImageUsd!.toStringAsFixed(3)}');
+    }
+    return bits.join(' · ');
   }
 }
 

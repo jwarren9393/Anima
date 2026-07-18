@@ -108,25 +108,34 @@ Opened from Home or Chat ⋮ → **Settings** (`settings_screen.dart`). Each til
 - Subscription state.
 - Weekly / daily input credits, daily image allowance, monthly usage, used / remaining / total / %, reset times, period end — as returned by NanoGPT.
 
-**AI model**
+**AI model (chat)**
 
 - Live NanoGPT **model catalog**.
 - Provider list: **Auto** first, then providers A–Z.
 - Auto options include `auto-model`, `auto-model-basic`, `auto-model-standard`, `auto-model-premium`.
 - Model dropdown filtered by provider; refresh catalog; optional **custom model id**.
 
+**Image model (avatars)**
+
+- Separate **Image model** picker for NanoGPT image generation (Generate avatar).
+- When **Use subscription API** is **on**, Anima loads only NanoGPT’s **subscription image catalog** (`/api/subscription/v1/image-models`) so paid wallet models stay hidden.
+- When subscription API is **off**, the full public image catalog appears with **Included** / **Paid** labels (and price when known). Generating with a Paid model asks for confirmation first.
+- Generation still uses `POST /api/v1/images` (NanoGPT does not expose a separate subscription image *generation* URL).
+
 **Connection**
 
-- **Use subscription API** toggles pay-as-you-go vs subscription base URL and reloads the matching catalog.
+- **Use subscription API** toggles pay-as-you-go vs subscription base URL and reloads the matching **chat** and **image** catalogs.
 
 ### 3.2 Personas
 
 `personas_screen.dart` / `persona_edit_screen.dart`
 
 - Multiple **{{user}}** identities: **Name**, optional **About this persona** (injected into prompts), optional photo.
+- **Generate avatar** — same NanoGPT sheet as characters; prompt is built from name + About (editable); subscription-safe model rules apply.
 - Create / edit / delete (at least one persona always kept).
 - **Set as default** for new chats (long-press also works).
 - Per-chat persona can differ from the default (see Chat ⋮ menu).
+- Also reachable by tapping **your** avatar in chat.
 
 ### 3.3 Characters
 
@@ -166,7 +175,9 @@ Two modes:
 | System prompt (optional) | Blank = Anima default; `{{original}}` inserts default; presets + wand |
 | Post-history instructions | Optional; presets + wand |
 | World Info / lorebook | Embedded `character_book` |
-| Avatar | Pick / clear; PNG import uses card image |
+| Avatar | Pick photo, **Generate avatar** (NanoGPT), or clear; PNG import uses card image |
+
+**Generate avatar** opens a shared sheet (`generate_avatar_sheet.dart`): editable prompt from card text (name, description, personality, scenario, tags), image model picker, preview, **Use as avatar**. Uses the same subscription-safe image rules as API settings.
 
 Imported creator notes, tags, extensions, etc. are **preserved** on save/export even if not shown as edit fields.
 
@@ -186,7 +197,7 @@ Imported creator notes, tags, extensions, etc. are **preserved** on save/export 
 
 - **Scan depth (messages)** — default 4 (1–50).
 - **Token budget** — default 512 (approx; 10–4000).
-- **Recursive scanning** — toggle is saved but **not implemented** yet.
+- **Recursive scanning** — when on, content from matched entries can pull in further active entries (same shared token budget + priority).
 - Link to edit **character** lorebooks via Characters.
 
 **Global lorebooks**
@@ -200,6 +211,7 @@ Imported creator notes, tags, extensions, etc. are **preserved** on save/export 
 - Enabled, Always on, Label, Keywords, Suggest keywords from content, Selective + secondary keywords, Case-sensitive, Lore content, placement (Before / After desc), Insertion order, Priority, Comment.
 - AI wand on Label / Keywords / Secondary / Content; merges keyword suggestions.
 - Matching: recent messages scanned; selective needs both key sets; always-on needs no keyword; global + speaking character’s book merged; budget + priority apply.
+- When lore fires and fits the budget, chat shows a brief top overlay: **Lore Triggered: …**
 
 ### 3.5 Creation Center
 
@@ -208,6 +220,7 @@ Imported creator notes, tags, extensions, etc. are **preserved** on save/export 
 - AI workshop chats to invent a world (setting, factions, places, rules, history, people, items…).
 - Streaming replies + Stop.
 - **Create lorebook** / **Update lorebook** — NanoGPT turns the workshop into keyword entries saved as one **enabled global lorebook** (one workshop ↔ one book).
+- **Create characters** (person+ icon) — detects named people in the workshop chat, lets you multi-select, generates each full card one-by-one, and opens **Review generated character** (same editor as Characters, including Generate avatar) before anything is saved. Saving a name that already exists creates a **second** card (no overwrite).
 - Deleting a workshop does **not** delete an already-created lorebook.
 
 ### 3.6 Generation parameters
@@ -238,6 +251,16 @@ All use the normal model + sampling (Format uses lower temperature to stay close
 
 - Theme is fixed Obsidian & Gold.
 - Chat avatars only: **shape**, **size tier**, fine **scale** slider (persona + character photos in bubbles).
+
+### 3.9 Backup & restore
+
+`backup_restore_screen.dart` / `app_backup_service.dart`
+
+- One **`.anima-backup`** plain JSON file for the whole app library.
+- **Includes:** chats, characters, personas, categories, lorebooks, Creation Center workshops, composer drafts, Paths cache, avatar image files, and non-secret settings.
+- **Does not include:** the NanoGPT **API key** (on purpose). Re-enter the key after restore under API & connection.
+- Restore replaces only Anima’s known files/settings (whitelist) — not other device data — then returns to Home.
+- Not encrypted; treat the file like a private export.
 
 ---
 
@@ -293,15 +316,20 @@ All use the normal model + sampling (Format uses lower temperature to stay close
 
 | Action | Behavior |
 |--------|----------|
-| Delete | Removes that message only (no confirm) |
-| Rewind to here | Deletes everything after (no confirm) |
-| Branch from here | New chat with history through here (keeps persona, auto-reply, note, lore picks) |
+| Delete | Removes that message only; **4s Undo** SnackBar before the change is written to disk |
+| Rewind to here | Deletes everything after; **4s Undo** SnackBar before disk write |
+| Branch from here | New chat with history through here (keeps persona, auto-reply, note, lore picks); runs immediately |
 | Continue | Generate next reply |
 | Impersonate | AI drafts the next **user** message as the persona |
 | Paths | Roadway brainstorm sheet |
 | Auto-reply on/off | Per-chat toggle |
 | Regenerate / New swipe | Latest AI message |
 | Previous / Next swipe | When multiple swipes exist |
+
+**Toasts / overlays**
+
+- **Lore Triggered: …** — top overlay when World Info entries match and fit the budget.
+- **Memory summary optimized** — after a successful auto-summarize.
 
 ### Swipes
 
@@ -365,8 +393,9 @@ Ordinary data lives under the app documents directory unless noted. **Nothing is
 | `anima_lorebooks.json` | Global lorebooks |
 | `anima_world_workshops.json` | Creation Center workshops |
 | `avatars/` | Local image files referenced by filename |
+| `.anima-backup` export | Full-library backup JSON + embedded avatar bytes (no API key) |
 
-Other services (no separate “user screen”): `NanoGptService` (API/stream/credits/catalog), `MessageFormatter`, `CharacterCollaborator`, `LoreCollaborator`, `RoadwayService`, `WorldWorkshopBuilder`, `ChatTranscriptCodec`, `CharacterCardCodec`, `AvatarService`.
+Other services (no separate “user screen”): `NanoGptService` (API/stream/credits/image models/image generate/catalog), `MessageFormatter`, `CharacterCollaborator`, `LoreCollaborator`, `RoadwayService`, `WorldWorkshopBuilder`, `ChatTranscriptCodec`, `CharacterCardCodec`, `AvatarService`, `AvatarPromptBuilder`, `AppBackupService`.
 
 ---
 
@@ -374,11 +403,12 @@ Other services (no separate “user screen”): `NanoGptService` (API/stream/cre
 
 - Windows app build only on a Windows PC.
 - Group chat is simple (chips + round-robin), not full SillyTavern group orchestration.
-- Recursive lore scanning: setting saved, logic not built.
 - No NovelAI / Agnai / Risu lore converters (ST JSON + `character_book` work).
 - No TTS.
 - Paths live on the long-press menu (not a permanent composer button).
-- Not yet: undo send/delete, auto-resume last chat, pinned Author’s Note / mood chips, memory preview toast, lore-hit toast, light theme.
+- Full-app backup is plain JSON (not encrypted) and skips the API key on purpose.
+- PNG card export: JPEG/WebP avatars may fall back to a placeholder; PNG avatars embed correctly.
+- Not yet: undo send, auto-resume last chat, pinned Author’s Note / mood chips, memory preview panel, light theme.
 - Private personal app — not for Play Store / App Store.
 
 ---
@@ -390,11 +420,12 @@ lib/
   main.dart                 # Entry, Obsidian & Gold theme wiring
   theme/                    # Theme + glass backdrop
   models/                   # Messages, sessions, characters, categories, lore, personas, presets
-  screens/                  # Home, chat, settings tree, editors, Creation Center
-  widgets/                  # Avatars, greeting picker, category controls, RP text, presets
-  services/                 # API, persistence, prompts, collaborators, Paths, drafts
+  screens/                  # Home, chat, settings tree, editors, Creation Center, backup
+  widgets/                  # Avatars, Generate avatar sheet, greeting picker, RP text, presets
+  services/                 # API (chat + images), persistence, prompts, backup, Paths, drafts
 test/                       # Unit / widget tests
 AGENTS.md                   # Agent living document (status + next actions)
+README.md                   # This product overview
 ```
 
 ---

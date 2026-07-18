@@ -143,7 +143,7 @@ class LoreSettings {
   /// Rough max lore size injected per turn (1 token ≈ 4 chars).
   final int tokenBudget;
 
-  /// SillyTavern flag; not fully implemented in Anima yet (saved for later).
+  /// Let selected lore content trigger additional entries within the same budget.
   final bool recursiveScanning;
 
   LoreSettings copyWith({
@@ -218,6 +218,9 @@ class SettingsService {
 
   /// A sensible default NanoGPT model id. Change it anytime in Settings.
   static const defaultModel = 'openai/gpt-4o-mini';
+
+  /// Default image model for avatar generation (NanoGPT Image API).
+  static const defaultImageModel = 'hidream';
   static const defaultUserName = 'User';
 
   /// Pay-as-you-go / prepaid balance endpoint.
@@ -228,6 +231,7 @@ class SettingsService {
       'https://nano-gpt.com/api/subscription/v1';
 
   static const _modelStorageKey = 'nanogpt_model';
+  static const _imageModelStorageKey = 'nanogpt_image_model';
   static const _selectedCharacterKey = 'selected_character_id';
   static const _userNameKey = 'persona_user_name';
   static const _userPersonaKey = 'persona_description';
@@ -267,7 +271,60 @@ class SettingsService {
   /// Legacy message-count context (migrated once to a token budget).
   static const _legacyContextMaxHistoryKey = 'context_max_history_messages';
 
+  /// Preference keys included in a full-app backup (never the API key).
+  static const backupPreferenceKeys = <String>[
+    _modelStorageKey,
+    _imageModelStorageKey,
+    _selectedCharacterKey,
+    _userNameKey,
+    _userPersonaKey,
+    _temperatureKey,
+    _topPKey,
+    _maxTokensKey,
+    _frequencyPenaltyKey,
+    _presencePenaltyKey,
+    _repetitionPenaltyKey,
+    _useSubscriptionKey,
+    _avatarShapeKey,
+    _avatarSizeKey,
+    _avatarScaleKey,
+    _uiStyleKey,
+    _loreScanDepthKey,
+    _loreTokenBudgetKey,
+    _loreRecursiveKey,
+    _personaAvatarKey,
+    _collaboratorGuidanceKey,
+    _composerFormatNoteKey,
+    _roadwayNoteKey,
+    _contextHistoryTokensKey,
+    _contextAutoSummarizeKey,
+    _contextSummarizeEveryKey,
+    _contextKeepRecentKey,
+  ];
+
   final FlutterSecureStorage _storage;
+
+  /// Snapshot of non-secret preferences for a full-app backup.
+  Future<Map<String, String>> exportForBackup() async {
+    final out = <String, String>{};
+    for (final key in backupPreferenceKeys) {
+      final value = await _storage.read(key: key);
+      if (value != null) out[key] = value;
+    }
+    return out;
+  }
+
+  /// Replace non-secret preferences from a backup (clears missing keys).
+  Future<void> importFromBackup(Map<String, String> values) async {
+    for (final key in backupPreferenceKeys) {
+      final value = values[key];
+      if (value == null) {
+        await _storage.delete(key: key);
+      } else {
+        await _storage.write(key: key, value: value);
+      }
+    }
+  }
 
   Future<String> getModel() async {
     final value = await _storage.read(key: _modelStorageKey);
@@ -282,6 +339,22 @@ class SettingsService {
       return;
     }
     await _storage.write(key: _modelStorageKey, value: trimmed);
+  }
+
+  /// Image model id for avatar generation (`POST /api/v1/images`).
+  Future<String> getImageModel() async {
+    final value = await _storage.read(key: _imageModelStorageKey);
+    if (value == null || value.trim().isEmpty) return defaultImageModel;
+    return value.trim();
+  }
+
+  Future<void> saveImageModel(String model) async {
+    final trimmed = model.trim();
+    if (trimmed.isEmpty) {
+      await _storage.delete(key: _imageModelStorageKey);
+      return;
+    }
+    await _storage.write(key: _imageModelStorageKey, value: trimmed);
   }
 
   Future<String?> getSelectedCharacterId() async {

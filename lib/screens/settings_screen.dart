@@ -10,6 +10,7 @@ import '../services/world_info_service.dart';
 import '../services/world_workshop_service.dart';
 import 'api_settings_screen.dart';
 import 'appearance_settings_screen.dart';
+import 'backup_restore_screen.dart';
 import 'characters_screen.dart';
 import 'collaborator_settings_screen.dart';
 import 'lore_settings_screen.dart';
@@ -78,6 +79,8 @@ class SettingsScreen extends StatelessWidget {
               MaterialPageRoute(
                 builder: (_) => PersonasScreen(
                   personaService: personaService,
+                  settingsService: settingsService,
+                  nanoGptService: nanoGptService,
                 ),
               ),
             ),
@@ -116,12 +119,13 @@ class SettingsScreen extends StatelessWidget {
           _SettingsTile(
             icon: Icons.travel_explore,
             title: 'Creation Center',
-            subtitle: 'Chat with AI to build a global lorebook',
+            subtitle: 'Chat with AI to build lorebooks and characters',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => WorldWorkshopListScreen(
                   workshopService: worldWorkshopService,
                   worldInfoService: worldInfoService,
+                  characterService: characterService,
                   settingsService: settingsService,
                   nanoGptService: nanoGptService,
                 ),
@@ -157,6 +161,19 @@ class SettingsScreen extends StatelessWidget {
             title: 'Appearance',
             subtitle: 'Chat avatars (Obsidian & Gold theme is fixed)',
             onTap: () => _openAppearance(context),
+          ),
+          _SettingsTile(
+            icon: Icons.backup,
+            title: 'Backup & restore',
+            subtitle: 'Export or replace chats, characters, settings…',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => BackupRestoreScreen(
+                  settingsService: settingsService,
+                  personaService: personaService,
+                ),
+              ),
+            ),
           ),
           const Divider(height: 32),
           Padding(

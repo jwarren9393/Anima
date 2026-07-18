@@ -192,7 +192,8 @@ class _LoreSettingsScreenState extends State<LoreSettingsScreen> {
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Recursive scanning'),
                   subtitle: const Text(
-                    'SillyTavern option — not active in Anima yet; saved for later.',
+                    'Let matched lore trigger related entries. All entries still '
+                    'share the same token budget.',
                   ),
                   value: _recursiveScanning,
                   onChanged: (v) => setState(() => _recursiveScanning = v),

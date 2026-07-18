@@ -130,6 +130,8 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
+    // Reload after Settings closes (e.g. full backup restore).
+    if (mounted) await _load();
   }
 
   Future<void> _openChat(ChatSession session) async {

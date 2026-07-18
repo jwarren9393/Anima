@@ -29,6 +29,7 @@ import '../services/roadway_service.dart';
 import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
 import '../services/world_workshop_service.dart';
+import '../theme/anima_theme.dart';
 import '../widgets/anima_avatar.dart';
 import '../widgets/greeting_picker.dart';
 import '../widgets/keyboard_inset.dart';
@@ -96,6 +97,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Persona? _persona;
   double _keyboardInset = 0;
   Timer? _draftSaveTimer;
+  Timer? _toastTimer;
+  OverlayEntry? _toastEntry;
+  _PendingChatRemoval? _pendingRemoval;
   String _lastSavedDraft = '';
 
   List<ChatMessage> get _messages => _session?.messages ?? const [];
@@ -267,7 +271,84 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Future<void> _persist() async {
     final session = _session;
     if (session == null) return;
-    await widget.chatService.saveChat(session);
+    final pending = _pendingRemoval;
+    if (pending == null ||
+        pending.finished ||
+        pending.session.id != session.id) {
+      await widget.chatService.saveChat(session);
+      return;
+    }
+
+    // Other chat changes may still save during the Undo window. Persist those
+    // changes with the removed messages (and memory) temporarily restored so
+    // the deletion itself does not reach anima_chats.json before the SnackBar
+    // closes.
+    final messages = List<ChatMessage>.from(session.messages);
+    messages.insertAll(
+      pending.index.clamp(0, messages.length),
+      pending.removed,
+    );
+    await widget.chatService.saveChat(
+      session.copyWith(
+        messages: messages,
+        memorySummary: pending.previousMemorySummary,
+        memoryCoveredCount: pending.previousMemoryCoveredCount,
+      ),
+    );
+  }
+
+  void _showLocalToast(String message) {
+    if (!mounted) return;
+    _toastTimer?.cancel();
+    _toastEntry?.remove();
+
+    final entry = OverlayEntry(
+      builder: (context) => IgnorePointer(
+        child: SafeArea(
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: AnimaTheme.glassHigh.withValues(alpha: 0.96),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: AnimaTheme.gold.withValues(alpha: 0.45),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AnimaTheme.gold.withValues(alpha: 0.12),
+                      blurRadius: 18,
+                    ),
+                  ],
+                ),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+                  child: Text(
+                    message,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: AnimaTheme.ink,
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    _toastEntry = entry;
+    Overlay.of(context).insert(entry);
+    _toastTimer = Timer(const Duration(seconds: 2), () {
+      if (_toastEntry == entry) _toastEntry = null;
+      entry.remove();
+    });
   }
 
   Future<void> _openSettings() async {
@@ -303,6 +384,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       MaterialPageRoute(
         builder: (_) => PersonasScreen(
           personaService: widget.personaService,
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
           pickForChat: true,
           selectedPersonaId: _session?.personaId ?? _persona?.id,
         ),
@@ -385,6 +468,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       MaterialPageRoute(
         builder: (_) => PersonaEditScreen(
           personaService: widget.personaService,
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
           existing: persona,
         ),
       ),
@@ -1224,7 +1309,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         _busy = false;
       });
       await _persist();
-      if (!quiet && mounted) {
+      if (quiet && mounted) {
+        _showLocalToast('Memory summary optimized');
+      } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -1371,6 +1458,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       extraBooks: extraBooks,
       scanDepthOverride: loreSettings.scanDepth,
       tokenBudgetOverride: loreSettings.tokenBudget,
+      recursiveScanningOverride: loreSettings.recursiveScanning,
+      onTriggered: (labels) {
+        if (labels.isEmpty) return;
+        _showLocalToast('Lore Triggered: ${labels.join(', ')}');
+      },
     );
 
     final others = _participants.where((c) => c.id != character.id).toList();
@@ -1648,8 +1740,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Future<void> _deleteMessage(int index) async {
     if (_busy || _session == null) return;
     if (index < 0 || index >= _messages.length) return;
-    setState(() => _session!.messages.removeAt(index));
-    await _persist();
+    // Deleting inside the summarized prefix invalidates the memory.
+    final clearMemory = index < _session!.memoryCoveredCount;
+    await _beginUndoableRemoval(
+      index: index,
+      count: 1,
+      message: 'Message deleted',
+      clearMemory: clearMemory,
+    );
   }
 
   /// Keep messages through [index]; delete everything after.
@@ -1662,10 +1760,102 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       );
       return;
     }
+    // Rewinding into summarized history invalidates the memory.
+    final clearMemory = index + 1 < _session!.memoryCoveredCount;
+    await _beginUndoableRemoval(
+      index: index + 1,
+      count: _messages.length - index - 1,
+      message: 'Chat rewound',
+      clearMemory: clearMemory,
+    );
+  }
+
+  Future<void> _beginUndoableRemoval({
+    required int index,
+    required int count,
+    required String message,
+    bool clearMemory = false,
+  }) async {
+    final session = _session;
+    if (session == null || count <= 0) return;
+
+    final previous = _pendingRemoval;
+    if (previous != null && !previous.finished) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      await _commitPendingRemoval(previous);
+    }
+    if (!mounted || _session?.id != session.id) return;
+
+    final removed = List<ChatMessage>.from(
+      session.messages.getRange(index, index + count),
+    );
+    final nextMessages = List<ChatMessage>.from(session.messages)
+      ..removeRange(index, index + count);
+    final nextSession = session.copyWith(
+      messages: nextMessages,
+      memorySummary: clearMemory ? '' : session.memorySummary,
+      memoryCoveredCount: clearMemory ? 0 : session.memoryCoveredCount,
+    );
+    final pending = _PendingChatRemoval(
+      session: nextSession,
+      index: index,
+      removed: removed,
+      previousMemorySummary: session.memorySummary,
+      previousMemoryCoveredCount: session.memoryCoveredCount,
+      clearedMemory: clearMemory,
+    );
+    _pendingRemoval = pending;
+    setState(() => _session = nextSession);
+
+    final controller = ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 4),
+        backgroundColor: AnimaTheme.glassHigh,
+        action: SnackBarAction(
+          label: 'Undo',
+          textColor: AnimaTheme.gold,
+          onPressed: () => _undoPendingRemoval(pending),
+        ),
+      ),
+    );
+    unawaited(
+      controller.closed.then((_) => _commitPendingRemoval(pending)),
+    );
+  }
+
+  void _undoPendingRemoval(_PendingChatRemoval pending) {
+    if (pending.finished) return;
+    pending.finished = true;
+    if (identical(_pendingRemoval, pending)) _pendingRemoval = null;
+
+    final session = pending.session;
+    final messages = List<ChatMessage>.from(session.messages);
+    messages.insertAll(
+      pending.index.clamp(0, messages.length),
+      pending.removed,
+    );
+    if (!mounted || _session?.id != session.id) return;
     setState(() {
-      _session!.messages.removeRange(index + 1, _session!.messages.length);
+      _session = session.copyWith(
+        messages: messages,
+        memorySummary: pending.previousMemorySummary,
+        memoryCoveredCount: pending.previousMemoryCoveredCount,
+      );
     });
-    await _persist();
+  }
+
+  Future<void> _commitPendingRemoval(_PendingChatRemoval pending) async {
+    if (pending.finished) return;
+    pending.finished = true;
+    if (identical(_pendingRemoval, pending)) _pendingRemoval = null;
+    // Prefer the live session if this chat is still open (may include edits
+    // made during the Undo window); fall back to the pending snapshot.
+    final live = _session;
+    final toSave = (live != null && live.id == pending.session.id)
+        ? live
+        : pending.session;
+    await widget.chatService.saveChat(toSave);
   }
 
   /// Copy this chat through [index] into a new saved chat and switch to it.
@@ -1745,6 +1935,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     widget.nanoGptService.cancelActiveStream();
     _draftSaveTimer?.cancel();
+    _toastTimer?.cancel();
+    _toastEntry?.remove();
+    _toastEntry = null;
     // Fire-and-forget final draft flush (async dispose is not allowed).
     final session = _session;
     final text = _inputController.text;
@@ -2287,6 +2480,26 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (action == 'swipe_prev') _shiftSwipe(index, -1);
     if (action == 'swipe_next') _shiftSwipe(index, 1);
   }
+}
+
+class _PendingChatRemoval {
+  _PendingChatRemoval({
+    required this.session,
+    required this.index,
+    required this.removed,
+    required this.previousMemorySummary,
+    required this.previousMemoryCoveredCount,
+    required this.clearedMemory,
+  });
+
+  /// Live chat after the temporary removal (same id as before).
+  final ChatSession session;
+  final int index;
+  final List<ChatMessage> removed;
+  final String previousMemorySummary;
+  final int previousMemoryCoveredCount;
+  final bool clearedMemory;
+  bool finished = false;
 }
 
 class _EmptyChat extends StatelessWidget {

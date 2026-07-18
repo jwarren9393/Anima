@@ -1,22 +1,27 @@
 import 'package:flutter/material.dart';
 
+import '../models/character.dart';
 import '../models/chat_message.dart';
 import '../models/global_lorebook.dart';
 import '../models/world_workshop.dart';
+import '../services/character_service.dart';
 import '../services/nanogpt_service.dart';
 import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
 import '../services/world_workshop_builder.dart';
 import '../services/world_workshop_service.dart';
+import '../theme/anima_theme.dart';
 import '../widgets/keyboard_inset.dart';
+import 'character_edit_screen.dart';
 
-/// Plain chat with the World Info collaborator; Create lorebook exports to global WI.
+/// Plain chat with the World Info collaborator; export lorebook / characters.
 class WorldWorkshopChatScreen extends StatefulWidget {
   const WorldWorkshopChatScreen({
     super.key,
     required this.workshop,
     required this.workshopService,
     required this.worldInfoService,
+    required this.characterService,
     required this.settingsService,
     required this.nanoGptService,
   });
@@ -24,6 +29,7 @@ class WorldWorkshopChatScreen extends StatefulWidget {
   final WorldWorkshop workshop;
   final WorldWorkshopService workshopService;
   final WorldInfoService worldInfoService;
+  final CharacterService characterService;
   final SettingsService settingsService;
   final NanoGptService nanoGptService;
 
@@ -34,13 +40,14 @@ class WorldWorkshopChatScreen extends StatefulWidget {
 
 class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     with WidgetsBindingObserver {
-  static const _builder = WorldWorkshopBuilder();
+  final _builder = WorldWorkshopBuilder();
 
   final _input = TextEditingController();
   final _scroll = ScrollController();
   late WorldWorkshop _workshop;
   bool _sending = false;
   bool _exporting = false;
+  String? _exportStatus;
   double _keyboardInset = 0;
 
   @override
@@ -200,7 +207,10 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       return;
     }
 
-    setState(() => _exporting = true);
+    setState(() {
+      _exporting = true;
+      _exportStatus = 'Creating lorebook…';
+    });
     try {
       final collaborator =
           await widget.settingsService.getCollaboratorSettings();
@@ -262,8 +272,330 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         SnackBar(content: Text('Could not create lorebook: $error')),
       );
     } finally {
-      if (mounted) setState(() => _exporting = false);
+      if (mounted) {
+        setState(() {
+          _exporting = false;
+          _exportStatus = null;
+        });
+      }
     }
+  }
+
+  Future<void> _createCharacters() async {
+    if (_sending || _exporting) return;
+    if (_workshop.messages.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Chat a bit first, then create characters.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _exporting = true;
+      _exportStatus = 'Finding characters…';
+    });
+
+    try {
+      final collaborator =
+          await widget.settingsService.getCollaboratorSettings();
+      final model = await widget.settingsService.getModel();
+      final sampling = await widget.settingsService.getSampling();
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+      final existingChars = await widget.characterService.loadCharacters();
+      final existingNames = {
+        for (final c in existingChars) c.name.trim().toLowerCase(),
+      };
+
+      final detectRaw = await widget.nanoGptService.complete(
+        model: model,
+        messages: _builder.buildCharacterDetectMessages(
+          conversation: _workshop.messages,
+          guidanceNote: collaborator.guidanceNote,
+        ),
+        baseUrl: baseUrl,
+        sampling: sampling,
+      );
+
+      final candidates = _builder.parseCharacterCandidatesJson(detectRaw);
+      if (!mounted) return;
+
+      if (candidates.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No clear characters found yet. Chat more about people, then try again.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      setState(() {
+        _exporting = false;
+        _exportStatus = null;
+      });
+
+      final selected = await _pickCandidates(
+        candidates: candidates,
+        existingNames: existingNames,
+      );
+      if (!mounted || selected == null || selected.isEmpty) return;
+
+      setState(() {
+        _exporting = true;
+        _exportStatus = 'Generating characters…';
+      });
+
+      var savedCount = 0;
+      var skippedCount = 0;
+
+      for (var i = 0; i < selected.length; i++) {
+        if (!mounted) return;
+        final candidate = selected[i];
+        setState(() {
+          _exportStatus =
+              'Generating ${i + 1} of ${selected.length}: ${candidate.name}…';
+        });
+
+        try {
+          final cardRaw = await widget.nanoGptService.complete(
+            model: model,
+            messages: _builder.buildCharacterExportMessages(
+              conversation: _workshop.messages,
+              characterName: candidate.name,
+              characterSummary: candidate.summary,
+              guidanceNote: collaborator.guidanceNote,
+            ),
+            baseUrl: baseUrl,
+            sampling: sampling,
+          );
+
+          final draft = _builder.parseCharacterJson(
+            cardRaw,
+            preferredId: widget.characterService.newId(),
+            fallbackName: candidate.name,
+          );
+
+          if (!mounted) return;
+          setState(() {
+            _exporting = false;
+            _exportStatus = null;
+          });
+
+          final saved = await Navigator.of(context).push<Character>(
+            MaterialPageRoute(
+              builder: (_) => CharacterEditScreen(
+                characterService: widget.characterService,
+                settingsService: widget.settingsService,
+                nanoGptService: widget.nanoGptService,
+                existing: draft,
+                generatedDraft: true,
+              ),
+            ),
+          );
+
+          if (saved != null) {
+            savedCount++;
+          } else {
+            skippedCount++;
+          }
+        } on FormatException catch (error) {
+          if (!mounted) return;
+          skippedCount++;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${candidate.name}: ${error.message}'),
+              backgroundColor: AnimaTheme.glassHigh,
+            ),
+          );
+        } on NanoGptException catch (error) {
+          if (!mounted) return;
+          skippedCount++;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${candidate.name}: ${error.message}'),
+              backgroundColor: AnimaTheme.glassHigh,
+            ),
+          );
+        }
+
+        if (!mounted) return;
+        // Resume busy state between cards when more remain.
+        if (i < selected.length - 1) {
+          setState(() {
+            _exporting = true;
+            _exportStatus =
+                'Generating ${i + 2} of ${selected.length}…';
+          });
+        }
+      }
+
+      if (!mounted) return;
+      final parts = <String>[];
+      if (savedCount > 0) {
+        parts.add(
+          'Saved $savedCount character${savedCount == 1 ? '' : 's'}',
+        );
+      }
+      if (skippedCount > 0) {
+        parts.add(
+          'skipped $skippedCount',
+        );
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            parts.isEmpty ? 'No characters saved.' : parts.join(' · '),
+          ),
+        ),
+      );
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not create characters: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _exporting = false;
+          _exportStatus = null;
+        });
+      }
+    }
+  }
+
+  Future<List<WorkshopCharacterCandidate>?> _pickCandidates({
+    required List<WorkshopCharacterCandidate> candidates,
+    required Set<String> existingNames,
+  }) async {
+    final selected = <String>{
+      for (final c in candidates)
+        if (!existingNames.contains(c.name.trim().toLowerCase()))
+          c.name.trim().toLowerCase(),
+    };
+    // If everything already exists, still preselect all so the user can
+    // intentionally create another version.
+    if (selected.isEmpty) {
+      selected.addAll(
+        candidates.map((c) => c.name.trim().toLowerCase()),
+      );
+    }
+
+    return showModalBottomSheet<List<WorkshopCharacterCandidate>>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final theme = Theme.of(context);
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 8,
+                  bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Create characters',
+                      style: theme.textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Choose who to turn into playable character cards. '
+                      'You’ll review each card before it’s saved.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 12),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.sizeOf(context).height * 0.5,
+                      ),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: candidates.length,
+                        itemBuilder: (context, index) {
+                          final candidate = candidates[index];
+                          final key = candidate.name.trim().toLowerCase();
+                          final exists = existingNames.contains(key);
+                          final checked = selected.contains(key);
+                          return CheckboxListTile(
+                            value: checked,
+                            onChanged: (value) {
+                              setSheetState(() {
+                                if (value == true) {
+                                  selected.add(key);
+                                } else {
+                                  selected.remove(key);
+                                }
+                              });
+                            },
+                            title: Text(candidate.name),
+                            subtitle: Text(
+                              [
+                                if (candidate.summary.isNotEmpty)
+                                  candidate.summary,
+                                if (exists)
+                                  'Already in Characters (new card won’t overwrite)',
+                              ].join('\n'),
+                            ),
+                            controlAffinity: ListTileControlAffinity.leading,
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Cancel'),
+                        ),
+                        const Spacer(),
+                        FilledButton(
+                          onPressed: selected.isEmpty
+                              ? null
+                              : () {
+                                  final chosen = candidates
+                                      .where(
+                                        (c) => selected.contains(
+                                          c.name.trim().toLowerCase(),
+                                        ),
+                                      )
+                                      .toList();
+                                  Navigator.pop(context, chosen);
+                                },
+                          child: Text(
+                            'Generate (${selected.length})',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   void _scrollToEnd() {
@@ -287,9 +619,25 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       appBar: AppBar(
         title: Text(_workshop.title),
         actions: [
+          IconButton(
+            tooltip: 'Create characters',
+            onPressed: busy ? null : _createCharacters,
+            icon: _exporting &&
+                    (_exportStatus?.contains('character') == true ||
+                        _exportStatus?.contains('Finding') == true ||
+                        _exportStatus?.contains('Generating') == true)
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.person_add_alt_1),
+          ),
           TextButton(
             onPressed: busy ? null : _createLorebook,
-            child: _exporting
+            child: _exporting &&
+                    (_exportStatus == null ||
+                        _exportStatus!.contains('lorebook'))
                 ? const SizedBox(
                     width: 18,
                     height: 18,
@@ -305,110 +653,111 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       ),
       body: KeyboardInset(
         child: Column(
-        children: [
-          Material(
-            color: theme.colorScheme.surfaceContainerHighest.withValues(
-              alpha: 0.5,
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              child: Text(
-                'Talk about your world. When you’re ready, tap '
-                '${_workshop.exportedLorebookId == null ? 'Create' : 'Update'} '
-                'lorebook to save keyword entries into World Info.',
-                style: theme.textTheme.bodySmall,
+          children: [
+            Material(
+              color: theme.colorScheme.surfaceContainerHighest.withValues(
+                alpha: 0.5,
+              ),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                child: Text(
+                  _exportStatus ??
+                      'Talk about your world. Use Create lorebook for World Info, '
+                          'or the person+ icon to turn people into character cards.',
+                  style: theme.textTheme.bodySmall,
+                ),
               ),
             ),
-          ),
-          Expanded(
-            child: _workshop.messages.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        'Example: “I want a rainy coastal city with rival '
-                        'guilds and a buried god under the harbor…”',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                    ),
-                  )
-                : ListView.builder(
-                    controller: _scroll,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _workshop.messages.length,
-                    itemBuilder: (context, index) {
-                      final message = _workshop.messages[index];
-                      final isUser = message.isUser;
-                      return Align(
-                        alignment: isUser
-                            ? Alignment.centerRight
-                            : Alignment.centerLeft,
-                        child: Container(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 10,
-                          ),
-                          constraints: BoxConstraints(
-                            maxWidth: MediaQuery.sizeOf(context).width * 0.85,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isUser
-                                ? theme.colorScheme.primaryContainer
-                                : theme.colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Text(
-                            message.text.isEmpty && !isUser && _sending
-                                ? '…'
-                                : message.text,
-                            style: theme.textTheme.bodyMedium,
-                          ),
+            Expanded(
+              child: _workshop.messages.isEmpty
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          'Example: “I want a rainy coastal city with rival '
+                          'guilds and a buried god under the harbor…”',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodyMedium,
                         ),
-                      );
-                    },
-                  ),
-          ),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _input,
-                      minLines: 1,
-                      maxLines: 5,
-                      textCapitalization: TextCapitalization.sentences,
-                      enabled: !_exporting,
-                      decoration: const InputDecoration(
-                        hintText: 'Describe your world…',
-                        border: OutlineInputBorder(),
-                        isDense: true,
                       ),
-                      onSubmitted: (_) {
-                        if (_sending) {
-                          _stop();
-                        } else {
-                          _send();
-                        }
+                    )
+                  : ListView.builder(
+                      controller: _scroll,
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _workshop.messages.length,
+                      itemBuilder: (context, index) {
+                        final message = _workshop.messages[index];
+                        final isUser = message.isUser;
+                        return Align(
+                          alignment: isUser
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            constraints: BoxConstraints(
+                              maxWidth: MediaQuery.sizeOf(context).width * 0.85,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isUser
+                                  ? theme.colorScheme.primaryContainer
+                                  : theme.colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: Text(
+                              message.text.isEmpty && !isUser && _sending
+                                  ? '…'
+                                  : message.text,
+                              style: theme.textTheme.bodyMedium,
+                            ),
+                          ),
+                        );
                       },
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filled(
-                    onPressed: _exporting
-                        ? null
-                        : (_sending ? _stop : _send),
-                    icon: Icon(_sending ? Icons.stop : Icons.send),
-                    tooltip: _sending ? 'Stop' : 'Send',
-                  ),
-                ],
+            ),
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _input,
+                        minLines: 1,
+                        maxLines: 5,
+                        textCapitalization: TextCapitalization.sentences,
+                        enabled: !_exporting,
+                        decoration: const InputDecoration(
+                          hintText: 'Describe your world…',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        onSubmitted: (_) {
+                          if (_sending) {
+                            _stop();
+                          } else {
+                            _send();
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton.filled(
+                      onPressed: _exporting
+                          ? null
+                          : (_sending ? _stop : _send),
+                      icon: Icon(_sending ? Icons.stop : Icons.send),
+                      tooltip: _sending ? 'Stop' : 'Send',
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
         ),
       ),
     );

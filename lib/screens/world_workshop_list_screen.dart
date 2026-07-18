@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/world_workshop.dart';
+import '../services/character_service.dart';
 import '../services/nanogpt_service.dart';
 import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
@@ -13,12 +14,14 @@ class WorldWorkshopListScreen extends StatefulWidget {
     super.key,
     required this.workshopService,
     required this.worldInfoService,
+    required this.characterService,
     required this.settingsService,
     required this.nanoGptService,
   });
 
   final WorldWorkshopService workshopService;
   final WorldInfoService worldInfoService;
+  final CharacterService characterService;
   final SettingsService settingsService;
   final NanoGptService nanoGptService;
 
@@ -53,6 +56,7 @@ class _WorldWorkshopListScreenState extends State<WorldWorkshopListScreen> {
           workshop: workshop,
           workshopService: widget.workshopService,
           worldInfoService: widget.worldInfoService,
+          characterService: widget.characterService,
           settingsService: widget.settingsService,
           nanoGptService: widget.nanoGptService,
         ),
@@ -74,7 +78,7 @@ class _WorldWorkshopListScreenState extends State<WorldWorkshopListScreen> {
         title: const Text('Delete workshop?'),
         content: Text(
           'Remove “${workshop.title}”? '
-          'Any lorebook you already saved to World Info stays there.',
+          'Any lorebook or characters you already saved stay in the app.',
         ),
         actions: [
           TextButton(
@@ -119,14 +123,13 @@ class _WorldWorkshopListScreenState extends State<WorldWorkshopListScreen> {
                   children: [
                     Text(
                       'Build a world by chatting with the AI. '
-                      'When you’re ready, tap Create lorebook — it becomes a '
-                      'global lorebook under World Info (same as one you made '
-                      'by hand).',
+                      'When you’re ready, create a lorebook for World Info '
+                      'and/or turn people from the chat into character cards.',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'One workshop chat = one lorebook.',
+                      'One workshop chat = one lorebook (characters are optional extras).',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],

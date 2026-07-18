@@ -256,6 +256,86 @@ void main() {
     );
   });
 
+  test('recursive scanning follows lore content into another active book', () {
+    final character = characterWithBook(
+      Lorebook(
+        name: 'Places',
+        entries: [
+          LorebookEntry(
+            name: 'Azure city',
+            keys: const ['azure'],
+            content: 'Azure is a city beneath the lake.',
+            insertionOrder: 20,
+          ),
+        ],
+      ),
+    );
+    final global = Lorebook(
+      name: 'Quest',
+      entries: [
+        LorebookEntry(
+          name: 'Sealed letter',
+          keys: const ['sealed letter'],
+          content: 'The sealed letter points toward Azure.',
+          insertionOrder: 10,
+        ),
+      ],
+    );
+
+    final disabled = lore.buildInjection(
+      character: character,
+      messages: msgs(['I open the sealed letter.']),
+      extraBooks: [global],
+      recursiveScanningOverride: false,
+    );
+    expect(disabled.matchedCount, 1);
+    expect(disabled.beforeChar, isNot(contains('beneath the lake')));
+
+    final enabled = lore.buildInjection(
+      character: character,
+      messages: msgs(['I open the sealed letter.']),
+      extraBooks: [global],
+      recursiveScanningOverride: true,
+    );
+    expect(enabled.matchedCount, 2);
+    expect(enabled.beforeChar, contains('beneath the lake'));
+    expect(enabled.triggeredLabels, contains('Quest — Sealed letter'));
+    expect(enabled.triggeredLabels, contains('Places — Azure city'));
+  });
+
+  test('recursive entries obey priority and the shared token budget', () {
+    final book = Lorebook(
+      name: 'Tight budget',
+      tokenBudget: 10,
+      entries: [
+        LorebookEntry(
+          name: 'Primary',
+          keys: const ['gate'],
+          content: 'Gate points to ember.',
+          priority: 100,
+        ),
+        LorebookEntry(
+          name: 'Deep detail',
+          keys: const ['ember'],
+          content: 'Ember detail is optional.',
+          priority: 1,
+        ),
+      ],
+    );
+    List<String>? notified;
+    final injection = lore.buildInjection(
+      character: characterWithBook(book),
+      messages: msgs(['I approach the gate.']),
+      recursiveScanningOverride: true,
+      onTriggered: (labels) => notified = labels,
+    );
+
+    expect(injection.matchedCount, 1);
+    expect(injection.beforeChar, contains('Gate points'));
+    expect(injection.beforeChar, isNot(contains('optional')));
+    expect(notified, ['Tight budget — Primary']);
+  });
+
   test('parses SillyTavern World Info map-style entries', () {
     final book = Lorebook.parseImport({
       'name': 'ST World',

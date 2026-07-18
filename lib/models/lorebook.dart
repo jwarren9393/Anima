@@ -23,7 +23,7 @@ class Lorebook {
   /// Rough max “tokens” of lore to inject (we approximate 1 token ≈ 4 chars).
   final int tokenBudget;
 
-  /// ST flag; Anima Phase 6 does not recurse (kept for export compatibility).
+  /// When enabled, selected entry content can trigger further lore entries.
   final bool recursiveScanning;
 
   final List<LorebookEntry> entries;

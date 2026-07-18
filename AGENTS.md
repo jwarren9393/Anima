@@ -60,19 +60,20 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-18  
-**Last agent action:** Full feature README + commit/push (Paths, categories, drafts, credits, etc.).
+**Last agent action:** Generate avatar on personas (same NanoGPT sheet + subscription-safe models as characters).
 
 ### What works today
 
 - **Home screen** — chat history, Settings, New chat
 - **New chat** — choose **Solo** or **Group**; if the character has several greetings, a **Choose opening** sheet picks which one starts (others stay as swipes)
 - **Settings hub** — separate menus:
-  - **Personas** — create multiple {{user}} identities (name, bio, photo); set a default for new chats
-  - **Characters** — character cards + **categories** (custom lists; one character can be in several); filter dropdown; **consistency check** (checklist icon) = read-only AI report
+  - **Personas** — create multiple {{user}} identities (name, bio, photo); **Generate avatar** from name/About; set a default for new chats
+  - **Characters** — character cards + **categories** (custom lists; one character can be in several); filter dropdown; **consistency check** (checklist icon) = read-only AI report; **Generate avatar** from card text
   - **World Info & lore** — **global lorebooks** (create / import ST JSON / export / on-off) + scan depth/budget + link to per-character books; **entry AI wand** + **Suggest keywords from content**
-  - **Creation Center** — chat with AI to invent a world; **Create lorebook** saves keyword entries as a selectable global lorebook (one workshop = one book)
+  - **Creation Center** — chat with AI to invent a world; **Create lorebook** saves keyword entries as a selectable global lorebook (one workshop = one book); **Create characters** (person+ icon) detects people in the chat, lets you multi-select, generates each card one-by-one, and opens **Review generated character** before anything is saved to Characters
   - **AI collaborator** — wand guidance note + **Composer Format** note + **Roadway / Paths** note
   - **Appearance** — chat avatar shape/size only (theme is fixed Obsidian & Gold)
+  - **Backup & restore** — one `.anima-backup` JSON file (chats, characters, personas, categories, lorebooks, workshops, drafts, roadway cache, avatars, settings); **API key is not included** — re-enter after restore; restore replaces Anima data only (whitelist), then returns to Home
   - API, Generation parameters
 - **Look** — single dark glass theme (black + gold accents, gold glow backdrop); no parchment / Middle-earth look; no light mode or color studio
 - **Generation parameters** — detailed help + many sampling presets; **context size in tokens** + presets (1K–24K); **auto-summarize** every N messages
@@ -80,7 +81,7 @@ High-value SillyTavern concepts to aim for over time:
 - **Text presets** — expanded Author’s Note / System prompt / Post-history / collaborator guidance sheets
 - **Character AI wand** — sparkle icon on creative card fields; sends all filled fields as context; appends NanoGPT text below what’s already there (uses chat model + sampling)
 - **World Info entry AI wand** — sparkle on Label / Keywords / Lore content (and Secondary keywords when Selective); uses book + sibling entry context; appends (keywords merge comma-separated); same model + collaborator guidance
-- **API & connection** — live NanoGPT model catalog: **Auto** provider (auto-model / basic / standard / premium) listed first, then providers A–Z; refresh; custom model id; subscription toggle reloads catalog; **See remaining credits** shows wallet USD/NANO + weekly/daily/monthly subscription allowance data returned by NanoGPT
+- **API & connection** — live NanoGPT model catalog: **Auto** provider (auto-model / basic / standard / premium) listed first, then providers A–Z; refresh; custom model id; subscription toggle reloads catalog; **image model** picker uses NanoGPT’s subscription image catalog when **Use subscription API** is on (hides paid models); otherwise full catalog with Paid/Included labels; **See remaining credits** shows wallet USD/NANO + weekly/daily/monthly + daily images allowance data returned by NanoGPT
 - **Chat stop** — while a reply streams, the send button becomes **Stop** (keeps any partial text)
 - **Composer shortcuts** — **OOC**, **Format** (✨), **Continue** (▶), Send/Stop; Format has its own collaborator note
 - **Draft autosave** — composer text saved per chat (survives leaving chat/app); cleared on send
@@ -88,12 +89,15 @@ High-value SillyTavern concepts to aim for over time:
 - **Paths (Roadway)** — long-press a message → **Paths** (sheet + ✨ generate); tap a tile → composer; check **two or more** + **Combine selected** to AI-merge them into one composer draft; options **stay cached** until the chat moves on, or you clear / refresh; note under AI collaborator
 - **Auto-reply** — long-press → toggle; **new chats default to off** (send alone; Continue or tap a name for a reply)
 - **RP message look** — bubbles style `*narration*` in soft italic gold and `"spoken lines"` in bolder text
-- **Message actions** — **tap** a bubble to edit; **long-press** for Delete, Rewind, Branch, Continue, Impersonate, Paths, Auto-reply, Regen/Swipe (delete / rewind / branch run immediately — no confirm dialog)
+- **Message actions** — **tap** a bubble to edit; **long-press** for Delete, Rewind, Branch, Continue, Impersonate, Paths, Auto-reply, Regen/Swipe (Delete / Rewind show a 4s Undo SnackBar before writing `anima_chats.json`; branch still runs immediately)
+- **Lore hit toast** — when keywords match and entries fit the budget, a brief top overlay shows “Lore Triggered: …”
+- **Memory toast** — auto-summarize success shows “Memory summary optimized”
+- **Recursive lore scanning** — Settings toggle works: matched entry content can pull further active entries; shared token budget + priority still apply
 - **Quick swipe** — on the **latest** AI message, ◀ **1/N** ▶ always shows; ▶ on the last version generates a new swipe (older multi-swipe bubbles still show arrows to browse only)
 - **Clean chat chrome** — no Swipe/Regen/Continue bar under messages (those live in the long-press menu; compact swipe arrows under bubbles)
 - **Per-chat persona** — in a chat, ⋮ menu → **Persona: …** to switch who you are for that thread (saved on the chat)
 - **Group chat controls** — tap a character name chip to choose who speaks next; auto-reply off by default (send only; tap a name or Continue for a reply; toggle via long-press)
-- **Avatars** — persona + character photos; **tap an AI avatar in chat** to edit that character card (tap yours to edit the persona); PNG card import still grabs the card image; chat bubble shape/size via Appearance
+- **Avatars** — persona + character photos; **Generate avatar** on character and persona create/edit (and Creation Center character review) uses NanoGPT image models + an editable prompt; **tap an AI avatar in chat** to edit that character card (tap yours to edit the persona); PNG card import still grabs the card image; chat bubble shape/size via Appearance
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar
 - **Smoke:** `flutter test` + `flutter analyze` pass; Android + Linux desktop debug work
 
@@ -102,11 +106,11 @@ High-value SillyTavern concepts to aim for over time:
 - Linux desktop ✅ (F5 with device **Linux**); Windows build still needs a Windows host
 - Group chats support manual next-speaker chips + auto-reply off (still simple, not full ST group orchestration)
 - PNG export uses the character’s PNG avatar when available; JPEG/WebP avatars still fall back to the teal placeholder on PNG export
-- Recursive lore scanning toggle saved but not implemented yet
 - NovelAI / Agnai / Risu lorebook converters not implemented (ST JSON + character_book shapes work)
 - No TTS (removed — Speak was not useful enough to keep)
 - Paths open from the long-press menu (not always on the composer chrome)
-- Back-burner QoL not started: undo send/delete, last-chat resume, pinned Author’s Note / mood chips, memory preview, lore-hit toast, etc.
+- Full-app backup is plain JSON (not encrypted) and skips the API key on purpose
+- Back-burner QoL not started: undo send, last-chat resume, pinned Author’s Note / mood chips, memory preview, etc.
 
 ---
 
@@ -230,20 +234,22 @@ lib/
     characters_screen.dart        List / categories / import / export (JSON + PNG)
     character_edit_screen.dart    Full card field editor (+ lorebook + avatar + AI wand)
     personas_screen.dart          Persona list / default / pick-for-chat
-    persona_edit_screen.dart      Create/edit one persona
+    persona_edit_screen.dart      Create/edit one persona (+ Generate avatar)
     lorebook_edit_screen.dart     World Info entry list + entry editor (+ AI wand)
     lorebooks_screen.dart         Global lorebook list / create / import / export
     world_workshop_list_screen.dart Creation Center workshop list
-    world_workshop_chat_screen.dart Workshop chat + Create/Update lorebook
-    settings_screen.dart          Settings hub (Personas + Characters + Creation Center + AI collaborator)
+    world_workshop_chat_screen.dart Workshop chat + Create/Update lorebook + Create characters
+    settings_screen.dart          Settings hub (Personas + Characters + Creation Center + AI collaborator + Backup)
     api_settings_screen.dart      API key, model catalog, subscription URL + remaining credits
     lore_settings_screen.dart     Global books + scan/budget + character books link
     sampling_settings_screen.dart ST-style generation parameters
     collaborator_settings_screen.dart AI wand + Format + Roadway notes
     appearance_settings_screen.dart Chat avatars (theme is fixed)
+    backup_restore_screen.dart    Full-app backup / restore (.anima-backup JSON; no API key)
     settings_ui.dart              Shared settings form helpers
   widgets/
     anima_avatar.dart             Local-file / initial avatar (circle or rect via style)
+    generate_avatar_sheet.dart    Shared NanoGPT Generate avatar sheet (characters + personas)
     keyboard_inset.dart           Lift UI above keyboard (chat composers)
     rp_rich_text.dart             *action* / "dialogue" styled message text
     greeting_picker.dart          Multi-greeting sheet when starting a chat
@@ -251,9 +257,10 @@ lib/
     preset_picker.dart            Preset button + bottom sheets (sampling / text)
   services/
     api_key_service.dart          Secure storage for NanoGPT API key
-    settings_service.dart         Model, sampling, context, lore, avatars, collaborator (+ legacy persona migrate)
+    settings_service.dart         Model, image model, sampling, context, lore, avatars, collaborator (+ legacy persona migrate)
     persona_service.dart          Multi-persona load/save + default active id
     avatar_service.dart           Local avatar files under documents/avatars
+    avatar_prompt_builder.dart    Text prompt for NanoGPT character/persona avatar generation
     character_service.dart        Load/save characters JSON on device
     character_category_service.dart Anima-only category lists (multi-membership)
     character_card_codec.dart     ST Card V1/V2/V3 + PNG import/export
@@ -269,9 +276,10 @@ lib/
     lorebook_service.dart         Keyword scan, budget, merge global + character books
     world_info_service.dart       Persist global lorebooks (anima_lorebooks.json)
     world_workshop_service.dart   Persist Creation Center workshops
-    world_workshop_builder.dart   Workshop prompts + lorebook JSON parse
+    world_workshop_builder.dart   Workshop prompts + lorebook/character detect + card JSON parse
     chat_transcript_codec.dart    Chat JSON / plain-text import/export
-    nanogpt_service.dart          Streaming + model catalog + credit usage + sampling + plain-English errors
+    app_backup_service.dart       Full-app backup/restore (whitelist JSON + avatars; no API key)
+    nanogpt_service.dart          Streaming + text/image model catalogs + image generate + credit usage + sampling + plain-English errors
 ```
 
 **Dependencies in use:** `flutter_secure_storage`, `http`, `path_provider`, `file_picker`, `share_plus`, `path`, `google_fonts`
@@ -325,9 +333,9 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. Hot restart → Settings → Characters → folder icon → create a category → ⋮ → Categories → assign → filter.
-2. New chat Solo / Group — confirm category filter; Paths combine + cache still work.
-3. README is now a full feature overview for sharing with humans / AI assistants.
+1. After pull: Settings → Backup & restore → make one backup, then spot-check restore on a disposable install if you want.
+2. Creation Center → Create characters → review/save; Personas/Characters → Generate avatar with subscription API on.
+3. Optional QoL backlog: undo send, last-chat resume, pinned Author’s Note / mood chips, memory preview panel.
 
 ---
 

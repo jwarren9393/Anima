@@ -6,12 +6,14 @@ import 'package:flutter/material.dart';
 
 import '../models/character.dart';
 import '../models/lorebook.dart';
+import '../services/avatar_prompt_builder.dart';
 import '../services/avatar_service.dart';
 import '../services/character_collaborator.dart';
 import '../services/character_service.dart';
 import '../services/nanogpt_service.dart';
 import '../services/settings_service.dart';
 import '../widgets/anima_avatar.dart';
+import '../widgets/generate_avatar_sheet.dart';
 import '../widgets/keyboard_inset.dart';
 import '../widgets/preset_picker.dart';
 import '../models/anima_presets.dart';
@@ -25,6 +27,7 @@ class CharacterEditScreen extends StatefulWidget {
     required this.settingsService,
     required this.nanoGptService,
     this.existing,
+    this.generatedDraft = false,
   });
 
   final CharacterService characterService;
@@ -32,12 +35,17 @@ class CharacterEditScreen extends StatefulWidget {
   final NanoGptService nanoGptService;
   final Character? existing;
 
+  /// True when opened from Creation Center (or similar) with AI-filled fields
+  /// that are not saved until the user taps Save.
+  final bool generatedDraft;
+
   @override
   State<CharacterEditScreen> createState() => _CharacterEditScreenState();
 }
 
 class _CharacterEditScreenState extends State<CharacterEditScreen> {
   static const _collaborator = CharacterCollaborator();
+  static const _avatarPromptBuilder = AvatarPromptBuilder();
 
   final _avatarService = AvatarService();
   final _name = TextEditingController();
@@ -51,6 +59,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
   final _postHistory = TextEditingController();
   bool _saving = false;
   bool _consistencyBusy = false;
+  bool _avatarBusy = false;
   CharacterCollaboratorField? _wandBusy;
   Lorebook? _lorebook;
   Map<String, dynamic> _extensions = const {};
@@ -65,7 +74,9 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
   String _preservedCharacterVersion = '';
   List<String> _preservedTags = const [];
 
-  bool get _isEditing => widget.existing != null;
+  bool get _isEditing => widget.existing != null && !widget.generatedDraft;
+
+  bool get _isGeneratedDraft => widget.generatedDraft;
 
   @override
   void initState() {
@@ -293,6 +304,58 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
     setState(() => _avatarFileName = null);
   }
 
+  Future<void> _generateAvatar() async {
+    if (_avatarBusy || _saving || _wandBusy != null) return;
+
+    final promptController = TextEditingController(
+      text: _avatarPromptBuilder.buildPrompt(
+        name: _name.text,
+        description: _description.text,
+        personality: _personality.text,
+        scenario: _scenario.text,
+        tags: _preservedTags,
+      ),
+    );
+
+    try {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (sheetContext) {
+          return GenerateAvatarSheet(
+            promptController: promptController,
+            settingsService: widget.settingsService,
+            nanoGptService: widget.nanoGptService,
+            onAccepted: (image) async {
+              setState(() => _avatarBusy = true);
+              try {
+                final previous = _avatarFileName;
+                final saved = await _avatarService.saveBytes(
+                  stem: _characterId,
+                  bytes: image.bytes,
+                  extension: image.fileExtension,
+                );
+                if (previous != null && previous != saved) {
+                  await _avatarService.delete(previous);
+                }
+                if (!mounted) return;
+                setState(() => _avatarFileName = saved);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Avatar updated from NanoGPT.')),
+                );
+              } finally {
+                if (mounted) setState(() => _avatarBusy = false);
+              }
+            },
+          );
+        },
+      );
+    } finally {
+      promptController.dispose();
+    }
+  }
+
   Future<void> _openLorebook() async {
     final initial = _lorebook ??
         Lorebook.empty(
@@ -443,9 +506,22 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
     final loreEnabled =
         _lorebook?.entries.where((e) => e.enabled).length ?? 0;
 
+    final title = _isGeneratedDraft
+        ? 'Review generated character'
+        : (_isEditing ? 'Edit character card' : 'New character card');
+    final intro = _isGeneratedDraft
+        ? 'Review this AI draft from Creation Center. Edit anything you like, '
+            'then Save to add it to Characters — or go back to skip it. '
+            'You can use {{char}} and {{user}} in the text.'
+        : 'Fields match SillyTavern Character Cards (V2/V3). '
+            'You can use {{char}} and {{user}} in the text. '
+            'Tap the wand on a creative field to append AI text '
+            '(uses your NanoGPT model + Settings → AI collaborator). '
+            'Use the checklist icon for a read-only consistency report.';
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEditing ? 'Edit character card' : 'New character card'),
+        title: Text(title),
         actions: [
           IconButton(
             tooltip: 'Consistency check (read-only report)',
@@ -466,11 +542,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         padding: const EdgeInsets.all(20),
         children: [
           Text(
-            'Fields match SillyTavern Character Cards (V2/V3). '
-            'You can use {{char}} and {{user}} in the text. '
-            'Tap the wand on a creative field to append AI text '
-            '(uses your NanoGPT model + Settings → AI collaborator). '
-            'Use the checklist icon for a read-only consistency report.',
+            intro,
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 20),
@@ -486,10 +558,11 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
                 const SizedBox(height: 12),
                 Wrap(
                   spacing: 8,
+                  runSpacing: 8,
                   alignment: WrapAlignment.center,
                   children: [
                     OutlinedButton.icon(
-                      onPressed: _pickAvatar,
+                      onPressed: (_avatarBusy || _saving) ? null : _pickAvatar,
                       icon: const Icon(Icons.photo),
                       label: Text(
                         _avatarFileName == null
@@ -497,15 +570,29 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
                             : 'Change avatar',
                       ),
                     ),
+                    OutlinedButton.icon(
+                      onPressed:
+                          (_avatarBusy || _saving) ? null : _generateAvatar,
+                      icon: _avatarBusy
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.auto_awesome),
+                      label: const Text('Generate avatar'),
+                    ),
                     if (_avatarFileName != null)
                       TextButton(
-                        onPressed: _clearAvatar,
+                        onPressed:
+                            (_avatarBusy || _saving) ? null : _clearAvatar,
                         child: const Text('Remove'),
                       ),
                   ],
                 ),
                 const SizedBox(height: 8),
                 Text(
+                  'Pick a photo or generate one with NanoGPT from the card text. '
                   'PNG card imports use the card image automatically.',
                   style: Theme.of(context).textTheme.bodySmall,
                   textAlign: TextAlign.center,
@@ -616,7 +703,11 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : Text(_isEditing ? 'Save character' : 'Create character'),
+                : Text(
+                    _isGeneratedDraft || _isEditing
+                        ? 'Save character'
+                        : 'Create character',
+                  ),
           ),
           const SizedBox(height: 24),
         ],

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../models/persona.dart';
+import '../services/nanogpt_service.dart';
 import '../services/persona_service.dart';
+import '../services/settings_service.dart';
 import '../widgets/anima_avatar.dart';
 import 'persona_edit_screen.dart';
 
@@ -10,11 +12,15 @@ class PersonasScreen extends StatefulWidget {
   const PersonasScreen({
     super.key,
     required this.personaService,
+    required this.settingsService,
+    required this.nanoGptService,
     this.pickForChat = false,
     this.selectedPersonaId,
   });
 
   final PersonaService personaService;
+  final SettingsService settingsService;
+  final NanoGptService nanoGptService;
 
   /// When true, tapping a row returns that persona (for chat switching).
   final bool pickForChat;
@@ -52,6 +58,8 @@ class _PersonasScreenState extends State<PersonasScreen> {
       MaterialPageRoute(
         builder: (_) => PersonaEditScreen(
           personaService: widget.personaService,
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
         ),
       ),
     );
@@ -64,6 +72,8 @@ class _PersonasScreenState extends State<PersonasScreen> {
       MaterialPageRoute(
         builder: (_) => PersonaEditScreen(
           personaService: widget.personaService,
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
           existing: persona,
         ),
       ),
