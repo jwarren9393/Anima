@@ -11,10 +11,29 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **Distribution** | Personal use only — **not** published to app stores |
 | **Repo** | https://github.com/jwarren9393/Anima (private) |
 | **Theme** | Fixed dark **Obsidian & Gold** glass UI (no light mode / theme studio) |
+| **Version** | `1.0.0` (see [GitHub Releases](https://github.com/jwarren9393/Anima/releases) for the official APK) |
 
 API base (pay-as-you-go): `https://nano-gpt.com/api/v1/chat/completions`  
 Auth: `Authorization: Bearer <API_KEY>`  
 Optional subscription base: `https://nano-gpt.com/api/subscription/v1`
+
+---
+
+## Download (Android APK)
+
+Official builds are published on the repo’s **[Releases](https://github.com/jwarren9393/Anima/releases)** page (not committed into source).
+
+1. Open the latest release (e.g. **v1.0.0**).
+2. Download **`Anima-1.0.0.apk`**.
+3. On your phone: allow install from this source if Android asks, then open the APK.
+4. First launch → **Settings → API & connection** → paste your NanoGPT key → Save.
+
+This is a **personal / sideload** build (not Play Store). Rebuild locally anytime with:
+
+```bash
+flutter build apk --release
+# output: build/app/outputs/flutter-apk/app-release.apk
+```
 
 ---
 

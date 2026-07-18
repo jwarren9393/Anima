@@ -60,7 +60,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-18  
-**Last agent action:** Generate avatar on personas (same NanoGPT sheet + subscription-safe models as characters).
+**Last agent action:** Built release APK `Anima-1.0.0.apk` and published GitHub Release **v1.0.0**.
 
 ### What works today
 
@@ -333,9 +333,9 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. After pull: Settings → Backup & restore → make one backup, then spot-check restore on a disposable install if you want.
-2. Creation Center → Create characters → review/save; Personas/Characters → Generate avatar with subscription API on.
-3. Optional QoL backlog: undo send, last-chat resume, pinned Author’s Note / mood chips, memory preview panel.
+1. Install **v1.0.0** from [Releases](https://github.com/jwarren9393/Anima/releases) on your phone and confirm API key + a quick chat.
+2. Optional: Settings → Backup & restore → keep a `.anima-backup` somewhere safe.
+3. Optional QoL backlog when you want more: undo send, last-chat resume, pinned Author’s Note / mood chips, memory preview panel.
 
 ---
 

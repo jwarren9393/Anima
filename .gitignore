@@ -52,3 +52,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local release APK copies (GitHub Releases hold the official binaries)
+/dist/
+*.apk
