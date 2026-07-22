@@ -40,42 +40,36 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
 
   bool _busy = false;
 
+  bool get _useDesktopSaveDialog =>
+      Platform.isLinux || Platform.isWindows || Platform.isMacOS;
+
   Future<void> _createBackup() async {
     if (_busy) return;
     setState(() => _busy = true);
     try {
       final bundle = await _backup.createBackup();
-      final dir = await getTemporaryDirectory();
       final stamp = DateTime.now()
           .toUtc()
           .toIso8601String()
           .replaceAll(':', '-')
           .split('.')
           .first;
-      final path =
-          '${dir.path}/anima_backup_$stamp.${AppBackupService.fileExtension}';
-      final file = File(path);
-      await file.writeAsBytes(bundle.bytes, flush: true);
+      final fileName =
+          'anima_backup_$stamp.${AppBackupService.fileExtension}';
 
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Backup ready · ${bundle.summary.shortDescription}'),
-        ),
-      );
-
-      await SharePlus.instance.share(
-        ShareParams(
-          files: [
-            XFile(
-              path,
-              mimeType: 'application/json',
-              name: 'anima_backup_$stamp.${AppBackupService.fileExtension}',
-            ),
-          ],
-          subject: 'Anima backup',
-        ),
-      );
+      if (_useDesktopSaveDialog) {
+        await _saveBackupOnDesktop(
+          bytes: bundle.bytes,
+          fileName: fileName,
+          summary: bundle.summary.shortDescription,
+        );
+      } else {
+        await _shareBackupOnMobile(
+          bytes: bundle.bytes,
+          fileName: fileName,
+          summary: bundle.summary.shortDescription,
+        );
+      }
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -84,6 +78,85 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _saveBackupOnDesktop({
+    required Uint8List bytes,
+    required String fileName,
+    required String summary,
+  }) async {
+    String? initialDirectory;
+    try {
+      final downloads = await getDownloadsDirectory();
+      initialDirectory = downloads?.path;
+    } catch (_) {
+      // Fall back to the system default save location.
+    }
+
+    final pickedPath = await FilePicker.platform.saveFile(
+      dialogTitle: 'Save Anima backup',
+      fileName: fileName,
+      initialDirectory: initialDirectory,
+      type: FileType.any,
+      bytes: bytes,
+    );
+    if (pickedPath == null) return;
+
+    final savedPath = _ensureBackupExtension(pickedPath);
+    final file = File(savedPath);
+    // Desktop pickers usually write [bytes], but always rewrite so a missing
+    // extension rename still lands a complete backup file.
+    await file.writeAsBytes(bytes, flush: true);
+    if (savedPath != pickedPath) {
+      final leftover = File(pickedPath);
+      if (await leftover.exists()) {
+        try {
+          await leftover.delete();
+        } catch (_) {
+          // Ignore cleanup failures; the complete backup file still exists.
+        }
+      }
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Backup saved · $summary\n$savedPath')),
+    );
+  }
+
+  Future<void> _shareBackupOnMobile({
+    required Uint8List bytes,
+    required String fileName,
+    required String summary,
+  }) async {
+    final dir = await getTemporaryDirectory();
+    final path = '${dir.path}/$fileName';
+    final file = File(path);
+    await file.writeAsBytes(bytes, flush: true);
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Backup ready · $summary')),
+    );
+
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [
+          XFile(
+            path,
+            mimeType: 'application/json',
+            name: fileName,
+          ),
+        ],
+        subject: 'Anima backup',
+      ),
+    );
+  }
+
+  String _ensureBackupExtension(String path) {
+    final extension = '.${AppBackupService.fileExtension}';
+    if (path.toLowerCase().endsWith(extension)) return path;
+    return '$path$extension';
   }
 
   Future<void> _restoreBackup() async {
@@ -181,6 +254,17 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
             'lorebooks, Creation Center workshops, drafts, avatars, and '
             'settings. Use it after reinstalling Anima.',
             style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _useDesktopSaveDialog
+                ? 'On this computer, Create backup opens a Save dialog '
+                    '(Downloads is suggested). Pick a folder you can find later.'
+                : 'On your phone, Create backup opens the system share sheet so '
+                    'you can save the file to Files, Drive, or another app.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 12),
           Text(

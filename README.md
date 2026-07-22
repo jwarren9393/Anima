@@ -19,14 +19,103 @@ Optional subscription base: `https://nano-gpt.com/api/subscription/v1`
 
 ---
 
-## Download (Android APK)
+## Installation and updates
 
-Official **v1.1.0** builds are published on the repo’s **[Releases](https://github.com/jwarren9393/Anima/releases)** page (not committed into source).
+Anima is a personal app, so it is installed directly rather than through an app store. The NanoGPT API key is never included in a build or backup. On the first launch of each device, open **Settings → API & connection**, enter the key, and tap **Save**.
 
-1. Open release **v1.1.0**.
+### Android — easiest installation
+
+Official Android builds are published on the private repo’s **[Releases](https://github.com/jwarren9393/Anima/releases)** page.
+
+1. On the phone, open the Releases page and select **v1.1.0**.
 2. Download **`Anima-1.1.0.apk`**.
-3. On your phone: allow install from this source if Android asks, then open the APK.
-4. First launch → **Settings → API & connection** → paste your NanoGPT key → Save.
+3. Open the downloaded APK. If Android asks, allow your browser or file manager to **install unknown apps**.
+4. Tap **Install**, then open Anima.
+5. Enter the NanoGPT key under **Settings → API & connection**.
+
+To update Android later, download the newly refreshed APK and install it over the existing app. **Do not uninstall first**: installing over it preserves Anima’s local data. Making a backup before any important update is still recommended.
+
+To build the APK from source instead, install Flutter and the Android SDK, connect an Android device or configure signing as needed, then run:
+
+```bash
+flutter pub get
+flutter build apk --release
+# APK: build/app/outputs/flutter-apk/app-release.apk
+```
+
+### Linux — Kubuntu/Ubuntu
+
+The repository includes a one-command installer/updater. It builds Anima, installs it for the current Linux user, adds the app-menu launcher and icon, and leaves chats/settings in their separate data directory.
+
+#### First-time setup
+
+1. Install the Linux build tools:
+
+   ```bash
+   sudo apt update
+   sudo apt install clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev
+   ```
+
+2. Install the current stable [Flutter SDK for Linux](https://docs.flutter.dev/get-started/install/linux), add its `bin` directory to `PATH`, and verify it:
+
+   ```bash
+   flutter doctor
+   flutter config --enable-linux-desktop
+   ```
+
+3. Download this private repository. If GitHub CLI is installed and signed in:
+
+   ```bash
+   gh repo clone jwarren9393/Anima
+   cd Anima
+   ```
+
+   If the repository is already on the computer, open a terminal in its folder instead.
+
+4. Install Anima:
+
+   ```bash
+   ./scripts/update_linux.sh
+   ```
+
+5. Search for **Anima** in the application menu. Log out and back in only if the launcher does not appear.
+
+#### Update Linux later
+
+From the Anima repository, run one command:
+
+```bash
+./scripts/update_linux.sh --pull
+```
+
+That downloads the newest GitHub changes, rebuilds Anima, and installs the result. If you edited the source locally instead of downloading an update, run `./scripts/update_linux.sh` without `--pull`. The script installs to `~/.local/share/anima`; it does not erase chats, characters, lorebooks, or settings.
+
+### Windows
+
+Windows builds must be made on a Windows computer.
+
+1. Install [Flutter for Windows](https://docs.flutter.dev/get-started/install/windows) and Visual Studio 2022 with the **Desktop development with C++** workload.
+2. In PowerShell, verify the setup:
+
+   ```powershell
+   flutter doctor
+   flutter config --enable-windows-desktop
+   ```
+
+3. Clone or download this repository, open PowerShell in its folder, and build:
+
+   ```powershell
+   flutter pub get
+   flutter build windows --release
+   ```
+
+4. Open `build\windows\x64\runner\Release\` and run `anima.exe`. Keep the entire `Release` folder together because the executable needs the DLLs and data beside it. Create a desktop shortcut to `anima.exe` if desired.
+
+To update Windows, pull or download the latest source, repeat the build, close Anima, and replace the previous `Release` folder with the new one. Anima’s user data is stored separately and is not removed when the program files are replaced.
+
+### Moving data between devices
+
+Anima does not automatically sync devices. Use **Settings → Backup & restore** to create an `.anima-backup` on one device, transfer that file privately, and restore it on the other device. Restore replaces the destination device’s current Anima library. The API key is deliberately excluded, so enter it separately on each device.
 
 ### What’s in v1.1.0
 
@@ -35,13 +124,6 @@ Official **v1.1.0** builds are published on the repo’s **[Releases](https://gi
 - Full chat app: solo/group, streaming, swipes, Paths, drafts, structured personas + AI wand, characters, World Info
 - Creation Center: invent worlds, import lorebooks, create/update lorebooks, create AI characters or your persona
 - Generate avatars, backup & restore, context estimates
-
-This is a **personal / sideload** build (not Play Store). Rebuild locally anytime with:
-
-```bash
-flutter build apk --release
-# output: build/app/outputs/flutter-apk/app-release.apk
-```
 
 ---
 
@@ -54,7 +136,7 @@ Living build notes for coding agents live in [`AGENTS.md`](AGENTS.md) (status, r
 
 ---
 
-## Quick start (this machine)
+## Developer quick start
 
 ```bash
 export JAVA_HOME="$HOME/development/jdk-17"
@@ -292,6 +374,8 @@ All use the normal model + sampling (Format uses lower temperature to stay close
 - One **`.anima-backup`** plain JSON file for the whole app library.
 - **Includes:** chats, characters, personas, categories, lorebooks, Creation Center workshops, composer drafts, Paths cache, avatar image files, and non-secret settings.
 - **Does not include:** the NanoGPT **API key** (on purpose). Re-enter the key after restore under API & connection.
+- **Desktop (Linux/Windows):** Create backup opens a **Save** dialog (Downloads suggested) and shows the final path when done.
+- **Android:** Create backup opens the system share sheet so you can save to Files / Drive / etc.
 - Restore replaces only Anima’s known files/settings (whitelist) — not other device data — then returns to Home.
 - Not encrypted; treat the file like a private export.
 
