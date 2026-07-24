@@ -92,6 +92,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   bool _busy = false;
   bool _formatting = false;
 
+  /// When true, streaming keeps the list pinned to the end until the user scrolls up.
+  bool _stickToBottom = true;
+  static const _stickToBottomThreshold = 80.0;
+
   /// When on, Send wraps the message as `(OOC: …)` for out-of-character talk.
   bool _oocMode = false;
   AvatarStyleSettings _avatarStyle = const AvatarStyleSettings();
@@ -119,7 +123,18 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _inputController.addListener(_onComposerChanged);
+    _scrollController.addListener(_onScrollChanged);
     _bootstrap();
+  }
+
+  void _onScrollChanged() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    final atBottom =
+        position.maxScrollExtent - position.pixels <= _stickToBottomThreshold;
+    if (atBottom != _stickToBottom) {
+      _stickToBottom = atBottom;
+    }
   }
 
   @override
@@ -128,7 +143,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       if (!mounted) return;
       final inset = MediaQuery.viewInsetsOf(context).bottom;
       // Keyboard opening — keep the latest messages and composer in view.
-      if (inset > _keyboardInset + 8) {
+      if (inset > _keyboardInset + 8 && _stickToBottom) {
         _scrollToBottom();
       }
       _keyboardInset = inset;
@@ -200,7 +215,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _persona = persona;
       _loading = false;
     });
-    _scrollToBottom(jump: true);
+    _scrollToBottom(jump: true, force: true);
   }
 
   Future<Character> _resolveCharacterForSession(ChatSession session) async {
@@ -602,7 +617,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _session = session;
       _error = null;
     });
-    _scrollToBottom(jump: true);
+    _scrollToBottom(jump: true, force: true);
   }
 
   Future<void> _pickChat() async {
@@ -772,7 +787,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         _session = withPersona;
         _error = null;
       });
-      _scrollToBottom(jump: true);
+      _scrollToBottom(jump: true, force: true);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -850,7 +865,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         );
       }
     });
-    _scrollToBottom();
+    _scrollToBottom(force: true);
     await _persist();
     if (!autoReply) return;
 
@@ -935,7 +950,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         ),
       );
     });
-    _scrollToBottom();
+    _scrollToBottom(force: true);
     await _persist();
     await _streamIntoLastAssistant(
       excludeLastAssistant: true,
@@ -968,7 +983,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         ),
       );
     });
-    _scrollToBottom();
+    _scrollToBottom(force: true);
     await _persist();
     await _streamIntoLastAssistant(
       excludeLastAssistant: true,
@@ -1101,7 +1116,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         ),
       );
     });
-    _scrollToBottom();
+    _scrollToBottom(force: true);
     await _persist();
     await _streamIntoLastAssistant(
       excludeLastAssistant: true,
@@ -1655,7 +1670,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         );
       }
     });
-    _scrollToBottom();
+    _scrollToBottom(force: true);
 
     await _streamIntoLastAssistant(
       excludeLastAssistant: true,
@@ -1829,7 +1844,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             speakerName: last.speakerName ?? speaker.name,
           );
         });
-        _scrollToBottom();
+        _scrollToBottom(jump: true);
       }
 
       if (!mounted) return;
@@ -2163,7 +2178,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text('Branched to “${branched.title}”.')));
-    _scrollToBottom(jump: true);
+    _scrollToBottom(jump: true, force: true);
   }
 
   void _shiftSwipe(int index, int delta) {
@@ -2177,7 +2192,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     _persist();
   }
 
-  void _scrollToBottom({bool jump = false}) {
+  void _scrollToBottom({bool jump = false, bool force = false}) {
+    if (force) {
+      _stickToBottom = true;
+    } else if (!_stickToBottom) {
+      return;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) return;
       final target = _scrollController.position.maxScrollExtent;
@@ -2208,6 +2228,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       unawaited(_draftService.saveDraft(session.id, text));
     }
     _inputController.removeListener(_onComposerChanged);
+    _scrollController.removeListener(_onScrollChanged);
     _inputController.dispose();
     _scrollController.dispose();
     super.dispose();
