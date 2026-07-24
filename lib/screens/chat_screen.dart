@@ -92,10 +92,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   bool _busy = false;
   bool _formatting = false;
 
-  /// When true, streaming keeps the list pinned to the end until the user scrolls up.
-  bool _stickToBottom = true;
-  static const _stickToBottomThreshold = 80.0;
-
   /// When on, Send wraps the message as `(OOC: …)` for out-of-character talk.
   bool _oocMode = false;
   AvatarStyleSettings _avatarStyle = const AvatarStyleSettings();
@@ -104,11 +100,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   List<Character> _participants = const [];
   ChatSession? _session;
   Persona? _persona;
-  double _keyboardInset = 0;
   Timer? _draftSaveTimer;
   Timer? _toastTimer;
   OverlayEntry? _toastEntry;
-  _PendingChatRemoval? _pendingRemoval;
   String _lastSavedDraft = '';
 
   List<ChatMessage> get _messages => _session?.messages ?? const [];
@@ -123,31 +117,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _inputController.addListener(_onComposerChanged);
-    _scrollController.addListener(_onScrollChanged);
     _bootstrap();
-  }
-
-  void _onScrollChanged() {
-    if (!_scrollController.hasClients) return;
-    final position = _scrollController.position;
-    final atBottom =
-        position.maxScrollExtent - position.pixels <= _stickToBottomThreshold;
-    if (atBottom != _stickToBottom) {
-      _stickToBottom = atBottom;
-    }
-  }
-
-  @override
-  void didChangeMetrics() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final inset = MediaQuery.viewInsetsOf(context).bottom;
-      // Keyboard opening — keep the latest messages and composer in view.
-      if (inset > _keyboardInset + 8 && _stickToBottom) {
-        _scrollToBottom();
-      }
-      _keyboardInset = inset;
-    });
   }
 
   @override
@@ -215,7 +185,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _persona = persona;
       _loading = false;
     });
-    _scrollToBottom(jump: true, force: true);
+    _scrollToBottom(jump: true);
   }
 
   Future<Character> _resolveCharacterForSession(ChatSession session) async {
@@ -291,30 +261,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Future<void> _persist() async {
     final session = _session;
     if (session == null) return;
-    final pending = _pendingRemoval;
-    if (pending == null ||
-        pending.finished ||
-        pending.session.id != session.id) {
-      await widget.chatService.saveChat(session);
-      return;
-    }
-
-    // Other chat changes may still save during the Undo window. Persist those
-    // changes with the removed messages (and memory) temporarily restored so
-    // the deletion itself does not reach anima_chats.json before the SnackBar
-    // closes.
-    final messages = List<ChatMessage>.from(session.messages);
-    messages.insertAll(
-      pending.index.clamp(0, messages.length),
-      pending.removed,
-    );
-    await widget.chatService.saveChat(
-      session.copyWith(
-        messages: messages,
-        memorySummary: pending.previousMemorySummary,
-        memoryCoveredCount: pending.previousMemoryCoveredCount,
-      ),
-    );
+    await widget.chatService.saveChat(session);
   }
 
   void _showLocalToast(String message) {
@@ -617,7 +564,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _session = session;
       _error = null;
     });
-    _scrollToBottom(jump: true, force: true);
+    _scrollToBottom(jump: true);
   }
 
   Future<void> _pickChat() async {
@@ -787,7 +734,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         _session = withPersona;
         _error = null;
       });
-      _scrollToBottom(jump: true, force: true);
+      _scrollToBottom(jump: true);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -865,7 +812,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         );
       }
     });
-    _scrollToBottom(force: true);
+    _scrollToBottom(jump: true);
     await _persist();
     if (!autoReply) return;
 
@@ -950,7 +897,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         ),
       );
     });
-    _scrollToBottom(force: true);
     await _persist();
     await _streamIntoLastAssistant(
       excludeLastAssistant: true,
@@ -983,7 +929,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         ),
       );
     });
-    _scrollToBottom(force: true);
     await _persist();
     await _streamIntoLastAssistant(
       excludeLastAssistant: true,
@@ -1116,7 +1061,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         ),
       );
     });
-    _scrollToBottom(force: true);
     await _persist();
     await _streamIntoLastAssistant(
       excludeLastAssistant: true,
@@ -1670,7 +1614,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         );
       }
     });
-    _scrollToBottom(force: true);
 
     await _streamIntoLastAssistant(
       excludeLastAssistant: true,
@@ -1844,7 +1787,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             speakerName: last.speakerName ?? speaker.name,
           );
         });
-        _scrollToBottom(jump: true);
       }
 
       if (!mounted) return;
@@ -2019,120 +1961,34 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Future<void> _deleteMessage(int index) async {
     if (_busy || _session == null) return;
     if (index < 0 || index >= _messages.length) return;
-    // Deleting inside the summarized prefix invalidates the memory.
     final clearMemory = index < _session!.memoryCoveredCount;
-    await _beginUndoableRemoval(
-      index: index,
-      count: 1,
-      message: 'Message deleted',
-      clearMemory: clearMemory,
-    );
+    setState(() {
+      final messages = List<ChatMessage>.from(_session!.messages)
+        ..removeAt(index);
+      _session = _session!.copyWith(
+        messages: messages,
+        memorySummary: clearMemory ? '' : _session!.memorySummary,
+        memoryCoveredCount: clearMemory ? 0 : _session!.memoryCoveredCount,
+      );
+    });
+    await _persist();
   }
 
   /// Keep messages through [index]; delete everything after.
   Future<void> _rewindToMessage(int index) async {
     if (_busy || _session == null) return;
     if (index < 0 || index >= _messages.length) return;
-    if (index >= _messages.length - 1) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nothing after this message to remove.')),
-      );
-      return;
-    }
-    // Rewinding into summarized history invalidates the memory.
+    if (index >= _messages.length - 1) return;
     final clearMemory = index + 1 < _session!.memoryCoveredCount;
-    await _beginUndoableRemoval(
-      index: index + 1,
-      count: _messages.length - index - 1,
-      message: 'Chat rewound',
-      clearMemory: clearMemory,
-    );
-  }
-
-  Future<void> _beginUndoableRemoval({
-    required int index,
-    required int count,
-    required String message,
-    bool clearMemory = false,
-  }) async {
-    final session = _session;
-    if (session == null || count <= 0) return;
-
-    final previous = _pendingRemoval;
-    if (previous != null && !previous.finished) {
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      await _commitPendingRemoval(previous);
-    }
-    if (!mounted || _session?.id != session.id) return;
-
-    final removed = List<ChatMessage>.from(
-      session.messages.getRange(index, index + count),
-    );
-    final nextMessages = List<ChatMessage>.from(session.messages)
-      ..removeRange(index, index + count);
-    final nextSession = session.copyWith(
-      messages: nextMessages,
-      memorySummary: clearMemory ? '' : session.memorySummary,
-      memoryCoveredCount: clearMemory ? 0 : session.memoryCoveredCount,
-    );
-    final pending = _PendingChatRemoval(
-      session: nextSession,
-      index: index,
-      removed: removed,
-      previousMemorySummary: session.memorySummary,
-      previousMemoryCoveredCount: session.memoryCoveredCount,
-      clearedMemory: clearMemory,
-    );
-    _pendingRemoval = pending;
-    setState(() => _session = nextSession);
-
-    final controller = ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        duration: const Duration(seconds: 4),
-        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
-        action: SnackBarAction(
-          label: 'Undo',
-          textColor: Theme.of(context).colorScheme.primary,
-          onPressed: () => _undoPendingRemoval(pending),
-        ),
-      ),
-    );
-    unawaited(controller.closed.then((_) => _commitPendingRemoval(pending)));
-  }
-
-  void _undoPendingRemoval(_PendingChatRemoval pending) {
-    if (pending.finished) return;
-    pending.finished = true;
-    if (identical(_pendingRemoval, pending)) _pendingRemoval = null;
-
-    final session = pending.session;
-    final messages = List<ChatMessage>.from(session.messages);
-    messages.insertAll(
-      pending.index.clamp(0, messages.length),
-      pending.removed,
-    );
-    if (!mounted || _session?.id != session.id) return;
     setState(() {
-      _session = session.copyWith(
+      final messages = _session!.messages.sublist(0, index + 1);
+      _session = _session!.copyWith(
         messages: messages,
-        memorySummary: pending.previousMemorySummary,
-        memoryCoveredCount: pending.previousMemoryCoveredCount,
+        memorySummary: clearMemory ? '' : _session!.memorySummary,
+        memoryCoveredCount: clearMemory ? 0 : _session!.memoryCoveredCount,
       );
     });
-  }
-
-  Future<void> _commitPendingRemoval(_PendingChatRemoval pending) async {
-    if (pending.finished) return;
-    pending.finished = true;
-    if (identical(_pendingRemoval, pending)) _pendingRemoval = null;
-    // Prefer the live session if this chat is still open (may include edits
-    // made during the Undo window); fall back to the pending snapshot.
-    final live = _session;
-    final toSave = (live != null && live.id == pending.session.id)
-        ? live
-        : pending.session;
-    await widget.chatService.saveChat(toSave);
+    await _persist();
   }
 
   /// Copy this chat through [index] into a new saved chat and switch to it.
@@ -2178,7 +2034,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text('Branched to “${branched.title}”.')));
-    _scrollToBottom(jump: true, force: true);
+    _scrollToBottom(jump: true);
   }
 
   void _shiftSwipe(int index, int delta) {
@@ -2192,12 +2048,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     _persist();
   }
 
-  void _scrollToBottom({bool jump = false, bool force = false}) {
-    if (force) {
-      _stickToBottom = true;
-    } else if (!_stickToBottom) {
-      return;
-    }
+  void _scrollToBottom({bool jump = false}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) return;
       final target = _scrollController.position.maxScrollExtent;
@@ -2228,7 +2079,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       unawaited(_draftService.saveDraft(session.id, text));
     }
     _inputController.removeListener(_onComposerChanged);
-    _scrollController.removeListener(_onScrollChanged);
     _inputController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -2797,26 +2647,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (action == 'swipe_prev') _shiftSwipe(index, -1);
     if (action == 'swipe_next') _shiftSwipe(index, 1);
   }
-}
-
-class _PendingChatRemoval {
-  _PendingChatRemoval({
-    required this.session,
-    required this.index,
-    required this.removed,
-    required this.previousMemorySummary,
-    required this.previousMemoryCoveredCount,
-    required this.clearedMemory,
-  });
-
-  /// Live chat after the temporary removal (same id as before).
-  final ChatSession session;
-  final int index;
-  final List<ChatMessage> removed;
-  final String previousMemorySummary;
-  final int previousMemoryCoveredCount;
-  final bool clearedMemory;
-  bool finished = false;
 }
 
 class _EmptyChat extends StatelessWidget {

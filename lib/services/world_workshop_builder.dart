@@ -38,6 +38,9 @@ class WorldWorkshopBuilder {
   /// Cap for recent raw messages when a chat has no memory summary yet.
   static const importFallbackRecent = 40;
 
+  /// Recent messages sent to live-chat character generation (smaller = faster).
+  static const characterGenRecentMessages = 24;
+
   /// System prompt for the ongoing workshop chat (questions + brainstorming).
   String chatSystemPrompt({
     String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
@@ -174,8 +177,14 @@ unless the user asks for depth.
     ChatSession session, {
     String userName = 'User',
   }) {
-    final messages = selectRecentMessagesForImport(session);
+    final messages = selectRecentMessagesForCharacterGen(session);
     return formatRoleplayTranscript(messages, userName: userName);
+  }
+
+  List<ChatMessage> selectRecentMessagesForCharacterGen(ChatSession session) {
+    final recent = selectRecentMessagesForImport(session);
+    if (recent.length <= characterGenRecentMessages) return recent;
+    return recent.sublist(recent.length - characterGenRecentMessages);
   }
 
   /// Scan a live roleplay chat for characters mentioned in the story.
@@ -184,11 +193,11 @@ unless the user asks for depth.
     required List<Character> characters,
     Persona? persona,
     List<GlobalLorebook> linkedLorebooks = const [],
-    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+    String buildPromptNote = CharacterBuildSettings.defaultPromptNote,
   }) {
-    final guidance = guidanceNote.trim().isEmpty
-        ? CollaboratorSettings.defaultGuidanceNote
-        : guidanceNote.trim();
+    final guidance = buildPromptNote.trim().isEmpty
+        ? CharacterBuildSettings.defaultPromptNote
+        : buildPromptNote.trim();
     final userName = persona?.name.trim().isNotEmpty == true
         ? persona!.name.trim()
         : 'User';
@@ -267,11 +276,11 @@ $imported$transcriptBlock List playable characters mentioned in this roleplay ch
     String characterSummary = '',
     Persona? persona,
     List<GlobalLorebook> linkedLorebooks = const [],
-    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+    String buildPromptNote = CharacterBuildSettings.defaultPromptNote,
   }) {
-    final guidance = guidanceNote.trim().isEmpty
-        ? CollaboratorSettings.defaultGuidanceNote
-        : guidanceNote.trim();
+    final guidance = buildPromptNote.trim().isEmpty
+        ? CharacterBuildSettings.defaultPromptNote
+        : buildPromptNote.trim();
     final name = characterName.trim();
     final summary = characterSummary.trim();
     final userName = persona?.name.trim().isNotEmpty == true
@@ -313,6 +322,7 @@ Output rules:
 }
 - Fill fields from the chat transcript and reference material. Invent only what
   is needed for a usable card that fits the current scene.
+- Keep each field concise (a few sentences each). Do not write long essays.
 - Do NOT include a character_book / lorebook on the card.
 - Do not sanitize or moralize. Output only the JSON object.
 '''
@@ -655,13 +665,13 @@ ${formatTranscript(conversation)}
     required List<ChatMessage> conversation,
     required String characterName,
     String characterSummary = '',
-    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+    String buildPromptNote = CharacterBuildSettings.defaultPromptNote,
     Lorebook? sourceLorebook,
     WorkshopSourceContext? importedSource,
   }) {
-    final guidance = guidanceNote.trim().isEmpty
-        ? CollaboratorSettings.defaultGuidanceNote
-        : guidanceNote.trim();
+    final guidance = buildPromptNote.trim().isEmpty
+        ? CharacterBuildSettings.defaultPromptNote
+        : buildPromptNote.trim();
     final name = characterName.trim();
     final summary = characterSummary.trim();
 
@@ -699,6 +709,7 @@ Output rules:
   }
 }
 - Fill fields from the conversation. Invent only what is needed for a usable card.
+- Keep each field concise (a few sentences each). Do not write long essays.
 - Do NOT include a character_book / lorebook on the card — world lore stays in
   the separate global lorebook.
 - Do not sanitize or moralize. Output only the JSON object.
@@ -773,13 +784,13 @@ ${formatTranscript(conversation)}
   List<Map<String, String>> buildCharacterUpdateMessages({
     required List<ChatMessage> conversation,
     required Character existing,
-    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+    String buildPromptNote = CharacterBuildSettings.defaultPromptNote,
     Lorebook? sourceLorebook,
     WorkshopSourceContext? importedSource,
   }) {
-    final guidance = guidanceNote.trim().isEmpty
-        ? CollaboratorSettings.defaultGuidanceNote
-        : guidanceNote.trim();
+    final guidance = buildPromptNote.trim().isEmpty
+        ? CharacterBuildSettings.defaultPromptNote
+        : buildPromptNote.trim();
     final name = existing.name.trim().isEmpty ? 'Character' : existing.name.trim();
     final currentCard = formatCharacterCardJson(existing);
 

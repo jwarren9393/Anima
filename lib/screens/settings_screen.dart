@@ -15,6 +15,7 @@ import 'appearance_settings_screen.dart';
 import 'backup_restore_screen.dart';
 import 'characters_screen.dart';
 import 'collaborator_settings_screen.dart';
+import 'character_build_settings_screen.dart';
 import 'lore_settings_screen.dart';
 import 'personas_screen.dart';
 import 'sampling_settings_screen.dart';
@@ -159,6 +160,18 @@ class SettingsScreen extends StatelessWidget {
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => CollaboratorSettingsScreen(
+                  settingsService: settingsService,
+                ),
+              ),
+            ),
+          ),
+          _SettingsTile(
+            icon: Icons.badge_outlined,
+            title: 'Character builds',
+            subtitle: 'Model, tokens, and prompt for full card generation',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => CharacterBuildSettingsScreen(
                   settingsService: settingsService,
                 ),
               ),

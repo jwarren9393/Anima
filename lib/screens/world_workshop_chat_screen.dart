@@ -515,6 +515,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
 
       var savedCount = 0;
       var skippedCount = 0;
+      final build = await widget.settingsService.resolveCharacterBuild();
 
       for (var i = 0; i < selected.length; i++) {
         if (!mounted) return;
@@ -526,17 +527,17 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
 
         try {
           final cardRaw = await widget.nanoGptService.complete(
-            model: model,
+            model: build.model,
             messages: _builder.buildCharacterExportMessages(
               conversation: _workshop.messages,
               characterName: candidate.name,
               characterSummary: candidate.summary,
-              guidanceNote: collaborator.guidanceNote,
+              buildPromptNote: build.promptNote,
               sourceLorebook: _linkedLorebook?.book,
               importedSource: _workshop.importedSource,
             ),
             baseUrl: baseUrl,
-            sampling: sampling,
+            sampling: build.sampling,
           );
 
           final draft = _builder.parseCharacterJson(
@@ -702,23 +703,20 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         _exportStatus = 'Updating ${selected.name}…';
       });
 
-      final collaborator = await widget.settingsService
-          .getCollaboratorSettings();
-      final model = await widget.settingsService.getModel();
-      final sampling = await widget.settingsService.getSampling();
+      final build = await widget.settingsService.resolveCharacterBuild();
       final baseUrl = await widget.settingsService.getApiBaseUrl();
 
       final cardRaw = await widget.nanoGptService.complete(
-        model: model,
+        model: build.model,
         messages: _builder.buildCharacterUpdateMessages(
           conversation: _workshop.messages,
           existing: selected,
-          guidanceNote: collaborator.guidanceNote,
+          buildPromptNote: build.promptNote,
           sourceLorebook: _linkedLorebook?.book,
           importedSource: _workshop.importedSource,
         ),
         baseUrl: baseUrl,
-        sampling: sampling,
+        sampling: build.sampling,
       );
 
       final draft = _builder.parseCharacterUpdateJson(

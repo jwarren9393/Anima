@@ -60,7 +60,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-24  
-**Last agent action:** Fixed intermittent “Generate from chat” JSON failures — one-shot API calls now use non-streaming mode, JSON parsing uses balanced braces, card generation bumps max tokens and retries once.
+**Last agent action:** Settings → **Character builds** — separate model, max tokens, temperature, top P, and prompt for full card generation from chat / Creation Center.
 
 ### What works today
 
@@ -72,6 +72,7 @@ High-value SillyTavern concepts to aim for over time:
   - **World Info & lore** — **global lorebooks** (create / import ST JSON / export / on-off) + scan depth/budget + link to per-character books; **entry AI wand** + **Suggest keywords from content**
   - **Creation Center** — chat with AI to invent a world; **Import** can seed from an **existing chat** (memory summary + recent messages + characters/persona + linked lore as read-only source), a World Info lorebook, or a JSON file; **Create/Update lorebook** saves keyword entries as a selectable global lorebook (one workshop = one book); the people menu can **Create AI characters** (multi-select + review each card), **Update existing character** (pick a saved card — imported-chat cast listed first — preserve-and-merge from workshop context, review, then overwrite only on Save), or **Create my persona** (choose one person from workshop chat + linked lore, generate player-focused fields, then review before saving); **context estimate** banner (tap for details) shows ~messages/tokens vs model window
   - **AI collaborator** — wand guidance note + **Composer Format** note + **Roadway / Paths** note
+  - **Character builds** — model, max tokens, temperature, top P, and prompt for **full card JSON** generation (New character from chat + Creation Center create/update); separate from main chat model
   - **Appearance (Theme Studio)** — 8 global presets (glass + solid), custom background/accent/header/menu/text/bubble colors, fonts, text scales, glass opacity/blur, chat avatars; live preview + immediate app-wide apply
   - **Backup & restore** — one `.anima-backup` JSON file (chats, characters, personas, categories, lorebooks, workshops, drafts, roadway cache, avatars, settings); **API key is not included** — re-enter after restore; on Linux/Windows Create backup opens a **Save** dialog (Downloads suggested); Android still uses the share sheet; restore replaces Anima data only (whitelist), then returns to Home
   - API, Generation parameters
@@ -82,14 +83,14 @@ High-value SillyTavern concepts to aim for over time:
 - **Character AI wand** — sparkle icon on creative card fields; sends all filled fields as context; appends NanoGPT text below what’s already there (uses chat model + sampling)
 - **World Info entry AI wand** — sparkle on Label / Keywords / Lore content (and Secondary keywords when Selective); uses book + sibling entry context; appends (keywords merge comma-separated); same model + collaborator guidance
 - **API & connection** — live NanoGPT model catalog: **Auto** provider (auto-model / basic / standard / premium) listed first, then providers A–Z; refresh; custom model id; subscription toggle reloads catalog; model dropdown shows **context window** when NanoGPT reports `context_length`; **image model** picker uses NanoGPT’s subscription image catalog when **Use subscription API** is on (hides paid models); otherwise full catalog with Paid/Included labels; **See remaining credits** shows wallet USD/NANO + weekly/daily/monthly + daily images allowance data returned by NanoGPT
-- **Chat stop** — while a reply streams, the send button becomes **Stop** (keeps any partial text); scroll follows the stream only while you stay near the bottom (scroll up to read from the start without being pulled back down)
+- **Chat stop** — while a reply streams, the send button becomes **Stop** (keeps any partial text); the list does **not** auto-scroll during streaming — scroll freely while a reply types in
 - **Composer shortcuts** — **OOC**, **Format** (✨), **Continue** (▶), Send/Stop; Format has its own collaborator note
 - **Draft autosave** — composer text saved per chat (survives leaving chat/app); cleared on send
 - **Character categories** — Anima-only lists (not ST card tags); **All characters** master view + custom categories; filter in Characters (manage/pick) and Group setup; membership via row menu → Categories
 - **Paths (Roadway)** — long-press a message → **Paths** (sheet + ✨ generate); tap a tile → composer; check **two or more** + **Combine selected** to AI-merge them into one composer draft; options **stay cached** until the chat moves on, or you clear / refresh; note under AI collaborator
 - **Auto-reply** — long-press → toggle; **new chats default to off** (send alone; Continue or tap a name for a reply)
 - **RP message look** — bubbles style `*narration*` in soft italic gold and `"spoken lines"` in bolder text
-- **Message actions** — **tap** a bubble to edit; **long-press** for Delete, Rewind, Branch, Continue, Impersonate, Paths, Auto-reply, Regen/Swipe (Delete / Rewind show a 4s Undo SnackBar before writing `anima_chats.json`; branch still runs immediately)
+- **Message actions** — **tap** a bubble to edit; **long-press** for Delete, Rewind, Branch, Continue, Impersonate, Paths, Auto-reply, Regen/Swipe (Delete / Rewind save immediately; branch still runs immediately)
 - **Lore hit toast** — when keywords match and entries fit the budget, a brief top overlay shows “Lore Triggered: …”
 - **Memory toast** — auto-summarize success shows “Memory summary optimized”
 - **Recursive lore scanning** — Settings toggle works: matched entry content can pull further active entries; shared token budget + priority still apply
@@ -97,7 +98,7 @@ High-value SillyTavern concepts to aim for over time:
 - **Clean chat chrome** — no Swipe/Regen/Continue bar under messages (those live in the long-press menu; compact swipe arrows under bubbles)
 - **Per-chat persona** — in a chat, ⋮ menu → **Persona: …** to switch who you are for that thread (saved on the chat)
 - **Group chat controls** — tap a character name chip to choose who speaks next; auto-reply off by default (send only; tap a name or Continue for a reply; toggle via long-press); leading `Name:` is stripped from replies so the bubble header isn’t duplicated
-- **Manage cast (mid-chat)** — ⋮ → **Manage cast** adds/removes characters in the **current** chat (solo or group) without starting over; ⋮ → **New character** opens a sheet to **scan/generate from chat** (non-streaming API + retry on parse) or start blank; manage screen **+** uses the same chat-aware flow when editing cast
+- **Manage cast (mid-chat)** — ⋮ → **Manage cast** adds/removes characters in the **current** chat (solo or group) without starting over; ⋮ → **New character** opens a sheet to **type a name + generate from chat** or start blank; manage screen **+** uses the same flow when editing cast
 - **Avatars** — persona + character photos; **Generate avatar** on character and persona create/edit (and Creation Center character review) uses NanoGPT image models + an editable prompt; **tap an AI avatar in chat** to edit that character card (tap yours to edit the persona); PNG card import still grabs the card image; chat bubble shape/size via Appearance
 - **Context estimate** — chat ⋮ → **Context estimate** shows ~message/token gauges vs history budget and model window; Creation Center shows a live banner estimate
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar
@@ -248,6 +249,7 @@ lib/
     lore_settings_screen.dart     Global books + scan/budget + character books link
     sampling_settings_screen.dart ST-style generation parameters
     collaborator_settings_screen.dart AI wand + Format + Roadway notes
+    character_build_settings_screen.dart Full card build model + sampling + prompt
     appearance_settings_screen.dart Theme Studio (presets + colors/fonts + avatars)
     backup_restore_screen.dart    Full-app backup / restore (.anima-backup JSON; no API key)
     settings_ui.dart              Shared settings form helpers
@@ -369,7 +371,7 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. Spot-check ⋮ → **New character** → pick a scanned name → **Generate from chat** on Android (should open the card editor reliably).
+1. Spot-check ⋮ → **New character** → type a name → **Generate from chat** (sheet should open instantly, no auto-scan).
 2. Spot-check ⋮ → **Manage cast** on a solo chat (add a temp character, talk, remove them) and on a group chat (add + remove a member); confirm history stays in the same thread.
 3. Optional: upload `assets/branding/anima_icon.png` as the GitHub repo Social preview (Settings → General → Social preview).
 4. Optional QoL backlog when you want more: undo send, last-chat resume, pinned Author’s Note / mood chips, memory preview panel.

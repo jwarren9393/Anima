@@ -159,7 +159,97 @@ class LoreSettings {
   }
 }
 
-  /// Guidance for the character-editor / World Info wand, plus composer helpers.
+/// Model, sampling, and prompt for full character card JSON generation
+/// (New character from chat, Creation Center create/update).
+class CharacterBuildSettings {
+  const CharacterBuildSettings({
+    this.useMainChatModel = true,
+    this.modelId = '',
+    this.maxTokens = defaultMaxTokens,
+    this.temperature = defaultTemperature,
+    this.topP = defaultTopP,
+    this.promptNote = defaultPromptNote,
+  });
+
+  static const defaultMaxTokens = 2048;
+  static const defaultTemperature = 0.7;
+  static const defaultTopP = 0.95;
+  static const defaultPromptNote =
+      'Write accurate, playable SillyTavern-style character cards from the '
+      'source material. Keep each field concise (a few sentences). Stay faithful '
+      'to established facts. Do not sanitize or moralize.';
+
+  /// When true, [SettingsService.getModel] is used for card builds.
+  final bool useMainChatModel;
+
+  /// NanoGPT model id when [useMainChatModel] is false (same format as API settings).
+  final String modelId;
+  final int maxTokens;
+  final double temperature;
+  final double topP;
+
+  /// Injected into full card JSON export/update prompts.
+  final String promptNote;
+
+  String resolvedModel(String mainChatModel) {
+    if (useMainChatModel) {
+      final main = mainChatModel.trim();
+      return main.isEmpty ? SettingsService.defaultModel : main;
+    }
+    final custom = modelId.trim();
+    if (custom.isEmpty) {
+      final main = mainChatModel.trim();
+      return main.isEmpty ? SettingsService.defaultModel : main;
+    }
+    return custom;
+  }
+
+  SamplingSettings toSampling() {
+    return SamplingSettings(
+      temperature: temperature.clamp(0.0, 2.0),
+      topP: topP.clamp(0.0, 1.0),
+      maxTokens: maxTokens.clamp(256, 8192),
+    );
+  }
+
+  String effectivePromptNote() {
+    final note = promptNote.trim();
+    return note.isEmpty ? defaultPromptNote : note;
+  }
+
+  CharacterBuildSettings copyWith({
+    bool? useMainChatModel,
+    String? modelId,
+    int? maxTokens,
+    double? temperature,
+    double? topP,
+    String? promptNote,
+  }) {
+    return CharacterBuildSettings(
+      useMainChatModel: useMainChatModel ?? this.useMainChatModel,
+      modelId: modelId ?? this.modelId,
+      maxTokens: maxTokens ?? this.maxTokens,
+      temperature: temperature ?? this.temperature,
+      topP: topP ?? this.topP,
+      promptNote: promptNote ?? this.promptNote,
+    );
+  }
+}
+
+/// Resolved model + sampling + prompt for one card-build API call.
+class CharacterBuildRequest {
+  const CharacterBuildRequest({
+    required this.model,
+    required this.sampling,
+    required this.promptNote,
+  });
+
+  final String model;
+  final SamplingSettings sampling;
+  final String promptNote;
+}
+
+/// Guidance for the character-editor / World Info wand, plus composer helpers.
 class CollaboratorSettings {
   const CollaboratorSettings({
     this.guidanceNote = defaultGuidanceNote,
@@ -264,6 +354,12 @@ class SettingsService {
   static const _collaboratorGuidanceKey = 'collaborator_guidance_note';
   static const _composerFormatNoteKey = 'composer_format_guidance_note';
   static const _roadwayNoteKey = 'roadway_guidance_note';
+  static const _characterBuildUseMainModelKey = 'character_build_use_main_model';
+  static const _characterBuildModelKey = 'character_build_model_id';
+  static const _characterBuildMaxTokensKey = 'character_build_max_tokens';
+  static const _characterBuildTemperatureKey = 'character_build_temperature';
+  static const _characterBuildTopPKey = 'character_build_top_p';
+  static const _characterBuildPromptKey = 'character_build_prompt_note';
   static const _contextHistoryTokensKey = 'context_history_token_budget';
   static const _contextAutoSummarizeKey = 'context_auto_summarize';
   static const _contextSummarizeEveryKey = 'context_summarize_every';
@@ -296,6 +392,12 @@ class SettingsService {
     _collaboratorGuidanceKey,
     _composerFormatNoteKey,
     _roadwayNoteKey,
+    _characterBuildUseMainModelKey,
+    _characterBuildModelKey,
+    _characterBuildMaxTokensKey,
+    _characterBuildTemperatureKey,
+    _characterBuildTopPKey,
+    _characterBuildPromptKey,
     _contextHistoryTokensKey,
     _contextAutoSummarizeKey,
     _contextSummarizeEveryKey,
@@ -593,6 +695,79 @@ class SettingsService {
     } else {
       await _storage.write(key: _roadwayNoteKey, value: roadway);
     }
+  }
+
+  /// Full character card JSON generation (chat + Creation Center).
+  Future<CharacterBuildSettings> getCharacterBuildSettings() async {
+    final useMainRaw = await _storage.read(key: _characterBuildUseMainModelKey);
+    final modelRaw = await _storage.read(key: _characterBuildModelKey);
+    final maxRaw = await _storage.read(key: _characterBuildMaxTokensKey);
+    final tempRaw = await _storage.read(key: _characterBuildTemperatureKey);
+    final topPRaw = await _storage.read(key: _characterBuildTopPKey);
+    final promptRaw = await _storage.read(key: _characterBuildPromptKey);
+
+    final maxTokens =
+        int.tryParse(maxRaw ?? '') ?? CharacterBuildSettings.defaultMaxTokens;
+    final temperature = double.tryParse(tempRaw ?? '') ??
+        CharacterBuildSettings.defaultTemperature;
+    final topP =
+        double.tryParse(topPRaw ?? '') ?? CharacterBuildSettings.defaultTopP;
+
+    return CharacterBuildSettings(
+      useMainChatModel: useMainRaw != 'false' && useMainRaw != '0',
+      modelId: modelRaw?.trim() ?? '',
+      maxTokens: maxTokens.clamp(256, 8192),
+      temperature: temperature.clamp(0.0, 2.0),
+      topP: topP.clamp(0.0, 1.0),
+      promptNote: (promptRaw == null || promptRaw.trim().isEmpty)
+          ? CharacterBuildSettings.defaultPromptNote
+          : promptRaw,
+    );
+  }
+
+  Future<void> saveCharacterBuildSettings(CharacterBuildSettings settings) async {
+    await _storage.write(
+      key: _characterBuildUseMainModelKey,
+      value: settings.useMainChatModel ? 'true' : 'false',
+    );
+
+    final model = settings.modelId.trim();
+    if (model.isEmpty) {
+      await _storage.delete(key: _characterBuildModelKey);
+    } else {
+      await _storage.write(key: _characterBuildModelKey, value: model);
+    }
+
+    await _storage.write(
+      key: _characterBuildMaxTokensKey,
+      value: '${settings.maxTokens.clamp(256, 8192)}',
+    );
+    await _storage.write(
+      key: _characterBuildTemperatureKey,
+      value: '${settings.temperature.clamp(0.0, 2.0)}',
+    );
+    await _storage.write(
+      key: _characterBuildTopPKey,
+      value: '${settings.topP.clamp(0.0, 1.0)}',
+    );
+
+    final prompt = settings.promptNote.trim();
+    if (prompt.isEmpty || prompt == CharacterBuildSettings.defaultPromptNote) {
+      await _storage.delete(key: _characterBuildPromptKey);
+    } else {
+      await _storage.write(key: _characterBuildPromptKey, value: prompt);
+    }
+  }
+
+  /// Model, sampling, and prompt for one full card build request.
+  Future<CharacterBuildRequest> resolveCharacterBuild() async {
+    final build = await getCharacterBuildSettings();
+    final mainModel = await getModel();
+    return CharacterBuildRequest(
+      model: build.resolvedModel(mainModel),
+      sampling: build.toSampling(),
+      promptNote: build.effectivePromptNote(),
+    );
   }
 
   /// When true, use the subscription API base URL.

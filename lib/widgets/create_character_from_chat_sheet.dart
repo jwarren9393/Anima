@@ -11,16 +11,6 @@ import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
 import '../services/world_workshop_builder.dart';
 
-/// Enough room for a full ST V2 card even when global max tokens is low.
-SamplingSettings _jsonGenerationSampling(SamplingSettings base) {
-  const floor = 4096;
-  final max = base.maxTokens;
-  if (max == null || max < floor) {
-    return base.copyWith(maxTokens: floor);
-  }
-  return base;
-}
-
 /// Bottom sheet: create a character from the current chat context or start blank.
 Future<Character?> showCreateCharacterFromChatSheet({
   required BuildContext context,
@@ -76,15 +66,11 @@ class _CreateCharacterFromChatSheetState
     extends State<_CreateCharacterFromChatSheet> {
   final _builder = WorldWorkshopBuilder();
   final _nameController = TextEditingController();
-  final _summaryByName = <String, String>{};
 
   List<GlobalLorebook> _linkedLorebooks = const [];
-  List<WorkshopCharacterCandidate> _candidates = const [];
   bool _loadingLore = true;
-  bool _scanning = false;
   bool _generating = false;
   String? _error;
-  String? _selectedSummary;
 
   bool get _hasChatContext =>
       widget.session.messages.any((m) => m.text.trim().isNotEmpty) ||
@@ -122,91 +108,6 @@ class _CreateCharacterFromChatSheetState
       _linkedLorebooks = linked;
       _loadingLore = false;
     });
-    if (_hasChatContext) {
-      await _scanChat(quiet: true);
-    }
-  }
-
-  Future<void> _scanChat({bool quiet = false}) async {
-    if (!_hasChatContext) {
-      if (!quiet && mounted) {
-        setState(() {
-          _error = 'Chat a bit first, then scan for characters.';
-        });
-      }
-      return;
-    }
-
-    setState(() {
-      _scanning = true;
-      _error = null;
-    });
-
-    try {
-      final collaborator = await widget.settingsService.getCollaboratorSettings();
-      final model = await widget.settingsService.getModel();
-      final sampling = _jsonGenerationSampling(
-        await widget.settingsService.getSampling(),
-      );
-      final baseUrl = await widget.settingsService.getApiBaseUrl();
-
-      final raw = await widget.nanoGptService.complete(
-        model: model,
-        messages: _builder.buildChatCharacterDetectMessages(
-          session: widget.session,
-          characters: widget.participants,
-          persona: widget.persona,
-          linkedLorebooks: _linkedLorebooks,
-          guidanceNote: collaborator.guidanceNote,
-        ),
-        baseUrl: baseUrl,
-        sampling: sampling,
-      );
-
-      final candidates = _builder.parseCharacterCandidatesJson(raw);
-      if (!mounted) return;
-      setState(() {
-        _candidates = candidates;
-        _summaryByName
-          ..clear()
-          ..addEntries(
-            candidates.map(
-              (c) => MapEntry(c.name.trim().toLowerCase(), c.summary),
-            ),
-          );
-        _scanning = false;
-        if (candidates.isEmpty && !quiet) {
-          _error =
-              'No clear characters found. Type a name and generate, or start blank.';
-        }
-      });
-    } on FormatException catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _scanning = false;
-        _error = error.message;
-      });
-    } on NanoGptException catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _scanning = false;
-        _error = error.message;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _scanning = false;
-        _error = '$error';
-      });
-    }
-  }
-
-  void _pickCandidate(WorkshopCharacterCandidate candidate) {
-    _nameController.text = candidate.name;
-    setState(() {
-      _selectedSummary = candidate.summary;
-      _error = null;
-    });
   }
 
   Future<void> _openCharacterEditor({Character? existing}) async {
@@ -228,7 +129,7 @@ class _CreateCharacterFromChatSheetState
   Future<void> _generateFromChat() async {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
-      setState(() => _error = 'Enter a character name (or pick one below).');
+      setState(() => _error = 'Enter a character name.');
       return;
     }
     if (!_hasChatContext) {
@@ -242,32 +143,25 @@ class _CreateCharacterFromChatSheetState
     });
 
     try {
-      final collaborator = await widget.settingsService.getCollaboratorSettings();
-      final model = await widget.settingsService.getModel();
-      final sampling = _jsonGenerationSampling(
-        await widget.settingsService.getSampling(),
-      );
+      final build = await widget.settingsService.resolveCharacterBuild();
       final baseUrl = await widget.settingsService.getApiBaseUrl();
-      final summary =
-          _selectedSummary ?? _summaryByName[name.toLowerCase()] ?? '';
       final messages = _builder.buildChatCharacterExportMessages(
         session: widget.session,
         characters: widget.participants,
         characterName: name,
-        characterSummary: summary,
         persona: widget.persona,
         linkedLorebooks: _linkedLorebooks,
-        guidanceNote: collaborator.guidanceNote,
+        buildPromptNote: build.promptNote,
       );
       final preferredId = widget.characterService.newId();
 
       Character? draft;
       for (var attempt = 0; attempt < 2; attempt++) {
         final cardRaw = await widget.nanoGptService.complete(
-          model: model,
+          model: build.model,
           messages: messages,
           baseUrl: baseUrl,
-          sampling: sampling,
+          sampling: build.sampling,
         );
         try {
           draft = _builder.parseCharacterJson(
@@ -313,7 +207,7 @@ class _CreateCharacterFromChatSheetState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final busy = _scanning || _generating || _loadingLore;
+    final busy = _generating || _loadingLore;
 
     return SafeArea(
       child: Padding(
@@ -331,8 +225,8 @@ class _CreateCharacterFromChatSheetState
             const SizedBox(height: 6),
             Text(
               _hasChatContext
-                  ? 'Type a name from the story, scan the chat for suggestions, '
-                      'or let the AI fill the card from what was said so far.'
+                  ? 'Type a name from the story and let the AI fill the card '
+                      'from what was said so far.'
                   : 'Start a blank card, or chat a bit first to generate from context.',
               style: theme.textTheme.bodySmall,
             ),
@@ -350,33 +244,6 @@ class _CreateCharacterFromChatSheetState
                 if (_error != null) setState(() => _error = null);
               },
             ),
-            if (_candidates.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Found in chat',
-                  style: theme.textTheme.labelLarge,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final candidate in _candidates)
-                    ActionChip(
-                      label: Text(candidate.name),
-                      tooltip: candidate.summary.isEmpty
-                          ? null
-                          : candidate.summary,
-                      onPressed: busy
-                          ? null
-                          : () => _pickCandidate(candidate),
-                    ),
-                ],
-              ),
-            ],
             if (_error != null) ...[
               const SizedBox(height: 12),
               Text(
@@ -399,18 +266,6 @@ class _CreateCharacterFromChatSheetState
               label: Text(
                 _generating ? 'Generating card…' : 'Generate from chat',
               ),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: busy || !_hasChatContext ? null : () => _scanChat(),
-              icon: _scanning
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.search),
-              label: Text(_scanning ? 'Scanning chat…' : 'Scan chat for names'),
             ),
             TextButton(
               onPressed: busy ? null : () => _openCharacterEditor(),

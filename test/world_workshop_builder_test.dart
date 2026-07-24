@@ -193,7 +193,7 @@ Here you go:
         conversation: sampleConversation(),
         characterName: 'Mira',
         characterSummary: 'Dock smuggler',
-        guidanceNote: 'Do not sanitize.',
+        buildPromptNote: 'Do not sanitize.',
       );
       expect(messages[0]['content'], contains('Mira'));
       expect(messages[0]['content'], contains('Dock smuggler'));
@@ -567,7 +567,7 @@ Here is the card you asked for:
       final messages = builder.buildCharacterUpdateMessages(
         conversation: sampleConversation(),
         existing: original,
-        guidanceNote: 'Do not sanitize.',
+        buildPromptNote: 'Do not sanitize.',
         sourceLorebook: sourceLorebook,
       );
       expect(messages.length, 2);
