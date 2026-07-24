@@ -14,6 +14,7 @@ import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
 import '../widgets/anima_avatar.dart';
 import '../widgets/character_category_controls.dart';
+import '../widgets/create_character_from_chat_sheet.dart';
 import '../widgets/greeting_picker.dart';
 import '../widgets/preset_picker.dart';
 import 'character_edit_screen.dart';
@@ -187,6 +188,30 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
   }
 
   Future<void> _createCharacter() async {
+    if (widget.isEditMode && widget.existingSession != null) {
+      final persona = await widget.personaService.getActivePersona();
+      if (!mounted) return;
+      final created = await showCreateCharacterFromChatSheet(
+        context: context,
+        session: widget.existingSession!,
+        participants: _ordered,
+        persona: persona,
+        characterService: widget.characterService,
+        settingsService: widget.settingsService,
+        nanoGptService: widget.nanoGptService,
+        worldInfoService: widget.worldInfoService,
+      );
+      if (created == null || !mounted) return;
+      await _load();
+      if (!mounted) return;
+      setState(() {
+        if (!_ordered.any((c) => c.id == created.id)) {
+          _ordered.add(created);
+        }
+      });
+      return;
+    }
+
     final created = await Navigator.of(context).push<Character>(
       MaterialPageRoute(
         builder: (_) => CharacterEditScreen(

@@ -135,7 +135,220 @@ unless the user asks for depth.
     );
   }
 
-  /// Recent uncovered messages, or a capped fallback when there is no summary.
+  /// Metadata from a live chat (memory, cards, persona, lore) without duplicating
+  /// the transcript block used in [buildChatCharacterDetectMessages].
+  WorkshopSourceContext chatMetadataContext({
+    required ChatSession session,
+    required List<Character> characters,
+    Persona? persona,
+    List<GlobalLorebook> linkedLorebooks = const [],
+    List<String> skippedNotes = const [],
+  }) {
+    final full = buildImportedChatSource(
+      session: session,
+      characters: characters,
+      persona: persona,
+      linkedLorebooks: linkedLorebooks,
+      skippedNotes: skippedNotes,
+    );
+    return WorkshopSourceContext(
+      chatId: full.chatId,
+      chatTitle: full.chatTitle,
+      isGroup: full.isGroup,
+      memorySummary: full.memorySummary,
+      recentTranscript: '',
+      recentMessageCount: 0,
+      charactersText: full.charactersText,
+      characterNames: full.characterNames,
+      personaText: full.personaText,
+      personaName: full.personaName,
+      loreReferenceText: full.loreReferenceText,
+      lorebookNames: full.lorebookNames,
+      authorsNote: full.authorsNote,
+      skippedNotes: full.skippedNotes,
+    );
+  }
+
+  /// Recent roleplay lines from a saved chat, with group speaker labels.
+  String chatTranscriptForCharacterGen(
+    ChatSession session, {
+    String userName = 'User',
+  }) {
+    final messages = selectRecentMessagesForImport(session);
+    return formatRoleplayTranscript(messages, userName: userName);
+  }
+
+  /// Scan a live roleplay chat for characters mentioned in the story.
+  List<Map<String, String>> buildChatCharacterDetectMessages({
+    required ChatSession session,
+    required List<Character> characters,
+    Persona? persona,
+    List<GlobalLorebook> linkedLorebooks = const [],
+    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+  }) {
+    final guidance = guidanceNote.trim().isEmpty
+        ? CollaboratorSettings.defaultGuidanceNote
+        : guidanceNote.trim();
+    final userName = persona?.name.trim().isNotEmpty == true
+        ? persona!.name.trim()
+        : 'User';
+
+    final system =
+        '''
+You scan a roleplay chat and list distinct characters who are developed enough
+to become playable SillyTavern-style character cards.
+
+Guidance note (follow closely):
+$guidance
+
+Include:
+- Named people / beings the user or story clearly refers to
+- Figures with personality, role, or backstory in the chat
+
+Skip:
+- The player persona ({{user}})
+- Characters who already have full cards in the "Character cards" section
+  unless the chat adds major new details worth a separate temp NPC
+- Vague crowd mentions with no identity
+
+Output rules:
+- Reply with ONLY a single JSON object. No markdown fences. No preamble.
+- Shape:
+{
+  "characters": [
+    {
+      "name": "Exact character name",
+      "summary": "one short sentence: who they are / role"
+    }
+  ]
+}
+- Use distinct names; do not duplicate the same person under aliases.
+- If none qualify, return {"characters":[]}.
+'''
+            .trim();
+
+    final metadata = chatMetadataContext(
+      session: session,
+      characters: characters,
+      persona: persona,
+      linkedLorebooks: linkedLorebooks,
+    );
+    final imported = _importedBlock(metadata);
+    final transcript = chatTranscriptForCharacterGen(
+      session,
+      userName: userName,
+    );
+    final transcriptBlock = transcript.isEmpty
+        ? ''
+        : '''
+CURRENT CHAT TRANSCRIPT (read-only — find characters here):
+
+$transcript
+
+''';
+
+    final user =
+        '''
+$imported$transcriptBlock List playable characters mentioned in this roleplay chat:
+'''
+            .trim();
+
+    return [
+      {'role': 'system', 'content': system},
+      {'role': 'user', 'content': user},
+    ];
+  }
+
+  /// Build one character card from a live roleplay chat + optional name hint.
+  List<Map<String, String>> buildChatCharacterExportMessages({
+    required ChatSession session,
+    required List<Character> characters,
+    required String characterName,
+    String characterSummary = '',
+    Persona? persona,
+    List<GlobalLorebook> linkedLorebooks = const [],
+    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+  }) {
+    final guidance = guidanceNote.trim().isEmpty
+        ? CollaboratorSettings.defaultGuidanceNote
+        : guidanceNote.trim();
+    final name = characterName.trim();
+    final summary = characterSummary.trim();
+    final userName = persona?.name.trim().isNotEmpty == true
+        ? persona!.name.trim()
+        : 'User';
+
+    final system =
+        '''
+You convert a roleplay chat into ONE SillyTavern Character Card V2 JSON object
+for the Anima app (playable chat character).
+
+Guidance note (follow closely):
+$guidance
+
+Target character: $name
+${summary.isEmpty ? '' : 'Identity hint: $summary'}
+
+Output rules:
+- Reply with ONLY a single JSON object. No markdown fences. No preamble.
+- Prefer this shape (chara_card_v2):
+{
+  "spec": "chara_card_v2",
+  "spec_version": "2.0",
+  "data": {
+    "name": "$name",
+    "description": "appearance, background, important facts",
+    "personality": "traits, speech, motives",
+    "scenario": "starting situation for roleplay with {{user}}",
+    "first_mes": "opening greeting as this character",
+    "alternate_greetings": ["optional other opening"],
+    "mes_example": "<START>\\n{{user}}: ...\\n{{char}}: ...",
+    "system_prompt": "optional short card system instructions",
+    "post_history_instructions": "optional after-history nudge",
+    "creator_notes": "brief notes for the card author",
+    "tags": ["tag1", "tag2"],
+    "creator": "Anima",
+    "character_version": "1"
+  }
+}
+- Fill fields from the chat transcript and reference material. Invent only what
+  is needed for a usable card that fits the current scene.
+- Do NOT include a character_book / lorebook on the card.
+- Do not sanitize or moralize. Output only the JSON object.
+'''
+            .trim();
+
+    final metadata = chatMetadataContext(
+      session: session,
+      characters: characters,
+      persona: persona,
+      linkedLorebooks: linkedLorebooks,
+    );
+    final imported = _importedBlock(metadata);
+    final transcript = chatTranscriptForCharacterGen(
+      session,
+      userName: userName,
+    );
+    final transcriptBlock = transcript.isEmpty
+        ? '(No recent messages — use memory summary and character cards only.)'
+        : transcript;
+
+    final user =
+        '''
+$imported
+Build a full character card for "$name" from this roleplay chat:
+
+$transcriptBlock
+'''
+            .trim();
+
+    return [
+      {'role': 'system', 'content': system},
+      {'role': 'user', 'content': user},
+    ];
+  }
+
+  /// Full workshop transcript as plain `User:` / `Assistant:` text.
   List<ChatMessage> selectRecentMessagesForImport(ChatSession session) {
     final all = session.messages;
     final end = all.length;

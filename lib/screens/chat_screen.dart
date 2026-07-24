@@ -31,6 +31,7 @@ import '../services/settings_service.dart';
 import '../services/speaker_prefix.dart';
 import '../services/world_info_service.dart';
 import '../services/world_workshop_service.dart';
+import '../widgets/create_character_from_chat_sheet.dart';
 import '../widgets/anima_avatar.dart';
 import '../widgets/greeting_picker.dart';
 import '../widgets/keyboard_inset.dart';
@@ -1522,14 +1523,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   Future<void> _createCharacterForChat() async {
     if (_busy || _session == null) return;
-    final created = await Navigator.of(context).push<Character>(
-      MaterialPageRoute(
-        builder: (_) => CharacterEditScreen(
-          characterService: widget.characterService,
-          settingsService: widget.settingsService,
-          nanoGptService: widget.nanoGptService,
-        ),
-      ),
+    final created = await showCreateCharacterFromChatSheet(
+      context: context,
+      session: _session!,
+      participants: _participants,
+      persona: _persona,
+      characterService: widget.characterService,
+      settingsService: widget.settingsService,
+      nanoGptService: widget.nanoGptService,
+      worldInfoService: widget.worldInfoService,
     );
     if (created == null || !mounted || _session == null) return;
 

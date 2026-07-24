@@ -653,4 +653,74 @@ Here you go:
       expect(updated.systemPrompt, contains('Stay sharp'));
     });
   });
+
+  group('WorldWorkshopBuilder live chat characters', () {
+    test('buildChatCharacterExportMessages includes transcript and memory', () {
+      final session = ChatSession(
+        id: 'chat_1',
+        characterId: 'hero',
+        title: 'Harbor run',
+        updatedAt: DateTime(2026, 1, 1),
+        memorySummary: 'Mira owes the Tide Guild.',
+        messages: [
+          ChatMessage(
+            id: '1',
+            role: ChatRole.user,
+            text: 'Who is at the dock?',
+          ),
+          ChatMessage(
+            id: '2',
+            role: ChatRole.assistant,
+            text: 'Mira waves from the pier, oilskin shining.',
+            speakerName: 'Narrator',
+          ),
+        ],
+      );
+      const hero = Character(
+        id: 'hero',
+        name: 'Hero',
+        description: 'Main POV character',
+      );
+
+      final messages = builder.buildChatCharacterExportMessages(
+        session: session,
+        characters: const [hero],
+        characterName: 'Mira',
+        characterSummary: 'Dock smuggler',
+        persona: const Persona(id: 'p1', name: 'Jay'),
+      );
+
+      expect(messages.length, 2);
+      final user = messages.last['content'] ?? '';
+      expect(user, contains('Mira owes the Tide Guild'));
+      expect(user, contains('Mira waves from the pier'));
+      expect(user, contains('Build a full character card for "Mira"'));
+    });
+
+    test('buildChatCharacterDetectMessages lists scan instructions', () {
+      final session = ChatSession(
+        id: 'chat_1',
+        characterId: 'hero',
+        title: 'Test',
+        updatedAt: DateTime(2026, 1, 1),
+        messages: [
+          ChatMessage(
+            id: '1',
+            role: ChatRole.user,
+            text: 'Captain Vex blocks the gate.',
+          ),
+        ],
+      );
+
+      final messages = builder.buildChatCharacterDetectMessages(
+        session: session,
+        characters: const [],
+      );
+
+      final system = messages.first['content'] ?? '';
+      final user = messages.last['content'] ?? '';
+      expect(system, contains('roleplay chat'));
+      expect(user, contains('Captain Vex blocks the gate'));
+    });
+  });
 }
