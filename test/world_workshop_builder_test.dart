@@ -274,6 +274,31 @@ Here you go:
       expect(character.id, 'char_safe');
       expect(character.name, 'Vex');
     });
+
+    test('parseCharacterJson handles nested v2 card and braces in strings', () {
+      const raw = '''
+Here is the card you asked for:
+{
+  "spec": "chara_card_v2",
+  "spec_version": "2.0",
+  "data": {
+    "name": "Cecilia",
+    "description": "She said \\"hello}\\" once.",
+    "personality": "Bold",
+    "scenario": "A feast",
+    "first_mes": "Greetings.",
+    "mes_example": ""
+  }
+}
+''';
+      final character = builder.parseCharacterJson(
+        raw,
+        preferredId: 'char_nested',
+        fallbackName: 'Cecilia',
+      );
+      expect(character.name, 'Cecilia');
+      expect(character.description, contains('hello}'));
+    });
   });
 
   group('WorldWorkshopBuilder personas', () {

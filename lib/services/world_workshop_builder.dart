@@ -1127,29 +1127,83 @@ ${formatTranscript(conversation)}
     required String missingMessage,
     required String notObjectMessage,
   }) {
-    var text = raw.trim();
+    final text = raw.trim();
     if (text.isEmpty) {
       throw FormatException(emptyMessage);
     }
 
-    // Strip ```json ... ``` if the model ignores instructions.
+    // Try each fenced block — models often wrap JSON and add prose outside.
     final fence = RegExp(r'```(?:json)?\s*([\s\S]*?)```', caseSensitive: false);
-    final fenceMatch = fence.firstMatch(text);
-    if (fenceMatch != null) {
-      text = fenceMatch.group(1)!.trim();
+    for (final match in fence.allMatches(text)) {
+      final fenced = match.group(1)?.trim() ?? '';
+      final parsed = _tryParseJsonObject(
+        fenced,
+        notObjectMessage: notObjectMessage,
+      );
+      if (parsed != null) return parsed;
     }
 
+    final parsed = _tryParseJsonObject(
+      text,
+      notObjectMessage: notObjectMessage,
+    );
+    if (parsed != null) return parsed;
+
+    throw FormatException(missingMessage);
+  }
+
+  Map<String, dynamic>? _tryParseJsonObject(
+    String text, {
+    required String notObjectMessage,
+  }) {
+    final slice = _extractBalancedJsonObject(text);
+    if (slice == null) return null;
+    try {
+      final decoded = jsonDecode(slice);
+      if (decoded is! Map) {
+        throw FormatException(notObjectMessage);
+      }
+      return Map<String, dynamic>.from(decoded);
+    } on FormatException {
+      rethrow;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// First top-level `{...}` using brace counting (respects strings).
+  String? _extractBalancedJsonObject(String text) {
     final start = text.indexOf('{');
-    final end = text.lastIndexOf('}');
-    if (start < 0 || end <= start) {
-      throw FormatException(missingMessage);
-    }
+    if (start < 0) return null;
 
-    final slice = text.substring(start, end + 1);
-    final decoded = jsonDecode(slice);
-    if (decoded is! Map) {
-      throw FormatException(notObjectMessage);
+    var depth = 0;
+    var inString = false;
+    var escaped = false;
+    for (var i = start; i < text.length; i++) {
+      final char = text[i];
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (char == r'\') {
+          escaped = true;
+        } else if (char == '"') {
+          inString = false;
+        }
+        continue;
+      }
+      if (char == '"') {
+        inString = true;
+        continue;
+      }
+      if (char == '{') {
+        depth++;
+      } else if (char == '}') {
+        depth--;
+        if (depth == 0) {
+          return text.substring(start, i + 1);
+        }
+      }
     }
-    return Map<String, dynamic>.from(decoded);
+    return null;
   }
 }

@@ -11,6 +11,16 @@ import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
 import '../services/world_workshop_builder.dart';
 
+/// Enough room for a full ST V2 card even when global max tokens is low.
+SamplingSettings _jsonGenerationSampling(SamplingSettings base) {
+  const floor = 4096;
+  final max = base.maxTokens;
+  if (max == null || max < floor) {
+    return base.copyWith(maxTokens: floor);
+  }
+  return base;
+}
+
 /// Bottom sheet: create a character from the current chat context or start blank.
 Future<Character?> showCreateCharacterFromChatSheet({
   required BuildContext context,
@@ -135,7 +145,9 @@ class _CreateCharacterFromChatSheetState
     try {
       final collaborator = await widget.settingsService.getCollaboratorSettings();
       final model = await widget.settingsService.getModel();
-      final sampling = await widget.settingsService.getSampling();
+      final sampling = _jsonGenerationSampling(
+        await widget.settingsService.getSampling(),
+      );
       final baseUrl = await widget.settingsService.getApiBaseUrl();
 
       final raw = await widget.nanoGptService.complete(
@@ -232,31 +244,47 @@ class _CreateCharacterFromChatSheetState
     try {
       final collaborator = await widget.settingsService.getCollaboratorSettings();
       final model = await widget.settingsService.getModel();
-      final sampling = await widget.settingsService.getSampling();
+      final sampling = _jsonGenerationSampling(
+        await widget.settingsService.getSampling(),
+      );
       final baseUrl = await widget.settingsService.getApiBaseUrl();
       final summary =
           _selectedSummary ?? _summaryByName[name.toLowerCase()] ?? '';
-
-      final cardRaw = await widget.nanoGptService.complete(
-        model: model,
-        messages: _builder.buildChatCharacterExportMessages(
-          session: widget.session,
-          characters: widget.participants,
-          characterName: name,
-          characterSummary: summary,
-          persona: widget.persona,
-          linkedLorebooks: _linkedLorebooks,
-          guidanceNote: collaborator.guidanceNote,
-        ),
-        baseUrl: baseUrl,
-        sampling: sampling,
+      final messages = _builder.buildChatCharacterExportMessages(
+        session: widget.session,
+        characters: widget.participants,
+        characterName: name,
+        characterSummary: summary,
+        persona: widget.persona,
+        linkedLorebooks: _linkedLorebooks,
+        guidanceNote: collaborator.guidanceNote,
       );
+      final preferredId = widget.characterService.newId();
 
-      final draft = _builder.parseCharacterJson(
-        cardRaw,
-        preferredId: widget.characterService.newId(),
-        fallbackName: name,
-      );
+      Character? draft;
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final cardRaw = await widget.nanoGptService.complete(
+          model: model,
+          messages: messages,
+          baseUrl: baseUrl,
+          sampling: sampling,
+        );
+        try {
+          draft = _builder.parseCharacterJson(
+            cardRaw,
+            preferredId: preferredId,
+            fallbackName: name,
+          );
+          break;
+        } on FormatException {
+          if (attempt == 1) rethrow;
+        }
+      }
+      if (draft == null) {
+        throw const FormatException(
+          'Could not find character card JSON in the AI reply. Try again.',
+        );
+      }
 
       if (!mounted) return;
       setState(() => _generating = false);

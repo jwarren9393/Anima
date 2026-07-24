@@ -1103,26 +1103,29 @@ class NanoGptService {
 
           final data = line.substring(5).trimLeft();
           if (data == '[DONE]') {
+            buffer
+              ..clear()
+              ..write(content);
             return;
           }
 
-          try {
-            final decoded = jsonDecode(data);
-            if (decoded is! Map) continue;
-            final choices = decoded['choices'];
-            if (choices is! List || choices.isEmpty) continue;
-            final first = choices.first;
-            if (first is! Map) continue;
-            final delta = first['delta'];
-            if (delta is! Map) continue;
-            final piece = delta['content'];
-            if (piece is String && piece.isNotEmpty) {
-              produced = true;
-              yield piece;
-            }
-          } catch (error) {
-            if (error is NanoGptCancelledException) rethrow;
-            // Ignore malformed SSE lines and keep reading.
+          final piece = _parseSseContentPiece(data);
+          if (piece != null && piece.isNotEmpty) {
+            produced = true;
+            yield piece;
+          }
+        }
+      }
+
+      // Some providers omit a trailing newline on the last SSE line.
+      final trailing = buffer.toString().trim();
+      if (trailing.isNotEmpty && trailing.startsWith('data:')) {
+        final data = trailing.substring(5).trimLeft();
+        if (data != '[DONE]') {
+          final piece = _parseSseContentPiece(data);
+          if (piece != null && piece.isNotEmpty) {
+            produced = true;
+            yield piece;
           }
         }
       }
@@ -1157,27 +1160,142 @@ class NanoGptService {
     return a.toLowerCase().compareTo(b.toLowerCase());
   }
 
-  /// Non-streaming helper kept for simple one-shot calls.
+  /// Non-streaming helper for one-shot calls (JSON export, scans, etc.).
+  ///
+  /// Uses `stream: false` so the full reply arrives in one piece — more reliable
+  /// than stitching SSE chunks on mobile networks.
   Future<String> complete({
     required String model,
     required List<Map<String, String>> messages,
     String? baseUrl,
     SamplingSettings sampling = const SamplingSettings(),
   }) async {
-    final parts = <String>[];
-    await for (final chunk in streamCompletion(
-      model: model,
-      messages: messages,
-      baseUrl: baseUrl,
-      sampling: sampling,
-    )) {
-      parts.add(chunk);
+    final apiKey = await _apiKeyService.getApiKey();
+    if (apiKey == null) {
+      throw NanoGptException(
+        'No NanoGPT API key saved yet. Open Settings and paste your key first.',
+      );
     }
-    final text = parts.join().trim();
-    if (text.isEmpty) {
+    if (messages.isEmpty) {
+      throw NanoGptException('Nothing to send to NanoGPT yet.');
+    }
+
+    final root =
+        (baseUrl ?? defaultBaseUrl).trim().replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$root/chat/completions');
+
+    final body = <String, dynamic>{
+      'model': model,
+      'messages': messages,
+      'stream': false,
+      ...sampling.toApiBody(),
+    };
+
+    late final http.Response response;
+    try {
+      response = await http
+          .post(
+            uri,
+            headers: {
+              'Authorization': 'Bearer $apiKey',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 120));
+    } on SocketException {
+      throw NanoGptException(
+        'Could not reach NanoGPT. Check your internet connection and try again.',
+      );
+    } on TimeoutException {
+      throw NanoGptException(
+        'NanoGPT took too long to reply. Try again in a moment.',
+      );
+    } on http.ClientException {
+      throw NanoGptException(
+        'Could not reach NanoGPT. Check your internet connection and try again.',
+      );
+    }
+
+    if (response.statusCode == 401) {
+      throw NanoGptException(
+        'NanoGPT rejected the API key. Open Settings and check that it is correct.',
+      );
+    }
+    if (response.statusCode == 402) {
+      throw NanoGptException(
+        'NanoGPT says payment is needed. Check your NanoGPT account balance or plan.',
+      );
+    }
+    if (response.statusCode == 429) {
+      throw NanoGptException(
+        'Too many requests right now. Wait a moment and try again.',
+      );
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw NanoGptException(
+        'NanoGPT returned an error (${response.statusCode}). '
+        'If this keeps happening, try a different model name in Settings.\n\n'
+        '${_shortBody(response.body)}',
+      );
+    }
+
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map) {
+        throw NanoGptException(
+          'NanoGPT returned an unexpected reply. Try again.',
+        );
+      }
+      final choices = decoded['choices'];
+      if (choices is! List || choices.isEmpty) {
+        throw NanoGptException('NanoGPT returned an empty reply. Try again.');
+      }
+      final first = choices.first;
+      if (first is! Map) {
+        throw NanoGptException('NanoGPT returned an empty reply. Try again.');
+      }
+
+      final message = first['message'];
+      if (message is Map) {
+        final content = message['content'];
+        if (content is String && content.trim().isNotEmpty) {
+          return content.trim();
+        }
+      }
+
+      final text = first['text'];
+      if (text is String && text.trim().isNotEmpty) {
+        return text.trim();
+      }
+
       throw NanoGptException('NanoGPT returned an empty reply. Try again.');
+    } on NanoGptException {
+      rethrow;
+    } catch (_) {
+      throw NanoGptException('Could not read NanoGPT reply. Try again.');
     }
-    return text;
+  }
+
+  /// Extracts streamed assistant text from one SSE `data:` payload.
+  String? _parseSseContentPiece(String data) {
+    try {
+      final decoded = jsonDecode(data);
+      if (decoded is! Map) return null;
+      final choices = decoded['choices'];
+      if (choices is! List || choices.isEmpty) return null;
+      final first = choices.first;
+      if (first is! Map) return null;
+      final delta = first['delta'];
+      if (delta is! Map) return null;
+      final piece = delta['content'];
+      if (piece is String && piece.isNotEmpty) {
+        return piece;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 
   bool _isSuccess(int statusCode) =>

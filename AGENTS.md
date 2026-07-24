@@ -59,8 +59,8 @@ High-value SillyTavern concepts to aim for over time:
 
 **Phase:** Post-roadmap tweaks
 
-**Last updated:** 2026-07-23  
-**Last agent action:** Mid-chat cast management — add/remove characters in the current thread via ⋮ → Manage cast; create characters from chat menu or manage screen without starting a new chat.
+**Last updated:** 2026-07-24  
+**Last agent action:** Fixed intermittent “Generate from chat” JSON failures — one-shot API calls now use non-streaming mode, JSON parsing uses balanced braces, card generation bumps max tokens and retries once.
 
 ### What works today
 
@@ -97,7 +97,7 @@ High-value SillyTavern concepts to aim for over time:
 - **Clean chat chrome** — no Swipe/Regen/Continue bar under messages (those live in the long-press menu; compact swipe arrows under bubbles)
 - **Per-chat persona** — in a chat, ⋮ menu → **Persona: …** to switch who you are for that thread (saved on the chat)
 - **Group chat controls** — tap a character name chip to choose who speaks next; auto-reply off by default (send only; tap a name or Continue for a reply; toggle via long-press); leading `Name:` is stripped from replies so the bubble header isn’t duplicated
-- **Manage cast (mid-chat)** — ⋮ → **Manage cast** adds/removes characters in the **current** chat (solo or group) without starting over; ⋮ → **New character** opens a sheet to **scan/generate from chat** or start blank; manage screen **+** uses the same chat-aware flow when editing cast
+- **Manage cast (mid-chat)** — ⋮ → **Manage cast** adds/removes characters in the **current** chat (solo or group) without starting over; ⋮ → **New character** opens a sheet to **scan/generate from chat** (non-streaming API + retry on parse) or start blank; manage screen **+** uses the same chat-aware flow when editing cast
 - **Avatars** — persona + character photos; **Generate avatar** on character and persona create/edit (and Creation Center character review) uses NanoGPT image models + an editable prompt; **tap an AI avatar in chat** to edit that character card (tap yours to edit the persona); PNG card import still grabs the card image; chat bubble shape/size via Appearance
 - **Context estimate** — chat ⋮ → **Context estimate** shows ~message/token gauges vs history budget and model window; Creation Center shows a live banner estimate
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar
@@ -369,9 +369,10 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. Spot-check ⋮ → **Manage cast** on a solo chat (add a temp character, talk, remove them) and on a group chat (add + remove a member); confirm history stays in the same thread.
-2. Optional: upload `assets/branding/anima_icon.png` as the GitHub repo Social preview (Settings → General → Social preview).
-3. Optional QoL backlog when you want more: undo send, last-chat resume, pinned Author’s Note / mood chips, memory preview panel.
+1. Spot-check ⋮ → **New character** → pick a scanned name → **Generate from chat** on Android (should open the card editor reliably).
+2. Spot-check ⋮ → **Manage cast** on a solo chat (add a temp character, talk, remove them) and on a group chat (add + remove a member); confirm history stays in the same thread.
+3. Optional: upload `assets/branding/anima_icon.png` as the GitHub repo Social preview (Settings → General → Social preview).
+4. Optional QoL backlog when you want more: undo send, last-chat resume, pinned Author’s Note / mood chips, memory preview panel.
 
 ---
 
