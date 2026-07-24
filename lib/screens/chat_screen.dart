@@ -1491,6 +1491,89 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     await _summarizeNow(quiet: true);
   }
 
+  Future<void> _manageCast() async {
+    if (_busy || _session == null) return;
+    final session = await Navigator.of(context).push<ChatSession>(
+      MaterialPageRoute(
+        builder: (_) => GroupChatSetupScreen(
+          characterService: widget.characterService,
+          categoryService: widget.characterCategoryService,
+          chatService: widget.chatService,
+          personaService: widget.personaService,
+          worldInfoService: widget.worldInfoService,
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
+          existingSession: _session,
+          preselectedIds: _session!.effectiveParticipantIds.toSet(),
+        ),
+      ),
+    );
+    if (session == null || !mounted) return;
+    await _flushDraftNow();
+    final fallback =
+        _character ?? Character(id: session.characterId, name: 'Character');
+    final participants = await _resolveParticipants(session, fallback);
+    await _applySession(
+      session,
+      participants: participants,
+      character: participants.isNotEmpty ? participants.first : fallback,
+    );
+  }
+
+  Future<void> _createCharacterForChat() async {
+    if (_busy || _session == null) return;
+    final created = await Navigator.of(context).push<Character>(
+      MaterialPageRoute(
+        builder: (_) => CharacterEditScreen(
+          characterService: widget.characterService,
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
+        ),
+      ),
+    );
+    if (created == null || !mounted || _session == null) return;
+
+    final currentIds = _session!.effectiveParticipantIds;
+    if (currentIds.contains(created.id)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${created.name} is already in this chat.')),
+      );
+      return;
+    }
+
+    final byId = {
+      for (final c in _participants) c.id: c,
+      created.id: created,
+    };
+    final ordered = [
+      for (final id in currentIds)
+        if (byId.containsKey(id)) byId[id]!,
+      created,
+    ];
+
+    try {
+      final updated = await widget.chatService.updateSessionCast(
+        _session!,
+        ordered,
+      );
+      if (!mounted) return;
+      await _applySession(
+        updated,
+        participants: ordered,
+        character: ordered.first,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Added ${created.name} to this chat')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not add character: $error')),
+      );
+    }
+  }
+
   Future<void> _startGroupChat() async {
     if (_busy) return;
     final session = await Navigator.of(context).push<ChatSession>(
@@ -1501,6 +1584,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           chatService: widget.chatService,
           personaService: widget.personaService,
           worldInfoService: widget.worldInfoService,
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
           preselectedIds: {if (_character != null) _character!.id},
         ),
       ),
@@ -2182,6 +2267,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               if (value == 'summarize') _summarizeNow();
               if (value == 'context') _showContextEstimate();
               if (value == 'characters') _openCharacters();
+              if (value == 'manage_cast') _manageCast();
+              if (value == 'new_character') _createCharacterForChat();
               if (value == 'group') _startGroupChat();
               if (value == 'export') _exportChat();
               if (value == 'import') _importChat();
@@ -2221,8 +2308,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 child: Text('Characters'),
               ),
               const PopupMenuItem(
+                value: 'manage_cast',
+                child: Text('Manage cast'),
+              ),
+              const PopupMenuItem(
+                value: 'new_character',
+                child: Text('New character'),
+              ),
+              const PopupMenuItem(
                 value: 'group',
-                child: Text('Start group chat'),
+                child: Text('Start new group chat'),
               ),
               const PopupMenuDivider(),
               const PopupMenuItem(value: 'export', child: Text('Export chat')),

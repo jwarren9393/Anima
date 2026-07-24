@@ -59,8 +59,8 @@ High-value SillyTavern concepts to aim for over time:
 
 **Phase:** Post-roadmap tweaks
 
-**Last updated:** 2026-07-18  
-**Last agent action:** Desktop Create backup now opens a Save dialog (Downloads suggested) instead of a hard-to-find temp share file.
+**Last updated:** 2026-07-23  
+**Last agent action:** Mid-chat cast management — add/remove characters in the current thread via ⋮ → Manage cast; create characters from chat menu or manage screen without starting a new chat.
 
 ### What works today
 
@@ -97,6 +97,7 @@ High-value SillyTavern concepts to aim for over time:
 - **Clean chat chrome** — no Swipe/Regen/Continue bar under messages (those live in the long-press menu; compact swipe arrows under bubbles)
 - **Per-chat persona** — in a chat, ⋮ menu → **Persona: …** to switch who you are for that thread (saved on the chat)
 - **Group chat controls** — tap a character name chip to choose who speaks next; auto-reply off by default (send only; tap a name or Continue for a reply; toggle via long-press); leading `Name:` is stripped from replies so the bubble header isn’t duplicated
+- **Manage cast (mid-chat)** — ⋮ → **Manage cast** adds/removes characters in the **current** chat (solo or group) without starting over; ⋮ → **New character** creates a card and adds them immediately; manage screen also has a + button to create characters in-place
 - **Avatars** — persona + character photos; **Generate avatar** on character and persona create/edit (and Creation Center character review) uses NanoGPT image models + an editable prompt; **tap an AI avatar in chat** to edit that character card (tap yours to edit the persona); PNG card import still grabs the card image; chat bubble shape/size via Appearance
 - **Context estimate** — chat ⋮ → **Context estimate** shows ~message/token gauges vs history budget and model window; Creation Center shows a live banner estimate
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar
@@ -288,6 +289,7 @@ lib/
     nanogpt_service.dart          Streaming + text/image model catalogs + image generate + credit usage + sampling + plain-English errors
 scripts/
   update_linux.sh                 One-command Linux build/install + launcher; optional Git pull
+  update_windows.ps1              Windows build + optional zip / GitHub Release upload (`-Zip`, `-Release`)
 ```
 
 **Dependencies in use:** `flutter_secure_storage`, `http`, `path_provider`, `file_picker`, `share_plus`, `path`, `google_fonts`  
@@ -306,20 +308,44 @@ scripts/
 
 ## Machine notes (this developer PC)
 
+### Windows (this PC)
+
+| Tool | Status |
+|------|--------|
+| Flutter | ✅ 3.44.8 stable at `C:\src\flutter` |
+| Dart | ✅ 3.12.2 |
+| JDK | ✅ Temurin 17 at `C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot` |
+| Android SDK | ✅ `%LOCALAPPDATA%\Android\Sdk` (platform 36, build-tools 36.0.0) — licenses accepted |
+| Android Studio | ✅ Installed (SDK also set up via cmdline-tools) |
+| Visual Studio | ✅ Build Tools 2022 + C++ workload |
+| Git | ✅ `C:\Program Files\Git\cmd\git.exe` |
+| GitHub CLI (`gh`) | ✅ installed — run `gh auth login` if not signed in |
+| Chrome | ❌ Not required for this app |
+| Developer Mode | ⚠️ Turn on in **Settings → System → For developers** (Flutter plugin symlinks on Windows) |
+| Physical Android phone | Plug in + USB debugging → `flutter devices` / `flutter run` |
+
+User env (set for this account): `JAVA_HOME`, `ANDROID_HOME`, `ANDROID_SDK_ROOT`, and `PATH` include Flutter, JDK, and Android tools. **Restart Cursor / open a new terminal** after setup.
+
+```powershell
+cd F:\AI\Anima
+flutter doctor
+flutter pub get
+flutter run -d windows   # after Developer Mode is on
+```
+
+### Linux (alternate host)
+
 | Tool | Status |
 |------|--------|
 | Flutter | ✅ 3.44.6 stable at `~/development/flutter` |
 | Dart | ✅ 3.12.2 |
 | JDK | ✅ Temurin 17 at `~/development/jdk-17` |
-| Android SDK | ✅ `~/Android/Sdk` (platform 36, build-tools 36.0.0) — Flutter doctor Android ✓ |
-| Chrome | ❌ Not required for this app |
-| Linux desktop toolchain | ✅ Works — cmake/ninja/clang/GTK + `libsecret-1-dev`; desktop debug via F5 (device: Linux) |
-| Windows desktop | ❌ Build only on a Windows host (`flutter build windows` refused on Linux) |
-| Git | ✅ installed |
+| Android SDK | ✅ `~/Android/Sdk` (platform 36, build-tools 36.0.0) |
+| Linux desktop toolchain | ✅ cmake/ninja/clang/GTK + `libsecret-1-dev`; F5 (device: Linux) |
 | GitHub CLI (`gh`) | ✅ `~/.local/bin/gh` (logged in as jwarren9393) |
-| Physical Android phone | ✅ Samsung SM-S731U (`R3CYA09N26J`), Android 16 — `flutter run` verified |
+| Physical Android phone | ✅ Samsung SM-S731U (`R3CYA09N26J`), Android 16 |
 
-PATH tip for shells (also appended to `~/.bashrc`):
+PATH tip for Linux shells:
 
 ```bash
 export JAVA_HOME="$HOME/development/jdk-17"
@@ -342,7 +368,7 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. Spot-check Creation Center people menu → **Update existing character** on an imported-chat cast member; review the merge, Save, confirm the original card updated.
+1. Spot-check ⋮ → **Manage cast** on a solo chat (add a temp character, talk, remove them) and on a group chat (add + remove a member); confirm history stays in the same thread.
 2. Optional: upload `assets/branding/anima_icon.png` as the GitHub repo Social preview (Settings → General → Social preview).
 3. Optional QoL backlog when you want more: undo send, last-chat resume, pinned Author’s Note / mood chips, memory preview panel.
 

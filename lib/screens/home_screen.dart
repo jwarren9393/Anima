@@ -236,6 +236,8 @@ class _HomeScreenState extends State<HomeScreen> {
           chatService: widget.chatService,
           personaService: widget.personaService,
           worldInfoService: widget.worldInfoService,
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
         ),
       ),
     );

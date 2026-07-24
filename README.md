@@ -11,7 +11,7 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **Distribution** | Personal use only — **not** published to app stores |
 | **Repo** | https://github.com/jwarren9393/Anima (private) |
 | **Theme** | **Theme Studio** — 8 global presets (glass + solid), custom colors/fonts, chat avatars |
-| **Version** | **1.1.0** (official APK on [GitHub Releases](https://github.com/jwarren9393/Anima/releases)) |
+| **Version** | **1.0.0** (official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases)) |
 
 API base (pay-as-you-go): `https://nano-gpt.com/api/v1/chat/completions`  
 Auth: `Authorization: Bearer <API_KEY>`  
@@ -27,8 +27,8 @@ Anima is a personal app, so it is installed directly rather than through an app 
 
 Official Android builds are published on the private repo’s **[Releases](https://github.com/jwarren9393/Anima/releases)** page.
 
-1. On the phone, open the Releases page and select **v1.1.0**.
-2. Download **`Anima-1.1.0.apk`**.
+1. On the phone, open the Releases page and select **v1.0.0**.
+2. Download **`Anima-1.0.0.apk`**.
 3. Open the downloaded APK. If Android asks, allow your browser or file manager to **install unknown apps**.
 4. Tap **Install**, then open Anima.
 5. Enter the NanoGPT key under **Settings → API & connection**.
@@ -117,13 +117,14 @@ To update Windows, pull or download the latest source, repeat the build, close A
 
 Anima does not automatically sync devices. Use **Settings → Backup & restore** to create an `.anima-backup` on one device, transfer that file privately, and restore it on the other device. Restore replaces the destination device’s current Anima library. The API key is deliberately excluded, so enter it separately on each device.
 
-### What’s in v1.1.0
+### What’s in v1.0.0
 
-- Everything from v1.0.0, plus **Theme Studio** (Settings → Appearance)
-- 8 global presets (glass + solid), custom colors/fonts/sizes, clean backgrounds (no sparkle texture)
+- **Manage cast** — add or remove characters mid-chat without starting over; create new characters from the chat menu
+- **Theme Studio** (Settings → Appearance): 8 global presets, custom colors/fonts/sizes
 - Full chat app: solo/group, streaming, swipes, Paths, drafts, structured personas + AI wand, characters, World Info
 - Creation Center: invent worlds, import lorebooks, create/update lorebooks, create AI characters or your persona
 - Generate avatars, backup & restore, context estimates
+- **Android** APK + **Windows** x64 zip on GitHub Releases
 
 ---
 

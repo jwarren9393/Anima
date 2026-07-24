@@ -306,4 +306,69 @@ class ChatService {
     await setActiveChatId(groupsKey, session.id);
     return session;
   }
+
+  /// Updates who is in an existing chat without starting a new thread.
+  ///
+  /// - **Solo** (1 member): stored under that character’s id, empty [participantIds].
+  /// - **Group** (2+ members): stored under [groupsKey] with ordered [participantIds].
+  ///
+  /// Migrates between solo and group buckets when the cast size changes.
+  Future<ChatSession> updateSessionCast(
+    ChatSession session,
+    List<Character> orderedMembers, {
+    String? authorsNote,
+    bool? autoReply,
+    List<String>? lorebookIds,
+  }) async {
+    if (orderedMembers.isEmpty) {
+      throw ArgumentError('A chat needs at least one character.');
+    }
+
+    final orderedIds = orderedMembers.map((m) => m.id).toList();
+    final willBeGroup = orderedIds.length > 1;
+    final oldBucket = session.characterId;
+    final newBucket = willBeGroup ? groupsKey : orderedMembers.first.id;
+
+    var nextSpeakerIndex = session.nextSpeakerIndex;
+    if (!willBeGroup) {
+      nextSpeakerIndex = 0;
+    } else {
+      final priorIds = session.effectiveParticipantIds;
+      if (priorIds.isNotEmpty &&
+          session.nextSpeakerIndex >= 0 &&
+          session.nextSpeakerIndex < priorIds.length) {
+        final currentId = priorIds[session.nextSpeakerIndex];
+        final idx = orderedIds.indexOf(currentId);
+        nextSpeakerIndex = idx >= 0 ? idx : 0;
+      } else {
+        nextSpeakerIndex = nextSpeakerIndex.clamp(0, orderedIds.length - 1);
+      }
+    }
+
+    var title = session.title;
+    if (willBeGroup) {
+      final names =
+          orderedMembers.map((m) => m.name.trim()).where((n) => n.isNotEmpty);
+      title = 'Group · ${names.join(', ')}';
+    } else if (session.isGroup) {
+      title = _defaultTitle(orderedMembers.first);
+    }
+
+    final updated = session.copyWith(
+      characterId: newBucket,
+      title: title,
+      participantIds: willBeGroup ? orderedIds : const [],
+      nextSpeakerIndex: nextSpeakerIndex,
+      authorsNote: authorsNote ?? session.authorsNote,
+      autoReply: autoReply ?? session.autoReply,
+      lorebookIds: lorebookIds ?? session.lorebookIds,
+    );
+
+    if (oldBucket != newBucket) {
+      await deleteChat(oldBucket, session.id);
+    }
+    await saveChat(updated);
+    await setActiveChatId(newBucket, session.id);
+    return updated;
+  }
 }
