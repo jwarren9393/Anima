@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/anima_presets.dart';
 import '../services/settings_service.dart';
+import '../utils/platform_utils.dart';
 import '../widgets/preset_picker.dart';
 import 'settings_ui.dart';
 
@@ -26,6 +27,7 @@ class _CollaboratorSettingsScreenState
   final _roadwayController = TextEditingController();
   bool _loading = true;
   bool _saving = false;
+  bool _enterToSend = true;
 
   @override
   void initState() {
@@ -35,11 +37,13 @@ class _CollaboratorSettingsScreenState
 
   Future<void> _load() async {
     final settings = await widget.settingsService.getCollaboratorSettings();
+    final enterToSend = await widget.settingsService.getEnterToSendComposer();
     if (!mounted) return;
     setState(() {
       _guidanceController.text = settings.guidanceNote;
       _composerFormatController.text = settings.composerFormatNote;
       _roadwayController.text = settings.roadwayNote;
+      _enterToSend = enterToSend;
       _loading = false;
     });
   }
@@ -53,6 +57,7 @@ class _CollaboratorSettingsScreenState
         roadwayNote: _roadwayController.text,
       ),
     );
+    await widget.settingsService.saveEnterToSendComposer(_enterToSend);
     if (!mounted) return;
     setState(() => _saving = false);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -133,6 +138,26 @@ class _CollaboratorSettingsScreenState
                 OutlinedButton(
                   onPressed: _saving ? null : _resetWandDefault,
                   child: const Text('Reset wand note to default'),
+                ),
+                const SizedBox(height: 32),
+                SettingsUi.sectionTitle(context, 'Chat composer'),
+                const SizedBox(height: 8),
+                SettingsUi.sectionHint(
+                  context,
+                  isDesktopPlatform
+                      ? 'On desktop, Enter sends your message and Shift+Enter '
+                          'starts a new line — like Discord or Slack.'
+                      : 'When you use a hardware keyboard on a phone or tablet, '
+                          'Enter can send instead of starting a new line.',
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Enter to send'),
+                  subtitle: const Text(
+                    'Off = Enter always starts a new line in the composer',
+                  ),
+                  value: _enterToSend,
+                  onChanged: (value) => setState(() => _enterToSend = value),
                 ),
                 const SizedBox(height: 32),
                 SettingsUi.sectionTitle(context, 'Composer Format'),

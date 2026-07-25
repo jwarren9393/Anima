@@ -190,7 +190,7 @@ class SettingsScreen extends StatelessWidget {
           _SettingsTile(
             icon: Icons.auto_awesome,
             title: 'AI collaborator',
-            subtitle: 'Wand + Format + Roadway notes',
+            subtitle: 'Wand + Format + Roadway + Enter to send',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => CollaboratorSettingsScreen(

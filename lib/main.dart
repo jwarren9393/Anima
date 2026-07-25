@@ -1,3 +1,6 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import 'screens/home_screen.dart';
@@ -14,9 +17,15 @@ import 'services/world_info_service.dart';
 import 'services/world_workshop_service.dart';
 import 'theme/anima_theme.dart';
 import 'theme/glass_backdrop.dart';
+import 'utils/windows_key_injector.dart';
+import 'utils/windows_paste_handler.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  if (!kIsWeb && Platform.isWindows) {
+    WindowsKeyInjector.install();
+    WindowsPasteHandler.install();
+  }
 
   final apiKeyService = ApiKeyService();
   final settingsService = SettingsService();

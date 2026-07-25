@@ -32,6 +32,8 @@ import '../services/speaker_prefix.dart';
 import '../services/world_info_service.dart';
 import '../services/world_workshop_service.dart';
 import '../services/opening_scene_service.dart';
+import '../utils/scroll_to_end.dart';
+import '../widgets/chat_composer_field.dart';
 import '../widgets/chat_lorebook_picker.dart';
 import '../widgets/create_character_from_chat_sheet.dart';
 import '../widgets/anima_avatar.dart';
@@ -96,6 +98,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   bool _loading = true;
   bool _busy = false;
   bool _formatting = false;
+  bool _enterToSend = false;
 
   /// When on, Send wraps the message as `(OOC: …)` for out-of-character talk.
   bool _oocMode = false;
@@ -167,6 +170,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     await widget.chatService.setActiveChatId(session.characterId, session.id);
     final character = await _resolveCharacterForSession(session);
     final uiStyle = await widget.settingsService.getUiStyle();
+    final enterToSend = await widget.settingsService.getEnterToSendComposer();
     var persona = await widget.personaService.resolve(session.personaId);
     // Bind persona onto older chats that never stored one.
     if (session.personaId == null || session.personaId != persona.id) {
@@ -190,6 +194,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _session = session;
       _avatarStyle = uiStyle.avatarStyle;
       _persona = persona;
+      _enterToSend = enterToSend;
       _loading = false;
     });
     _scrollToBottom(jump: true);
@@ -2218,19 +2223,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   void _scrollToBottom({bool jump = false}) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollController.hasClients) return;
-      final target = _scrollController.position.maxScrollExtent;
-      if (jump) {
-        _scrollController.jumpTo(target);
-      } else {
-        _scrollController.animateTo(
-          target,
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
-        );
-      }
-    });
+    scrollListToEnd(_scrollController, jump: jump);
   }
 
   @override
@@ -2646,12 +2639,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                           ),
                         ),
                         Expanded(
-                          child: TextField(
+                          child: ChatComposerField(
                             controller: _inputController,
                             enabled: !_busy && !_formatting,
-                            minLines: 1,
-                            maxLines: 5,
-                            textInputAction: .newline,
+                            enterToSend: _enterToSend,
                             decoration: InputDecoration(
                               hintText: _oocMode
                                   ? 'Out-of-character note…'
@@ -2666,9 +2657,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                               border: const OutlineInputBorder(),
                               isDense: true,
                             ),
-                            onSubmitted: (_) {
-                              if (!_busy && !_formatting) _send();
-                            },
+                            onSend: _send,
                           ),
                         ),
                         const SizedBox(width: 4),

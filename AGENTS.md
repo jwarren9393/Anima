@@ -60,7 +60,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-25  
-**Last agent action:** **Cross-device sync** — Settings → Backup, restore & sync: choose one Google Drive file; **Push** overwrites it, **Pull** loads it (same as backup; API key stays local).
+**Last agent action:** Published **v1.0.0 build 15** — desktop Enter-to-send, scroll-on-open fix, Creation Center no stream-scroll, Windows Wispr Flow paste fix.
 
 ### What works today
 
@@ -87,8 +87,8 @@ High-value SillyTavern concepts to aim for over time:
 - **Character AI wand** — sparkle icon on creative card fields; sends all filled fields as context; appends NanoGPT text below what’s already there (uses chat model + sampling)
 - **World Info entry AI wand** — sparkle on Label / Keywords / Lore content (and Secondary keywords when Selective); uses book + sibling entry context; appends (keywords merge comma-separated); same model + collaborator guidance
 - **API & connection** — live NanoGPT model catalog: **Auto** provider (auto-model / basic / standard / premium) listed first, then providers A–Z; refresh; custom model id; subscription toggle reloads catalog; model dropdown shows **context window** when NanoGPT reports `context_length`; **image model** picker uses NanoGPT’s subscription image catalog when **Use subscription API** is on (hides paid models); otherwise full catalog with Paid/Included labels; **See remaining credits** shows wallet USD/NANO + weekly/daily/monthly + daily images allowance data returned by NanoGPT
-- **Chat stop** — while a reply streams, the send button becomes **Stop** (keeps any partial text); the list does **not** auto-scroll during streaming — scroll freely while a reply types in
-- **Composer shortcuts** — **OOC**, **Format** (✨), **Continue** (▶), Send/Stop; Format has its own collaborator note
+- **Chat stop** — while a reply streams, the send button becomes **Stop** (keeps any partial text); the list does **not** auto-scroll during streaming — scroll freely while a reply types in (regular chat + Creation Center)
+- **Composer shortcuts** — **OOC**, **Format** (✨), **Continue** (▶), Send/Stop; Format has its own collaborator note; **desktop:** Enter sends (Shift+Enter = new line; toggle in **Settings → AI collaborator**)
 - **Draft autosave** — composer text saved per chat (survives leaving chat/app); cleared on send
 - **Character categories** — Anima-only lists (not ST card tags); **All characters** master view + custom categories; filter in Characters (manage/pick) and Group setup; membership via row menu → Categories
 - **Paths (Roadway)** — long-press a message → **Paths** (sheet + ✨ generate); tap a tile → composer; check **two or more** + **Combine selected** to AI-merge them into one composer draft; options **stay cached** until the chat moves on, or you clear / refresh; note under AI collaborator
@@ -264,6 +264,7 @@ lib/
     settings_ui.dart              Shared settings form helpers
   widgets/
     anima_avatar.dart             Local-file / initial avatar (circle or rect via style)
+    chat_composer_field.dart      Chat composer with optional Enter-to-send (Shift+Enter newline)
     generate_avatar_sheet.dart    Shared NanoGPT Generate avatar sheet (characters + personas)
     keyboard_inset.dart           Lift UI above keyboard (chat composers)
     rp_rich_text.dart             *action* / "dialogue" styled message text
@@ -275,6 +276,11 @@ lib/
     character_category_controls.dart Category filter + manage / assign sheets
     preset_picker.dart            Preset button + bottom sheets (sampling / text)
     create_character_from_chat_sheet.dart Scan/generate character card from live chat context
+  utils/
+    platform_utils.dart           Desktop platform detection (Windows / Linux / macOS)
+    scroll_to_end.dart            Retry scroll-to-bottom for lazy chat lists
+    windows_key_injector.dart     Windows synthesized Ctrl+V key-event fix
+    windows_paste_handler.dart    Windows Ctrl+V / Shift+Insert paste into focused fields
   services/
     api_key_service.dart          Secure storage for NanoGPT API key
     settings_service.dart         Model, image model, sampling, context, lore, Theme Studio, collaborator (+ legacy persona migrate)

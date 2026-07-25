@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../utils/platform_utils.dart';
+
 import '../models/ui_style_settings.dart';
 
 export '../models/ui_style_settings.dart'
@@ -382,6 +384,7 @@ class SettingsService {
   static const _collaboratorGuidanceKey = 'collaborator_guidance_note';
   static const _composerFormatNoteKey = 'composer_format_guidance_note';
   static const _roadwayNoteKey = 'roadway_guidance_note';
+  static const _enterToSendComposerKey = 'composer_enter_to_send';
   static const _characterBuildUseMainModelKey = 'character_build_use_main_model';
   static const _characterBuildModelKey = 'character_build_model_id';
   static const _characterBuildMaxTokensKey = 'character_build_max_tokens';
@@ -426,6 +429,7 @@ class SettingsService {
     _collaboratorGuidanceKey,
     _composerFormatNoteKey,
     _roadwayNoteKey,
+    _enterToSendComposerKey,
     _characterBuildUseMainModelKey,
     _characterBuildModelKey,
     _characterBuildMaxTokensKey,
@@ -706,6 +710,21 @@ class SettingsService {
       roadwayNote: (roadwayRaw == null || roadwayRaw.trim().isEmpty)
           ? CollaboratorSettings.defaultRoadwayNote
           : roadwayRaw,
+    );
+  }
+
+  /// Desktop-style chat composer: Enter sends, Shift+Enter adds a new line.
+  /// Defaults to on for Windows/Linux/macOS and off for phone builds.
+  Future<bool> getEnterToSendComposer() async {
+    final raw = await _storage.read(key: _enterToSendComposerKey);
+    if (raw == null) return isDesktopPlatform;
+    return raw == 'true';
+  }
+
+  Future<void> saveEnterToSendComposer(bool value) async {
+    await _storage.write(
+      key: _enterToSendComposerKey,
+      value: value ? 'true' : 'false',
     );
   }
 

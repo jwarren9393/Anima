@@ -21,6 +21,8 @@ import '../services/world_info_service.dart';
 import '../services/world_workshop_builder.dart';
 import '../services/opening_scene_service.dart';
 import '../services/world_workshop_service.dart';
+import '../utils/scroll_to_end.dart';
+import '../widgets/chat_composer_field.dart';
 import '../widgets/greeting_picker.dart';
 import '../widgets/keyboard_inset.dart';
 import '../widgets/narrator_bubble.dart';
@@ -86,6 +88,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   bool _exporting = false;
   String? _exportStatus;
   double _keyboardInset = 0;
+  bool _enterToSend = false;
 
   @override
   void initState() {
@@ -95,6 +98,11 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     _openingSceneController.text = _workshop.openingScene;
     _loadLinkedLorebook();
     _loadModelContext();
+    if (_workshop.messages.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        scrollListToEnd(_scroll, jump: true);
+      });
+    }
   }
 
   Future<void> _loadLinkedLorebook() async {
@@ -112,6 +120,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   Future<void> _loadModelContext() async {
     try {
       final modelId = await widget.settingsService.getModel();
+      final enterToSend = await widget.settingsService.getEnterToSendComposer();
       final baseUrl = await widget.settingsService.getApiBaseUrl();
       final models = await widget.nanoGptService.listModels(baseUrl: baseUrl);
       if (!mounted) return;
@@ -125,6 +134,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       setState(() {
         _modelId = modelId;
         _modelContextLength = contextLength;
+        _enterToSend = enterToSend;
       });
     } catch (_) {
       // Context length is optional UI polish.
@@ -327,7 +337,6 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         setState(() {
           _workshop = _workshop.copyWith(messages: updated);
         });
-        _scrollToEnd();
       }
 
       await _persist(_workshop);
@@ -1435,14 +1444,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   }
 
   void _scrollToEnd() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scroll.hasClients) return;
-      _scroll.animateTo(
-        _scroll.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-      );
-    });
+    scrollListToEnd(_scroll);
   }
 
   Future<void> _showImportedSourceDetails() async {
@@ -1835,18 +1837,16 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                 child: Row(
                   children: [
                     Expanded(
-                      child: TextField(
+                      child: ChatComposerField(
                         controller: _input,
-                        minLines: 1,
-                        maxLines: 5,
-                        textCapitalization: TextCapitalization.sentences,
                         enabled: !_exporting,
+                        enterToSend: _enterToSend,
                         decoration: const InputDecoration(
                           hintText: 'Describe your world…',
                           border: OutlineInputBorder(),
                           isDense: true,
                         ),
-                        onSubmitted: (_) {
+                        onSend: () {
                           if (_sending) {
                             _stop();
                           } else {
