@@ -16,6 +16,8 @@ class ChatSession {
     List<String>? lorebookIds,
     this.memorySummary = '',
     this.memoryCoveredCount = 0,
+    this.openingScene = '',
+    this.openingSceneInPrompt = true,
   })  : messages = List<ChatMessage>.from(messages ?? const []),
         participantIds = List<String>.from(participantIds ?? const []),
         lorebookIds =
@@ -60,6 +62,14 @@ class ChatSession {
   /// [memorySummary] (those can be skipped when packing recent history).
   final int memoryCoveredCount;
 
+  /// Optional narrator/setup prose shown at the top of the chat (not stored in
+  /// [messages] and not tied to a character greeting).
+  final String openingScene;
+
+  /// When true, [openingScene] is injected into API prompts. Auto-turns off
+  /// after the first user message unless re-enabled in the chat menu.
+  final bool openingSceneInPrompt;
+
   bool get isGroup => participantIds.length > 1;
 
   /// Effective cast for prompting (falls back to [characterId] when solo).
@@ -85,6 +95,8 @@ class ChatSession {
     bool clearLorebookIds = false,
     String? memorySummary,
     int? memoryCoveredCount,
+    String? openingScene,
+    bool? openingSceneInPrompt,
   }) {
     return ChatSession(
       id: id ?? this.id,
@@ -100,6 +112,9 @@ class ChatSession {
       lorebookIds: clearLorebookIds ? null : (lorebookIds ?? this.lorebookIds),
       memorySummary: memorySummary ?? this.memorySummary,
       memoryCoveredCount: memoryCoveredCount ?? this.memoryCoveredCount,
+      openingScene: openingScene ?? this.openingScene,
+      openingSceneInPrompt:
+          openingSceneInPrompt ?? this.openingSceneInPrompt,
     );
   }
 
@@ -117,6 +132,8 @@ class ChatSession {
         if (lorebookIds != null) 'lorebookIds': lorebookIds,
         if (memorySummary.trim().isNotEmpty) 'memorySummary': memorySummary,
         if (memoryCoveredCount > 0) 'memoryCoveredCount': memoryCoveredCount,
+        if (openingScene.trim().isNotEmpty) 'openingScene': openingScene,
+        if (!openingSceneInPrompt) 'openingSceneInPrompt': false,
       };
 
   factory ChatSession.fromJson(Map<String, dynamic> json) {
@@ -179,6 +196,8 @@ class ChatSession {
       lorebookIds: lorebookIds,
       memorySummary: (json['memorySummary'] as String? ?? '').trim(),
       memoryCoveredCount: coveredCount.clamp(0, 100000),
+      openingScene: (json['openingScene'] as String? ?? '').trim(),
+      openingSceneInPrompt: json['openingSceneInPrompt'] != false,
     );
   }
 

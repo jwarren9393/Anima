@@ -25,6 +25,34 @@ void main() {
       expect(text, contains('3 sentences'));
     });
 
+    test('global prompts merge with card fields and authors note', () {
+      final character = Character(
+        id: 'c1',
+        name: 'Aiko',
+        systemPrompt: 'Card system line.',
+        postHistoryInstructions: 'Card post-history.',
+      );
+      final system = builder.buildSystemPrompt(
+        character: character,
+        userName: 'Sam',
+        globalSystemPrompt: 'Global system rules.',
+      );
+      expect(system, contains('Card system line.'));
+      expect(system, contains('Global system rules.'));
+
+      final post = builder.buildPostHistory(
+        character: character,
+        userName: 'Sam',
+        authorsNote: 'Chat note.',
+        globalPostHistory: 'Global post-history.',
+      );
+      expect(post.indexOf('Global post-history.'), lessThan(
+        post.indexOf('Card post-history.'),
+      ));
+      expect(post, contains("Author's note:"));
+      expect(post, contains('Chat note.'));
+    });
+
     test('continue mode asks for character-only continuation', () {
       final character = Character(id: 'c1', name: 'Aiko');
       final system = builder.buildSystemPrompt(

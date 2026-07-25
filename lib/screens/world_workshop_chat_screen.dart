@@ -4,19 +4,31 @@ import 'package:flutter/material.dart';
 
 import '../models/character.dart';
 import '../models/chat_message.dart';
+import '../models/chat_session.dart';
 import '../models/global_lorebook.dart';
 import '../models/persona.dart';
 import '../models/world_workshop.dart';
+import '../services/api_key_service.dart';
+import '../services/appearance_controller.dart';
+import '../services/character_category_service.dart';
 import '../services/character_service.dart';
 import '../services/chat_context_service.dart';
+import '../services/chat_service.dart';
 import '../services/nanogpt_service.dart';
 import '../services/persona_service.dart';
 import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
 import '../services/world_workshop_builder.dart';
+import '../services/opening_scene_service.dart';
 import '../services/world_workshop_service.dart';
+import '../widgets/greeting_picker.dart';
 import '../widgets/keyboard_inset.dart';
+import '../widgets/narrator_bubble.dart';
+import '../widgets/opening_scene_picker.dart';
 import 'character_edit_screen.dart';
+import 'characters_screen.dart';
+import 'chat_screen.dart';
+import 'group_chat_setup_screen.dart';
 import 'persona_edit_screen.dart';
 
 /// Plain chat with the World Info collaborator; export lorebook / characters.
@@ -27,18 +39,30 @@ class WorldWorkshopChatScreen extends StatefulWidget {
     required this.workshopService,
     required this.worldInfoService,
     required this.characterService,
+    required this.characterCategoryService,
     required this.personaService,
+    required this.chatService,
+    required this.apiKeyService,
     required this.settingsService,
     required this.nanoGptService,
+    required this.worldWorkshopService,
+    required this.openingSceneService,
+    required this.appearanceController,
   });
 
   final WorldWorkshop workshop;
   final WorldWorkshopService workshopService;
   final WorldInfoService worldInfoService;
   final CharacterService characterService;
+  final CharacterCategoryService characterCategoryService;
   final PersonaService personaService;
+  final ChatService chatService;
+  final ApiKeyService apiKeyService;
   final SettingsService settingsService;
   final NanoGptService nanoGptService;
+  final WorldWorkshopService worldWorkshopService;
+  final OpeningSceneService openingSceneService;
+  final AppearanceController appearanceController;
 
   @override
   State<WorldWorkshopChatScreen> createState() =>
@@ -51,6 +75,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   final _contextService = const ChatContextService();
 
   final _input = TextEditingController();
+  final _openingSceneController = TextEditingController();
   final _scroll = ScrollController();
   late WorldWorkshop _workshop;
   GlobalLorebook? _linkedLorebook;
@@ -67,6 +92,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _workshop = widget.workshop;
+    _openingSceneController.text = _workshop.openingScene;
     _loadLinkedLorebook();
     _loadModelContext();
   }
@@ -206,8 +232,21 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _input.dispose();
+    _openingSceneController.dispose();
     _scroll.dispose();
     super.dispose();
+  }
+
+  Future<void> _saveOpeningSceneField() async {
+    final text = _openingSceneController.text.trim();
+    if (text == _workshop.openingScene) return;
+    final next = _workshop.copyWith(openingScene: text);
+    await _persist(next);
+    await widget.openingSceneService.syncFromWorkshop(
+      workshopId: next.id,
+      workshopTitle: next.title,
+      openingScene: text,
+    );
   }
 
   Future<void> _persist(WorldWorkshop workshop) async {
@@ -432,6 +471,206 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         });
       }
     }
+  }
+
+  Future<void> _createOpeningScene() async {
+    if (_sending || _exporting || _loadingLinkedLorebook) return;
+    if (!_hasSourceMaterial) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Chat a bit first (or import a roleplay chat), then create the opening scene.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _exporting = true;
+      _exportStatus = 'Creating opening scene…';
+    });
+    try {
+      final collaborator = await widget.settingsService
+          .getCollaboratorSettings();
+      final model = await widget.settingsService.getModel();
+      final sampling = await widget.settingsService.getSampling();
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+
+      final raw = await widget.nanoGptService.complete(
+        model: model,
+        messages: _builder.buildOpeningSceneExportMessages(
+          conversation: _workshop.messages,
+          guidanceNote: collaborator.guidanceNote,
+          sourceLorebook: _linkedLorebook?.book,
+          importedSource: _workshop.importedSource,
+          existingOpeningScene: _workshop.openingScene,
+        ),
+        baseUrl: baseUrl,
+        sampling: sampling,
+      );
+
+      final scene = _builder.parseOpeningSceneJson(raw);
+      _openingSceneController.text = scene;
+      final next = _workshop.copyWith(openingScene: scene);
+      await _persist(next);
+      await widget.openingSceneService.syncFromWorkshop(
+        workshopId: next.id,
+        workshopTitle: next.title,
+        openingScene: scene,
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Opening scene saved to this workshop.')),
+      );
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not create opening scene: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _exporting = false;
+          _exportStatus = null;
+        });
+      }
+    }
+  }
+
+  Future<void> _openChat(ChatSession session) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChatScreen(
+          apiKeyService: widget.apiKeyService,
+          settingsService: widget.settingsService,
+          characterService: widget.characterService,
+          characterCategoryService: widget.characterCategoryService,
+          personaService: widget.personaService,
+          chatService: widget.chatService,
+          nanoGptService: widget.nanoGptService,
+          worldInfoService: widget.worldInfoService,
+          worldWorkshopService: widget.worldWorkshopService,
+          openingSceneService: widget.openingSceneService,
+          appearanceController: widget.appearanceController,
+          initialSession: session,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _startRoleplay() async {
+    if (_sending || _exporting || _loadingLinkedLorebook) return;
+    await _saveOpeningSceneField();
+    if (!mounted) return;
+
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.person_outline),
+              title: const Text('Solo chat'),
+              subtitle: const Text('One character with this opening scene'),
+              onTap: () => Navigator.pop(context, 'solo'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.groups_outlined),
+              title: const Text('Group chat'),
+              subtitle: const Text('Several characters + opening scene'),
+              onTap: () => Navigator.pop(context, 'group'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+
+    if (choice == 'group') {
+      final session = await Navigator.of(context).push<ChatSession>(
+        MaterialPageRoute(
+          builder: (_) => GroupChatSetupScreen(
+            characterService: widget.characterService,
+            categoryService: widget.characterCategoryService,
+            chatService: widget.chatService,
+            personaService: widget.personaService,
+            worldInfoService: widget.worldInfoService,
+            settingsService: widget.settingsService,
+            nanoGptService: widget.nanoGptService,
+            openingSceneService: widget.openingSceneService,
+            worldWorkshopService: widget.worldWorkshopService,
+            initialOpeningScene: _workshop.openingScene,
+          ),
+        ),
+      );
+      if (session == null || !mounted) return;
+      await _openChat(session);
+      return;
+    }
+
+    final character = await Navigator.of(context).push<Character>(
+      MaterialPageRoute(
+        builder: (_) => CharactersScreen(
+          characterService: widget.characterService,
+          categoryService: widget.characterCategoryService,
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
+          pickMode: true,
+        ),
+      ),
+    );
+    if (character == null || !mounted) return;
+
+    final persona = await widget.personaService.getActivePersona();
+    if (!mounted) return;
+    final greetingIndex = await pickGreetingIndex(
+      context,
+      character: character,
+      userName: persona.name,
+    );
+    if (greetingIndex == null || !mounted) return;
+
+    await widget.openingSceneService.importMissingFromWorkshops(
+      await widget.worldWorkshopService.loadWorkshops(),
+    );
+    if (!mounted) return;
+    final savedScenes = await widget.openingSceneService.loadScenes();
+    if (!mounted) return;
+
+    final openingPick = await pickOpeningScene(
+      context,
+      initial: _workshop.openingScene,
+      subtitle:
+          'Prefilled from this workshop. Edit, skip, or use as-is for the new chat.',
+      savedScenes: savedScenes,
+      openingSceneService: widget.openingSceneService,
+      workshopService: widget.worldWorkshopService,
+    );
+    if (openingPick == null || !mounted) return;
+
+    final session = await widget.chatService.startNewChat(
+      character,
+      userName: persona.name,
+      personaId: persona.id,
+      greetingIndex: greetingIndex,
+      openingScene: openingPick.text,
+    );
+    if (!mounted) return;
+    await _openChat(session);
   }
 
   Future<void> _createCharacters() async {
@@ -1229,6 +1468,81 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     );
   }
 
+  Widget _openingSceneCard(ThemeData theme) {
+    final hasScene = _workshop.openingScene.trim().isNotEmpty;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Material(
+        color: theme.colorScheme.tertiaryContainer.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.auto_stories_outlined,
+                    color: theme.colorScheme.onTertiaryContainer,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Opening scene',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: theme.colorScheme.onTertiaryContainer,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: (_sending || _exporting || _loadingLinkedLorebook)
+                        ? null
+                        : _createOpeningScene,
+                    child: Text(hasScene ? 'Generate' : 'Create'),
+                  ),
+                ],
+              ),
+              Text(
+                'Narrator setup for roleplay chats — separate from lore entries '
+                'and character greetings. Saved scenes sync to Settings → '
+                'Opening scenes for use in any new chat.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onTertiaryContainer,
+                ),
+              ),
+              const SizedBox(height: 10),
+              if (hasScene)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: NarratorBubble(
+                    text: _workshop.openingScene,
+                    onTap: null,
+                  ),
+                ),
+              TextField(
+                controller: _openingSceneController,
+                minLines: 3,
+                maxLines: 6,
+                enabled: !_exporting,
+                textCapitalization: TextCapitalization.sentences,
+                onChanged: (_) {},
+                onEditingComplete: _saveOpeningSceneField,
+                onTapOutside: (_) => _saveOpeningSceneField(),
+                decoration: const InputDecoration(
+                  hintText: 'Rain on cobblestones. The city holds its breath…',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                  alignLabelWithHint: true,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _importedSourceCard(ThemeData theme) {
     final source = _workshop.importedSource;
     if (source == null || !source.hasContent) {
@@ -1268,6 +1582,15 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                           color: theme.colorScheme.onSecondaryContainer,
                         ),
                       ),
+                      if (source.importProfile.trim().isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          source.importProfile.trim(),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.onSecondaryContainer,
+                          ),
+                        ),
+                      ],
                       if (source.skippedNotes.isNotEmpty) ...[
                         const SizedBox(height: 4),
                         Text(
@@ -1359,11 +1682,31 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
               ),
             ],
           ),
+          IconButton(
+            tooltip: 'Start roleplay chat',
+            onPressed: busy ? null : _startRoleplay,
+            icon: const Icon(Icons.play_arrow_outlined),
+          ),
+          TextButton(
+            onPressed: busy ? null : _createOpeningScene,
+            child:
+                _exporting && (_exportStatus?.contains('opening') == true)
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Text(
+                    _workshop.openingScene.trim().isEmpty
+                        ? 'Opening scene'
+                        : 'Update opening',
+                  ),
+          ),
           TextButton(
             onPressed: busy ? null : _createLorebook,
             child:
                 _exporting &&
-                    (_exportStatus == null ||
+                    (_exportStatus != null &&
                         _exportStatus!.contains('lorebook'))
                 ? const SizedBox(
                     width: 18,
@@ -1405,8 +1748,8 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                                 : hasImported
                                     ? 'Seeded from “${imported!.chatTitle}”. '
                                         'Chat to refine ideas, then Create lorebook, '
-                                        'Create AI characters, or Update existing character.'
-                                    : 'Talk about your world. Use Create lorebook for World Info, '
+                                        'Opening scene, Create AI characters, or Update existing character.'
+                                    : 'Talk about your world. Use Create lorebook, Opening scene, '
                                         'or the person+ icon to create/update character cards.'),
                         style: theme.textTheme.bodySmall,
                       ),
@@ -1427,6 +1770,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
               ),
             ),
             _importedSourceCard(theme),
+            _openingSceneCard(theme),
             Expanded(
               child: _workshop.messages.isEmpty
                   ? Center(
@@ -1439,8 +1783,8 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                                   'the lorebook—or create characters directly.'
                               : hasImported
                                   ? 'Your imported chat is ready as source material.\n\n'
-                                      'Ask the AI what to extract into a lorebook, or tap '
-                                      'Create lorebook / the person+ icon when you’re ready.'
+                                      'Ask the AI what to extract into a lorebook or opening scene, '
+                                      'or tap Create lorebook / Opening scene when you’re ready.'
                                   : 'Example: “I want a rainy coastal city with rival '
                                       'guilds and a buried god under the harbor…”',
                           textAlign: TextAlign.center,

@@ -7,14 +7,20 @@ import '../models/character.dart';
 import '../models/chat_session.dart';
 import '../models/global_lorebook.dart';
 import '../models/world_workshop.dart';
+import '../models/workshop_chat_import_options.dart';
+import '../services/api_key_service.dart';
+import '../services/appearance_controller.dart';
+import '../services/character_category_service.dart';
 import '../services/character_service.dart';
 import '../services/chat_service.dart';
 import '../services/nanogpt_service.dart';
+import '../services/opening_scene_service.dart';
 import '../services/persona_service.dart';
 import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
 import '../services/world_workshop_builder.dart';
 import '../services/world_workshop_service.dart';
+import '../widgets/workshop_chat_import_sheet.dart';
 import 'world_workshop_chat_screen.dart';
 
 /// Settings → Creation Center: list of world-building workshop chats.
@@ -24,19 +30,27 @@ class WorldWorkshopListScreen extends StatefulWidget {
     required this.workshopService,
     required this.worldInfoService,
     required this.characterService,
+    required this.characterCategoryService,
     required this.personaService,
     required this.chatService,
+    required this.apiKeyService,
     required this.settingsService,
     required this.nanoGptService,
+    required this.openingSceneService,
+    required this.appearanceController,
   });
 
   final WorldWorkshopService workshopService;
   final WorldInfoService worldInfoService;
   final CharacterService characterService;
+  final CharacterCategoryService characterCategoryService;
   final PersonaService personaService;
   final ChatService chatService;
+  final ApiKeyService apiKeyService;
   final SettingsService settingsService;
   final NanoGptService nanoGptService;
+  final OpeningSceneService openingSceneService;
+  final AppearanceController appearanceController;
 
   @override
   State<WorldWorkshopListScreen> createState() =>
@@ -73,9 +87,15 @@ class _WorldWorkshopListScreenState extends State<WorldWorkshopListScreen> {
           workshopService: widget.workshopService,
           worldInfoService: widget.worldInfoService,
           characterService: widget.characterService,
+          characterCategoryService: widget.characterCategoryService,
           personaService: widget.personaService,
+          chatService: widget.chatService,
+          apiKeyService: widget.apiKeyService,
           settingsService: widget.settingsService,
           nanoGptService: widget.nanoGptService,
+          worldWorkshopService: widget.workshopService,
+          openingSceneService: widget.openingSceneService,
+          appearanceController: widget.appearanceController,
         ),
       ),
     );
@@ -275,8 +295,8 @@ class _WorldWorkshopListScreenState extends State<WorldWorkshopListScreen> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                     child: Text(
-                      'Seeds a workshop from memory summary, recent messages, '
-                      'characters, persona, and linked lore (read-only source).',
+                      'Pick a chat, then choose what to import (trimmed history, '
+                      'optional lorebooks, etc.).',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),
@@ -323,7 +343,22 @@ class _WorldWorkshopListScreenState extends State<WorldWorkshopListScreen> {
         },
       );
       if (selected == null || !mounted) return;
-      await _importChat(selected, characters);
+
+      final contextSettings =
+          await widget.settingsService.getContextSettings();
+      final loreCounts = _loreCountsForChat(selected, characters);
+      if (!mounted) return;
+
+      final options = await pickWorkshopChatImportOptions(
+        context,
+        session: selected,
+        keepRecentDefault: contextSettings.summarizeKeepRecent,
+        linkedLorebookCount: loreCounts.$1,
+        embeddedLorebookCount: loreCounts.$2,
+      );
+      if (options == null || !mounted) return;
+
+      await _importChat(selected, characters, options);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -334,9 +369,27 @@ class _WorldWorkshopListScreenState extends State<WorldWorkshopListScreen> {
     }
   }
 
+  /// Returns (linked global lorebook count, embedded character lorebook count).
+  (int, int) _loreCountsForChat(
+    ChatSession session,
+    Map<String, Character> characterLookup,
+  ) {
+    final linkedIds = session.lorebookIds;
+    final linkedCount =
+        linkedIds == null ? 0 : linkedIds.where((id) => id.trim().isNotEmpty).length;
+
+    var embedded = 0;
+    for (final id in session.effectiveParticipantIds) {
+      final book = characterLookup[id]?.lorebook;
+      if (book != null && book.entries.isNotEmpty) embedded++;
+    }
+    return (linkedCount, embedded);
+  }
+
   Future<void> _importChat(
     ChatSession session,
     Map<String, Character> characterLookup,
+    WorkshopChatImportOptions options,
   ) async {
     final skipped = <String>[];
     final characters = <Character>[];
@@ -360,19 +413,18 @@ class _WorldWorkshopListScreenState extends State<WorldWorkshopListScreen> {
     }
 
     final linked = <GlobalLorebook>[];
-    final loreIds = session.lorebookIds;
-    if (loreIds == null) {
-      final enabled = await widget.worldInfoService.loadBooks();
-      linked.addAll(enabled.where((b) => b.enabled && b.book.entries.isNotEmpty));
-    } else {
-      for (final id in loreIds) {
-        final book = await widget.worldInfoService.getById(id);
-        if (book == null) {
-          skipped.add('Lorebook id $id (deleted)');
-          continue;
+    if (options.includeGlobalLorebooks) {
+      final loreIds = session.lorebookIds;
+      if (loreIds != null) {
+        for (final id in loreIds) {
+          final book = await widget.worldInfoService.getById(id);
+          if (book == null) {
+            skipped.add('Lorebook id $id (deleted)');
+            continue;
+          }
+          if (book.book.entries.isEmpty) continue;
+          linked.add(book);
         }
-        if (book.book.entries.isEmpty) continue;
-        linked.add(book);
       }
     }
 
@@ -382,6 +434,7 @@ class _WorldWorkshopListScreenState extends State<WorldWorkshopListScreen> {
       persona: persona,
       linkedLorebooks: linked,
       skippedNotes: skipped,
+      options: options,
     );
     if (!source.hasContent) {
       if (!mounted) return;

@@ -9,13 +9,16 @@ import '../services/character_category_service.dart';
 import '../services/character_service.dart';
 import '../services/chat_service.dart';
 import '../services/nanogpt_service.dart';
+import '../services/opening_scene_service.dart';
 import '../services/persona_service.dart';
 import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
+import '../services/world_workshop_service.dart';
 import '../widgets/anima_avatar.dart';
 import '../widgets/character_category_controls.dart';
 import '../widgets/create_character_from_chat_sheet.dart';
 import '../widgets/greeting_picker.dart';
+import '../widgets/opening_scene_picker.dart';
 import '../widgets/preset_picker.dart';
 import 'character_edit_screen.dart';
 
@@ -31,8 +34,11 @@ class GroupChatSetupScreen extends StatefulWidget {
     required this.worldInfoService,
     required this.settingsService,
     required this.nanoGptService,
+    required this.openingSceneService,
+    required this.worldWorkshopService,
     this.preselectedIds = const {},
     this.existingSession,
+    this.initialOpeningScene = '',
   });
 
   final CharacterService characterService;
@@ -42,12 +48,17 @@ class GroupChatSetupScreen extends StatefulWidget {
   final WorldInfoService worldInfoService;
   final SettingsService settingsService;
   final NanoGptService nanoGptService;
+  final OpeningSceneService openingSceneService;
+  final WorldWorkshopService worldWorkshopService;
 
   /// Character ids already checked (e.g. current chat cast).
   final Set<String> preselectedIds;
 
   /// When set, changes apply to this chat instead of starting a new one.
   final ChatSession? existingSession;
+
+  /// Prefill opening scene when starting from Creation Center.
+  final String initialOpeningScene;
 
   bool get isEditMode => existingSession != null;
 
@@ -63,6 +74,7 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
   final List<Character> _ordered = [];
   final Set<String> _selectedLoreIds = {};
   final _authorsNoteController = TextEditingController();
+  final _openingSceneController = TextEditingController();
   bool _autoReply = false;
   bool _loading = true;
   bool _working = false;
@@ -137,7 +149,10 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
         ..addAll(selectedLore);
       if (session != null) {
         _authorsNoteController.text = session.authorsNote;
+        _openingSceneController.text = session.openingScene;
         _autoReply = session.autoReply;
+      } else if (widget.initialOpeningScene.trim().isNotEmpty) {
+        _openingSceneController.text = widget.initialOpeningScene.trim();
       }
       _loading = false;
     });
@@ -166,6 +181,7 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
   @override
   void dispose() {
     _authorsNoteController.dispose();
+    _openingSceneController.dispose();
     super.dispose();
   }
 
@@ -268,6 +284,29 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
         setState(() => _working = false);
         return;
       }
+      await widget.openingSceneService.importMissingFromWorkshops(
+        await widget.worldWorkshopService.loadWorkshops(),
+      );
+      if (!mounted) {
+        setState(() => _working = false);
+        return;
+      }
+      final savedScenes = await widget.openingSceneService.loadScenes();
+      if (!mounted) {
+        setState(() => _working = false);
+        return;
+      }
+      final openingPick = await pickOpeningScene(
+        context,
+        initial: _openingSceneController.text,
+        savedScenes: savedScenes,
+        openingSceneService: widget.openingSceneService,
+        workshopService: widget.worldWorkshopService,
+      );
+      if (openingPick == null || !mounted) {
+        setState(() => _working = false);
+        return;
+      }
       final session = await widget.chatService.startGroupChat(
         List<Character>.from(_ordered),
         userName: persona.name,
@@ -278,6 +317,7 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
             ? null
             : _selectedLoreIds.toList(growable: false),
         greetingIndex: greetingIndex,
+        openingScene: openingPick.text,
       );
       if (!mounted) return;
       Navigator.of(context).pop(session);
@@ -477,6 +517,28 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
                         );
                       }),
                     ],
+                    const SizedBox(height: 20),
+                    Text(
+                      'Opening scene',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Optional narrator setup shown once at the top of the chat '
+                      '(not the character’s first line).',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    TextField(
+                      controller: _openingSceneController,
+                      minLines: 3,
+                      maxLines: 6,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: const InputDecoration(
+                        hintText: 'The harbor fog lifts as your party gathers…',
+                        border: OutlineInputBorder(),
+                        alignLabelWithHint: true,
+                      ),
+                    ),
                     const SizedBox(height: 20),
                     Text(
                       'Author’s Note',

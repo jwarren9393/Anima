@@ -55,6 +55,7 @@ class PromptBuilder {
     LorebookInjection lore = const LorebookInjection(),
     List<Character> others = const [],
     PromptMode mode = PromptMode.normal,
+    String globalSystemPrompt = '',
   }) {
     final charName =
         character.name.trim().isEmpty ? 'Character' : character.name.trim();
@@ -132,6 +133,13 @@ class PromptBuilder {
       chunks.add('The user is called $safeUser.');
     }
 
+    final global = globalSystemPrompt.trim();
+    if (global.isNotEmpty) {
+      chunks.add(
+        applyMacros(global, charName: charName, userName: safeUser),
+      );
+    }
+
     return applyMacros(
       chunks.join('\n\n'),
       charName: charName,
@@ -143,11 +151,17 @@ class PromptBuilder {
     required Character character,
     required String userName,
     String authorsNote = '',
+    String globalPostHistory = '',
   }) {
     final charName =
         character.name.trim().isEmpty ? 'Character' : character.name.trim();
     final safeUser = userName.trim().isEmpty ? 'User' : userName.trim();
     final parts = <String>[];
+
+    final global = globalPostHistory.trim();
+    if (global.isNotEmpty) {
+      parts.add(applyMacros(global, charName: charName, userName: safeUser));
+    }
 
     final cardNote = character.postHistoryInstructions.trim();
     if (cardNote.isNotEmpty) {
@@ -166,6 +180,26 @@ class PromptBuilder {
     }
 
     return parts.join('\n\n');
+  }
+
+  /// One-time narrator/setup block for the start of a chat.
+  String buildOpeningSceneBlock({
+    required String openingScene,
+    required String charName,
+    required String userName,
+  }) {
+    final scene = openingScene.trim();
+    if (scene.isEmpty) return '';
+    final safeChar = charName.trim().isEmpty ? 'Character' : charName.trim();
+    final safeUser = userName.trim().isEmpty ? 'User' : userName.trim();
+    final expanded = applyMacros(
+      scene,
+      charName: safeChar,
+      userName: safeUser,
+    );
+    return 'Opening scene (established at the start of this chat; the story may '
+        'have moved on since — use as background, not as the current moment '
+        'unless recent messages say otherwise):\n$expanded';
   }
 
   String expandGreeting({

@@ -249,6 +249,34 @@ class CharacterBuildRequest {
   final String promptNote;
 }
 
+/// App-wide system prompt + post-history text merged into every chat.
+class GlobalChatPromptSettings {
+  const GlobalChatPromptSettings({
+    this.systemPrompt = '',
+    this.postHistoryInstructions = '',
+  });
+
+  /// Prepended into the system block on every generation (after card + persona).
+  final String systemPrompt;
+
+  /// Prepended into the post-history block (before card post-history + Author's Note).
+  final String postHistoryInstructions;
+
+  bool get isEmpty =>
+      systemPrompt.trim().isEmpty && postHistoryInstructions.trim().isEmpty;
+
+  GlobalChatPromptSettings copyWith({
+    String? systemPrompt,
+    String? postHistoryInstructions,
+  }) {
+    return GlobalChatPromptSettings(
+      systemPrompt: systemPrompt ?? this.systemPrompt,
+      postHistoryInstructions:
+          postHistoryInstructions ?? this.postHistoryInstructions,
+    );
+  }
+}
+
 /// Guidance for the character-editor / World Info wand, plus composer helpers.
 class CollaboratorSettings {
   const CollaboratorSettings({
@@ -360,6 +388,8 @@ class SettingsService {
   static const _characterBuildTemperatureKey = 'character_build_temperature';
   static const _characterBuildTopPKey = 'character_build_top_p';
   static const _characterBuildPromptKey = 'character_build_prompt_note';
+  static const _globalChatSystemPromptKey = 'global_chat_system_prompt';
+  static const _globalChatPostHistoryKey = 'global_chat_post_history';
   static const _contextHistoryTokensKey = 'context_history_token_budget';
   static const _contextAutoSummarizeKey = 'context_auto_summarize';
   static const _contextSummarizeEveryKey = 'context_summarize_every';
@@ -398,6 +428,8 @@ class SettingsService {
     _characterBuildTemperatureKey,
     _characterBuildTopPKey,
     _characterBuildPromptKey,
+    _globalChatSystemPromptKey,
+    _globalChatPostHistoryKey,
     _contextHistoryTokensKey,
     _contextAutoSummarizeKey,
     _contextSummarizeEveryKey,
@@ -768,6 +800,34 @@ class SettingsService {
       sampling: build.toSampling(),
       promptNote: build.effectivePromptNote(),
     );
+  }
+
+  /// Global system prompt + post-history for all chats.
+  Future<GlobalChatPromptSettings> getGlobalChatPromptSettings() async {
+    final systemRaw = await _storage.read(key: _globalChatSystemPromptKey);
+    final postRaw = await _storage.read(key: _globalChatPostHistoryKey);
+    return GlobalChatPromptSettings(
+      systemPrompt: systemRaw?.trim() ?? '',
+      postHistoryInstructions: postRaw?.trim() ?? '',
+    );
+  }
+
+  Future<void> saveGlobalChatPromptSettings(
+    GlobalChatPromptSettings settings,
+  ) async {
+    final system = settings.systemPrompt.trim();
+    if (system.isEmpty) {
+      await _storage.delete(key: _globalChatSystemPromptKey);
+    } else {
+      await _storage.write(key: _globalChatSystemPromptKey, value: system);
+    }
+
+    final post = settings.postHistoryInstructions.trim();
+    if (post.isEmpty) {
+      await _storage.delete(key: _globalChatPostHistoryKey);
+    } else {
+      await _storage.write(key: _globalChatPostHistoryKey, value: post);
+    }
   }
 
   /// When true, use the subscription API base URL.

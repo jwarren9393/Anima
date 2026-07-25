@@ -129,6 +129,8 @@ class ChatService {
     String userName = 'User',
     String? personaId,
     int greetingIndex = 0,
+    String openingScene = '',
+    bool openingSceneInPrompt = true,
   }) async {
     final builder = const PromptBuilder();
     final greetings = character.allGreetings
@@ -163,6 +165,10 @@ class ChatService {
       updatedAt: DateTime.now(),
       messages: messages,
       personaId: personaId,
+      openingScene: openingScene.trim(),
+      openingSceneInPrompt: openingScene.trim().isNotEmpty
+          ? openingSceneInPrompt
+          : true,
     );
 
     await saveChat(session);
@@ -248,6 +254,8 @@ class ChatService {
     bool autoReply = false,
     List<String>? lorebookIds,
     int greetingIndex = 0,
+    String openingScene = '',
+    bool openingSceneInPrompt = true,
   }) async {
     if (members.length < 2) {
       throw ArgumentError('Group chats need at least two characters.');
@@ -300,6 +308,10 @@ class ChatService {
       personaId: personaId,
       autoReply: autoReply,
       lorebookIds: lorebookIds,
+      openingScene: openingScene.trim(),
+      openingSceneInPrompt: openingScene.trim().isNotEmpty
+          ? openingSceneInPrompt
+          : true,
     );
 
     await saveChat(session);

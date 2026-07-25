@@ -31,10 +31,13 @@ import '../services/settings_service.dart';
 import '../services/speaker_prefix.dart';
 import '../services/world_info_service.dart';
 import '../services/world_workshop_service.dart';
+import '../services/opening_scene_service.dart';
+import '../widgets/chat_lorebook_picker.dart';
 import '../widgets/create_character_from_chat_sheet.dart';
 import '../widgets/anima_avatar.dart';
 import '../widgets/greeting_picker.dart';
 import '../widgets/keyboard_inset.dart';
+import '../widgets/narrator_bubble.dart';
 import '../widgets/preset_picker.dart';
 import '../widgets/rp_rich_text.dart';
 import 'characters_screen.dart';
@@ -57,6 +60,7 @@ class ChatScreen extends StatefulWidget {
     required this.nanoGptService,
     required this.worldInfoService,
     required this.worldWorkshopService,
+    required this.openingSceneService,
     required this.appearanceController,
     required this.initialSession,
   });
@@ -70,6 +74,7 @@ class ChatScreen extends StatefulWidget {
   final NanoGptService nanoGptService;
   final WorldInfoService worldInfoService;
   final WorldWorkshopService worldWorkshopService;
+  final OpeningSceneService openingSceneService;
   final AppearanceController appearanceController;
   final ChatSession initialSession;
 
@@ -106,6 +111,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   String _lastSavedDraft = '';
 
   List<ChatMessage> get _messages => _session?.messages ?? const [];
+  String get _openingScene => (_session?.openingScene ?? '').trim();
+  bool get _hasOpeningScene => _openingScene.isNotEmpty;
   bool get _isGroup => _session?.isGroup == true;
   String get _userName => _persona?.name.trim().isNotEmpty == true
       ? _persona!.name.trim()
@@ -339,6 +346,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           nanoGptService: widget.nanoGptService,
           worldInfoService: widget.worldInfoService,
           worldWorkshopService: widget.worldWorkshopService,
+          openingSceneService: widget.openingSceneService,
           appearanceController: widget.appearanceController,
         ),
       ),
@@ -788,6 +796,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     final autoReply = _session!.autoReply;
     final speaker = _speakerForTurn();
+    final hadUser = _session!.messages.any((m) => m.isUser);
     final userMessage = ChatMessage(
       id: ChatMessage.newId(),
       role: ChatRole.user,
@@ -796,7 +805,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     setState(() {
       _error = null;
-      _session!.messages.add(userMessage);
+      var session = _session!;
+      session.messages.add(userMessage);
+      if (!hadUser &&
+          session.openingScene.trim().isNotEmpty &&
+          session.openingSceneInPrompt) {
+        session = session.copyWith(openingSceneInPrompt: false);
+      }
+      _session = session;
       if (autoReply) {
         _busy = true;
         _session!.messages.add(
@@ -1144,6 +1160,135 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _pickChatLorebooks() async {
+    final session = _session;
+    if (session == null || _busy) return;
+    final books = await widget.worldInfoService.loadBooks();
+    if (!mounted) return;
+    final result = await pickChatLorebooks(
+      context,
+      allBooks: books,
+      chatLorebookIds: session.lorebookIds,
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _session = result.useAppDefault
+          ? session.copyWith(clearLorebookIds: true)
+          : session.copyWith(lorebookIds: result.selectedIds);
+    });
+    await _persist();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          result.useAppDefault
+              ? 'This chat now uses your World Info default lorebooks.'
+              : result.selectedIds.isEmpty
+                  ? 'Global lorebooks turned off for this chat '
+                      '(character card lore still applies).'
+                  : '${result.selectedIds.length} lorebook'
+                      '${result.selectedIds.length == 1 ? '' : 's'} '
+                      'active for this chat.',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _editOpeningScene() async {
+    final session = _session;
+    if (session == null || _busy) return;
+    final controller = TextEditingController(text: session.openingScene);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Opening scene'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Narrator/setup prose shown at the top of this chat. '
+                  'Injected into prompts until you send a message or turn it off.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  minLines: 5,
+                  maxLines: 12,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: const InputDecoration(
+                    hintText: 'The scene opens on…',
+                    border: OutlineInputBorder(),
+                    alignLabelWithHint: true,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, ''),
+              child: const Text('Clear'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, controller.text.trim()),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      final trimmed = result.trim();
+      _session = session.copyWith(
+        openingScene: trimmed,
+        openingSceneInPrompt: trimmed.isNotEmpty,
+      );
+    });
+    await _persist();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          result.trim().isEmpty
+              ? 'Opening scene cleared.'
+              : 'Opening scene saved for this chat.',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _toggleOpeningSceneInjection() async {
+    final session = _session;
+    if (session == null || _busy || session.openingScene.trim().isEmpty) {
+      return;
+    }
+    final next = !session.openingSceneInPrompt;
+    setState(() {
+      _session = session.copyWith(openingSceneInPrompt: next);
+    });
+    await _persist();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          next
+              ? 'Opening scene will be injected into prompts again.'
+              : 'Opening scene hidden from prompts (still visible in chat).',
+        ),
+      ),
+    );
+  }
+
   Future<void> _editMemorySummary() async {
     final session = _session;
     if (session == null || _busy) return;
@@ -1236,6 +1381,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     try {
       final contextSettings = await widget.settingsService.getContextSettings();
+      final globalPrompts =
+          await widget.settingsService.getGlobalChatPromptSettings();
       final modelId = await widget.settingsService.getModel();
       final baseUrl = await widget.settingsService.getApiBaseUrl();
       int? modelContext;
@@ -1259,9 +1406,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               character.personality,
               character.scenario,
               character.systemPrompt,
+              globalPrompts.systemPrompt,
               _persona?.description ?? '',
             ].join('\n');
       final postApprox = [
+        globalPrompts.postHistoryInstructions,
         character?.postHistoryInstructions ?? '',
         session.authorsNote,
       ].join('\n');
@@ -1463,6 +1612,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           worldInfoService: widget.worldInfoService,
           settingsService: widget.settingsService,
           nanoGptService: widget.nanoGptService,
+          openingSceneService: widget.openingSceneService,
+          worldWorkshopService: widget.worldWorkshopService,
           existingSession: _session,
           preselectedIds: _session!.effectiveParticipantIds.toSet(),
         ),
@@ -1547,6 +1698,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           worldInfoService: widget.worldInfoService,
           settingsService: widget.settingsService,
           nanoGptService: widget.nanoGptService,
+          openingSceneService: widget.openingSceneService,
+          worldWorkshopService: widget.worldWorkshopService,
           preselectedIds: {if (_character != null) _character!.id},
         ),
       ),
@@ -1651,6 +1804,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
 
     final others = _participants.where((c) => c.id != character.id).toList();
+    final globalPrompts =
+        await widget.settingsService.getGlobalChatPromptSettings();
     final system = _promptBuilder.buildSystemPrompt(
       character: character,
       userName: userName,
@@ -1658,16 +1813,30 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       lore: lore,
       others: others,
       mode: mode,
+      globalSystemPrompt: globalPrompts.systemPrompt,
     );
     final postHistory = _promptBuilder.buildPostHistory(
       character: character,
       userName: userName,
       authorsNote: _session?.authorsNote ?? '',
+      globalPostHistory: globalPrompts.postHistoryInstructions,
     );
 
     final msgs = <Map<String, String>>[
       {'role': 'system', 'content': system},
     ];
+
+    final openingScene = (_session?.openingScene ?? '').trim();
+    if (openingScene.isNotEmpty && (_session?.openingSceneInPrompt ?? false)) {
+      final block = _promptBuilder.buildOpeningSceneBlock(
+        openingScene: openingScene,
+        charName: character.name,
+        userName: userName,
+      );
+      if (block.isNotEmpty) {
+        msgs.add({'role': 'system', 'content': block});
+      }
+    }
 
     final memory = (_session?.memorySummary ?? '').trim();
     if (memory.isNotEmpty) {
@@ -2136,6 +2305,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             onSelected: (value) {
               if (value == 'persona') _pickPersona();
               if (value == 'authors_note') _editAuthorsNote();
+              if (value == 'lorebooks') _pickChatLorebooks();
+              if (value == 'opening_scene') _editOpeningScene();
+              if (value == 'opening_inject') _toggleOpeningSceneInjection();
               if (value == 'memory') _editMemorySummary();
               if (value == 'summarize') _summarizeNow();
               if (value == 'context') _showContextEstimate();
@@ -2160,6 +2332,25 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 value: "authors_note",
                 child: Text("Author's Note"),
               ),
+              PopupMenuItem(
+                value: 'lorebooks',
+                child: Text(chatLorebookMenuLabel(_session?.lorebookIds)),
+              ),
+              PopupMenuItem(
+                value: 'opening_scene',
+                child: Text(
+                  _hasOpeningScene ? 'Opening scene' : 'Add opening scene',
+                ),
+              ),
+              if (_hasOpeningScene)
+                PopupMenuItem(
+                  value: 'opening_inject',
+                  child: Text(
+                    (_session?.openingSceneInPrompt ?? false)
+                        ? 'Stop injecting opening scene'
+                        : 'Inject opening scene in prompts',
+                  ),
+                ),
               PopupMenuItem(
                 value: 'memory',
                 child: Text(
@@ -2228,7 +2419,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 ),
               ),
             Expanded(
-              child: _messages.isEmpty && !_busy
+              child: _messages.isEmpty && !_busy && !_hasOpeningScene
                   ? _EmptyChat(
                       hasApiKey: _hasApiKey,
                       characterName: characterName,
@@ -2236,11 +2427,31 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       onOpenCharacters: _openCharacters,
                       onNewChat: _newChat,
                     )
-                  : ListView.builder(
+                  : CustomScrollView(
                       controller: _scrollController,
-                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-                      itemCount: _messages.length,
-                      itemBuilder: (context, index) {
+                      slivers: [
+                        if (_hasOpeningScene)
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                              child: NarratorBubble(
+                                text: _openingScene,
+                                injecting:
+                                    _session?.openingSceneInPrompt ?? false,
+                                onTap: _busy ? null : _editOpeningScene,
+                              ),
+                            ),
+                          ),
+                        SliverPadding(
+                          padding: EdgeInsets.fromLTRB(
+                            12,
+                            _hasOpeningScene ? 4 : 12,
+                            12,
+                            8,
+                          ),
+                          sliver: SliverList(
+                            delegate: SliverChildBuilderDelegate(
+                              (context, index) {
                         final message = _messages[index];
                         final isLast = index == _messages.length - 1;
                         final thinking =
@@ -2307,7 +2518,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                             nextGeneratesSwipe: canQuickSwipe,
                           ),
                         );
-                      },
+                              },
+                              childCount: _messages.length,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
             ),
             if (_error != null)

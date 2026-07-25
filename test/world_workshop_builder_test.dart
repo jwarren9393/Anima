@@ -7,6 +7,7 @@ import 'package:anima/models/global_lorebook.dart';
 import 'package:anima/models/lorebook.dart';
 import 'package:anima/models/persona.dart';
 import 'package:anima/models/world_workshop.dart';
+import 'package:anima/models/workshop_chat_import_options.dart';
 import 'package:anima/services/world_workshop_builder.dart';
 
 void main() {
@@ -400,16 +401,29 @@ Here is the card you asked for:
       );
     }
 
-    test('selectRecentMessages prefers uncovered after summary', () {
+    test('selectRecentMessages prefers newest when summary exists', () {
+      final many = <ChatMessage>[
+        for (var i = 0; i < 30; i++)
+          ChatMessage(
+            id: 'n$i',
+            role: i.isEven ? ChatRole.user : ChatRole.assistant,
+            text: 'Line $i',
+          ),
+      ];
       final recent = builder.selectRecentMessagesForImport(
-        sampleSession(summary: 'They smuggled crates.', covered: 1),
+        sampleSession(
+          summary: 'They smuggled crates.',
+          covered: 20,
+          messages: many,
+        ),
+        keepRecent: 10,
       );
-      expect(recent, hasLength(2));
-      expect(recent.first.text, contains('slip past'));
-      expect(recent.last.speakerName, 'Captain Vex');
+      expect(recent, hasLength(10));
+      expect(recent.first.text, 'Line 20');
+      expect(recent.last.text, 'Line 29');
     });
 
-    test('selectRecentMessages falls back when no summary', () {
+    test('selectRecentMessages keeps last N without summary', () {
       final many = <ChatMessage>[
         for (var i = 0; i < 50; i++)
           ChatMessage(
@@ -421,10 +435,45 @@ Here is the card you asked for:
       ];
       final recent = builder.selectRecentMessagesForImport(
         sampleSession(messages: many),
+        keepRecent: 10,
       );
-      expect(recent, hasLength(WorldWorkshopBuilder.importFallbackRecent));
-      expect(recent.first.text, 'Line 10');
+      expect(recent, hasLength(10));
+      expect(recent.first.text, 'Line 40');
       expect(recent.last.text, 'Line 49');
+    });
+
+    test('import options can omit lore and characters', () {
+      final source = builder.buildImportedChatSource(
+        session: sampleSession(summary: 'Dock heist in progress.', covered: 1),
+        characters: const [
+          Character(
+            id: 'char_a',
+            name: 'Mira',
+            description: 'Dock smuggler',
+          ),
+        ],
+        linkedLorebooks: const [
+          GlobalLorebook(
+            id: 'lore_1',
+            book: Lorebook(
+              name: 'Harbor',
+              entries: [
+                LorebookEntry(id: 1, keys: ['harbor'], content: 'Salt.'),
+              ],
+            ),
+          ),
+        ],
+        options: const WorkshopChatImportOptions(
+          includeCharacters: false,
+          includeGlobalLorebooks: false,
+          includeEmbeddedCharacterLore: false,
+          includePersona: false,
+        ),
+      );
+      expect(source.charactersText, isEmpty);
+      expect(source.loreReferenceText, isEmpty);
+      expect(source.personaText, isEmpty);
+      expect(source.importProfile, isNotEmpty);
     });
 
     test('buildImportedChatSource packs cards, persona, lore, speakers', () {
@@ -473,6 +522,10 @@ Here is the card you asked for:
           ),
         ],
         skippedNotes: const ['Character id char_missing (deleted)'],
+        options: const WorkshopChatImportOptions(
+          includeGlobalLorebooks: true,
+          includeEmbeddedCharacterLore: true,
+        ),
       );
 
       expect(source.hasContent, isTrue);

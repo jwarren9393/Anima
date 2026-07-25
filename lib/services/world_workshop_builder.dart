@@ -6,6 +6,7 @@ import '../models/chat_session.dart';
 import '../models/global_lorebook.dart';
 import '../models/lorebook.dart';
 import '../models/persona.dart';
+import '../models/workshop_chat_import_options.dart';
 import '../models/world_workshop.dart';
 import 'character_card_codec.dart';
 import 'settings_service.dart';
@@ -32,11 +33,12 @@ class WorldWorkshopBuilder {
 
   final CharacterCardCodec _cardCodec;
 
-  /// Newest raw messages kept when a memory summary already covers the rest.
-  static const importKeepWhenCovered = 12;
+  /// Newest raw messages kept when seeding a workshop from a saved chat.
+  /// Matches [ContextSettings.defaultKeepRecent] / Summarize “keep recent”.
+  static const importKeepRecentDefault = 10;
 
-  /// Cap for recent raw messages when a chat has no memory summary yet.
-  static const importFallbackRecent = 40;
+  /// Legacy cap when no memory summary exists (same as [importKeepRecentDefault]).
+  static const importFallbackRecent = importKeepRecentDefault;
 
   /// Recent messages sent to live-chat character generation (smaller = faster).
   static const characterGenRecentMessages = 24;
@@ -66,6 +68,10 @@ Your job in this chat:
   ask you for JSON later.
 - Do NOT dump finished character-card JSON unless they ask. The app has a
   separate "Create characters" action for that.
+- Opening scene prose is NOT stored in the lorebook. The app has a dedicated
+  Opening scene field (Create opening scene button). When the user describes
+  how the story should begin, help them shape it and remind them to save it
+  there — do not bury opening narration only in lore entries.
 ${imported.isEmpty ? '' : '''
 - An existing roleplay chat was imported below as read-only source material.
   Use it to propose a NEW lorebook and optional NEW characters. Do not treat
@@ -98,43 +104,81 @@ unless the user asks for depth.
     Persona? persona,
     List<GlobalLorebook> linkedLorebooks = const [],
     List<String> skippedNotes = const [],
+    WorkshopChatImportOptions options = WorkshopChatImportOptions.defaults,
   }) {
-    final recent = selectRecentMessagesForImport(session);
+    final keepRecent = options.keepRecent.clamp(1, 80);
+    final recent = selectRecentMessagesForImport(
+      session,
+      keepRecent: keepRecent,
+      includeRecentMessages: options.includeRecentMessages,
+    );
+    final totalMessages = session.messages
+        .where((m) => m.text.trim().isNotEmpty)
+        .length;
     final userName = persona?.name.trim().isNotEmpty == true
         ? persona!.name.trim()
         : 'User';
-    final characterNames = [
-      for (final c in characters)
-        if (c.name.trim().isNotEmpty) c.name.trim(),
-    ];
-    final loreNames = [
-      for (final g in linkedLorebooks)
-        if (g.displayName.trim().isNotEmpty) g.displayName.trim(),
-    ];
+    final characterNames = options.includeCharacters
+        ? [
+            for (final c in characters)
+              if (c.name.trim().isNotEmpty) c.name.trim(),
+          ]
+        : <String>[];
+    final loreNames = options.includeGlobalLorebooks
+        ? [
+            for (final g in linkedLorebooks)
+              if (g.displayName.trim().isNotEmpty) g.displayName.trim(),
+          ]
+        : <String>[];
+
+    final embeddedLoreCount = options.includeEmbeddedCharacterLore
+        ? characters
+            .where((c) => (c.lorebook?.entries.isNotEmpty ?? false))
+            .length
+        : 0;
 
     return WorkshopSourceContext(
       chatId: session.id,
       chatTitle: session.title.trim().isEmpty ? 'Chat' : session.title.trim(),
       isGroup: session.isGroup,
-      memorySummary: session.memorySummary.trim(),
+      memorySummary: options.includeMemorySummary
+          ? session.memorySummary.trim()
+          : '',
       recentTranscript: formatRoleplayTranscript(
         recent,
         userName: userName,
       ),
       recentMessageCount: recent.length,
-      charactersText: formatCharactersForImport(characters),
+      charactersText: options.includeCharacters
+          ? formatCharactersForImport(characters)
+          : '',
       characterNames: characterNames,
-      personaText: formatPersonaForImport(persona),
-      personaName: persona?.name.trim().isEmpty == false
+      personaText: options.includePersona
+          ? formatPersonaForImport(persona)
+          : '',
+      personaName: options.includePersona &&
+              persona?.name.trim().isNotEmpty == true
           ? persona!.name.trim()
           : null,
       loreReferenceText: formatLorebooksForImport(
-        linkedLorebooks: linkedLorebooks,
-        characters: characters,
+        linkedLorebooks:
+            options.includeGlobalLorebooks ? linkedLorebooks : const [],
+        characters: options.includeEmbeddedCharacterLore ? characters : const [],
       ),
       lorebookNames: loreNames,
-      authorsNote: session.authorsNote.trim(),
+      authorsNote:
+          options.includeAuthorsNote ? session.authorsNote.trim() : '',
+      openingScene:
+          options.includeOpeningScene ? session.openingScene.trim() : '',
       skippedNotes: skippedNotes,
+      importProfile: options.summaryLine(
+        totalMessages: totalMessages,
+        recentCount: recent.length,
+        hasMemory: session.memorySummary.trim().isNotEmpty,
+        globalLoreCount: linkedLorebooks.length,
+        embeddedLoreCount: embeddedLoreCount,
+      ),
+      totalMessageCount: totalMessages,
     );
   }
 
@@ -168,7 +212,10 @@ unless the user asks for depth.
       loreReferenceText: full.loreReferenceText,
       lorebookNames: full.lorebookNames,
       authorsNote: full.authorsNote,
+      openingScene: full.openingScene,
       skippedNotes: full.skippedNotes,
+      importProfile: full.importProfile,
+      totalMessageCount: full.totalMessageCount,
     );
   }
 
@@ -358,33 +405,23 @@ $transcriptBlock
     ];
   }
 
-  /// Full workshop transcript as plain `User:` / `Assistant:` text.
-  List<ChatMessage> selectRecentMessagesForImport(ChatSession session) {
+  /// Recent roleplay lines for workshop import — same trim as Summarize:
+  /// newest [keepRecent] messages only (not every uncovered line).
+  List<ChatMessage> selectRecentMessagesForImport(
+    ChatSession session, {
+    int keepRecent = importKeepRecentDefault,
+    bool includeRecentMessages = true,
+  }) {
+    if (!includeRecentMessages) return const [];
+
     final all = session.messages;
     final end = all.length;
     if (end == 0) return const [];
 
-    final hasSummary = session.memorySummary.trim().isNotEmpty;
+    final keep = keepRecent.clamp(1, 80);
     final recent = <ChatMessage>[];
 
-    if (hasSummary) {
-      final covered = session.memoryCoveredCount.clamp(0, end);
-      for (var i = covered; i < end; i++) {
-        if (all[i].text.trim().isEmpty) continue;
-        recent.add(all[i]);
-      }
-      if (recent.isEmpty) {
-        for (var i = end - 1;
-            i >= 0 && recent.length < importKeepWhenCovered;
-            i--) {
-          if (all[i].text.trim().isEmpty) continue;
-          recent.insert(0, all[i]);
-        }
-      }
-      return recent;
-    }
-
-    for (var i = end - 1; i >= 0 && recent.length < importFallbackRecent; i--) {
+    for (var i = end - 1; i >= 0 && recent.length < keep; i--) {
       if (all[i].text.trim().isEmpty) continue;
       recent.insert(0, all[i]);
     }
@@ -980,6 +1017,87 @@ ${formatTranscript(conversation)}
       {'role': 'system', 'content': system},
       {'role': 'user', 'content': user},
     ];
+  }
+
+  /// Build NanoGPT messages to extract opening scene prose from a workshop.
+  List<Map<String, String>> buildOpeningSceneExportMessages({
+    required List<ChatMessage> conversation,
+    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+    Lorebook? sourceLorebook,
+    WorkshopSourceContext? importedSource,
+    String existingOpeningScene = '',
+  }) {
+    final guidance = guidanceNote.trim().isEmpty
+        ? CollaboratorSettings.defaultGuidanceNote
+        : guidanceNote.trim();
+    final existing = existingOpeningScene.trim();
+
+    final system =
+        '''
+You convert a world-building conversation into ONE opening scene for a roleplay chat.
+
+An opening scene is narrator/setup prose shown once at the start of a chat — NOT a
+character's first line, NOT a lorebook entry, and NOT a scenario card field.
+
+Guidance note (follow closely):
+$guidance
+
+Output rules:
+- Reply with ONLY a single JSON object. No markdown fences. No preamble.
+- Shape: {"openingScene": "..."}
+- Write in third-person or omniscient narrator voice (stage-direction style is fine).
+- Set the moment, place, mood, and what is happening when the story begins.
+- Do NOT write dialogue as the character's official first message.
+- Keep it readable on a phone (roughly 80–400 words unless the user asked for more).
+- Preserve established facts. Do not sanitize or moralize.
+${existing.isEmpty ? '' : '- Revise the existing opening scene below when the user asked for changes.'}
+'''
+            .trim();
+
+    final source = formatLorebookContext(sourceLorebook);
+    final imported = _importedBlock(importedSource);
+    final user =
+        '''
+$imported${source.isEmpty ? '' : '''
+Use this linked lorebook as source material:
+
+$source
+
+'''}${existing.isEmpty ? '' : '''
+Current opening scene (revise when appropriate):
+
+$existing
+
+'''}Extract or write the opening scene from the linked lorebook, imported chat source, and workshop conversation:
+
+${formatTranscript(conversation)}
+'''
+            .trim();
+
+    return [
+      {'role': 'system', 'content': system},
+      {'role': 'user', 'content': user},
+    ];
+  }
+
+  /// Parse model output into opening-scene prose. Throws [FormatException].
+  String parseOpeningSceneJson(String raw) {
+    final map = _extractJsonObject(
+      raw,
+      emptyMessage: 'The AI returned an empty opening scene.',
+      missingMessage:
+          'Could not find opening scene JSON in the AI reply. Try Create opening scene again.',
+      notObjectMessage: 'Opening scene JSON must be an object.',
+    );
+    final text = (map['openingScene'] ?? map['opening_scene'] ?? '')
+        .toString()
+        .trim();
+    if (text.isEmpty) {
+      throw const FormatException(
+        'The AI returned an opening scene with no text. Try chatting a bit more, then Create again.',
+      );
+    }
+    return text;
   }
 
   /// Parse model output into a [Lorebook]. Throws [FormatException] on failure.

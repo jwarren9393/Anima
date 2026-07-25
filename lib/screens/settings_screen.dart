@@ -6,6 +6,7 @@ import '../services/character_category_service.dart';
 import '../services/character_service.dart';
 import '../services/chat_service.dart';
 import '../services/nanogpt_service.dart';
+import '../services/opening_scene_service.dart';
 import '../services/persona_service.dart';
 import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
@@ -16,7 +17,9 @@ import 'backup_restore_screen.dart';
 import 'characters_screen.dart';
 import 'collaborator_settings_screen.dart';
 import 'character_build_settings_screen.dart';
+import 'global_chat_prompts_screen.dart';
 import 'lore_settings_screen.dart';
+import 'opening_scenes_screen.dart';
 import 'personas_screen.dart';
 import 'sampling_settings_screen.dart';
 import 'world_workshop_list_screen.dart';
@@ -34,6 +37,7 @@ class SettingsScreen extends StatelessWidget {
     required this.nanoGptService,
     required this.worldInfoService,
     required this.worldWorkshopService,
+    required this.openingSceneService,
     required this.appearanceController,
   });
 
@@ -46,6 +50,7 @@ class SettingsScreen extends StatelessWidget {
   final NanoGptService nanoGptService;
   final WorldInfoService worldInfoService;
   final WorldWorkshopService worldWorkshopService;
+  final OpeningSceneService openingSceneService;
   final AppearanceController appearanceController;
 
   Future<void> _openAppearance(BuildContext context) async {
@@ -109,6 +114,19 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
           _SettingsTile(
+            icon: Icons.auto_stories_outlined,
+            title: 'Opening scenes',
+            subtitle: 'Saved narrator setups for new chats (incl. Creation Center)',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => OpeningScenesScreen(
+                  openingSceneService: openingSceneService,
+                  workshopService: worldWorkshopService,
+                ),
+              ),
+            ),
+          ),
+          _SettingsTile(
             icon: Icons.menu_book,
             title: 'World Info & lore',
             subtitle: 'Global lorebooks, scan depth, character books',
@@ -134,10 +152,14 @@ class SettingsScreen extends StatelessWidget {
                   workshopService: worldWorkshopService,
                   worldInfoService: worldInfoService,
                   characterService: characterService,
+                  characterCategoryService: characterCategoryService,
                   personaService: personaService,
                   chatService: chatService,
+                  apiKeyService: apiKeyService,
                   settingsService: settingsService,
                   nanoGptService: nanoGptService,
+                  openingSceneService: openingSceneService,
+                  appearanceController: appearanceController,
                 ),
               ),
             ),
@@ -150,6 +172,18 @@ class SettingsScreen extends StatelessWidget {
               MaterialPageRoute(
                 builder: (_) =>
                     SamplingSettingsScreen(settingsService: settingsService),
+              ),
+            ),
+          ),
+          _SettingsTile(
+            icon: Icons.article_outlined,
+            title: 'Global chat prompts',
+            subtitle: 'System prompt + post-history for every chat',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => GlobalChatPromptsScreen(
+                  settingsService: settingsService,
+                ),
               ),
             ),
           ),

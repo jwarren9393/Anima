@@ -20,6 +20,9 @@ class WorkshopSourceContext {
     this.lorebookNames = const [],
     this.authorsNote = '',
     this.skippedNotes = const [],
+    this.openingScene = '',
+    this.importProfile = '',
+    this.totalMessageCount = 0,
   });
 
   final String chatId;
@@ -36,6 +39,13 @@ class WorkshopSourceContext {
   final List<String> lorebookNames;
   final String authorsNote;
   final List<String> skippedNotes;
+  final String openingScene;
+
+  /// Human-readable note of what was included at import time.
+  final String importProfile;
+
+  /// Total non-empty messages in the source chat (for context).
+  final int totalMessageCount;
 
   bool get hasContent =>
       memorySummary.trim().isNotEmpty ||
@@ -43,7 +53,8 @@ class WorkshopSourceContext {
       charactersText.trim().isNotEmpty ||
       personaText.trim().isNotEmpty ||
       loreReferenceText.trim().isNotEmpty ||
-      authorsNote.trim().isNotEmpty;
+      authorsNote.trim().isNotEmpty ||
+      openingScene.trim().isNotEmpty;
 
   /// One-line summary for list tiles / source cards.
   String get compactSummary {
@@ -69,6 +80,9 @@ class WorkshopSourceContext {
         '${lorebookNames.length == 1 ? '' : 's'}',
       );
     }
+    if (openingScene.trim().isNotEmpty) {
+      bits.add('opening scene');
+    }
     if (bits.isEmpty) return 'Imported chat source';
     return bits.join(' · ');
   }
@@ -86,6 +100,15 @@ class WorkshopSourceContext {
       buffer.writeln();
       buffer.writeln('Author\'s Note:');
       buffer.writeln(authorsNote.trim());
+    }
+    if (openingScene.trim().isNotEmpty) {
+      buffer.writeln();
+      buffer.writeln('Opening scene (narrator setup at story start):');
+      buffer.writeln(openingScene.trim());
+    }
+    if (importProfile.trim().isNotEmpty) {
+      buffer.writeln();
+      buffer.writeln('Import profile: ${importProfile.trim()}');
     }
     if (personaText.trim().isNotEmpty) {
       buffer.writeln();
@@ -137,6 +160,9 @@ class WorkshopSourceContext {
         if (lorebookNames.isNotEmpty) 'lorebookNames': lorebookNames,
         if (authorsNote.trim().isNotEmpty) 'authorsNote': authorsNote,
         if (skippedNotes.isNotEmpty) 'skippedNotes': skippedNotes,
+        if (openingScene.trim().isNotEmpty) 'openingScene': openingScene,
+        if (importProfile.trim().isNotEmpty) 'importProfile': importProfile,
+        if (totalMessageCount > 0) 'totalMessageCount': totalMessageCount,
       };
 
   factory WorkshopSourceContext.fromJson(Map<String, dynamic> json) {
@@ -168,6 +194,10 @@ class WorkshopSourceContext {
       lorebookNames: stringList(json['lorebookNames']),
       authorsNote: '${json['authorsNote'] ?? ''}'.trim(),
       skippedNotes: stringList(json['skippedNotes']),
+      openingScene: '${json['openingScene'] ?? ''}'.trim(),
+      importProfile: '${json['importProfile'] ?? ''}'.trim(),
+      totalMessageCount:
+          (json['totalMessageCount'] as num?)?.toInt().clamp(0, 100000) ?? 0,
     );
   }
 }
@@ -181,6 +211,7 @@ class WorldWorkshop {
     required this.updatedAt,
     this.exportedLorebookId,
     this.importedSource,
+    this.openingScene = '',
   });
 
   final String id;
@@ -198,6 +229,9 @@ class WorldWorkshop {
   /// Optional seed from an existing roleplay chat (read-only reference).
   final WorkshopSourceContext? importedSource;
 
+  /// Narrator-style opening prose for roleplay chats started from this workshop.
+  final String openingScene;
+
   WorldWorkshop copyWith({
     String? id,
     String? title,
@@ -207,6 +241,7 @@ class WorldWorkshop {
     bool clearExportedLorebookId = false,
     WorkshopSourceContext? importedSource,
     bool clearImportedSource = false,
+    String? openingScene,
   }) {
     return WorldWorkshop(
       id: id ?? this.id,
@@ -219,6 +254,7 @@ class WorldWorkshop {
       importedSource: clearImportedSource
           ? null
           : (importedSource ?? this.importedSource),
+      openingScene: openingScene ?? this.openingScene,
     );
   }
 
@@ -230,6 +266,7 @@ class WorldWorkshop {
         if (exportedLorebookId != null && exportedLorebookId!.isNotEmpty)
           'exportedLorebookId': exportedLorebookId,
         if (importedSource != null) 'importedSource': importedSource!.toJson(),
+        if (openingScene.trim().isNotEmpty) 'openingScene': openingScene,
       };
 
   factory WorldWorkshop.fromJson(Map<String, dynamic> json) {
@@ -270,6 +307,7 @@ class WorldWorkshop {
               ? null
               : ('${json['exportedLorebookId']}').trim(),
       importedSource: imported,
+      openingScene: (json['openingScene'] as String? ?? '').trim(),
     );
   }
 

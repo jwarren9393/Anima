@@ -7,6 +7,7 @@ import 'services/character_category_service.dart';
 import 'services/character_service.dart';
 import 'services/chat_service.dart';
 import 'services/nanogpt_service.dart';
+import 'services/opening_scene_service.dart';
 import 'services/persona_service.dart';
 import 'services/settings_service.dart';
 import 'services/world_info_service.dart';
@@ -26,6 +27,7 @@ void main() {
   final nanoGptService = NanoGptService(apiKeyService: apiKeyService);
   final worldInfoService = WorldInfoService();
   final worldWorkshopService = WorldWorkshopService();
+  final openingSceneService = OpeningSceneService();
   final appearanceController = AppearanceController(
     settingsService: settingsService,
   );
@@ -41,6 +43,7 @@ void main() {
       nanoGptService: nanoGptService,
       worldInfoService: worldInfoService,
       worldWorkshopService: worldWorkshopService,
+      openingSceneService: openingSceneService,
       appearanceController: appearanceController,
     ),
   );
@@ -58,6 +61,7 @@ class AnimaApp extends StatefulWidget {
     required this.nanoGptService,
     required this.worldInfoService,
     required this.worldWorkshopService,
+    required this.openingSceneService,
     required this.appearanceController,
   });
 
@@ -70,6 +74,7 @@ class AnimaApp extends StatefulWidget {
   final NanoGptService nanoGptService;
   final WorldInfoService worldInfoService;
   final WorldWorkshopService worldWorkshopService;
+  final OpeningSceneService openingSceneService;
   final AppearanceController appearanceController;
 
   @override
@@ -124,6 +129,7 @@ class _AnimaAppState extends State<AnimaApp> {
         nanoGptService: widget.nanoGptService,
         worldInfoService: widget.worldInfoService,
         worldWorkshopService: widget.worldWorkshopService,
+        openingSceneService: widget.openingSceneService,
         appearanceController: widget.appearanceController,
       ),
     );
