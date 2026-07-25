@@ -26,7 +26,7 @@ class SyncTarget {
     }
     final uri = contentUri?.trim();
     if (uri != null && uri.isNotEmpty) {
-      return 'Google Drive sync file';
+      return 'Google Drive sync folder';
     }
     return 'Not set';
   }

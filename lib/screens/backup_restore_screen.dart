@@ -514,8 +514,9 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                 ? 'On Windows, pick a file inside your Google Drive folder '
                     '(e.g. anima-sync.anima-backup). Push updates it in place — '
                     'no delete-and-reupload.'
-                : 'On your phone, choose the same sync file in Google Drive once. '
-                    'Push updates that file; Pull when you switch devices.',
+                : 'On your phone, choose the Google Drive folder for sync '
+                    '(Create sync file makes anima-sync.anima-backup there). '
+                    'Push overwrites that file; Pull when you switch devices.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -548,7 +549,9 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
           OutlinedButton.icon(
             onPressed: _busy ? null : _chooseSyncFile,
             icon: const Icon(Icons.insert_drive_file_outlined),
-            label: const Text('Choose sync file'),
+            label: Text(
+              Platform.isAndroid ? 'Choose sync folder' : 'Choose sync file',
+            ),
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(

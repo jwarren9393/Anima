@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:saf/saf.dart';
+// ignore: implementation_imports
+import 'package:saf/src/storage_access_framework/api.dart' as saf_legacy;
 
 import '../models/sync_target.dart';
 import 'app_backup_service.dart';
@@ -35,14 +37,14 @@ class SyncService {
   Future<SyncTarget?> chooseExistingSyncFile() async {
     if (Platform.isAndroid) {
       final saf = Saf();
-      final doc = await saf.pickFile(
-        mimeTypes: const ['application/json', '*/*'],
+      final dir = await saf.pickDirectory(
+        writePermission: true,
         persistablePermission: true,
       );
-      if (doc == null) return null;
-      await settingsService.saveSyncContentUri(doc.uri);
+      if (dir == null) return null;
+      await settingsService.saveSyncContentUri(dir.uri);
       await settingsService.saveSyncFilePath(null);
-      return SyncTarget(contentUri: doc.uri);
+      return SyncTarget(contentUri: dir.uri);
     }
 
     final pick = await FilePicker.platform.pickFiles(
@@ -81,7 +83,7 @@ class SyncService {
         bundle.bytes,
         overwrite: true,
       );
-      await settingsService.saveSyncContentUri(doc.uri);
+      await settingsService.saveSyncContentUri(dir.uri);
       await settingsService.saveSyncFilePath(null);
       return SyncTarget(contentUri: doc.uri);
     }
@@ -163,8 +165,7 @@ class SyncService {
       if (!Platform.isAndroid) {
         throw SyncException('This device uses a file path for sync, not a URI.');
       }
-      final saf = Saf();
-      return saf.readFileBytes(uri);
+      return _readAndroidBytes(uri);
     }
 
     throw SyncException('Choose a sync file first.');
@@ -183,15 +184,74 @@ class SyncService {
       if (!Platform.isAndroid) {
         throw SyncException('This device uses a file path for sync, not a URI.');
       }
-      final saf = Saf();
-      await saf.withFileDescriptor(uri, 'w', (fd) async {
-        final file = File(fd.path);
-        await file.writeAsBytes(bytes, flush: true);
-      });
+      await _writeAndroidBytes(uri, bytes);
       return;
     }
 
     throw SyncException('Choose a sync file first.');
+  }
+
+  Future<Uint8List> _readAndroidBytes(String uri) async {
+    final saf = Saf();
+    final meta = await saf.stat(uri);
+    if (meta == null) {
+      throw SyncException(
+        'Sync file is no longer accessible. Choose the sync folder again.',
+      );
+    }
+
+    if (meta.isDir) {
+      final file = await saf_legacy.findFile(
+        Uri.parse(uri),
+        defaultFileName,
+      );
+      if (file == null) {
+        throw SyncException(
+          '“$defaultFileName” was not found in the sync folder. '
+          'Create sync file or Push from another device first.',
+        );
+      }
+      return saf.readFileBytes(file.uri.toString());
+    }
+
+    return saf.readFileBytes(uri);
+  }
+
+  Future<void> _writeAndroidBytes(String uri, Uint8List bytes) async {
+    final saf = Saf();
+    final meta = await saf.stat(uri);
+    if (meta == null) {
+      throw SyncException(
+        'Sync file is no longer accessible. Choose the sync folder again.',
+      );
+    }
+
+    if (meta.isDir) {
+      await saf.writeFileBytes(
+        uri,
+        defaultFileName,
+        mimeType,
+        bytes,
+        overwrite: true,
+      );
+      return;
+    }
+
+    // Legacy: user picked a single file — overwrite via parent folder + name.
+    final parent = await saf_legacy.parentFile(Uri.parse(uri));
+    if (parent == null) {
+      throw SyncException(
+        'Could not update the sync file. Tap the link icon and choose the '
+        'Google Drive folder again (not the file itself).',
+      );
+    }
+    await saf.writeFileBytes(
+      parent.uri.toString(),
+      meta.name,
+      mimeType,
+      bytes,
+      overwrite: true,
+    );
   }
 
   String _ensureBackupExtension(String path) {
