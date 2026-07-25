@@ -60,7 +60,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-25  
-**Last agent action:** Published **v1.0.0 build 15** — desktop Enter-to-send, scroll-on-open fix, Creation Center no stream-scroll, Windows Wispr Flow paste fix.
+**Last agent action:** Published **v1.0.0 build 16** — fixes Backspace after Wispr Flow paste on Windows (stuck modifier cleanup).
 
 ### What works today
 
@@ -279,8 +279,7 @@ lib/
   utils/
     platform_utils.dart           Desktop platform detection (Windows / Linux / macOS)
     scroll_to_end.dart            Retry scroll-to-bottom for lazy chat lists
-    windows_key_injector.dart     Windows synthesized Ctrl+V key-event fix
-    windows_paste_handler.dart    Windows Ctrl+V / Shift+Insert paste into focused fields
+    windows_paste_handler.dart    Windows Ctrl+V / Shift+Insert paste + modifier cleanup
   services/
     api_key_service.dart          Secure storage for NanoGPT API key
     settings_service.dart         Model, image model, sampling, context, lore, Theme Studio, collaborator (+ legacy persona migrate)

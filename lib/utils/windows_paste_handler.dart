@@ -1,3 +1,4 @@
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -20,6 +21,35 @@ bool isWindowsPasteShortcut({
     return true;
   }
   return false;
+}
+
+/// Modifier keys Wispr Flow / clipboard tools often leave "down" after a
+/// synthetic Ctrl+V paste on Windows Flutter builds.
+const _pasteModifierKeys = <(PhysicalKeyboardKey, LogicalKeyboardKey)>[
+  (PhysicalKeyboardKey.controlLeft, LogicalKeyboardKey.controlLeft),
+  (PhysicalKeyboardKey.controlRight, LogicalKeyboardKey.controlRight),
+  (PhysicalKeyboardKey.metaLeft, LogicalKeyboardKey.metaLeft),
+  (PhysicalKeyboardKey.metaRight, LogicalKeyboardKey.metaRight),
+  (PhysicalKeyboardKey.altLeft, LogicalKeyboardKey.altLeft),
+  (PhysicalKeyboardKey.altRight, LogicalKeyboardKey.altRight),
+  (PhysicalKeyboardKey.shiftLeft, LogicalKeyboardKey.shiftLeft),
+  (PhysicalKeyboardKey.shiftRight, LogicalKeyboardKey.shiftRight),
+];
+
+/// Release modifier keys Flutter still thinks are held after synthetic paste.
+void releaseStuckPasteModifiers(HardwareKeyboard keyboard) {
+  final pressed = keyboard.logicalKeysPressed;
+  for (final (physical, logical) in _pasteModifierKeys) {
+    if (!pressed.contains(logical)) continue;
+    keyboard.handleKeyEvent(
+      KeyUpEvent(
+        physicalKey: physical,
+        logicalKey: logical,
+        timeStamp: Duration.zero,
+        synthesized: true,
+      ),
+    );
+  }
 }
 
 /// Routes Ctrl+V / Shift+Insert directly to the focused field on Windows.
@@ -60,5 +90,14 @@ class WindowsPasteHandler {
     if (editable == null) return;
 
     await editable.pasteText(SelectionChangedCause.keyboard);
+    _clearStuckModifiers();
+  }
+
+  static void _clearStuckModifiers() {
+    final keyboard = HardwareKeyboard.instance;
+    releaseStuckPasteModifiers(keyboard);
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      releaseStuckPasteModifiers(keyboard);
+    });
   }
 }

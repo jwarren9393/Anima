@@ -17,13 +17,11 @@ import 'services/world_info_service.dart';
 import 'services/world_workshop_service.dart';
 import 'theme/anima_theme.dart';
 import 'theme/glass_backdrop.dart';
-import 'utils/windows_key_injector.dart';
 import 'utils/windows_paste_handler.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   if (!kIsWeb && Platform.isWindows) {
-    WindowsKeyInjector.install();
     WindowsPasteHandler.install();
   }
 
