@@ -219,8 +219,9 @@ class SettingsScreen extends StatelessWidget {
           ),
           _SettingsTile(
             icon: Icons.backup,
-            title: 'Backup & restore',
-            subtitle: 'Export or replace chats, characters, settings…',
+            title: 'Backup, restore & sync',
+            subtitle:
+                'Push / pull one Google Drive file between phone and desktop',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => BackupRestoreScreen(

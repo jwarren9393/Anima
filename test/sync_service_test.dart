@@ -1,0 +1,134 @@
+import 'dart:io';
+
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
+
+import 'package:anima/services/app_backup_service.dart';
+import 'package:anima/services/settings_service.dart';
+import 'package:anima/services/sync_service.dart';
+
+class _MemorySecureStorage extends FlutterSecureStorage {
+  final Map<String, String> _store = {};
+
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    if (value == null) {
+      _store.remove(key);
+    } else {
+      _store[key] = value;
+    }
+  }
+
+  @override
+  Future<String?> read({
+    required String key,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async =>
+      _store[key];
+
+  @override
+  Future<void> delete({
+    required String key,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    _store.remove(key);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => Future.value(null);
+}
+
+void main() {
+  late Directory tempDir;
+  late Directory syncDir;
+  late Map<String, String> prefs;
+  late AppBackupService backupService;
+  late SettingsService settings;
+  late SyncService syncService;
+
+  setUp(() async {
+    tempDir = await Directory.systemTemp.createTemp('anima_sync_docs_');
+    syncDir = await Directory.systemTemp.createTemp('anima_sync_file_');
+    prefs = {'nanogpt_model': 'test/model'};
+    backupService = AppBackupService(
+      documentsDirectory: () async => tempDir,
+      loadPreferences: () async => Map<String, String>.from(prefs),
+      savePreferences: (values) async {
+        prefs
+          ..clear()
+          ..addAll(values);
+      },
+    );
+    settings = SettingsService(storage: _MemorySecureStorage());
+    syncService = SyncService(
+      settingsService: settings,
+      backupService: backupService,
+    );
+    await File(p.join(tempDir.path, 'anima_chats.json')).writeAsString(
+      '{"sessions":[{"id":"s1","characterId":"c1","messages":[]}]}',
+    );
+  });
+
+  tearDown(() async {
+    if (await tempDir.exists()) await tempDir.delete(recursive: true);
+    if (await syncDir.exists()) await syncDir.delete(recursive: true);
+  });
+
+  test('push overwrites the same desktop sync file', () async {
+    final syncPath = p.join(syncDir.path, SyncService.defaultFileName);
+    await File(syncPath).writeAsString('{"format":"anima_backup_v1","files":{}}');
+
+    await settings.saveSyncFilePath(syncPath);
+    final first = await syncService.push();
+    expect(first.summary.fileCount, greaterThan(0));
+
+    final inspected = await backupService.inspectBackup(
+      await File(syncPath).readAsBytes(),
+    );
+    expect(inspected.summary.fileCount, greaterThan(0));
+
+    await File(p.join(tempDir.path, 'anima_characters.json'))
+        .writeAsString('[{"id":"c2","name":"Nova"}]');
+    await syncService.push();
+    final again = await backupService.inspectBackup(
+      await File(syncPath).readAsBytes(),
+    );
+    expect(again.files['anima_characters.json'], contains('Nova'));
+  });
+
+  test('pull restores from desktop sync file', () async {
+    final bundle = await backupService.createBackup();
+    final syncPath = p.join(syncDir.path, 'handoff.anima-backup');
+    await File(syncPath).writeAsBytes(bundle.bytes);
+    await settings.saveSyncFilePath(syncPath);
+
+    await File(p.join(tempDir.path, 'anima_chats.json'))
+        .writeAsString('{"sessions":[]}');
+    final result = await syncService.pull();
+    expect(result.summary.fileCount, greaterThan(0));
+
+    final chats =
+        await File(p.join(tempDir.path, 'anima_chats.json')).readAsString();
+    expect(chats, contains('s1'));
+  });
+}

@@ -6,10 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../models/sync_target.dart';
 import '../services/app_backup_service.dart';
 import '../services/appearance_controller.dart';
 import '../services/persona_service.dart';
 import '../services/settings_service.dart';
+import '../services/sync_service.dart';
 
 /// Export / restore all Anima data (except the API key) as one file.
 class BackupRestoreScreen extends StatefulWidget {
@@ -37,8 +39,33 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         settingsService: widget.settingsService,
         personaService: widget.personaService,
       );
+  late final SyncService _sync = SyncService(
+    settingsService: widget.settingsService,
+    backupService: _backup,
+  );
 
   bool _busy = false;
+  SyncTarget _syncTarget = const SyncTarget();
+  DateTime? _lastPush;
+  DateTime? _lastPull;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSyncStatus();
+  }
+
+  Future<void> _loadSyncStatus() async {
+    final target = await _sync.loadTarget();
+    final lastPush = await widget.settingsService.getSyncLastPushAt();
+    final lastPull = await widget.settingsService.getSyncLastPullAt();
+    if (!mounted) return;
+    setState(() {
+      _syncTarget = target;
+      _lastPush = lastPush;
+      _lastPull = lastPull;
+    });
+  }
 
   bool get _useDesktopSaveDialog =>
       Platform.isLinux || Platform.isWindows || Platform.isMacOS;
@@ -241,11 +268,194 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     }
   }
 
+  Future<void> _chooseSyncFile() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final target = await _sync.chooseExistingSyncFile();
+      if (target == null) return;
+      if (!mounted) return;
+      setState(() => _syncTarget = target);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Sync file set · ${target.displayLabel}')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$error')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _createSyncFile() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final target = await _sync.createSyncFile();
+      if (target == null) return;
+      if (!mounted) return;
+      setState(() => _syncTarget = target);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Sync file created · ${target.displayLabel}')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$error')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _clearSyncFile() async {
+    if (_busy) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Forget sync file?'),
+        content: const Text(
+          'Anima will stop using the saved sync file on this device. '
+          'Your Google Drive file is not deleted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Forget'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await _sync.clearSyncTarget();
+    if (!mounted) return;
+    setState(() => _syncTarget = const SyncTarget());
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Sync file cleared on this device')),
+    );
+  }
+
+  Future<void> _pushSync() async {
+    if (_busy) return;
+    if (!_syncTarget.isConfigured) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Choose a sync file first.')),
+      );
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      final result = await _sync.push();
+      if (!mounted) return;
+      setState(() => _lastPush = result.pushedAt);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Pushed to cloud · ${result.summary.shortDescription}',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$error')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _pullSync() async {
+    if (_busy) return;
+    if (!_syncTarget.isConfigured) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Choose a sync file first.')),
+      );
+      return;
+    }
+
+    late final AppBackupSummary summary;
+    try {
+      summary = await _sync.peekRemote();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$error')),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Pull from cloud?'),
+        content: Text(
+          'This replaces chats, characters, personas, lorebooks, '
+          'workshops, drafts, avatars, and settings on this device with '
+          'the sync file.\n\n'
+          '${summary.shortDescription}\n\n'
+          'Your NanoGPT API key is not changed.\n\n'
+          'Tip: Push from the other device before you pull here.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Pull now'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _busy = true);
+    try {
+      final result = await _sync.pull();
+      await widget.appearanceController?.reload();
+      if (!mounted) return;
+      setState(() => _lastPull = result.pulledAt);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Pulled from cloud · ${result.summary.shortDescription}'),
+        ),
+      );
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$error')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  String _formatSyncTime(DateTime? when) {
+    if (when == null) return 'Never';
+    final local = when.toLocal();
+    final y = local.year.toString().padLeft(4, '0');
+    final m = local.month.toString().padLeft(2, '0');
+    final d = local.day.toString().padLeft(2, '0');
+    final h = local.hour.toString().padLeft(2, '0');
+    final min = local.minute.toString().padLeft(2, '0');
+    return '$y-$m-$d $h:$min';
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Backup & restore')),
+      appBar: AppBar(title: const Text('Backup, restore & sync')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
         children: [
@@ -285,6 +495,78 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
             onPressed: _busy ? null : _restoreBackup,
             icon: const Icon(Icons.download),
             label: const Text('Restore backup'),
+          ),
+          const SizedBox(height: 36),
+          Text(
+            'Cross-device sync',
+            style: theme.textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Use one file in Google Drive (or a synced folder) as your '
+            'handoff point. Push overwrites that file; Pull loads it on '
+            'this device. Same data as backup — API key stays on each device.',
+            style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _useDesktopSaveDialog
+                ? 'On Windows, pick a file inside your Google Drive folder '
+                    '(e.g. anima-sync.anima-backup). Push updates it in place — '
+                    'no delete-and-reupload.'
+                : 'On your phone, choose the same sync file in Google Drive once. '
+                    'Push updates that file; Pull when you switch devices.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Sync file'),
+            subtitle: Text(
+              _syncTarget.isConfigured
+                  ? _syncTarget.displayLabel
+                  : 'Not set — choose or create a file',
+            ),
+            trailing: _syncTarget.isConfigured
+                ? IconButton(
+                    tooltip: 'Forget sync file',
+                    onPressed: _busy ? null : _clearSyncFile,
+                    icon: const Icon(Icons.link_off),
+                  )
+                : null,
+          ),
+          Text(
+            'Last push: ${_formatSyncTime(_lastPush)}\n'
+            'Last pull: ${_formatSyncTime(_lastPull)}',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            onPressed: _busy ? null : _chooseSyncFile,
+            icon: const Icon(Icons.insert_drive_file_outlined),
+            label: const Text('Choose sync file'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _busy ? null : _createSyncFile,
+            icon: const Icon(Icons.create_new_folder_outlined),
+            label: const Text('Create sync file'),
+          ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: _busy ? null : _pushSync,
+            icon: const Icon(Icons.cloud_upload_outlined),
+            label: Text(_busy ? 'Working…' : 'Push to cloud'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _busy ? null : _pullSync,
+            icon: const Icon(Icons.cloud_download_outlined),
+            label: const Text('Pull from cloud'),
           ),
         ],
       ),

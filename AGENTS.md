@@ -60,7 +60,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-25  
-**Last agent action:** **Opening scenes library** — workshop scenes sync to Settings → Opening scenes; any **New chat** (solo/group) can pick from saved scenes. Workshop **Start roleplay** is optional shortcut only.
+**Last agent action:** **Cross-device sync** — Settings → Backup, restore & sync: choose one Google Drive file; **Push** overwrites it, **Pull** loads it (same as backup; API key stays local).
 
 ### What works today
 
@@ -78,7 +78,7 @@ High-value SillyTavern concepts to aim for over time:
   - **Character builds** — model, max tokens, temperature, top P, and prompt for **full card JSON** generation (New character from chat + Creation Center create/update); separate from main chat model
   - **Global chat prompts** — app-wide **system prompt** + **post-history** merged into every chat (on top of each card; per-chat Author's Note still applies); preset pickers; `{{user}}` / `{{char}}`
   - **Appearance (Theme Studio)** — 8 global presets (glass + solid), custom background/accent/header/menu/text/bubble colors, fonts, text scales, glass opacity/blur, chat avatars; live preview + immediate app-wide apply
-  - **Backup & restore** — one `.anima-backup` JSON file (chats, characters, personas, categories, lorebooks, workshops, opening scenes, drafts, roadway cache, avatars, settings); **API key is not included** — re-enter after restore; on Linux/Windows Create backup opens a **Save** dialog (Downloads suggested); Android still uses the share sheet; restore replaces Anima data only (whitelist), then returns to Home
+  - **Backup & restore** — one `.anima-backup` JSON file (chats, characters, personas, categories, lorebooks, workshops, opening scenes, drafts, roadway cache, avatars, settings); **API key is not included** — re-enter after restore; on Linux/Windows Create backup opens a **Save** dialog (Downloads suggested); Android still uses the share sheet; restore replaces Anima data only (whitelist), then returns to Home; **Cross-device sync** — pick one sync file in Google Drive (or a synced folder on desktop); **Push to cloud** overwrites that file in place; **Pull from cloud** restores from it when switching phone ↔ PC (no delete-and-reupload)
   - API, Generation parameters
 - **Look** — Theme Studio with glass and solid presets (default Obsidian Gold soft-glow, no sparkle texture); Ivory Ink light preset + full color/font customization
 - **Generation parameters** — detailed help + many sampling presets; **context size in tokens** + presets (1K–24K); **auto-summarize** every N messages
@@ -234,6 +234,7 @@ lib/
     global_lorebook.dart          Standalone global lorebook (id + enabled + book)
     world_workshop.dart           Creation Center workshop + imported chat source + openingScene
     saved_opening_scene.dart      Saved opening scene (title, text, optional workshop link)
+    sync_target.dart              Sync file location (desktop path or Android URI)
     ui_style_settings.dart        Theme Studio settings + AnimaUiTheme extension + avatars
     theme_palette.dart            VisualStyle / BackgroundMode / fonts + 8 ThemePresets
     anima_presets.dart            Built-in sampling + text presets (Author’s Note, prompts, guidance)
@@ -259,7 +260,7 @@ lib/
     character_build_settings_screen.dart Full card build model + sampling + prompt
     global_chat_prompts_screen.dart App-wide system prompt + post-history for all chats
     appearance_settings_screen.dart Theme Studio (presets + colors/fonts + avatars)
-    backup_restore_screen.dart    Full-app backup / restore (.anima-backup JSON; no API key)
+    backup_restore_screen.dart    Full-app backup / restore + cross-device sync (.anima-backup JSON; no API key)
     settings_ui.dart              Shared settings form helpers
   widgets/
     anima_avatar.dart             Local-file / initial avatar (circle or rect via style)
@@ -299,6 +300,7 @@ lib/
     world_info_service.dart       Persist global lorebooks (anima_lorebooks.json)
     world_workshop_service.dart   Persist Creation Center workshops
     opening_scene_service.dart    Persist opening scenes library (anima_opening_scenes.json)
+    sync_service.dart             Push / pull one sync file for phone ↔ desktop handoff
     world_workshop_builder.dart   Workshop prompts + chat-import source + lorebook/people JSON parse
     chat_transcript_codec.dart    Chat JSON / plain-text import/export
     app_backup_service.dart       Full-app backup/restore (whitelist JSON + avatars; no API key)
@@ -308,7 +310,7 @@ scripts/
   update_windows.ps1              Windows build + optional zip / GitHub Release upload (`-Zip`, `-Release`)
 ```
 
-**Dependencies in use:** `flutter_secure_storage`, `http`, `path_provider`, `file_picker`, `share_plus`, `path`, `google_fonts`  
+**Dependencies in use:** `flutter_secure_storage`, `http`, `path_provider`, `file_picker`, `share_plus`, `path`, `google_fonts`, `saf` (Android sync file access)  
 **Dev / branding:** `flutter_launcher_icons`; master icon at `assets/branding/anima_icon.png`
 
 ---

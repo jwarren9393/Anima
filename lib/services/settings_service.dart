@@ -394,6 +394,10 @@ class SettingsService {
   static const _contextAutoSummarizeKey = 'context_auto_summarize';
   static const _contextSummarizeEveryKey = 'context_summarize_every';
   static const _contextKeepRecentKey = 'context_summarize_keep_recent';
+  static const _syncFilePathKey = 'sync_file_path';
+  static const _syncContentUriKey = 'sync_content_uri';
+  static const _syncLastPushKey = 'sync_last_push_at';
+  static const _syncLastPullKey = 'sync_last_pull_at';
   /// Legacy message-count context (migrated once to a token budget).
   static const _legacyContextMaxHistoryKey = 'context_max_history_messages';
 
@@ -947,5 +951,64 @@ class SettingsService {
       return;
     }
     await _storage.write(key: key, value: value.toString());
+  }
+
+  /// Cross-device sync file path (desktop) or null.
+  Future<String?> getSyncFilePath() async {
+    final value = await _storage.read(key: _syncFilePathKey);
+    if (value == null || value.trim().isEmpty) return null;
+    return value.trim();
+  }
+
+  Future<void> saveSyncFilePath(String? path) async {
+    if (path == null || path.trim().isEmpty) {
+      await _storage.delete(key: _syncFilePathKey);
+      return;
+    }
+    await _storage.write(key: _syncFilePathKey, value: path.trim());
+  }
+
+  /// Android SAF URI for the sync file in Google Drive (or other provider).
+  Future<String?> getSyncContentUri() async {
+    final value = await _storage.read(key: _syncContentUriKey);
+    if (value == null || value.trim().isEmpty) return null;
+    return value.trim();
+  }
+
+  Future<void> saveSyncContentUri(String? uri) async {
+    if (uri == null || uri.trim().isEmpty) {
+      await _storage.delete(key: _syncContentUriKey);
+      return;
+    }
+    await _storage.write(key: _syncContentUriKey, value: uri.trim());
+  }
+
+  Future<DateTime?> getSyncLastPushAt() => _readSyncTimestamp(_syncLastPushKey);
+
+  Future<void> saveSyncLastPushAt(DateTime? when) =>
+      _writeSyncTimestamp(_syncLastPushKey, when);
+
+  Future<DateTime?> getSyncLastPullAt() => _readSyncTimestamp(_syncLastPullKey);
+
+  Future<void> saveSyncLastPullAt(DateTime? when) =>
+      _writeSyncTimestamp(_syncLastPullKey, when);
+
+  Future<void> clearSyncTarget() async {
+    await _storage.delete(key: _syncFilePathKey);
+    await _storage.delete(key: _syncContentUriKey);
+  }
+
+  Future<DateTime?> _readSyncTimestamp(String key) async {
+    final raw = await _storage.read(key: key);
+    if (raw == null || raw.trim().isEmpty) return null;
+    return DateTime.tryParse(raw.trim());
+  }
+
+  Future<void> _writeSyncTimestamp(String key, DateTime? when) async {
+    if (when == null) {
+      await _storage.delete(key: key);
+      return;
+    }
+    await _storage.write(key: key, value: when.toUtc().toIso8601String());
   }
 }
