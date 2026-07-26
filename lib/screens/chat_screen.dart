@@ -27,6 +27,7 @@ import '../services/persona_service.dart';
 import '../services/prompt_builder.dart';
 import '../services/roadway_cache_service.dart';
 import '../services/roadway_service.dart';
+import '../services/reply_rewrite_service.dart';
 import '../services/settings_service.dart';
 import '../services/speaker_prefix.dart';
 import '../services/world_info_service.dart';
@@ -42,6 +43,7 @@ import '../widgets/greeting_picker.dart';
 import '../widgets/keyboard_inset.dart';
 import '../widgets/narrator_bubble.dart';
 import '../widgets/preset_picker.dart';
+import '../widgets/reply_rewrite_sheet.dart';
 import '../widgets/rp_rich_text.dart';
 import 'characters_screen.dart';
 import 'character_edit_screen.dart';
@@ -94,6 +96,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final _transcriptCodec = ChatTranscriptCodec();
   final _draftService = ComposerDraftService();
   static const _formatter = MessageFormatter();
+  static const _replyRewrite = ReplyRewriteService();
 
   bool _hasApiKey = false;
   bool _loading = true;
@@ -802,7 +805,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     final autoReply = _session!.autoReply;
     final speaker = _speakerForTurn();
-    final hadUser = _session!.messages.any((m) => m.isUser);
     final userMessage = ChatMessage(
       id: ChatMessage.newId(),
       role: ChatRole.user,
@@ -813,11 +815,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _error = null;
       var session = _session!;
       session.messages.add(userMessage);
-      if (!hadUser &&
-          session.openingScene.trim().isNotEmpty &&
-          session.openingSceneInPrompt) {
-        session = session.copyWith(openingSceneInPrompt: false);
-      }
       _session = session;
       if (autoReply) {
         _busy = true;
@@ -1535,6 +1532,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
 
     final chunk = _messages.sublist(session.memoryCoveredCount, cut);
+    final seedOpening = !session.openingSceneInMemory &&
+        session.openingScene.trim().isNotEmpty;
     setState(() {
       _busy = true;
       _error = null;
@@ -1551,15 +1550,19 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           existingSummary: session.memorySummary,
           userName: _userName,
           charName: _character!.name,
+          openingScene: session.openingScene,
+          seedOpeningScene: seedOpening,
         ),
         baseUrl: baseUrl,
-        sampling: sampling,
+        sampling: ChatContextService.summarizeSampling(sampling),
       );
       if (!mounted) return;
       setState(() {
         _session = session.copyWith(
           memorySummary: updated.trim(),
           memoryCoveredCount: cut,
+          openingSceneInMemory:
+              seedOpening || session.openingSceneInMemory,
         );
         _busy = false;
       });
@@ -1758,7 +1761,92 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _regenerateOrSwipe({required bool asNewSwipe}) async {
-    if (_busy || _session == null || _character == null || _messages.isEmpty) {
+    if (_messages.isEmpty) return;
+    final lastIndex = _messages.length - 1;
+    await _regenerateMessageAt(lastIndex, asNewSwipe: asNewSwipe);
+  }
+
+  ChatMessage _prepareAssistantForRegeneration(
+    ChatMessage message, {
+    required bool asNewSwipe,
+  }) {
+    if (asNewSwipe) {
+      return ChatMessage(
+        id: message.id,
+        role: message.role,
+        text: '',
+        swipes: [...message.swipes, ''],
+        swipeIndex: message.swipes.length,
+        speakerId: message.speakerId,
+        speakerName: message.speakerName,
+      );
+    }
+    final swipes = List<String>.from(message.swipes);
+    if (swipes.isEmpty) swipes.add('');
+    final swipeIndex = message.swipeIndex.clamp(0, swipes.length - 1);
+    swipes[swipeIndex] = '';
+    return ChatMessage(
+      id: message.id,
+      role: message.role,
+      text: '',
+      swipes: swipes,
+      swipeIndex: swipeIndex,
+      speakerId: message.speakerId,
+      speakerName: message.speakerName,
+    );
+  }
+
+  Future<bool> _confirmRegenerateTruncating(int index) async {
+    if (index >= _messages.length - 1) return true;
+    final later = _messages.length - index - 1;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Regenerate reply?'),
+        content: Text(
+          'This removes $later later message${later == 1 ? '' : 's'} '
+          'and generates a new reply here.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Regenerate'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  Future<void> _rewriteMessageAt(int index) async {
+    if (_busy || _session == null || _character == null) return;
+    final message = _messages[index];
+    if (message.isUser) return;
+    final choice = await showReplyRewriteSheet(context);
+    if (!mounted || choice == null) return;
+    await _regenerateMessageAt(
+      index,
+      asNewSwipe: choice.asNewSwipe,
+      rewrite: choice,
+    );
+  }
+
+  Future<void> _regenerateMessageAt(
+    int index, {
+    required bool asNewSwipe,
+    ReplyRewriteChoice? rewrite,
+  }) async {
+    if (_busy || _session == null || _character == null) return;
+    if (index < 0 || index >= _messages.length) return;
+    final message = _messages[index];
+    if (message.isUser) {
+      setState(() {
+        _error = 'Send a message first so there is an AI reply to regenerate.';
+      });
       return;
     }
     if (!_hasApiKey) {
@@ -1767,51 +1855,47 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       });
       return;
     }
+    if (!await _confirmRegenerateTruncating(index)) return;
 
-    final last = _messages.last;
-    if (last.isUser) {
-      setState(() {
-        _error = 'Send a message first so there is an AI reply to regenerate.';
-      });
-      return;
+    final originalText = message.text;
+    final speaker = _participants.firstWhere(
+      (c) => c.id == message.speakerId,
+      orElse: () => _character!,
+    );
+
+    var messages = List<ChatMessage>.from(_session!.messages);
+    if (index < messages.length - 1) {
+      messages = messages.sublist(0, index + 1);
+    }
+    messages[index] = _prepareAssistantForRegeneration(
+      messages[index],
+      asNewSwipe: asNewSwipe,
+    );
+
+    List<Map<String, String>>? rewriteMessages;
+    if (rewrite != null) {
+      rewriteMessages = _replyRewrite.buildRewriteMessages(
+        mode: rewrite.mode,
+        originalReply: originalText,
+        characterName: speaker.name,
+        contextMessages: messages.sublist(0, index),
+        customInstruction: rewrite.customInstruction,
+      );
     }
 
     setState(() {
       _error = null;
       _busy = true;
-      if (asNewSwipe) {
-        // Keep current text; new generation becomes another swipe.
-        final updated = last.withNewSwipe('');
-        _session!.messages[_messages.length - 1] = ChatMessage(
-          id: updated.id,
-          role: updated.role,
-          text: '',
-          swipes: [...last.swipes, ''],
-          swipeIndex: last.swipes.length,
-          speakerId: last.speakerId,
-          speakerName: last.speakerName,
-        );
-      } else {
-        // Regenerate replaces the visible swipe text.
-        final swipes = List<String>.from(last.swipes);
-        if (swipes.isEmpty) swipes.add('');
-        final index = last.swipeIndex.clamp(0, swipes.length - 1);
-        swipes[index] = '';
-        _session!.messages[_messages.length - 1] = ChatMessage(
-          id: last.id,
-          role: last.role,
-          text: '',
-          swipes: swipes,
-          swipeIndex: index,
-          speakerId: last.speakerId,
-          speakerName: last.speakerName,
-        );
-      }
+      _session = _session!.copyWith(messages: messages);
     });
+    await _persist();
 
-    await _streamIntoLastAssistant(
-      excludeLastAssistant: true,
-      allowGreetingNudge: true,
+    await _streamAssistantReply(
+      assistantIndex: index,
+      allowGreetingNudge: rewrite == null,
+      speakingAs: speaker,
+      advanceGroupSpeaker: false,
+      rewriteMessages: rewriteMessages,
     );
   }
 
@@ -1820,12 +1904,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     bool allowGreetingNudge = false,
     PromptMode mode = PromptMode.normal,
     Character? speakingAs,
+    int? historyEndExclusive,
+    List<Map<String, String>>? rewriteMessages,
   }) async {
     final character = speakingAs ?? _speakerForTurn();
     final userName = _userName;
     final persona = _persona?.promptText ?? '';
 
-    final end = excludeLastAssistant ? _messages.length - 1 : _messages.length;
+    final end = historyEndExclusive ??
+        (excludeLastAssistant ? _messages.length - 1 : _messages.length);
     final historyForScan = _messages.sublist(0, end);
     final loreSettings = await widget.settingsService.getLoreSettings();
     final extraBooks = await widget.worldInfoService.booksForChat(
@@ -1917,27 +2004,31 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       }
     }
 
-    if (allowGreetingNudge && msgs.length <= 1) {
-      msgs.add({
-        'role': 'user',
-        'content':
-            '(Write an alternate opening greeting in character. Stay in first person as the character.)',
-      });
-    }
+    if (rewriteMessages != null && rewriteMessages.isNotEmpty) {
+      msgs.addAll(rewriteMessages);
+    } else {
+      if (allowGreetingNudge && msgs.length <= 1) {
+        msgs.add({
+          'role': 'user',
+          'content':
+              '(Write an alternate opening greeting in character. Stay in first person as the character.)',
+        });
+      }
 
-    if (mode == PromptMode.continueScene) {
-      msgs.add({
-        'role': 'user',
-        'content':
-            '(Continue. Write only the next reply as ${character.name}.)',
-      });
-    }
-    if (mode == PromptMode.impersonate) {
-      msgs.add({
-        'role': 'user',
-        'content':
-            '(Write only $userName\'s next message. Do not write ${character.name}\'s lines.)',
-      });
+      if (mode == PromptMode.continueScene) {
+        msgs.add({
+          'role': 'user',
+          'content':
+              '(Continue. Write only the next reply as ${character.name}.)',
+        });
+      }
+      if (mode == PromptMode.impersonate) {
+        msgs.add({
+          'role': 'user',
+          'content':
+              '(Write only $userName\'s next message. Do not write ${character.name}\'s lines.)',
+        });
+      }
     }
 
     if (postHistory.isNotEmpty) {
@@ -1953,16 +2044,40 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     Character? speakingAs,
     bool advanceGroupSpeaker = false,
   }) async {
+    if (_messages.isEmpty) return;
+    await _streamAssistantReply(
+      assistantIndex: _messages.length - 1,
+      excludeLastAssistant: excludeLastAssistant,
+      allowGreetingNudge: allowGreetingNudge,
+      mode: mode,
+      speakingAs: speakingAs,
+      advanceGroupSpeaker: advanceGroupSpeaker,
+    );
+  }
+
+  Future<void> _streamAssistantReply({
+    required int assistantIndex,
+    bool excludeLastAssistant = true,
+    bool allowGreetingNudge = false,
+    PromptMode mode = PromptMode.normal,
+    Character? speakingAs,
+    bool advanceGroupSpeaker = false,
+    List<Map<String, String>>? rewriteMessages,
+  }) async {
+    if (assistantIndex < 0 || assistantIndex >= _messages.length) return;
     try {
       final model = await widget.settingsService.getModel();
       final sampling = await widget.settingsService.getSampling();
       final baseUrl = await widget.settingsService.getApiBaseUrl();
       final speaker = speakingAs ?? _speakerForTurn();
+      final assistantId = _messages[assistantIndex].id;
       final messages = await _buildApiMessages(
         excludeLastAssistant: excludeLastAssistant,
         allowGreetingNudge: allowGreetingNudge,
         mode: mode,
         speakingAs: speaker,
+        historyEndExclusive: rewriteMessages != null ? assistantIndex : null,
+        rewriteMessages: rewriteMessages,
       );
       final buffer = StringBuffer();
       await for (final chunk in widget.nanoGptService.streamCompletion(
@@ -1976,57 +2091,68 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         final speakerLabel = speaker.name;
         final text = stripLeadingSpeakerPrefix(buffer.toString(), speakerLabel);
         setState(() {
-          final last = _messages.last;
-          final swipes = List<String>.from(last.swipes);
-          final index = last.swipeIndex.clamp(
+          final updated = List<ChatMessage>.from(_session!.messages);
+          final index = updated.indexWhere((m) => m.id == assistantId);
+          if (index < 0) return;
+          final current = updated[index];
+          final swipes = List<String>.from(current.swipes);
+          final swipeIndex = current.swipeIndex.clamp(
             0,
             (swipes.length - 1).clamp(0, 9999),
           );
           if (swipes.isEmpty) {
             swipes.add(text);
           } else {
-            swipes[index] = text;
+            swipes[swipeIndex] = text;
           }
-          _session!.messages[_messages.length - 1] = ChatMessage(
-            id: last.id,
-            role: last.role,
+          updated[index] = ChatMessage(
+            id: current.id,
+            role: current.role,
             text: text,
             swipes: swipes,
-            swipeIndex: index,
-            speakerId: last.speakerId ?? speaker.id,
-            speakerName: last.speakerName ?? speaker.name,
+            swipeIndex: swipeIndex,
+            speakerId: current.speakerId ?? speaker.id,
+            speakerName: current.speakerName ?? speaker.name,
           );
+          _session = _session!.copyWith(messages: updated);
         });
       }
 
       if (!mounted) return;
-      final last = _messages.last;
+      final updated = List<ChatMessage>.from(_session!.messages);
+      final index = updated.indexWhere((m) => m.id == assistantId);
+      if (index < 0) return;
+      final current = updated[index];
       final cleaned = stripLeadingSpeakerPrefix(
-        last.text.trim(),
-        last.speakerName ?? speaker.name,
+        current.text.trim(),
+        current.speakerName ?? speaker.name,
       );
-      if (cleaned != last.text) {
+      if (cleaned != current.text) {
         setState(() {
-          final swipes = List<String>.from(last.swipes);
-          final index = last.swipeIndex.clamp(
+          final swipes = List<String>.from(current.swipes);
+          final swipeIndex = current.swipeIndex.clamp(
             0,
             (swipes.length - 1).clamp(0, 9999),
           );
           if (swipes.isNotEmpty) {
-            swipes[index] = cleaned;
+            swipes[swipeIndex] = cleaned;
           }
-          _session!.messages[_messages.length - 1] = ChatMessage(
-            id: last.id,
-            role: last.role,
+          updated[index] = ChatMessage(
+            id: current.id,
+            role: current.role,
             text: cleaned,
             swipes: swipes.isEmpty ? [cleaned] : swipes,
-            swipeIndex: index,
-            speakerId: last.speakerId ?? speaker.id,
-            speakerName: last.speakerName ?? speaker.name,
+            swipeIndex: swipeIndex,
+            speakerId: current.speakerId ?? speaker.id,
+            speakerName: current.speakerName ?? speaker.name,
           );
+          _session = _session!.copyWith(messages: updated);
         });
       }
-      final finalText = _messages.last.text.trim();
+      final finalText = _session!.messages
+          .firstWhere((m) => m.id == assistantId)
+          .text
+          .trim();
       if (finalText.isEmpty) {
         throw NanoGptException('NanoGPT returned an empty reply. Try again.');
       }
@@ -2044,29 +2170,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       setState(() {
         _busy = false;
         _error = error.message;
-        if (_messages.isNotEmpty &&
-            !_messages.last.isUser &&
-            _messages.last.text.trim().isEmpty) {
-          final last = _messages.last;
-          if (last.swipes.length > 1 &&
-              last.swipeIndex == last.swipes.length - 1) {
-            final previous = List<String>.from(last.swipes)..removeLast();
-            _session!.messages[_messages.length - 1] = ChatMessage(
-              id: last.id,
-              role: last.role,
-              text: previous.last,
-              swipes: previous,
-              swipeIndex: previous.length - 1,
-            );
-          } else {
-            _session!.messages.removeLast();
-          }
-        }
+        _clearEmptyAssistantAt(assistantIndex);
       });
       await _persist();
     } catch (error) {
       if (!mounted) return;
-      // Closing the HTTP client on Stop can surface as a network error.
       if (_looksLikeCancel(error)) {
         await _finishStoppedGeneration(
           advanceGroupSpeaker: advanceGroupSpeaker,
@@ -2079,6 +2187,32 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       });
       await _persist();
     }
+  }
+
+  void _clearEmptyAssistantAt(int assistantIndex) {
+    if (_session == null) return;
+    if (assistantIndex < 0 || assistantIndex >= _session!.messages.length) {
+      return;
+    }
+    final message = _session!.messages[assistantIndex];
+    if (message.isUser || message.text.trim().isNotEmpty) return;
+    final updated = List<ChatMessage>.from(_session!.messages);
+    if (message.swipes.length > 1 &&
+        message.swipeIndex == message.swipes.length - 1) {
+      final previous = List<String>.from(message.swipes)..removeLast();
+      updated[assistantIndex] = ChatMessage(
+        id: message.id,
+        role: message.role,
+        text: previous.last,
+        swipes: previous,
+        swipeIndex: previous.length - 1,
+        speakerId: message.speakerId,
+        speakerName: message.speakerName,
+      );
+    } else {
+      updated.removeAt(assistantIndex);
+    }
+    _session = _session!.copyWith(messages: updated);
   }
 
   bool _looksLikeCancel(Object error) {
@@ -2841,10 +2975,23 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   ),
                   onTap: () => Navigator.pop(context, 'auto_reply'),
                 ),
-                if (!message.isUser && isLast) ...[
+                if (!message.isUser) ...[
+                  ListTile(
+                    leading: const Icon(Icons.tune),
+                    title: const Text('Rewrite reply…'),
+                    subtitle: const Text(
+                      'Shorten, expand, change mood, or custom',
+                    ),
+                    onTap: () => Navigator.pop(context, 'rewrite'),
+                  ),
                   ListTile(
                     leading: const Icon(Icons.refresh),
                     title: const Text('Regenerate'),
+                    subtitle: Text(
+                      isLast
+                          ? 'Generate this reply again'
+                          : 'Removes later messages, then regenerates',
+                    ),
                     onTap: () => Navigator.pop(context, 'regen'),
                   ),
                   ListTile(
@@ -2889,8 +3036,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (action == 'impersonate') await _impersonate();
     if (action == 'paths') await _showPathsSheet();
     if (action == 'auto_reply') await _toggleAutoReply();
-    if (action == 'regen') await _regenerateOrSwipe(asNewSwipe: false);
-    if (action == 'swipe') await _regenerateOrSwipe(asNewSwipe: true);
+    if (action == 'regen') {
+      await _regenerateMessageAt(index, asNewSwipe: false);
+    }
+    if (action == 'swipe') {
+      await _regenerateMessageAt(index, asNewSwipe: true);
+    }
+    if (action == 'rewrite') await _rewriteMessageAt(index);
     if (action == 'swipe_prev') _shiftSwipe(index, -1);
     if (action == 'swipe_next') _shiftSwipe(index, 1);
   }

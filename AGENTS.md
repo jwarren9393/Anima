@@ -60,20 +60,20 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-25  
-**Last agent action:** Published **v1.0.0 build 26** — opening scene Fresh/Revise; AI card builder in character editor; Update character from chat in roleplay ⋮ menu.
+**Last agent action:** Build **27** — opening scene always injects + seeds into memory on first summarize; Creation Center opening-scene **length** picker; **Rewrite reply** controls (shorten/expand/mood/custom) on long-press in chat + Creation Center; smarter memory-summary prompts + higher summarize token floor; regenerate any AI bubble.
 
 ### What works today
 
 - **Home screen** — chat history, Settings, New chat
 - **New chat** — choose **Solo** or **Group**; if the character has several greetings, a **Choose opening** sheet picks which one starts (others stay as swipes); then an optional **Opening scene** sheet — pick a saved scene, browse **Opening scene library**, type fresh prose, or skip
-- **Opening scene (narrator)** — per-chat optional prose in a centered narrator card above messages (not a character bubble); injected into prompts until the first user message (or turn off via ⋮); edit via ⋮ → **Opening scene**; works in solo and group; separate from card **Scenario** (still injects every turn)
+- **Opening scene (narrator)** — per-chat optional prose in a centered narrator card above messages (not a character bubble); **always injected into prompts by default** (turn off via ⋮ → **Stop injecting opening scene** to save tokens); on the **first memory summarize**, the scene is folded into the memory summary so it stays in long-term context; edit via ⋮ → **Opening scene**; works in solo and group; separate from card **Scenario** (still injects every turn)
 - **Opening scenes library** — **Settings → Opening scenes** lists saved narrator setups (create / edit / delete); scenes from Creation Center **auto-sync** when you save or AI-generate an opening scene there; also imported when starting a new chat or opening the library; included in backup
 - **Settings hub** — separate menus:
   - **Personas** — create multiple {{user}} identities with separate identity/role, appearance, personality, background, goals, and photo fields; **AI wand** on creative fields (appends text like Characters); **Generate avatar** from persona details; set a default for new chats; all filled fields are labeled and sent on every chat generation
   - **Characters** — character cards + **categories** (custom lists; one character can be in several); filter dropdown; **consistency check** (checklist icon) = read-only AI report; **AI card builder** (plain-English generate/update slim fields — same as Creation Center); **Generate avatar** from card text
   - **World Info & lore** — **global lorebooks** (create / import ST JSON / export / on-off) + scan depth/budget + link to per-character books; **entry AI wand** + **Suggest keywords from content**
   - **Opening scenes** — saved narrator setups for new chats (manual + synced from Creation Center workshops)
-  - **Creation Center** — chat with AI to invent a world; **reply length** picker above the composer (**Short** ~600 tokens · **Normal** ~2K · **Detailed** ~4K), saved per workshop and applied to chat + regenerate; workshop replies use length-aware caps (not RP short-reply presets alone); **tap** a bubble to **edit** (your messages: **Save & regenerate** to re-prompt the AI), **long-press** for **Delete**, **Rewind to here**, **Regenerate reply** (on your messages), **Regenerate** / **New swipe** (on AI replies), and swipe navigation; **compact header** (context + play + **⋮** menu for lorebook, opening scene, characters — no crowded/cut-off buttons); **opening scene** is a one-line bar (tap → editor sheet) that **hides while the keyboard is open** so chat stays visible — when a scene already exists, choose **Fresh from chat** (ignore saved text) or **Revise from chat** (merge); lorebook/opening-scene **exports** use an **8192-token floor** + JSON retry; **linked lorebook in chat prompts** is **off by default** after create (⋮ → **Include linked lorebook in prompts** to re-enable; **Update lorebook** export still always uses the book); **Import** can seed from an **existing chat** with an **Import options** sheet (memory summary + last N recent messages — same N as Summarize “keep recent”, default 10 — not the full 100+ message log; **World Info lorebooks off by default** and only books **explicitly linked** on that chat when enabled; toggles for character cards, persona, embedded card lore, opening scene, author’s note), a World Info lorebook, or a JSON file; **Create/Update lorebook** saves keyword entries as a selectable global lorebook (one workshop = one book); **Create/Update opening scene** saves narrator setup prose (syncs to **Opening scenes** library); **Start roleplay chat** (▶) is a **shortcut** that opens solo/group with the workshop opening prefilled — **not required**; you can also save characters/lore from the workshop and start a normal **New chat** from Home with the same opening scene from the library; the people menu can **Create AI characters** (multi-select + review each card; warns when name already in Characters), **Update existing character** (pick any saved card — imported-chat cast listed first — merge from workshop context, review, then overwrite only on Save), or **Create my persona** (choose one person from workshop chat + linked lore, generate player-focused fields, then review before saving); **context estimate** banner (tap for details) shows ~messages/tokens vs model window
+  - **Creation Center** — chat with AI to invent a world; **reply length** picker above the composer (**Short** ~600 tokens · **Normal** ~2K · **Detailed** ~4K), saved per workshop and applied to chat + regenerate; workshop replies use length-aware caps (not RP short-reply presets alone); **tap** a bubble to **edit** (your messages: **Save & regenerate** to re-prompt the AI), **long-press** for **Delete**, **Rewind to here**, **Regenerate reply** (on your messages), **Rewrite reply…** (shorten / expand / mood / custom — replace or new swipe), **Regenerate** / **New swipe** (on AI replies), and swipe navigation; **compact header** (context + play + **⋮** menu for lorebook, opening scene, characters — no crowded/cut-off buttons); **opening scene** is a one-line bar (tap → editor sheet) that **hides while the keyboard is open** so chat stays visible — **length** picker (**Short** / **Medium** / **Long**) for AI generation; when a scene already exists, choose **Fresh from chat** (ignore saved text) or **Revise from chat** (merge); lorebook/opening-scene **exports** use an **8192-token floor** + JSON retry; **linked lorebook in chat prompts** is **off by default** after create (⋮ → **Include linked lorebook in prompts** to re-enable; **Update lorebook** export still always uses the book); **Import** can seed from an **existing chat** with an **Import options** sheet (memory summary + last N recent messages — same N as Summarize “keep recent”, default 10 — not the full 100+ message log; **World Info lorebooks off by default** and only books **explicitly linked** on that chat when enabled; toggles for character cards, persona, embedded card lore, opening scene, author’s note), a World Info lorebook, or a JSON file; **Create/Update lorebook** saves keyword entries as a selectable global lorebook (one workshop = one book); **Create/Update opening scene** saves narrator setup prose (syncs to **Opening scenes** library); **Start roleplay chat** (▶) is a **shortcut** that opens solo/group with the workshop opening prefilled — **not required**; you can also save characters/lore from the workshop and start a normal **New chat** from Home with the same opening scene from the library; the people menu can **Create AI characters** (multi-select + review each card; warns when name already in Characters), **Update existing character** (pick any saved card — imported-chat cast listed first — merge from workshop context, review, then overwrite only on Save), or **Create my persona** (choose one person from workshop chat + linked lore, generate player-focused fields, then review before saving); **context estimate** banner (tap for details) shows ~messages/tokens vs model window
   - **AI collaborator** — wand guidance note + **Composer Format** note + **Roadway / Paths** note
   - **Character builds** — model, max tokens, temperature, top P, and prompt for **slim card JSON** generation (description, personality, mes_example, tags only — no scenario, greetings, or per-card system/post-history; Creation Center + New character from chat); separate from main chat model
   - **Global chat prompts** — app-wide **system prompt** + **post-history** merged into every chat (on top of each card; per-chat Author's Note still applies); preset pickers; `{{user}}` / `{{char}}`
@@ -82,7 +82,7 @@ High-value SillyTavern concepts to aim for over time:
   - API, Generation parameters
 - **Look** — Theme Studio with glass and solid presets (default Obsidian Gold soft-glow, no sparkle texture); Ivory Ink light preset + full color/font customization
 - **Generation parameters** — detailed help + many sampling presets; **context size in tokens** + presets (1K–24K); **auto-summarize** every N messages
-- **Memory summary** — per chat (⋮ → Memory summary to edit; Summarize now); injected into prompts; auto-updates when enabled
+- **Memory summary** — per chat (⋮ → Memory summary to edit; Summarize now); injected into prompts; auto-updates when enabled; **smarter folding** — revises stale facts, tracks key changes, uses a lower temperature + **2048-token floor** for summarize calls; **first summarize** also folds the opening scene into memory when one is set
 - **Text presets** — expanded Author’s Note / System prompt / Post-history / collaborator guidance sheets
 - **Character AI wand** — sparkle icon on creative card fields; sends all filled fields as context; appends NanoGPT text below what’s already there (uses chat model + sampling)
 - **World Info entry AI wand** — sparkle on Label / Keywords / Lore content (and Secondary keywords when Selective); uses book + sibling entry context; appends (keywords merge comma-separated); same model + collaborator guidance
@@ -94,7 +94,7 @@ High-value SillyTavern concepts to aim for over time:
 - **Paths (Roadway)** — long-press a message → **Paths** (sheet + ✨ generate); tap a tile → composer; check **two or more** + **Combine selected** to AI-merge them into one composer draft; options **stay cached** until the chat moves on, or you clear / refresh; note under AI collaborator
 - **Auto-reply** — long-press → toggle; **new chats default to off** (send alone; Continue or tap a name for a reply)
 - **RP message look** — bubbles style `*narration*` in soft italic gold and `"spoken lines"` in bolder text
-- **Message actions** — **tap** a bubble to edit; **long-press** for Delete, Rewind, Branch, Continue, Impersonate, Paths, Auto-reply, Regen/Swipe (Delete / Rewind save immediately; branch still runs immediately)
+- **Message actions** — **tap** a bubble to edit; **long-press** for Delete, Rewind, Branch, Continue, Impersonate, Paths, Auto-reply, **Rewrite reply…** (shorten / expand / mood / custom — replace or new swipe), Regenerate / New swipe on **any** AI bubble (Delete / Rewind save immediately; branch still runs immediately)
 - **Lore hit toast** — when keywords match and entries fit the budget, a brief top overlay shows “Lore Triggered: …”
 - **Memory toast** — auto-summarize success shows “Memory summary optimized”
 - **Recursive lore scanning** — Settings toggle works: matched entry content can pull further active entries; shared token budget + priority still apply
@@ -108,7 +108,7 @@ High-value SillyTavern concepts to aim for over time:
 - **Context estimate** — chat ⋮ → **Context estimate** shows ~message/token gauges vs history budget and model window; Creation Center shows a live banner estimate
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar
 - **Linux install/update** — `./scripts/update_linux.sh` builds and installs the desktop app; add `--pull` to download GitHub changes first
-- **Smoke:** `flutter test` (174) + `flutter analyze` pass; Android + Linux desktop debug work
+- **Smoke:** `flutter test` (181) + `flutter analyze` pass; Android + Linux desktop debug work
 
 ### What does NOT work yet / limits
 
@@ -227,12 +227,13 @@ lib/
     glass_backdrop.dart           Configurable solid/gradient/soft-glow backdrop
   models/
     chat_message.dart             Bubble + swipes + optional speaker
-    chat_session.dart             Thread + authorsNote + group + lorebookIds + autoReply + memorySummary + openingScene
+    chat_session.dart             Thread + authorsNote + group + lorebookIds + autoReply + memorySummary + openingScene + openingSceneInMemory
     character.dart                ST-compatible card fields (+ Anima id)
     character_category.dart       Anima-only category lists + memberships
     lorebook.dart                 CharacterBook / World Info entries (+ ST import aliases)
     global_lorebook.dart          Standalone global lorebook (id + enabled + book)
-    world_workshop.dart           Creation Center workshop + imported chat source + openingScene
+    world_workshop.dart           Creation Center workshop + imported chat source + openingScene + openingSceneLength
+    opening_scene_length.dart     Short / Medium / Long hints for Creation Center opening-scene AI
     saved_opening_scene.dart      Saved opening scene (title, text, optional workshop link)
     sync_target.dart              Sync file location (desktop path or Android URI)
     ui_style_settings.dart        Theme Studio settings + AnimaUiTheme extension + avatars
@@ -277,6 +278,7 @@ lib/
     preset_picker.dart            Preset button + bottom sheets (sampling / text)
     create_character_from_chat_sheet.dart Scan/generate character card from live chat context
     update_character_from_chat_sheet.dart Pick saved card + optional notes → merge update from chat
+    reply_rewrite_sheet.dart      Rewrite reply mode picker (shorten / expand / mood / custom)
   utils/
     platform_utils.dart           Desktop platform detection (Windows / Linux / macOS)
     scroll_to_end.dart            Retry scroll-to-bottom for lazy chat lists
@@ -295,6 +297,7 @@ lib/
     persona_collaborator.dart     Field-aware prompts for persona AI wand
     lore_collaborator.dart        Field-aware prompts + keyword-from-content suggest
     message_formatter.dart        Composer AI format (*actions* / "dialogue")
+    reply_rewrite_service.dart    Rewrite-reply prompts for regen / new swipe
     roadway_service.dart          Paths / Roadway brainstorm + combine prompts + parse
   roadway_cache_service.dart    Per-chat cached Path options (survive sheet close)
   composer_draft_service.dart   Per-chat composer draft autosave
@@ -392,9 +395,9 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. Spot-check Creation Center: long-press an AI reply → **Regenerate** (or ◀ **1/N** ▶ on the latest) — confirm the full reply is not cut off and uses the updated workshop prompt.
-2. Spot-check Creation Center: long-press an older message → **Rewind to here** or **Edit** — confirm later messages are removed / corrections stick before generating lore or characters.
-3. Spot-check: Creation Center **Create opening scene** → confirm it appears under **Settings → Opening scenes** → start a normal **New chat** from Home and pick that scene (no need to use **Start roleplay**).
+1. Spot-check opening scene: start a chat with an opening scene → send a few messages → confirm the AI still respects the scene (⋮ injection stays on). Run **Summarize now** once → confirm memory summary includes the setup; later turns should still feel consistent.
+2. Spot-check **Rewrite reply…** on a long-press AI bubble (chat + Creation Center): try Shorten, Tenser, and Custom; test both replace and **Save as new swipe**.
+3. Spot-check Creation Center opening-scene editor: try **Short** vs **Long** length, then **Fresh from chat** / **Revise from chat**.
 4. Optional QoL backlog when you want more: undo send, last-chat resume, pinned Author’s Note / mood chips, memory preview panel.
 
 ---

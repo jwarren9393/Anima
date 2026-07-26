@@ -1,4 +1,5 @@
 import 'chat_message.dart';
+import 'opening_scene_length.dart';
 
 /// How long Creation Center chat replies are allowed to be (max_tokens cap).
 enum WorkshopReplyLength {
@@ -242,6 +243,7 @@ class WorldWorkshop {
     this.exportedLorebookId,
     this.importedSource,
     this.openingScene = '',
+    this.openingSceneLength = OpeningSceneLength.medium,
     this.replyLength = WorkshopReplyLength.normal,
     this.includeLinkedLorebookInPrompt = false,
   });
@@ -264,6 +266,9 @@ class WorldWorkshop {
   /// Narrator-style opening prose for roleplay chats started from this workshop.
   final String openingScene;
 
+  /// Target length when generating an opening scene from this workshop.
+  final OpeningSceneLength openingSceneLength;
+
   /// Reply length preset for workshop brainstorming chat (not exports).
   final WorkshopReplyLength replyLength;
 
@@ -282,6 +287,7 @@ class WorldWorkshop {
     WorkshopSourceContext? importedSource,
     bool clearImportedSource = false,
     String? openingScene,
+    OpeningSceneLength? openingSceneLength,
     WorkshopReplyLength? replyLength,
     bool? includeLinkedLorebookInPrompt,
   }) {
@@ -297,6 +303,7 @@ class WorldWorkshop {
           ? null
           : (importedSource ?? this.importedSource),
       openingScene: openingScene ?? this.openingScene,
+      openingSceneLength: openingSceneLength ?? this.openingSceneLength,
       replyLength: replyLength ?? this.replyLength,
       includeLinkedLorebookInPrompt: includeLinkedLorebookInPrompt ??
           this.includeLinkedLorebookInPrompt,
@@ -312,6 +319,7 @@ class WorldWorkshop {
           'exportedLorebookId': exportedLorebookId,
         if (importedSource != null) 'importedSource': importedSource!.toJson(),
         if (openingScene.trim().isNotEmpty) 'openingScene': openingScene,
+        'openingSceneLength': openingSceneLength.toJson(),
         'replyLength': replyLength.toJson(),
         'includeLinkedLorebookInPrompt': includeLinkedLorebookInPrompt,
       };
@@ -355,6 +363,8 @@ class WorldWorkshop {
               : ('${json['exportedLorebookId']}').trim(),
       importedSource: imported,
       openingScene: (json['openingScene'] as String? ?? '').trim(),
+      openingSceneLength:
+          OpeningSceneLength.fromJson(json['openingSceneLength']),
       replyLength: WorkshopReplyLength.fromJson(json['replyLength']),
       includeLinkedLorebookInPrompt:
           json['includeLinkedLorebookInPrompt'] == true,

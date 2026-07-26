@@ -18,6 +18,7 @@ class ChatSession {
     this.memoryCoveredCount = 0,
     this.openingScene = '',
     this.openingSceneInPrompt = true,
+    this.openingSceneInMemory = false,
   })  : messages = List<ChatMessage>.from(messages ?? const []),
         participantIds = List<String>.from(participantIds ?? const []),
         lorebookIds =
@@ -66,9 +67,12 @@ class ChatSession {
   /// [messages] and not tied to a character greeting).
   final String openingScene;
 
-  /// When true, [openingScene] is injected into API prompts. Auto-turns off
-  /// after the first user message unless re-enabled in the chat menu.
+  /// When true, [openingScene] is injected into API prompts (default on).
+  /// Turn off via the chat ⋮ menu to save tokens.
   final bool openingSceneInPrompt;
+
+  /// True after the opening scene has been folded into [memorySummary] once.
+  final bool openingSceneInMemory;
 
   bool get isGroup => participantIds.length > 1;
 
@@ -97,6 +101,7 @@ class ChatSession {
     int? memoryCoveredCount,
     String? openingScene,
     bool? openingSceneInPrompt,
+    bool? openingSceneInMemory,
   }) {
     return ChatSession(
       id: id ?? this.id,
@@ -115,6 +120,8 @@ class ChatSession {
       openingScene: openingScene ?? this.openingScene,
       openingSceneInPrompt:
           openingSceneInPrompt ?? this.openingSceneInPrompt,
+      openingSceneInMemory:
+          openingSceneInMemory ?? this.openingSceneInMemory,
     );
   }
 
@@ -134,6 +141,7 @@ class ChatSession {
         if (memoryCoveredCount > 0) 'memoryCoveredCount': memoryCoveredCount,
         if (openingScene.trim().isNotEmpty) 'openingScene': openingScene,
         if (!openingSceneInPrompt) 'openingSceneInPrompt': false,
+        if (openingSceneInMemory) 'openingSceneInMemory': true,
       };
 
   factory ChatSession.fromJson(Map<String, dynamic> json) {
@@ -198,6 +206,7 @@ class ChatSession {
       memoryCoveredCount: coveredCount.clamp(0, 100000),
       openingScene: (json['openingScene'] as String? ?? '').trim(),
       openingSceneInPrompt: json['openingSceneInPrompt'] != false,
+      openingSceneInMemory: json['openingSceneInMemory'] == true,
     );
   }
 

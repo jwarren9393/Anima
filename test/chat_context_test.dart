@@ -144,5 +144,34 @@ void main() {
       expect(ContextEstimate.formatTokenCount(1200), '1.2K');
       expect(ContextEstimate.formatTokenCount(16000), '16K');
     });
+
+    test('summarizeSampling raises token floor and lowers temperature', () {
+      const base = SamplingSettings(
+        maxTokens: 512,
+        temperature: 0.9,
+        topP: 1.0,
+      );
+      final tuned = ChatContextService.summarizeSampling(base);
+      expect(tuned.maxTokens, greaterThanOrEqualTo(2048));
+      expect(tuned.temperature, lessThanOrEqualTo(0.5));
+    });
+
+    test('buildSummarizeMessages seeds opening scene on first fold', () {
+      final messages = service.buildSummarizeMessages(
+        chunk: [msg('1', 'We enter the throne room.')],
+        existingSummary: '',
+        userName: 'Jay',
+        charName: 'Edric',
+        openingScene: 'Rain lashes the castle walls.',
+        seedOpeningScene: true,
+      );
+
+      final user = messages.last['content'] ?? '';
+      final system = messages.first['content'] ?? '';
+      expect(user, contains('Rain lashes the castle walls.'));
+      expect(user, contains('fold into memory'));
+      expect(system, contains('revise'));
+      expect(user, contains('throne room'));
+    });
   });
 }

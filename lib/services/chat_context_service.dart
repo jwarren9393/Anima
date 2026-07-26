@@ -92,11 +92,26 @@ class ChatContextService {
     return cut;
   }
 
+  /// Summarize calls need enough room for a careful memory rewrite.
+  static SamplingSettings summarizeSampling(SamplingSettings base) {
+    const minTokens = 2048;
+    final user = base.maxTokens;
+    final effective = user == null || user < minTokens ? minTokens : user;
+    return base.copyWith(
+      maxTokens: effective.clamp(512, 8192),
+      temperature: base.temperature.clamp(0.1, 1.0) <= 0.5
+          ? base.temperature
+          : 0.35,
+    );
+  }
+
   List<Map<String, String>> buildSummarizeMessages({
     required List<ChatMessage> chunk,
     required String existingSummary,
     required String userName,
     required String charName,
+    String openingScene = '',
+    bool seedOpeningScene = false,
   }) {
     final transcript = StringBuffer();
     for (final message in chunk) {
@@ -111,27 +126,49 @@ class ChatContextService {
       transcript.writeln();
     }
 
-    final system = '''
-You maintain a compact story memory for a private roleplay chat app (Anima).
-Update the running summary so older turns can be dropped from the live prompt.
-Keep important facts, relationships, open plot threads, and tone.
-Write in plain prose (or short bullets). Do not sanitize or moralize.
-Output ONLY the updated summary — no preamble.
-'''.trim();
+    final system =
+        '''
+You maintain an accurate story memory for a private roleplay chat app (Anima).
+Your job is to UPDATE the running memory so older turns can leave the live prompt.
+
+Critical rules:
+- Treat the existing memory as a living document — revise or remove facts that the
+  new chat segment contradicts or supersedes. Prefer the NEWEST information.
+- Track: who is present, relationships, locations, goals, secrets revealed,
+  promises, injuries, inventory, and open plot threads.
+- When something changes (alliance, location, mood, a character's goal), update
+  the summary to reflect the change; do not keep stale facts alongside new ones.
+- Keep important emotional tone and character voice notes when they matter later.
+- Use clear prose or labeled short bullets. Be specific (names, places, facts).
+- Do not sanitize, moralize, or omit uncomfortable story facts.
+- Output ONLY the updated memory summary — no preamble, no markdown fences.
+'''
+            .trim();
 
     final user = StringBuffer();
     if (existingSummary.trim().isNotEmpty) {
-      user.writeln('Existing memory summary:');
+      user.writeln('Existing memory summary (revise — do not blindly append):');
       user.writeln(existingSummary.trim());
       user.writeln();
     } else {
       user.writeln('No existing memory summary yet.');
       user.writeln();
     }
+    if (seedOpeningScene && openingScene.trim().isNotEmpty) {
+      user.writeln(
+        'Story opening (narrator setup at chat start — fold into memory as '
+        'established background; update later if the story contradicts it):',
+      );
+      user.writeln(openingScene.trim());
+      user.writeln();
+    }
     user.writeln('New chat segment to fold in:');
     user.writeln(transcript.toString().trim());
     user.writeln();
-    user.writeln('Write the updated memory summary now.');
+    user.writeln(
+      'Write the full updated memory summary now. Merge the opening (if any) '
+      'and new segment into one coherent memory; correct any outdated facts.',
+    );
 
     return [
       {'role': 'system', 'content': system},

@@ -130,4 +130,20 @@ void main() {
     final saved = await chatService.listChats('alice');
     expect(saved.single.openingScene, 'Fog rolls over the docks.');
   });
+
+  test('openingSceneInMemory tracks summarize seeding', () {
+    final session = ChatSession(
+      id: 's1',
+      characterId: 'c1',
+      title: 'Test',
+      updatedAt: DateTime.utc(2026),
+      openingScene: 'Rain on the docks.',
+      openingSceneInMemory: false,
+    );
+    expect(session.openingSceneInMemory, isFalse);
+
+    final afterSummarize = session.copyWith(openingSceneInMemory: true);
+    expect(afterSummarize.openingSceneInMemory, isTrue);
+    expect(afterSummarize.openingSceneInPrompt, isTrue);
+  });
 }

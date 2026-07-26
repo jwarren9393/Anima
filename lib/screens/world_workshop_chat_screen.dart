@@ -9,6 +9,7 @@ import '../models/chat_session.dart';
 import '../models/global_lorebook.dart';
 import '../models/lorebook.dart';
 import '../models/persona.dart';
+import '../models/opening_scene_length.dart';
 import '../models/world_workshop.dart';
 import '../services/api_key_service.dart';
 import '../services/appearance_controller.dart';
@@ -18,6 +19,7 @@ import '../services/chat_context_service.dart';
 import '../services/chat_service.dart';
 import '../services/nanogpt_service.dart';
 import '../services/persona_service.dart';
+import '../services/reply_rewrite_service.dart';
 import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
 import '../services/world_workshop_builder.dart';
@@ -29,6 +31,7 @@ import '../widgets/greeting_picker.dart';
 import '../widgets/keyboard_inset.dart';
 import '../widgets/narrator_bubble.dart';
 import '../widgets/opening_scene_picker.dart';
+import '../widgets/reply_rewrite_sheet.dart';
 import 'character_edit_screen.dart';
 import 'characters_screen.dart';
 import 'chat_screen.dart';
@@ -77,6 +80,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     with WidgetsBindingObserver {
   final _builder = WorldWorkshopBuilder();
   final _contextService = const ChatContextService();
+  static const _replyRewrite = ReplyRewriteService();
 
   final _input = TextEditingController();
   final _openingSceneController = TextEditingController();
@@ -316,7 +320,10 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     await _streamAssistantReply(assistantIndex: _workshop.messages.length - 1);
   }
 
-  Future<void> _streamAssistantReply({required int assistantIndex}) async {
+  Future<void> _streamAssistantReply({
+    required int assistantIndex,
+    List<Map<String, String>>? rewriteMessages,
+  }) async {
     if (assistantIndex < 0 || assistantIndex >= _workshop.messages.length) {
       return;
     }
@@ -345,6 +352,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         },
         for (final message in history) message.toApiMap(),
       ];
+      if (rewriteMessages != null) {
+        apiMessages.addAll(rewriteMessages);
+      }
 
       final buffer = StringBuffer();
       await for (final chunk in widget.nanoGptService.streamCompletion(
@@ -542,9 +552,24 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     await _streamAssistantReply(assistantIndex: messages.length - 1);
   }
 
+  Future<void> _rewriteMessage(int index) async {
+    if (_busy) return;
+    if (index < 0 || index >= _workshop.messages.length) return;
+    final message = _workshop.messages[index];
+    if (message.isUser) return;
+    final choice = await showReplyRewriteSheet(context);
+    if (!mounted || choice == null) return;
+    await _regenerateMessage(
+      index,
+      asNewSwipe: choice.asNewSwipe,
+      rewrite: choice,
+    );
+  }
+
   Future<void> _regenerateMessage(
     int index, {
     required bool asNewSwipe,
+    ReplyRewriteChoice? rewrite,
   }) async {
     if (_busy) return;
     if (index < 0 || index >= _workshop.messages.length) return;
@@ -552,6 +577,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     if (message.isUser) return;
     if (!await _confirmRegenerateTruncating(index)) return;
 
+    final originalText = message.text;
     var messages = _workshop.messages;
     if (index < messages.length - 1) {
       messages = messages.sublist(0, index + 1);
@@ -562,12 +588,26 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     );
     messages = List<ChatMessage>.from(messages)..[index] = prepared;
 
+    List<Map<String, String>>? rewriteMessages;
+    if (rewrite != null) {
+      rewriteMessages = _replyRewrite.buildRewriteMessages(
+        mode: rewrite.mode,
+        originalReply: originalText,
+        characterName: 'Workshop guide',
+        contextMessages: messages.sublist(0, index),
+        customInstruction: rewrite.customInstruction,
+      );
+    }
+
     setState(() {
       _sending = true;
       _workshop = _workshop.copyWith(messages: messages);
     });
 
-    await _streamAssistantReply(assistantIndex: index);
+    await _streamAssistantReply(
+      assistantIndex: index,
+      rewriteMessages: rewriteMessages,
+    );
   }
 
   Future<void> _editMessage(int index) async {
@@ -713,6 +753,14 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
             if (!message.isUser) ...[
               const Divider(),
               ListTile(
+                leading: const Icon(Icons.tune),
+                title: const Text('Rewrite reply…'),
+                subtitle: const Text(
+                  'Shorten, expand, change mood, or custom',
+                ),
+                onTap: () => Navigator.pop(context, 'rewrite'),
+              ),
+              ListTile(
                 leading: const Icon(Icons.refresh),
                 title: const Text('Regenerate'),
                 subtitle: Text(
@@ -765,6 +813,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     if (action == 'swipe') {
       await _regenerateMessage(index, asNewSwipe: true);
     }
+    if (action == 'rewrite') await _rewriteMessage(index);
     if (action == 'swipe_prev') _shiftSwipe(index, -1);
     if (action == 'swipe_next') _shiftSwipe(index, 1);
   }
@@ -785,6 +834,52 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
               ? 'Linked lorebook will be sent with chat and character exports.'
               : 'Linked lorebook hidden from prompts — using workshop chat only.',
         ),
+      ),
+    );
+  }
+
+  Future<void> _setOpeningSceneLength(OpeningSceneLength length) async {
+    if (_workshop.openingSceneLength == length) return;
+    setState(() => _workshop = _workshop.copyWith(openingSceneLength: length));
+    await _persist(_workshop);
+  }
+
+  Widget _openingSceneLengthPicker(ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 0, 0, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Length', style: theme.textTheme.labelLarge),
+          const SizedBox(height: 6),
+          SegmentedButton<OpeningSceneLength>(
+            segments: [
+              for (final mode in OpeningSceneLength.values)
+                ButtonSegment<OpeningSceneLength>(
+                  value: mode,
+                  label: Text(mode.label),
+                  tooltip: mode.subtitle,
+                ),
+            ],
+            selected: {_workshop.openingSceneLength},
+            onSelectionChanged: _busy || _exporting
+                ? null
+                : (selected) {
+                    if (selected.isEmpty) return;
+                    unawaited(_setOpeningSceneLength(selected.first));
+                  },
+            showSelectedIcon: false,
+            style: ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _workshop.openingSceneLength.subtitle,
+            style: theme.textTheme.bodySmall,
+          ),
+        ],
       ),
     );
   }
@@ -1002,6 +1097,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           importedSource: _workshop.importedSource,
           existingOpeningScene: _workshop.openingScene,
           reviseExisting: reviseExisting,
+          length: _workshop.openingSceneLength,
         ),
         baseUrl: baseUrl,
         sampling: sampling,
@@ -2106,6 +2202,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                     style: theme.textTheme.bodySmall,
                   ),
                   const SizedBox(height: 12),
+                  _openingSceneLengthPicker(theme),
                   if (_workshop.openingScene.trim().isNotEmpty) ...[
                     NarratorBubble(
                       text: _workshop.openingScene,

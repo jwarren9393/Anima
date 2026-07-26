@@ -5,6 +5,7 @@ import '../models/chat_message.dart';
 import '../models/chat_session.dart';
 import '../models/global_lorebook.dart';
 import '../models/lorebook.dart';
+import '../models/opening_scene_length.dart';
 import '../models/persona.dart';
 import '../models/workshop_chat_import_options.dart';
 import '../models/world_workshop.dart';
@@ -1307,6 +1308,7 @@ ${formatTranscript(conversation)}
     WorkshopSourceContext? importedSource,
     String existingOpeningScene = '',
     bool reviseExisting = true,
+    OpeningSceneLength length = OpeningSceneLength.medium,
   }) {
     final guidance = guidanceNote.trim().isEmpty
         ? CollaboratorSettings.defaultGuidanceNote
@@ -1335,7 +1337,7 @@ Output rules:
 - Write in third-person or omniscient narrator voice (stage-direction style is fine).
 - Set the moment, place, mood, and what is happening when the story begins.
 - Do NOT write dialogue as the character's official first message.
-- Keep it readable on a phone (roughly 80–400 words unless the user asked for more).
+- ${length.promptHint}
 - Preserve established facts. Do not sanitize or moralize.
 $revisionRule
 '''

@@ -26,6 +26,7 @@ class ChatTranscriptCodec {
       if (session.openingScene.trim().isNotEmpty)
         'openingScene': session.openingScene,
       if (!session.openingSceneInPrompt) 'openingSceneInPrompt': false,
+      if (session.openingSceneInMemory) 'openingSceneInMemory': true,
       'messages': session.messages.map((m) => m.toJson()).toList(),
     };
     return pretty
@@ -125,6 +126,7 @@ class ChatTranscriptCodec {
       authorsNote: (sessionMap['authorsNote'] as String? ?? '').trim(),
       openingScene: (sessionMap['openingScene'] as String? ?? '').trim(),
       openingSceneInPrompt: sessionMap['openingSceneInPrompt'] != false,
+      openingSceneInMemory: sessionMap['openingSceneInMemory'] == true,
       participantIds: () {
         final raw = sessionMap['participantIds'];
         if (raw is! List) return const <String>[];
