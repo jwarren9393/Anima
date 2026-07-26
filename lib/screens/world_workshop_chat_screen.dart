@@ -80,7 +80,6 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
 
   final _input = TextEditingController();
   final _openingSceneController = TextEditingController();
-  final _composerFocus = FocusNode();
   final _scroll = ScrollController();
   late WorldWorkshop _workshop;
   GlobalLorebook? _linkedLorebook;
@@ -253,7 +252,6 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _composerFocus.dispose();
     _input.dispose();
     _openingSceneController.dispose();
     _scroll.dispose();
@@ -2556,7 +2554,6 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                         Expanded(
                           child: ChatComposerField(
                             key: const ValueKey('workshop_composer'),
-                            focusNode: _composerFocus,
                             controller: _input,
                             enabled: !_busy,
                             enterToSend: _enterToSend,

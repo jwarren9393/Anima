@@ -60,7 +60,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-25  
-**Last agent action:** Published **v1.0.0 build 23** — Creation Center keyboard focus fix + Save & regenerate on edited user messages.
+**Last agent action:** Published **v1.0.0 build 24** — hotfix for Creation Center freeze/crash (reverted bad shared FocusNode; keyboard fix kept).
 
 ### What works today
 
