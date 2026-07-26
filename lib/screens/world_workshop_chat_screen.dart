@@ -323,6 +323,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       final model = await widget.settingsService.getModel();
       final sampling = WorldWorkshopBuilder.workshopChatSampling(
         await widget.settingsService.getSampling(),
+        replyLength: _workshop.replyLength,
       );
       final baseUrl = await widget.settingsService.getApiBaseUrl();
 
@@ -334,6 +335,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
             guidanceNote: collaborator.guidanceNote,
             sourceLorebook: _linkedLorebook?.book,
             importedSource: _workshop.importedSource,
+            replyLength: _workshop.replyLength,
           ),
         },
         for (final message in history) message.toApiMap(),
@@ -670,6 +672,53 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     }
     if (action == 'swipe_prev') _shiftSwipe(index, -1);
     if (action == 'swipe_next') _shiftSwipe(index, 1);
+  }
+
+  Future<void> _setReplyLength(WorkshopReplyLength length) async {
+    if (_workshop.replyLength == length) return;
+    setState(() => _workshop = _workshop.copyWith(replyLength: length));
+    await _persist(_workshop);
+  }
+
+  Widget _replyLengthPicker(ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SegmentedButton<WorkshopReplyLength>(
+            segments: [
+              for (final mode in WorkshopReplyLength.values)
+                ButtonSegment<WorkshopReplyLength>(
+                  value: mode,
+                  label: Text(mode.label),
+                  tooltip: mode.subtitle,
+                ),
+            ],
+            selected: {_workshop.replyLength},
+            onSelectionChanged: _busy
+                ? null
+                : (selected) {
+                    if (selected.isEmpty) return;
+                    unawaited(_setReplyLength(selected.first));
+                  },
+            showSelectedIcon: false,
+            style: ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _workshop.replyLength.subtitle,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
   }
 
   void _stop() {
@@ -2295,37 +2344,44 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                     ),
             ),
             SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: ChatComposerField(
-                        controller: _input,
-                        enabled: !_busy,
-                        enterToSend: _enterToSend,
-                        decoration: const InputDecoration(
-                          hintText: 'Describe your world…',
-                          border: OutlineInputBorder(),
-                          isDense: true,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!keyboardOpen) _replyLengthPicker(theme),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: ChatComposerField(
+                            controller: _input,
+                            enabled: !_busy,
+                            enterToSend: _enterToSend,
+                            decoration: const InputDecoration(
+                              hintText: 'Describe your world…',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            onSend: () {
+                              if (_sending) {
+                                _stop();
+                              } else {
+                                _send();
+                              }
+                            },
+                          ),
                         ),
-                        onSend: () {
-                          if (_sending) {
-                            _stop();
-                          } else {
-                            _send();
-                          }
-                        },
-                      ),
+                        const SizedBox(width: 8),
+                        IconButton.filled(
+                          onPressed:
+                              _exporting ? null : (_sending ? _stop : _send),
+                          icon: Icon(_sending ? Icons.stop : Icons.send),
+                          tooltip: _sending ? 'Stop' : 'Send',
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    IconButton.filled(
-                      onPressed: _exporting ? null : (_sending ? _stop : _send),
-                      icon: Icon(_sending ? Icons.stop : Icons.send),
-                      tooltip: _sending ? 'Stop' : 'Send',
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ],

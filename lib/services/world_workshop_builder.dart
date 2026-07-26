@@ -55,12 +55,46 @@ class WorldWorkshopBuilder {
   /// for many lore entries in one object.
   static const workshopExportMinMaxTokens = 8192;
 
-  /// Applies [workshopChatMinMaxTokens] without letting low RP caps truncate
-  /// worldbuilding replies.
-  static SamplingSettings workshopChatSampling(SamplingSettings base) {
-    const minTokens = workshopChatMinMaxTokens;
+  /// Short Creation Center chat replies (~quick ideas).
+  static const workshopChatShortMaxTokens = 600;
+
+  /// Detailed Creation Center chat replies (deep brainstorm + questions).
+  static const workshopChatDetailedMaxTokens = 4096;
+
+  /// Applies reply-length presets for Creation Center brainstorming chat.
+  static SamplingSettings workshopChatSampling(
+    SamplingSettings base, {
+    WorkshopReplyLength replyLength = WorkshopReplyLength.normal,
+  }) {
+    return switch (replyLength) {
+      WorkshopReplyLength.short => _workshopChatWithCap(
+          base,
+          cap: workshopChatShortMaxTokens,
+        ),
+      WorkshopReplyLength.normal => _workshopChatWithFloor(
+          base,
+          floor: workshopChatMinMaxTokens,
+        ),
+      WorkshopReplyLength.detailed => _workshopChatWithFloor(
+          base,
+          floor: workshopChatDetailedMaxTokens,
+        ),
+    };
+  }
+
+  static SamplingSettings _workshopChatWithCap(
+    SamplingSettings base, {
+    required int cap,
+  }) {
+    return base.copyWith(maxTokens: cap.clamp(256, 8192));
+  }
+
+  static SamplingSettings _workshopChatWithFloor(
+    SamplingSettings base, {
+    required int floor,
+  }) {
     final user = base.maxTokens;
-    final effective = user == null || user < minTokens ? minTokens : user;
+    final effective = user == null || user < floor ? floor : user;
     return base.copyWith(maxTokens: effective.clamp(256, 8192));
   }
 
@@ -77,6 +111,7 @@ class WorldWorkshopBuilder {
     String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
     Lorebook? sourceLorebook,
     WorkshopSourceContext? importedSource,
+    WorkshopReplyLength replyLength = WorkshopReplyLength.normal,
   }) {
     final guidance = guidanceNote.trim().isEmpty
         ? CollaboratorSettings.defaultGuidanceNote
@@ -84,9 +119,23 @@ class WorldWorkshopBuilder {
 
     final source = formatLorebookContext(sourceLorebook);
     final imported = formatImportedSource(importedSource);
+    final lengthNote = switch (replyLength) {
+      WorkshopReplyLength.short =>
+        'Reply length: SHORT — give a concise, focused answer (a few paragraphs '
+        'at most). Skip long question lists unless the user explicitly asks for them.',
+      WorkshopReplyLength.normal =>
+        'Reply length: NORMAL — balanced brainstorming. You may ask follow-up '
+        'questions, but keep structure clear and avoid huge walls of text.',
+      WorkshopReplyLength.detailed =>
+        'Reply length: DETAILED — the user wants a thorough brainstorm. Lay out '
+        'ideas fully, ask multiple follow-up questions, and finish every numbered '
+        'or bulleted list you start.',
+    };
     return '''
 You are Anima's World Info collaborator. You help the user invent a setting,
 factions, places, magic, history, and lore for a private roleplay app.
+
+$lengthNote
 
 Your job in this chat:
 - Ask clear follow-up questions when useful.

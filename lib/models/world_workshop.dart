@@ -1,5 +1,35 @@
 import 'chat_message.dart';
 
+/// How long Creation Center chat replies are allowed to be (max_tokens cap).
+enum WorkshopReplyLength {
+  short,
+  normal,
+  detailed;
+
+  String get label => switch (this) {
+        WorkshopReplyLength.short => 'Short',
+        WorkshopReplyLength.normal => 'Normal',
+        WorkshopReplyLength.detailed => 'Detailed',
+      };
+
+  String get subtitle => switch (this) {
+        WorkshopReplyLength.short => 'Quick ideas · ~600 tokens',
+        WorkshopReplyLength.normal => 'Balanced brainstorming · ~2K tokens',
+        WorkshopReplyLength.detailed =>
+          'Deep dive + questions · ~4K tokens',
+      };
+
+  static WorkshopReplyLength fromJson(dynamic raw) {
+    return switch ('$raw'.trim().toLowerCase()) {
+      'short' => WorkshopReplyLength.short,
+      'detailed' => WorkshopReplyLength.detailed,
+      _ => WorkshopReplyLength.normal,
+    };
+  }
+
+  String toJson() => name;
+}
+
 /// Read-only source material when a workshop is seeded from an existing chat.
 ///
 /// Kept separate from [WorldWorkshop.messages] so roleplay replies are never
@@ -212,6 +242,7 @@ class WorldWorkshop {
     this.exportedLorebookId,
     this.importedSource,
     this.openingScene = '',
+    this.replyLength = WorkshopReplyLength.normal,
   });
 
   final String id;
@@ -232,6 +263,9 @@ class WorldWorkshop {
   /// Narrator-style opening prose for roleplay chats started from this workshop.
   final String openingScene;
 
+  /// Reply length preset for workshop brainstorming chat (not exports).
+  final WorkshopReplyLength replyLength;
+
   WorldWorkshop copyWith({
     String? id,
     String? title,
@@ -242,6 +276,7 @@ class WorldWorkshop {
     WorkshopSourceContext? importedSource,
     bool clearImportedSource = false,
     String? openingScene,
+    WorkshopReplyLength? replyLength,
   }) {
     return WorldWorkshop(
       id: id ?? this.id,
@@ -255,6 +290,7 @@ class WorldWorkshop {
           ? null
           : (importedSource ?? this.importedSource),
       openingScene: openingScene ?? this.openingScene,
+      replyLength: replyLength ?? this.replyLength,
     );
   }
 
@@ -267,6 +303,7 @@ class WorldWorkshop {
           'exportedLorebookId': exportedLorebookId,
         if (importedSource != null) 'importedSource': importedSource!.toJson(),
         if (openingScene.trim().isNotEmpty) 'openingScene': openingScene,
+        'replyLength': replyLength.toJson(),
       };
 
   factory WorldWorkshop.fromJson(Map<String, dynamic> json) {
@@ -308,6 +345,7 @@ class WorldWorkshop {
               : ('${json['exportedLorebookId']}').trim(),
       importedSource: imported,
       openingScene: (json['openingScene'] as String? ?? '').trim(),
+      replyLength: WorkshopReplyLength.fromJson(json['replyLength']),
     );
   }
 

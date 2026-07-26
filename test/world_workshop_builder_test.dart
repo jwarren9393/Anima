@@ -44,13 +44,34 @@ void main() {
   );
 
   group('WorldWorkshopBuilder workshop chat sampling', () {
-    test('raises low RP max_tokens floor for brainstorming', () {
+    test('normal raises low RP max_tokens floor for brainstorming', () {
       const shortRp = SamplingSettings(maxTokens: 350);
       final adjusted = WorldWorkshopBuilder.workshopChatSampling(shortRp);
       expect(adjusted.maxTokens, WorldWorkshopBuilder.workshopChatMinMaxTokens);
     });
 
-    test('keeps higher user max_tokens', () {
+    test('short caps replies for quick ideas', () {
+      const shortRp = SamplingSettings(maxTokens: 350);
+      final adjusted = WorldWorkshopBuilder.workshopChatSampling(
+        shortRp,
+        replyLength: WorkshopReplyLength.short,
+      );
+      expect(adjusted.maxTokens, WorldWorkshopBuilder.workshopChatShortMaxTokens);
+    });
+
+    test('detailed raises floor for deep brainstorms', () {
+      const shortRp = SamplingSettings(maxTokens: 350);
+      final adjusted = WorldWorkshopBuilder.workshopChatSampling(
+        shortRp,
+        replyLength: WorkshopReplyLength.detailed,
+      );
+      expect(
+        adjusted.maxTokens,
+        WorldWorkshopBuilder.workshopChatDetailedMaxTokens,
+      );
+    });
+
+    test('keeps higher user max_tokens on normal', () {
       const longRp = SamplingSettings(maxTokens: 4096);
       final adjusted = WorldWorkshopBuilder.workshopChatSampling(longRp);
       expect(adjusted.maxTokens, 4096);
@@ -621,12 +642,14 @@ Here is the card you asked for:
       );
       final workshop = WorldWorkshop.empty(title: 'From chat').copyWith(
         importedSource: source,
+        replyLength: WorkshopReplyLength.detailed,
       );
       final restored = WorldWorkshop.fromJson(workshop.toJson());
       expect(restored.importedSource, isNotNull);
       expect(restored.importedSource!.chatTitle, 'Harbor Night');
       expect(restored.importedSource!.memorySummary, 'Kept.');
       expect(restored.importedSource!.characterNames, contains('Mira'));
+      expect(restored.replyLength, WorkshopReplyLength.detailed);
 
       final legacy = WorldWorkshop.fromJson({
         'id': 'ws_old',
@@ -635,6 +658,7 @@ Here is the card you asked for:
         'updatedAt': DateTime(2026, 1, 1).toIso8601String(),
       });
       expect(legacy.importedSource, isNull);
+      expect(legacy.replyLength, WorkshopReplyLength.normal);
     });
   });
 
