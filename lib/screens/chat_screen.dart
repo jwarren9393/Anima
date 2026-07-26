@@ -36,6 +36,7 @@ import '../utils/scroll_to_end.dart';
 import '../widgets/chat_composer_field.dart';
 import '../widgets/chat_lorebook_picker.dart';
 import '../widgets/create_character_from_chat_sheet.dart';
+import '../widgets/update_character_from_chat_sheet.dart';
 import '../widgets/anima_avatar.dart';
 import '../widgets/greeting_picker.dart';
 import '../widgets/keyboard_inset.dart';
@@ -1634,6 +1635,43 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _updateCharacterFromChat() async {
+    if (_busy || _session == null) return;
+    final updated = await showUpdateCharacterFromChatSheet(
+      context: context,
+      session: _session!,
+      participants: _participants,
+      persona: _persona,
+      characterService: widget.characterService,
+      settingsService: widget.settingsService,
+      nanoGptService: widget.nanoGptService,
+      worldInfoService: widget.worldInfoService,
+    );
+    if (updated == null || !mounted) return;
+
+    if (_participants.any((c) => c.id == updated.id)) {
+      final nextParticipants = [
+        for (final c in _participants)
+          if (c.id == updated.id) updated else c,
+      ];
+      final primary = _character?.id == updated.id ? updated : _character;
+      await _applySession(
+        _session!,
+        participants: nextParticipants,
+        character: primary,
+      );
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Updated “${updated.name}” — next replies use the new card.',
+        ),
+      ),
+    );
+  }
+
   Future<void> _createCharacterForChat() async {
     if (_busy || _session == null) return;
     final created = await showCreateCharacterFromChatSheet(
@@ -2305,6 +2343,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               if (value == 'characters') _openCharacters();
               if (value == 'manage_cast') _manageCast();
               if (value == 'new_character') _createCharacterForChat();
+              if (value == 'update_character') _updateCharacterFromChat();
               if (value == 'group') _startGroupChat();
               if (value == 'export') _exportChat();
               if (value == 'import') _importChat();
@@ -2369,6 +2408,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               const PopupMenuItem(
                 value: 'new_character',
                 child: Text('New character'),
+              ),
+              const PopupMenuItem(
+                value: 'update_character',
+                child: Text('Update character from chat'),
               ),
               const PopupMenuItem(
                 value: 'group',

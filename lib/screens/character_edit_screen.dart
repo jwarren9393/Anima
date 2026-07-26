@@ -12,6 +12,7 @@ import '../services/character_collaborator.dart';
 import '../services/character_service.dart';
 import '../services/nanogpt_service.dart';
 import '../services/settings_service.dart';
+import '../services/world_workshop_builder.dart';
 import '../widgets/anima_avatar.dart';
 import '../widgets/generate_avatar_sheet.dart';
 import '../widgets/keyboard_inset.dart';
@@ -51,9 +52,11 @@ class CharacterEditScreen extends StatefulWidget {
 class _CharacterEditScreenState extends State<CharacterEditScreen> {
   static const _collaborator = CharacterCollaborator();
   static const _avatarPromptBuilder = AvatarPromptBuilder();
+  static final _workshopBuilder = WorldWorkshopBuilder();
 
   final _avatarService = AvatarService();
   final _name = TextEditingController();
+  final _aiBrief = TextEditingController();
   final _description = TextEditingController();
   final _personality = TextEditingController();
   final _scenario = TextEditingController();
@@ -65,6 +68,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
   bool _saving = false;
   bool _consistencyBusy = false;
   bool _avatarBusy = false;
+  bool _aiCardBusy = false;
   CharacterCollaboratorField? _wandBusy;
   Lorebook? _lorebook;
   Map<String, dynamic> _extensions = const {};
@@ -87,6 +91,213 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
   bool get _isGeneratedDraft => widget.generatedDraft || widget.updatingExisting;
 
   bool get _isUpdatingExisting => widget.updatingExisting;
+
+  bool get _hasSlimCardContent =>
+      _description.text.trim().isNotEmpty ||
+      _personality.text.trim().isNotEmpty ||
+      _mesExample.text.trim().isNotEmpty ||
+      _preservedTags.isNotEmpty;
+
+  Character _characterFromDraft() {
+    final book = _lorebook;
+    return Character(
+      id: _characterId,
+      name: _name.text.trim(),
+      description: _description.text.trim(),
+      personality: _personality.text.trim(),
+      scenario: _scenario.text.trim(),
+      firstMes: _firstMes.text.trim(),
+      alternateGreetings: _lines(_alternateGreetings.text),
+      mesExample: _mesExample.text.trim(),
+      systemPrompt: _systemPrompt.text.trim(),
+      postHistoryInstructions: _postHistory.text.trim(),
+      creatorNotes: _preservedCreatorNotes.trim(),
+      creator: _preservedCreator.trim(),
+      characterVersion: _preservedCharacterVersion.trim(),
+      tags: List<String>.from(_preservedTags),
+      characterBook: book?.toJson(),
+      extensions: _extensions,
+      avatarFileName: _avatarFileName,
+    );
+  }
+
+  void _applySlimFields(Character character) {
+    if (character.name.trim().isNotEmpty) {
+      _name.text = character.name.trim();
+    }
+    _description.text = character.description.trim();
+    _personality.text = character.personality.trim();
+    _mesExample.text = character.mesExample.trim();
+    if (character.tags.isNotEmpty) {
+      _preservedTags = List<String>.from(character.tags);
+    }
+    if (character.creatorNotes.trim().isNotEmpty &&
+        _preservedCreatorNotes.trim().isEmpty) {
+      _preservedCreatorNotes = character.creatorNotes.trim();
+    }
+  }
+
+  void _applyCharacterUpdate(Character character) {
+    _name.text = character.name.trim();
+    _description.text = character.description.trim();
+    _personality.text = character.personality.trim();
+    _mesExample.text = character.mesExample.trim();
+    _preservedTags = List<String>.from(character.tags);
+  }
+
+  Future<void> _runAiCardGenerate() async {
+    if (_aiCardBusy || _wandBusy != null || _consistencyBusy) return;
+    final brief = _aiBrief.text.trim();
+    if (brief.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Describe the character in plain English first.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _aiCardBusy = true);
+    try {
+      final build = await widget.settingsService.resolveCharacterBuild();
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+      final messages = _workshopBuilder.buildPlainEnglishCharacterExportMessages(
+        userBrief: brief,
+        characterName: _name.text.trim(),
+        buildPromptNote: build.promptNote,
+      );
+
+      Character? draft;
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final raw = await widget.nanoGptService.complete(
+          model: build.model,
+          messages: messages,
+          baseUrl: baseUrl,
+          sampling: WorldWorkshopBuilder.workshopExportSampling(build.sampling),
+        );
+        try {
+          draft = _workshopBuilder.parseCharacterJson(
+            raw,
+            preferredId: _characterId,
+            fallbackName: _name.text.trim(),
+          );
+          break;
+        } on FormatException {
+          if (attempt == 1) rethrow;
+        }
+      }
+      if (draft == null) {
+        throw const FormatException(
+          'Could not find character card JSON in the AI reply. Try again.',
+        );
+      }
+
+      if (!mounted) return;
+      setState(() => _applySlimFields(draft!));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Filled description, personality, example dialogue, and tags '
+            '(Creation Center slim fields).',
+          ),
+        ),
+      );
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('AI card builder failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _aiCardBusy = false);
+    }
+  }
+
+  Future<void> _runAiCardUpdate() async {
+    if (_aiCardBusy || _wandBusy != null || _consistencyBusy) return;
+    final brief = _aiBrief.text.trim();
+    if (brief.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Say what you want to change in plain English first.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _aiCardBusy = true);
+    try {
+      final build = await widget.settingsService.resolveCharacterBuild();
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+      final existing = _characterFromDraft();
+      final messages = _workshopBuilder.buildPlainEnglishCharacterUpdateMessages(
+        existing: existing,
+        userBrief: brief,
+        buildPromptNote: build.promptNote,
+      );
+
+      Character? draft;
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final raw = await widget.nanoGptService.complete(
+          model: build.model,
+          messages: messages,
+          baseUrl: baseUrl,
+          sampling: WorldWorkshopBuilder.workshopExportSampling(build.sampling),
+        );
+        try {
+          draft = _workshopBuilder.parseCharacterUpdateJson(
+            raw,
+            original: existing,
+          );
+          break;
+        } on FormatException {
+          if (attempt == 1) rethrow;
+        }
+      }
+      if (draft == null) {
+        throw const FormatException(
+          'Could not find character card JSON in the AI reply. Try again.',
+        );
+      }
+
+      if (!mounted) return;
+      setState(() => _applyCharacterUpdate(draft!));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Merged your notes into the slim card fields. Scenario, greetings, '
+            'and prompts were kept as-is.',
+          ),
+        ),
+      );
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('AI card update failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _aiCardBusy = false);
+    }
+  }
 
   @override
   void initState() {
@@ -431,6 +642,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
   @override
   void dispose() {
     _name.dispose();
+    _aiBrief.dispose();
     _description.dispose();
     _personality.dispose();
     _scenario.dispose();
@@ -561,6 +773,72 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
           Text(
             intro,
             style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 20),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'AI card builder',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Describe the character in plain English. Fills the same slim '
+                    'fields as Creation Center (description, personality, example '
+                    'dialogue, tags — not scenario or greetings). Uses Settings → '
+                    'Character builds.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _aiBrief,
+                    enabled: !_aiCardBusy && !_saving,
+                    minLines: 3,
+                    maxLines: 8,
+                    scrollPadding: kAnimaKeyboardScrollPadding,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: const InputDecoration(
+                      hintText:
+                          'Tall elven ranger, silver hair, dry wit, loyal to the party…',
+                      border: OutlineInputBorder(),
+                      alignLabelWithHint: true,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: (_aiCardBusy || _saving || _wandBusy != null)
+                        ? null
+                        : _runAiCardGenerate,
+                    icon: _aiCardBusy
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.auto_awesome),
+                    label: Text(
+                      _hasSlimCardContent
+                          ? 'Replace slim fields from description'
+                          : 'Generate from description',
+                    ),
+                  ),
+                  if (_isEditing || _isUpdatingExisting || _hasSlimCardContent) ...[
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: (_aiCardBusy || _saving || _wandBusy != null)
+                          ? null
+                          : _runAiCardUpdate,
+                      icon: const Icon(Icons.edit_note),
+                      label: const Text('Update from description'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: 20),
           Center(
@@ -713,7 +991,8 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
             ),
           ),
           FilledButton(
-            onPressed: _saving || _wandBusy != null ? null : _save,
+            onPressed:
+                _saving || _wandBusy != null || _aiCardBusy ? null : _save,
             child: _saving
                 ? const SizedBox(
                     width: 20,

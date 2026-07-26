@@ -967,7 +967,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     }
   }
 
-  Future<void> _createOpeningScene() async {
+  Future<void> _createOpeningScene({required bool reviseExisting}) async {
     if (_sending || _exporting || _loadingLinkedLorebook) return;
     if (!_hasSourceMaterial) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1001,6 +1001,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           sourceLorebook: _lorebookForPrompt,
           importedSource: _workshop.importedSource,
           existingOpeningScene: _workshop.openingScene,
+          reviseExisting: reviseExisting,
         ),
         baseUrl: baseUrl,
         sampling: sampling,
@@ -1018,7 +1019,13 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Opening scene saved to this workshop.')),
+        SnackBar(
+          content: Text(
+            reviseExisting
+                ? 'Opening scene revised from chat.'
+                : 'Fresh opening scene generated from chat.',
+          ),
+        ),
       );
     } on FormatException catch (error) {
       if (!mounted) return;
@@ -1583,6 +1590,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                             if (character.description.trim().isNotEmpty)
                               character.description.trim(),
                             if (fromImport) 'In imported chat',
+                            'Saved character — updates overwrite this card',
                           ].join('\n'),
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
@@ -2103,6 +2111,15 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                       text: _workshop.openingScene,
                       onTap: null,
                     ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'An opening scene is already saved for this workshop. '
+                      'Choose fresh to ignore the saved text, or revise to merge '
+                      'changes from chat.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
                     const SizedBox(height: 12),
                   ],
                   TextField(
@@ -2119,22 +2136,46 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                     ),
                   ),
                   const SizedBox(height: 12),
-                  FilledButton.icon(
-                    onPressed: (_sending || _exporting || _loadingLinkedLorebook)
-                        ? null
-                        : () async {
-                            await _createOpeningScene();
-                            if (sheetContext.mounted) {
-                              Navigator.pop(sheetContext);
-                            }
-                          },
-                    icon: const Icon(Icons.auto_awesome),
-                    label: Text(
-                      _workshop.openingScene.trim().isEmpty
-                          ? 'Generate from chat'
-                          : 'Regenerate from chat',
+                  if (_workshop.openingScene.trim().isEmpty)
+                    FilledButton.icon(
+                      onPressed: (_sending || _exporting || _loadingLinkedLorebook)
+                          ? null
+                          : () async {
+                              await _createOpeningScene(reviseExisting: false);
+                              if (sheetContext.mounted) {
+                                Navigator.pop(sheetContext);
+                              }
+                            },
+                      icon: const Icon(Icons.auto_awesome),
+                      label: const Text('Generate from chat'),
+                    )
+                  else ...[
+                    FilledButton.icon(
+                      onPressed: (_sending || _exporting || _loadingLinkedLorebook)
+                          ? null
+                          : () async {
+                              await _createOpeningScene(reviseExisting: false);
+                              if (sheetContext.mounted) {
+                                Navigator.pop(sheetContext);
+                              }
+                            },
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Fresh from chat'),
                     ),
-                  ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: (_sending || _exporting || _loadingLinkedLorebook)
+                          ? null
+                          : () async {
+                              await _createOpeningScene(reviseExisting: true);
+                              if (sheetContext.mounted) {
+                                Navigator.pop(sheetContext);
+                              }
+                            },
+                      icon: const Icon(Icons.edit_note),
+                      label: const Text('Revise from chat'),
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   TextButton(
                     onPressed: () => Navigator.pop(sheetContext),

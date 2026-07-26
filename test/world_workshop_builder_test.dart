@@ -881,4 +881,102 @@ Here is the card you asked for:
       expect(user, contains('Captain Vex blocks the gate'));
     });
   });
+
+  group('opening scene export', () {
+    test('fresh mode omits existing opening scene block', () {
+      final messages = builder.buildOpeningSceneExportMessages(
+        conversation: const [],
+        existingOpeningScene: 'Old rain-soaked streets prose.',
+        reviseExisting: false,
+      );
+      final system = messages.first['content'] ?? '';
+      final user = messages.last['content'] ?? '';
+      expect(system, contains('NEW opening scene'));
+      expect(user, isNot(contains('Old rain-soaked streets prose')));
+    });
+
+    test('revise mode includes existing opening scene block', () {
+      final messages = builder.buildOpeningSceneExportMessages(
+        conversation: const [],
+        existingOpeningScene: 'Old rain-soaked streets prose.',
+        reviseExisting: true,
+      );
+      final user = messages.last['content'] ?? '';
+      expect(user, contains('Current opening scene'));
+      expect(user, contains('Old rain-soaked streets prose.'));
+    });
+  });
+
+  group('plain English character cards', () {
+    test('buildPlainEnglishCharacterExportMessages includes brief', () {
+      final messages = builder.buildPlainEnglishCharacterExportMessages(
+        userBrief: 'A stoic knight with a chipped sword.',
+        characterName: 'Sir Aldric',
+      );
+      final user = messages.last['content'] ?? '';
+      expect(user, contains('stoic knight'));
+      expect(messages.first['content'], contains('plain-English'));
+    });
+
+    test('buildPlainEnglishCharacterUpdateMessages includes current card', () {
+      const existing = Character(
+        id: 'c1',
+        name: 'Lyra',
+        description: 'Silver hair.',
+      );
+      final messages = builder.buildPlainEnglishCharacterUpdateMessages(
+        existing: existing,
+        userBrief: 'Make her more secretive.',
+      );
+      final user = messages.last['content'] ?? '';
+      expect(user, contains('Silver hair'));
+      expect(user, contains('more secretive'));
+    });
+  });
+
+  group('chat character update', () {
+    test('buildChatCharacterUpdateMessages includes transcript and notes', () {
+      final session = ChatSession(
+        id: 's1',
+        characterId: 'c1',
+        title: 'Test',
+        updatedAt: DateTime.utc(2026, 1, 1),
+        messages: [
+          ChatMessage(
+            id: 'm1',
+            role: ChatRole.user,
+            text: 'Lyra smiles.',
+          ),
+          ChatMessage(
+            id: 'm2',
+            role: ChatRole.assistant,
+            text: 'Hello there.',
+            speakerId: 'c1',
+          ),
+        ],
+      );
+      const existing = Character(id: 'c1', name: 'Lyra', description: 'Mage.');
+      final messages = builder.buildChatCharacterUpdateMessages(
+        session: session,
+        characters: const [existing],
+        existing: existing,
+        changeNotes: 'She now wears a red cloak.',
+      );
+      final user = messages.last['content'] ?? '';
+      expect(user, contains('Lyra smiles'));
+      expect(user, contains('red cloak'));
+      expect(user, contains('Mage.'));
+    });
+
+    test('prioritizeCharactersForChatUpdate lists participants first', () {
+      const a = Character(id: 'a', name: 'Alpha');
+      const b = Character(id: 'b', name: 'Beta');
+      const c = Character(id: 'c', name: 'Charlie');
+      final ordered = builder.prioritizeCharactersForChatUpdate(
+        allCharacters: [c, a, b],
+        participants: [b],
+      );
+      expect(ordered.map((e) => e.id).toList(), ['b', 'a', 'c']);
+    });
+  });
 }

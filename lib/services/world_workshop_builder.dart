@@ -504,6 +504,206 @@ $transcriptBlock
     ];
   }
 
+  /// Build one slim character card from plain-English notes (no chat transcript).
+  List<Map<String, String>> buildPlainEnglishCharacterExportMessages({
+    required String userBrief,
+    String characterName = '',
+    String buildPromptNote = CharacterBuildSettings.defaultPromptNote,
+  }) {
+    final guidance = buildPromptNote.trim().isEmpty
+        ? CharacterBuildSettings.defaultPromptNote
+        : buildPromptNote.trim();
+    final brief = userBrief.trim();
+    if (brief.isEmpty) {
+      throw ArgumentError('userBrief must not be empty');
+    }
+    final name = characterName.trim();
+
+    final system =
+        '''
+You convert plain-English character notes into ONE SillyTavern Character Card V2
+JSON object for the Anima app (playable chat character).
+
+Guidance note (follow closely):
+$guidance
+
+${name.isEmpty ? '' : 'Suggested name: $name\n'}
+Output rules:
+- Reply with ONLY a single JSON object. No markdown fences. No preamble.
+- Prefer this shape (chara_card_v2):
+$slimCharacterCardJsonShape
+$slimCharacterCardFieldRules
+- Fill fields from the user's notes. Invent only what is needed for a usable card.
+- Keep each field concise (a few sentences each). Do not write long essays.
+- Do not sanitize or moralize. Output only the JSON object.
+'''
+            .trim();
+
+    final user =
+        '''
+Turn these character notes into a full slim character card:
+
+$brief
+'''
+            .trim();
+
+    return [
+      {'role': 'system', 'content': system},
+      {'role': 'user', 'content': user},
+    ];
+  }
+
+  /// Preserve-and-merge update from plain-English change notes.
+  List<Map<String, String>> buildPlainEnglishCharacterUpdateMessages({
+    required Character existing,
+    required String userBrief,
+    String buildPromptNote = CharacterBuildSettings.defaultPromptNote,
+  }) {
+    final guidance = buildPromptNote.trim().isEmpty
+        ? CharacterBuildSettings.defaultPromptNote
+        : buildPromptNote.trim();
+    final brief = userBrief.trim();
+    if (brief.isEmpty) {
+      throw ArgumentError('userBrief must not be empty');
+    }
+    final name =
+        existing.name.trim().isEmpty ? 'Character' : existing.name.trim();
+    final currentCard = formatCharacterCardJson(existing);
+
+    final system =
+        '''
+You update ONE existing SillyTavern Character Card for the Anima app using the
+user's plain-English change notes.
+
+Guidance note (follow closely):
+$guidance
+
+Target character: $name
+
+Preserve-and-merge rules:
+- Keep established facts from the CURRENT CARD unless the notes clearly revise them.
+- Merge in new details from the user's notes.
+- Do not invent large contradictions or erase personality, history, or looks
+  that the current card already states.
+- Prefer richer, specific wording over vague replacements.
+- Keep the same character identity (same person). Do not rename unless the
+  notes explicitly ask for a name change.
+
+Output rules:
+- Reply with ONLY a single JSON object. No markdown fences. No preamble.
+- Prefer this shape (chara_card_v2):
+$slimCharacterCardJsonShape
+$slimCharacterCardUpdateFieldRules
+- Do not sanitize or moralize. Output only the JSON object.
+'''
+            .trim();
+
+    final user =
+        '''
+CURRENT CHARACTER CARD (preserve established facts; merge updates from notes):
+$currentCard
+
+User change notes:
+$brief
+'''
+            .trim();
+
+    return [
+      {'role': 'system', 'content': system},
+      {'role': 'user', 'content': user},
+    ];
+  }
+
+  /// Preserve-and-merge update for a saved character using a live roleplay chat.
+  List<Map<String, String>> buildChatCharacterUpdateMessages({
+    required ChatSession session,
+    required List<Character> characters,
+    required Character existing,
+    Persona? persona,
+    List<GlobalLorebook> linkedLorebooks = const [],
+    String changeNotes = '',
+    String buildPromptNote = CharacterBuildSettings.defaultPromptNote,
+  }) {
+    final guidance = buildPromptNote.trim().isEmpty
+        ? CharacterBuildSettings.defaultPromptNote
+        : buildPromptNote.trim();
+    final name =
+        existing.name.trim().isEmpty ? 'Character' : existing.name.trim();
+    final currentCard = formatCharacterCardJson(existing);
+    final notes = changeNotes.trim();
+    final userName = persona?.name.trim().isNotEmpty == true
+        ? persona!.name.trim()
+        : 'User';
+
+    final system =
+        '''
+You update ONE existing SillyTavern Character Card for the Anima app using a
+live roleplay chat as source material.
+
+Guidance note (follow closely):
+$guidance
+
+Target character: $name
+
+Preserve-and-merge rules:
+- Keep established facts from the CURRENT CARD unless the chat or user notes
+  clearly revise them.
+- Merge in new details established in the roleplay transcript.
+- Do not invent large contradictions or erase personality, history, or looks
+  that the current card already states.
+- Prefer richer, specific wording over vague replacements.
+- Keep the same character identity (same person). Do not rename unless the
+  chat or notes explicitly ask for a name change.
+
+Output rules:
+- Reply with ONLY a single JSON object. No markdown fences. No preamble.
+- Prefer this shape (chara_card_v2):
+$slimCharacterCardJsonShape
+$slimCharacterCardUpdateFieldRules
+- Do not sanitize or moralize. Output only the JSON object.
+'''
+            .trim();
+
+    final metadata = chatMetadataContext(
+      session: session,
+      characters: characters,
+      persona: persona,
+      linkedLorebooks: linkedLorebooks,
+    );
+    final imported = _importedBlock(metadata);
+    final transcript = chatTranscriptForCharacterGen(
+      session,
+      userName: userName,
+    );
+    final transcriptBlock = transcript.isEmpty
+        ? '(No recent messages — use memory summary and character cards only.)'
+        : transcript;
+    final notesBlock = notes.isEmpty
+        ? ''
+        : '''
+
+User change notes (apply these on top of the card and chat):
+$notes
+''';
+
+    final user =
+        '''
+CURRENT CHARACTER CARD (preserve established facts; merge chat updates):
+$currentCard
+
+$imported$notesBlock
+Update the character card for "$name" using the current card plus this roleplay chat:
+
+$transcriptBlock
+'''
+            .trim();
+
+    return [
+      {'role': 'system', 'content': system},
+      {'role': 'user', 'content': user},
+    ];
+  }
+
   /// Recent roleplay lines for workshop import — same trim as Summarize:
   /// newest [keepRecent] messages only (not every uncovered line).
   List<ChatMessage> selectRecentMessagesForImport(
@@ -861,6 +1061,28 @@ ${formatTranscript(conversation)}
     return _cardCodec.toCardV2Json(character, pretty: true);
   }
 
+  /// Characters in [participants] first, then the rest alphabetically.
+  List<Character> prioritizeCharactersForChatUpdate({
+    required List<Character> allCharacters,
+    required List<Character> participants,
+  }) {
+    final inChatIds = {for (final c in participants) c.id};
+    final inChat = <Character>[];
+    final rest = <Character>[];
+    for (final character in allCharacters) {
+      if (inChatIds.contains(character.id)) {
+        inChat.add(character);
+      } else {
+        rest.add(character);
+      }
+    }
+    int byName(Character a, Character b) =>
+        a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    inChat.sort(byName);
+    rest.sort(byName);
+    return [...inChat, ...rest];
+  }
+
   /// Sort saved characters so imported-chat cast appears first.
   List<Character> prioritizeCharactersForUpdate({
     required List<Character> characters,
@@ -1084,11 +1306,18 @@ ${formatTranscript(conversation)}
     Lorebook? sourceLorebook,
     WorkshopSourceContext? importedSource,
     String existingOpeningScene = '',
+    bool reviseExisting = true,
   }) {
     final guidance = guidanceNote.trim().isEmpty
         ? CollaboratorSettings.defaultGuidanceNote
         : guidanceNote.trim();
-    final existing = existingOpeningScene.trim();
+    final existing = reviseExisting ? existingOpeningScene.trim() : '';
+
+    final revisionRule = existing.isEmpty
+        ? '- Write a NEW opening scene from scratch using the conversation and '
+            'source material. Do not copy wording from any prior saved scene '
+            'unless the user explicitly asked to keep it.'
+        : '- Revise the existing opening scene below when the user asked for changes.';
 
     final system =
         '''
@@ -1108,7 +1337,7 @@ Output rules:
 - Do NOT write dialogue as the character's official first message.
 - Keep it readable on a phone (roughly 80–400 words unless the user asked for more).
 - Preserve established facts. Do not sanitize or moralize.
-${existing.isEmpty ? '' : '- Revise the existing opening scene below when the user asked for changes.'}
+$revisionRule
 '''
             .trim();
 
