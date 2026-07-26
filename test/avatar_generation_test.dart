@@ -7,7 +7,7 @@ void main() {
   group('AvatarPromptBuilder', () {
     const builder = AvatarPromptBuilder();
 
-    test('includes name and card fields', () {
+    test('includes name and visual card details', () {
       final prompt = builder.buildPrompt(
         name: 'Mira',
         description: 'Dock smuggler in oilskin with dark hair.',
@@ -17,38 +17,67 @@ void main() {
       );
       expect(prompt, contains('Mira'));
       expect(prompt, contains('oilskin'));
-      expect(prompt, contains('Wry and loyal'));
-      expect(prompt, contains('piers'));
+      expect(prompt, contains('dark hair'));
       expect(prompt, contains('smuggler'));
       expect(prompt, contains('no watermark'));
+    });
+
+    test('skips non-visual personality, scenario, and backstory', () {
+      final prompt = builder.buildPrompt(
+        name: 'Seraphina',
+        description: '''
+Seraphina is a 28-year-old elven diplomat with silver hair and violet eyes. She wears an emerald silk gown with gold embroidery.
+
+She grew up in the forest courts and learned statecraft from her mother. She despises corruption and will manipulate nobles when necessary.
+
+Relationships: allied with the merchant guild; estranged from her brother Marcus.
+''',
+        personality:
+            'Cunning, patient, fiercely loyal to her people. She never raises her voice but always gets what she wants through careful negotiation.',
+        scenario:
+            'A tense summit in the crystal palace where three kingdoms negotiate a trade treaty.',
+        tags: const ['elf', 'diplomat', 'fantasy', 'roleplay'],
+      );
+
+      expect(prompt.length, lessThanOrEqualTo(AvatarPromptBuilder.maxPromptLength));
+      expect(prompt, contains('silver hair'));
+      expect(prompt, contains('violet eyes'));
+      expect(prompt, contains('emerald silk gown'));
+      expect(prompt, contains('elf'));
+      expect(prompt, isNot(contains('manipulate nobles')));
+      expect(prompt, isNot(contains('crystal palace')));
+      expect(prompt, isNot(contains('Cunning, patient')));
+      expect(prompt, isNot(contains('Style tags: elf, diplomat, fantasy, roleplay')));
     });
 
     test('works with empty optional fields', () {
       final prompt = builder.buildPrompt(name: '');
       expect(prompt, contains('a character'));
       expect(prompt, contains('Portrait avatar'));
+      expect(prompt.length, lessThanOrEqualTo(AvatarPromptBuilder.maxPromptLength));
     });
 
-    test('clips very long description', () {
+    test('clips very long description under the NanoGPT limit', () {
       final long = List.filled(80, 'appearance detail').join(' ');
       final prompt = builder.buildPrompt(name: 'Vex', description: long);
-      expect(prompt.length, lessThan(long.length + 200));
+      expect(prompt.length, lessThanOrEqualTo(AvatarPromptBuilder.maxPromptLength));
       expect(prompt, contains('…'));
     });
 
-    test('buildPersonaPrompt uses name and about text', () {
+    test('buildPersonaPrompt prioritizes appearance over identity text', () {
       final prompt = builder.buildPersonaPrompt(
         name: 'Sam',
-        description: 'Soft-spoken cartographer with ink-stained fingers.',
+        description:
+            'Soft-spoken cartographer with ink-stained fingers and a love of old maps.',
         appearance: 'Silver hair and a green travel cloak.',
         personality: 'Patient and curious.',
       );
       expect(prompt, contains('Sam'));
       expect(prompt, contains('player / user persona'));
-      expect(prompt, contains('cartographer'));
       expect(prompt, contains('Silver hair'));
-      expect(prompt, contains('Patient and curious'));
-      expect(prompt, contains('no watermark'));
+      expect(prompt, contains('green travel cloak'));
+      expect(prompt, isNot(contains('love of old maps')));
+      expect(prompt.length, lessThanOrEqualTo(AvatarPromptBuilder.maxPromptLength));
     });
 
     test('buildPersonaPrompt works with empty fields', () {

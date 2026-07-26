@@ -178,8 +178,11 @@ class CharacterBuildSettings {
   static const defaultTopP = 0.95;
   static const defaultPromptNote =
       'Write accurate, playable SillyTavern-style character cards from the '
-      'source material. Keep each field concise (a few sentences). Stay faithful '
-      'to established facts. Do not sanitize or moralize.';
+      'source material. Focus on description, personality, and example dialogue '
+      'only — do not write scenario, opening messages, system prompt, or '
+      'post-history instructions (Anima handles those per chat). Keep each field '
+      'concise (a few sentences). Stay faithful to established facts. Do not '
+      'sanitize or moralize.';
 
   /// When true, [SettingsService.getModel] is used for card builds.
   final bool useMainChatModel;

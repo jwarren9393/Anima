@@ -61,6 +61,44 @@ class WorldWorkshopBuilder {
   /// Detailed Creation Center chat replies (deep brainstorm + questions).
   static const workshopChatDetailedMaxTokens = 4096;
 
+  /// JSON shape for Creation Center / chat-import character card generation.
+  ///
+  /// Omits scenario, greetings, and per-card system/post-history fields — Anima
+  /// uses per-chat opening scenes and global prompts instead.
+  static const slimCharacterCardJsonShape = '''
+{
+  "spec": "chara_card_v2",
+  "spec_version": "2.0",
+  "data": {
+    "name": "Character Name",
+    "description": "appearance, background, important facts",
+    "personality": "traits, speech style, motives",
+    "mes_example": "<START>\\n{{user}}: ...\\n{{char}}: ...",
+    "creator_notes": "brief notes for the card author",
+    "tags": ["tag1", "tag2"],
+    "creator": "Anima Creation Center",
+    "character_version": "1"
+  }
+}''';
+
+  static const slimCharacterCardFieldRules = '''
+- Generate ONLY these card fields: name, description, personality, mes_example,
+  creator_notes, and tags.
+- Do NOT output scenario, first_mes, alternate_greetings, system_prompt, or
+  post_history_instructions. Anima uses per-chat opening scenes and app-wide
+  system/post-history prompts instead of per-character copies of those fields.
+- Do NOT include a character_book / lorebook on the card — world lore stays in
+  the separate global lorebook.''';
+
+  static const slimCharacterCardUpdateFieldRules = '''
+- Update ONLY: description, personality, mes_example, creator_notes, and tags
+  (plus name only if the workshop explicitly requests a rename).
+- Do NOT output or change scenario, first_mes, alternate_greetings,
+  system_prompt, or post_history_instructions — the app keeps the existing card's
+  values for those fields.
+- Do NOT include a character_book / lorebook on the card — world lore stays in
+  the separate global lorebook. The app keeps the card's existing book.''';
+
   /// Applies reply-length presets for Creation Center brainstorming chat.
   static SamplingSettings workshopChatSampling(
     SamplingSettings base, {
@@ -427,29 +465,11 @@ ${summary.isEmpty ? '' : 'Identity hint: $summary'}
 Output rules:
 - Reply with ONLY a single JSON object. No markdown fences. No preamble.
 - Prefer this shape (chara_card_v2):
-{
-  "spec": "chara_card_v2",
-  "spec_version": "2.0",
-  "data": {
-    "name": "$name",
-    "description": "appearance, background, important facts",
-    "personality": "traits, speech, motives",
-    "scenario": "starting situation for roleplay with {{user}}",
-    "first_mes": "opening greeting as this character",
-    "alternate_greetings": ["optional other opening"],
-    "mes_example": "<START>\\n{{user}}: ...\\n{{char}}: ...",
-    "system_prompt": "optional short card system instructions",
-    "post_history_instructions": "optional after-history nudge",
-    "creator_notes": "brief notes for the card author",
-    "tags": ["tag1", "tag2"],
-    "creator": "Anima",
-    "character_version": "1"
-  }
-}
+$slimCharacterCardJsonShape
+$slimCharacterCardFieldRules
 - Fill fields from the chat transcript and reference material. Invent only what
   is needed for a usable card that fits the current scene.
 - Keep each field concise (a few sentences each). Do not write long essays.
-- Do NOT include a character_book / lorebook on the card.
 - Do not sanitize or moralize. Output only the JSON object.
 '''
             .trim();
@@ -807,29 +827,10 @@ ${summary.isEmpty ? '' : 'Identity hint: $summary'}
 Output rules:
 - Reply with ONLY a single JSON object. No markdown fences. No preamble.
 - Prefer this shape (chara_card_v2):
-{
-  "spec": "chara_card_v2",
-  "spec_version": "2.0",
-  "data": {
-    "name": "$name",
-    "description": "appearance, background, important facts",
-    "personality": "traits, speech, motives",
-    "scenario": "starting situation for roleplay with {{user}}",
-    "first_mes": "opening greeting as this character",
-    "alternate_greetings": ["optional other opening"],
-    "mes_example": "<START>\\n{{user}}: ...\\n{{char}}: ...",
-    "system_prompt": "optional short card system instructions",
-    "post_history_instructions": "optional after-history nudge",
-    "creator_notes": "brief notes for the card author",
-    "tags": ["tag1", "tag2"],
-    "creator": "Anima Creation Center",
-    "character_version": "1"
-  }
-}
+$slimCharacterCardJsonShape
+$slimCharacterCardFieldRules
 - Fill fields from the conversation. Invent only what is needed for a usable card.
 - Keep each field concise (a few sentences each). Do not write long essays.
-- Do NOT include a character_book / lorebook on the card — world lore stays in
-  the separate global lorebook.
 - Do not sanitize or moralize. Output only the JSON object.
 '''
             .trim();
@@ -935,27 +936,8 @@ Preserve-and-merge rules:
 Output rules:
 - Reply with ONLY a single JSON object. No markdown fences. No preamble.
 - Prefer this shape (chara_card_v2):
-{
-  "spec": "chara_card_v2",
-  "spec_version": "2.0",
-  "data": {
-    "name": "$name",
-    "description": "appearance, background, important facts",
-    "personality": "traits, speech, motives",
-    "scenario": "starting situation for roleplay with {{user}}",
-    "first_mes": "opening greeting as this character",
-    "alternate_greetings": ["optional other opening"],
-    "mes_example": "<START>\\n{{user}}: ...\\n{{char}}: ...",
-    "system_prompt": "optional short card system instructions",
-    "post_history_instructions": "optional after-history nudge",
-    "creator_notes": "brief notes for the card author",
-    "tags": ["tag1", "tag2"],
-    "creator": "Anima Creation Center",
-    "character_version": "1"
-  }
-}
-- Do NOT include a character_book / lorebook on the card — world lore stays in
-  the separate global lorebook. The app keeps the card's existing book.
+$slimCharacterCardJsonShape
+$slimCharacterCardUpdateFieldRules
 - Do not sanitize or moralize. Output only the JSON object.
 '''
             .trim();
@@ -1006,17 +988,12 @@ ${formatTranscript(conversation)}
       name: pick(parsed.name, original.name),
       description: pick(parsed.description, original.description),
       personality: pick(parsed.personality, original.personality),
-      scenario: pick(parsed.scenario, original.scenario),
-      firstMes: pick(parsed.firstMes, original.firstMes),
+      scenario: original.scenario,
+      firstMes: original.firstMes,
       mesExample: pick(parsed.mesExample, original.mesExample),
-      systemPrompt: pick(parsed.systemPrompt, original.systemPrompt),
-      postHistoryInstructions: pick(
-        parsed.postHistoryInstructions,
-        original.postHistoryInstructions,
-      ),
-      alternateGreetings: parsed.alternateGreetings.isEmpty
-          ? original.alternateGreetings
-          : parsed.alternateGreetings,
+      systemPrompt: original.systemPrompt,
+      postHistoryInstructions: original.postHistoryInstructions,
+      alternateGreetings: original.alternateGreetings,
       creatorNotes: original.creatorNotes.trim().isNotEmpty
           ? original.creatorNotes
           : pick(parsed.creatorNotes, original.creatorNotes),
@@ -1291,9 +1268,14 @@ ${formatTranscript(conversation)}
         : 'char_${DateTime.now().microsecondsSinceEpoch}';
 
     final character = _cardCodec.fromCardMap(map, preferredId: id);
-    // Never keep an embedded book from workshop character export.
+    // Workshop exports: no embedded book, and no per-card scene/greeting/prompts.
     final cleaned = character.copyWith(
       clearCharacterBook: true,
+      scenario: '',
+      firstMes: '',
+      alternateGreetings: const [],
+      systemPrompt: '',
+      postHistoryInstructions: '',
       name: character.name.trim().isEmpty
           ? (fallbackName?.trim() ?? '')
           : character.name.trim(),

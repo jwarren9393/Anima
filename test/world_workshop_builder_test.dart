@@ -272,6 +272,8 @@ Here you go:
         messages[0]['content'],
         contains('Do NOT include a character_book'),
       );
+      expect(messages[0]['content'], contains('Do NOT output scenario'));
+      expect(messages[0]['content'], isNot(contains('"first_mes"')));
       expect(messages[1]['content'], contains('Rainy city with guilds'));
     });
 
@@ -307,8 +309,12 @@ Here you go:
       expect(character.name, 'Mira');
       expect(character.description, contains('oilskin'));
       expect(character.personality, contains('Wry'));
-      expect(character.firstMes, contains('Need something moved'));
-      expect(character.alternateGreetings, hasLength(1));
+      expect(character.scenario, isEmpty);
+      expect(character.firstMes, isEmpty);
+      expect(character.alternateGreetings, isEmpty);
+      expect(character.systemPrompt, isEmpty);
+      expect(character.postHistoryInstructions, isEmpty);
+      expect(character.mesExample, contains('Keep your voice down'));
       expect(character.tags, containsAll(['smuggler', 'harbor']));
       expect(character.characterBook, isNull);
       expect(character.creator, isNotEmpty);
@@ -799,10 +805,10 @@ Here is the card you asked for:
       expect(updated.personality, 'Wry and loyal.');
       expect(updated.firstMes, original.firstMes);
       expect(updated.mesExample, original.mesExample);
-      expect(updated.postHistoryInstructions, 'Keep replies terse.');
+      expect(updated.postHistoryInstructions, original.postHistoryInstructions);
+      expect(updated.scenario, original.scenario);
+      expect(updated.systemPrompt, original.systemPrompt);
       expect(updated.description, contains('blood debt'));
-      expect(updated.scenario, contains('Fog rolls'));
-      expect(updated.systemPrompt, contains('Stay sharp'));
     });
   });
 
