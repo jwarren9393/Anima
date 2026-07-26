@@ -86,6 +86,7 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final _inputController = TextEditingController();
+  final _composerFocus = FocusNode();
   final _scrollController = ScrollController();
   final _promptBuilder = const PromptBuilder();
   final _lorebookService = const LorebookService();
@@ -2241,6 +2242,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       unawaited(_draftService.saveDraft(session.id, text));
     }
     _inputController.removeListener(_onComposerChanged);
+    _composerFocus.dispose();
     _inputController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -2640,6 +2642,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         ),
                         Expanded(
                           child: ChatComposerField(
+                            key: const ValueKey('chat_composer'),
+                            focusNode: _composerFocus,
                             controller: _inputController,
                             enabled: !_busy && !_formatting,
                             enterToSend: _enterToSend,

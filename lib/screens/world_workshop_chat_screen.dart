@@ -80,6 +80,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
 
   final _input = TextEditingController();
   final _openingSceneController = TextEditingController();
+  final _composerFocus = FocusNode();
   final _scroll = ScrollController();
   late WorldWorkshop _workshop;
   GlobalLorebook? _linkedLorebook;
@@ -89,7 +90,6 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   bool _sending = false;
   bool _exporting = false;
   String? _exportStatus;
-  double _keyboardInset = 0;
   bool _enterToSend = false;
 
   @override
@@ -244,14 +244,8 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   void didChangeMetrics() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final inset = MediaQuery.viewInsetsOf(context).bottom;
-      if (inset > _keyboardInset + 8) {
+      if (MediaQuery.viewInsetsOf(context).bottom > 24) {
         _scrollToEnd();
-      }
-      if ((inset - _keyboardInset).abs() > 1) {
-        setState(() => _keyboardInset = inset);
-      } else {
-        _keyboardInset = inset;
       }
     });
   }
@@ -259,6 +253,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _composerFocus.dispose();
     _input.dispose();
     _openingSceneController.dispose();
     _scroll.dispose();
@@ -495,6 +490,60 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     return confirmed == true;
   }
 
+  Future<bool> _confirmRegenerateAfterUser(int index) async {
+    if (index >= _workshop.messages.length - 1) return true;
+    final later = _workshop.messages.length - index - 1;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Regenerate reply?'),
+        content: Text(
+          'This removes $later later message${later == 1 ? '' : 's'} '
+          'and generates a new AI reply from your message.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Regenerate'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  /// Keep the user message at [index], drop everything after, stream a new reply.
+  Future<void> _regenerateAfterUserMessage(
+    int index, {
+    bool confirmTruncate = true,
+  }) async {
+    if (_busy) return;
+    if (index < 0 || index >= _workshop.messages.length) return;
+    final message = _workshop.messages[index];
+    if (!message.isUser) return;
+    if (confirmTruncate && !await _confirmRegenerateAfterUser(index)) return;
+
+    final messages = _workshop.messages.sublist(0, index + 1);
+    messages.add(
+      ChatMessage(
+        id: ChatMessage.newId(),
+        role: ChatRole.assistant,
+        text: '',
+      ),
+    );
+
+    setState(() {
+      _sending = true;
+      _workshop = _workshop.copyWith(messages: messages);
+    });
+    await _persist(_workshop);
+    await _streamAssistantReply(assistantIndex: messages.length - 1);
+  }
+
   Future<void> _regenerateMessage(
     int index, {
     required bool asNewSwipe,
@@ -528,7 +577,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     if (index < 0 || index >= _workshop.messages.length) return;
     final message = _workshop.messages[index];
     final controller = TextEditingController(text: message.text);
-    final result = await showDialog<String>(
+    final result = await showDialog<_WorkshopEditResult>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(message.isUser ? 'Edit your message' : 'Edit reply'),
@@ -544,21 +593,43 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text),
+          TextButton(
+            onPressed: () => Navigator.pop(
+              context,
+              _WorkshopEditResult(text: controller.text, regenerate: false),
+            ),
             child: const Text('Save'),
           ),
+          if (message.isUser)
+            FilledButton(
+              onPressed: () => Navigator.pop(
+                context,
+                _WorkshopEditResult(text: controller.text, regenerate: true),
+              ),
+              child: const Text('Save & regenerate'),
+            )
+          else
+            FilledButton(
+              onPressed: () => Navigator.pop(
+                context,
+                _WorkshopEditResult(text: controller.text, regenerate: false),
+              ),
+              child: const Text('Save'),
+            ),
         ],
       ),
     );
     WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
     if (result == null || !mounted) return;
-    final trimmed = result.trim();
+    final trimmed = result.text.trim();
     if (trimmed.isEmpty) return;
     final updated = List<ChatMessage>.from(_workshop.messages);
     updated[index] = message.withEditedText(trimmed);
     setState(() => _workshop = _workshop.copyWith(messages: updated));
     await _persist(_workshop);
+    if (result.regenerate && message.isUser) {
+      await _regenerateAfterUserMessage(index, confirmTruncate: false);
+    }
   }
 
   Future<void> _deleteMessage(int index) async {
@@ -628,6 +699,19 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                   ? () => Navigator.pop(context, 'rewind')
                   : null,
             ),
+            if (message.isUser) ...[
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.play_arrow),
+                title: const Text('Regenerate reply'),
+                subtitle: Text(
+                  isLast
+                      ? 'Generate an AI reply to this message'
+                      : 'Remove later messages, then generate a new reply',
+                ),
+                onTap: () => Navigator.pop(context, 'regen_reply'),
+              ),
+            ],
             if (!message.isUser) ...[
               const Divider(),
               ListTile(
@@ -676,6 +760,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     if (action == 'edit') await _editMessage(index);
     if (action == 'delete') await _deleteMessage(index);
     if (action == 'rewind') await _rewindToMessage(index);
+    if (action == 'regen_reply') await _regenerateAfterUserMessage(index);
     if (action == 'regen') {
       await _regenerateMessage(index, asNewSwipe: false);
     }
@@ -2199,7 +2284,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final busy = _sending || _exporting || _loadingLinkedLorebook;
-    final keyboardOpen = _keyboardInset > 0;
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 24;
     final linkedName = _linkedLorebook?.displayName;
     final imported = _workshop.importedSource;
     final hasImported = imported?.hasContent ?? false;
@@ -2333,8 +2418,14 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         child: Column(
           children: [
             _statusBanner(theme, compact: keyboardOpen),
-            if (!keyboardOpen) _importedSourceCard(theme),
-            if (!keyboardOpen) _openingSceneCompactBar(theme),
+            Offstage(
+              offstage: keyboardOpen,
+              child: _importedSourceCard(theme),
+            ),
+            Offstage(
+              offstage: keyboardOpen,
+              child: _openingSceneCompactBar(theme),
+            ),
             Expanded(
               child: _workshop.messages.isEmpty
                   ? Center(
@@ -2454,13 +2545,18 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (!keyboardOpen) _replyLengthPicker(theme),
+                  Offstage(
+                    offstage: keyboardOpen,
+                    child: _replyLengthPicker(theme),
+                  ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                     child: Row(
                       children: [
                         Expanded(
                           child: ChatComposerField(
+                            key: const ValueKey('workshop_composer'),
+                            focusNode: _composerFocus,
                             controller: _input,
                             enabled: !_busy,
                             enterToSend: _enterToSend,
@@ -2496,6 +2592,13 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       ),
     );
   }
+}
+
+class _WorkshopEditResult {
+  const _WorkshopEditResult({required this.text, required this.regenerate});
+
+  final String text;
+  final bool regenerate;
 }
 
 class _WorkshopSwipePager extends StatelessWidget {

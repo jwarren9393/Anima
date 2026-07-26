@@ -29,6 +29,7 @@ class ChatComposerField extends StatefulWidget {
     required this.enabled,
     required this.decoration,
     required this.onSend,
+    this.focusNode,
     this.enterToSend = false,
     this.minLines = 1,
     this.maxLines = 5,
@@ -39,6 +40,7 @@ class ChatComposerField extends StatefulWidget {
   final bool enabled;
   final InputDecoration decoration;
   final VoidCallback onSend;
+  final FocusNode? focusNode;
   final bool enterToSend;
   final int minLines;
   final int maxLines;
@@ -49,17 +51,21 @@ class ChatComposerField extends StatefulWidget {
 }
 
 class _ChatComposerFieldState extends State<ChatComposerField> {
-  late final FocusNode _focusNode;
+  FocusNode? _ownedFocusNode;
+
+  FocusNode get _focusNode => widget.focusNode ?? _ownedFocusNode!;
 
   @override
   void initState() {
     super.initState();
-    _focusNode = FocusNode(onKeyEvent: _onKey);
+    if (widget.focusNode == null) {
+      _ownedFocusNode = FocusNode(onKeyEvent: _onKey);
+    }
   }
 
   @override
   void dispose() {
-    _focusNode.dispose();
+    _ownedFocusNode?.dispose();
     super.dispose();
   }
 
@@ -83,7 +89,7 @@ class _ChatComposerFieldState extends State<ChatComposerField> {
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
+    final field = TextField(
       controller: widget.controller,
       focusNode: _focusNode,
       enabled: widget.enabled,
@@ -99,5 +105,15 @@ class _ChatComposerFieldState extends State<ChatComposerField> {
             }
           : null,
     );
+
+    if (widget.focusNode != null) {
+      return Focus(
+        focusNode: _focusNode,
+        onKeyEvent: _onKey,
+        child: field,
+      );
+    }
+
+    return field;
   }
 }
