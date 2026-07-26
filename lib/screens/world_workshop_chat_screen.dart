@@ -235,7 +235,11 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       if (inset > _keyboardInset + 8) {
         _scrollToEnd();
       }
-      _keyboardInset = inset;
+      if ((inset - _keyboardInset).abs() > 1) {
+        setState(() => _keyboardInset = inset);
+      } else {
+        _keyboardInset = inset;
+      }
     });
   }
 
@@ -1760,76 +1764,196 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     );
   }
 
-  Widget _openingSceneCard(ThemeData theme) {
-    final hasScene = _workshop.openingScene.trim().isNotEmpty;
+  Widget _openingSceneCompactBar(ThemeData theme) {
+    final scene = _workshop.openingScene.trim();
+    final hasScene = scene.isNotEmpty;
+    final preview = hasScene
+        ? scene.replaceAll(RegExp(r'\s+'), ' ')
+        : 'Tap to add narrator setup for new chats';
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       child: Material(
         color: theme.colorScheme.tertiaryContainer.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.auto_stories_outlined,
-                    color: theme.colorScheme.onTertiaryContainer,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Opening scene',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        color: theme.colorScheme.onTertiaryContainer,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: _showOpeningSceneEditor,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.auto_stories_outlined,
+                  size: 20,
+                  color: theme.colorScheme.onTertiaryContainer,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Opening scene',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: theme.colorScheme.onTertiaryContainer,
+                        ),
                       ),
+                      Text(
+                        preview,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onTertiaryContainer,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right,
+                  color: theme.colorScheme.onTertiaryContainer,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showOpeningSceneEditor() async {
+    if (_exporting) return;
+    _openingSceneController.text = _workshop.openingScene;
+    final theme = Theme.of(context);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
+          ),
+          child: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Opening scene',
+                    style: theme.textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Narrator setup for roleplay chats — separate from lore entries '
+                    'and character greetings. Saved scenes sync to Settings → '
+                    'Opening scenes.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 12),
+                  if (_workshop.openingScene.trim().isNotEmpty) ...[
+                    NarratorBubble(
+                      text: _workshop.openingScene,
+                      onTap: null,
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  TextField(
+                    controller: _openingSceneController,
+                    minLines: 4,
+                    maxLines: 10,
+                    enabled: !_exporting,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: const InputDecoration(
+                      hintText:
+                          'Rain on cobblestones. The city holds its breath…',
+                      border: OutlineInputBorder(),
+                      alignLabelWithHint: true,
                     ),
                   ),
-                  TextButton(
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
                     onPressed: (_sending || _exporting || _loadingLinkedLorebook)
                         ? null
-                        : _createOpeningScene,
-                    child: Text(hasScene ? 'Generate' : 'Create'),
+                        : () async {
+                            await _createOpeningScene();
+                            if (sheetContext.mounted) {
+                              Navigator.pop(sheetContext);
+                            }
+                          },
+                    icon: const Icon(Icons.auto_awesome),
+                    label: Text(
+                      _workshop.openingScene.trim().isEmpty
+                          ? 'Generate from chat'
+                          : 'Regenerate from chat',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: () => Navigator.pop(sheetContext),
+                    child: const Text('Done'),
                   ),
                 ],
               ),
-              Text(
-                'Narrator setup for roleplay chats — separate from lore entries '
-                'and character greetings. Saved scenes sync to Settings → '
-                'Opening scenes for use in any new chat.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onTertiaryContainer,
-                ),
-              ),
-              const SizedBox(height: 10),
-              if (hasScene)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: NarratorBubble(
-                    text: _workshop.openingScene,
-                    onTap: null,
-                  ),
-                ),
-              TextField(
-                controller: _openingSceneController,
-                minLines: 3,
-                maxLines: 6,
-                enabled: !_exporting,
-                textCapitalization: TextCapitalization.sentences,
-                onChanged: (_) {},
-                onEditingComplete: _saveOpeningSceneField,
-                onTapOutside: (_) => _saveOpeningSceneField(),
-                decoration: const InputDecoration(
-                  hintText: 'Rain on cobblestones. The city holds its breath…',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                  alignLabelWithHint: true,
-                ),
-              ),
-            ],
+            ),
           ),
+        );
+      },
+    );
+    await _saveOpeningSceneField();
+  }
+
+  Widget _statusBanner(ThemeData theme, {required bool compact}) {
+    final linkedName = _linkedLorebook?.displayName;
+    final imported = _workshop.importedSource;
+    final hasImported = imported?.hasContent ?? false;
+    return Material(
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+      child: InkWell(
+        onTap: _showContextEstimate,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: compact
+              ? Text(
+                  _exportStatus ?? _estimate.compactBannerLine,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: (_estimate.fillRatio ?? 0) >= 0.85
+                        ? theme.colorScheme.error
+                        : theme.colorScheme.tertiary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      _exportStatus ??
+                          (linkedName != null
+                              ? 'Linked to “$linkedName” '
+                                  '(${_linkedLorebook!.entryCount} entries). '
+                                  'Chat to revise it, then update lorebook or create characters.'
+                              : hasImported
+                                  ? 'Seeded from “${imported!.chatTitle}”. '
+                                      'Chat to refine, then use ⋮ for lorebook, opening scene, or characters.'
+                                  : 'Talk about your world. Use ⋮ for lorebook, opening scene, or characters.'),
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    if (_exportStatus == null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        _estimate.compactBannerLine,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: (_estimate.fillRatio ?? 0) >= 0.85
+                              ? theme.colorScheme.error
+                              : theme.colorScheme.tertiary,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
         ),
       ),
     );
@@ -1912,43 +2036,87 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final busy = _sending || _exporting || _loadingLinkedLorebook;
+    final keyboardOpen = _keyboardInset > 0;
     final linkedName = _linkedLorebook?.displayName;
     final imported = _workshop.importedSource;
     final hasImported = imported?.hasContent ?? false;
+    final lorebookLabel = _workshop.exportedLorebookId == null
+        ? 'Create lorebook'
+        : 'Update lorebook';
+    final openingLabel = _workshop.openingScene.trim().isEmpty
+        ? 'Opening scene'
+        : 'Edit opening scene';
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
       appBar: AppBar(
-        title: Text(_workshop.title),
+        title: Text(
+          _workshop.title,
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
           IconButton(
             tooltip: 'Context estimate',
             onPressed: _showContextEstimate,
             icon: const Icon(Icons.data_usage_outlined),
           ),
+          IconButton(
+            tooltip: 'Start roleplay chat',
+            onPressed: busy ? null : _startRoleplay,
+            icon: const Icon(Icons.play_arrow_outlined),
+          ),
           PopupMenuButton<String>(
-            tooltip: 'Create people',
+            tooltip: 'Workshop actions',
             enabled: !busy,
             onSelected: (value) {
-              if (value == 'characters') _createCharacters();
-              if (value == 'update') _updateExistingCharacter();
-              if (value == 'persona') _createPersona();
+              switch (value) {
+                case 'lorebook':
+                  _createLorebook();
+                case 'opening':
+                  _showOpeningSceneEditor();
+                case 'characters':
+                  _createCharacters();
+                case 'update':
+                  _updateExistingCharacter();
+                case 'persona':
+                  _createPersona();
+              }
             },
-            icon:
-                _exporting &&
-                    (_exportStatus?.contains('character') == true ||
-                        _exportStatus?.contains('persona') == true ||
-                        _exportStatus?.contains('Finding') == true ||
-                        _exportStatus?.contains('Generating') == true ||
-                        _exportStatus?.contains('Updating') == true)
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.person_add_alt_1),
-            itemBuilder: (context) => const [
+            itemBuilder: (context) => [
               PopupMenuItem(
+                value: 'lorebook',
+                child: ListTile(
+                  leading:
+                      _exporting &&
+                          (_exportStatus != null &&
+                              _exportStatus!.contains('lorebook'))
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.menu_book_outlined),
+                  title: Text(lorebookLabel),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'opening',
+                child: ListTile(
+                  leading:
+                      _exporting && (_exportStatus?.contains('opening') == true)
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.auto_stories_outlined),
+                  title: Text(openingLabel),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
                 value: 'characters',
                 child: ListTile(
                   leading: Icon(Icons.groups_outlined),
@@ -1956,7 +2124,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
-              PopupMenuItem(
+              const PopupMenuItem(
                 value: 'update',
                 child: ListTile(
                   leading: Icon(Icons.person_search_outlined),
@@ -1964,7 +2132,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
-              PopupMenuItem(
+              const PopupMenuItem(
                 value: 'persona',
                 child: ListTile(
                   leading: Icon(Icons.person_outline),
@@ -1974,95 +2142,14 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
               ),
             ],
           ),
-          IconButton(
-            tooltip: 'Start roleplay chat',
-            onPressed: busy ? null : _startRoleplay,
-            icon: const Icon(Icons.play_arrow_outlined),
-          ),
-          TextButton(
-            onPressed: busy ? null : _createOpeningScene,
-            child:
-                _exporting && (_exportStatus?.contains('opening') == true)
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Text(
-                    _workshop.openingScene.trim().isEmpty
-                        ? 'Opening scene'
-                        : 'Update opening',
-                  ),
-          ),
-          TextButton(
-            onPressed: busy ? null : _createLorebook,
-            child:
-                _exporting &&
-                    (_exportStatus != null &&
-                        _exportStatus!.contains('lorebook'))
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Text(
-                    _workshop.exportedLorebookId == null
-                        ? 'Create lorebook'
-                        : 'Update lorebook',
-                  ),
-          ),
         ],
       ),
       body: KeyboardInset(
         child: Column(
           children: [
-            Material(
-              color: theme.colorScheme.surfaceContainerHighest.withValues(
-                alpha: 0.5,
-              ),
-              child: InkWell(
-                onTap: _showContextEstimate,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        _exportStatus ??
-                            (linkedName != null
-                                ? 'Linked to “$linkedName” '
-                                    '(${_linkedLorebook!.entryCount} entries). '
-                                    'Chat to revise it, Update lorebook to save changes, '
-                                    'or create character cards from it.'
-                                : hasImported
-                                    ? 'Seeded from “${imported!.chatTitle}”. '
-                                        'Chat to refine ideas, then Create lorebook, '
-                                        'Opening scene, Create AI characters, or Update existing character.'
-                                    : 'Talk about your world. Use Create lorebook, Opening scene, '
-                                        'or the person+ icon to create/update character cards.'),
-                        style: theme.textTheme.bodySmall,
-                      ),
-                      if (_exportStatus == null) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          _estimate.compactBannerLine,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: (_estimate.fillRatio ?? 0) >= 0.85
-                                ? theme.colorScheme.error
-                                : Theme.of(context).colorScheme.tertiary,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            _importedSourceCard(theme),
-            _openingSceneCard(theme),
+            _statusBanner(theme, compact: keyboardOpen),
+            if (!keyboardOpen) _importedSourceCard(theme),
+            if (!keyboardOpen) _openingSceneCompactBar(theme),
             Expanded(
               child: _workshop.messages.isEmpty
                   ? Center(
@@ -2075,8 +2162,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                                   'the lorebook—or create characters directly.'
                               : hasImported
                                   ? 'Your imported chat is ready as source material.\n\n'
-                                      'Ask the AI what to extract into a lorebook or opening scene, '
-                                      'or tap Create lorebook / Opening scene when you’re ready.'
+                                      'Ask the AI what to extract, then use ⋮ for lorebook or opening scene.'
                                   : 'Example: “I want a rainy coastal city with rival '
                                       'guilds and a buried god under the harbor…”',
                           textAlign: TextAlign.center,
