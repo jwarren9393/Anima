@@ -117,6 +117,8 @@ class ThemePalette {
     required this.textMuted,
     required this.userBubble,
     required this.aiBubble,
+    this.rpActionText,
+    this.rpDialogueText,
     this.brightness = Brightness.dark,
   });
 
@@ -131,7 +133,16 @@ class ThemePalette {
   final Color textMuted;
   final Color userBubble;
   final Color aiBubble;
+
+  /// *Action / narration* color in chat bubbles. Defaults to [accent].
+  final Color? rpActionText;
+
+  /// "Spoken dialogue" color in chat bubbles. Defaults to [text].
+  final Color? rpDialogueText;
   final Brightness brightness;
+
+  Color get resolvedRpActionText => rpActionText ?? accent;
+  Color get resolvedRpDialogueText => rpDialogueText ?? text;
 
   ThemePalette copyWith({
     Color? background,
@@ -145,6 +156,8 @@ class ThemePalette {
     Color? textMuted,
     Color? userBubble,
     Color? aiBubble,
+    Color? rpActionText,
+    Color? rpDialogueText,
     Brightness? brightness,
   }) {
     return ThemePalette(
@@ -159,6 +172,8 @@ class ThemePalette {
       textMuted: textMuted ?? this.textMuted,
       userBubble: userBubble ?? this.userBubble,
       aiBubble: aiBubble ?? this.aiBubble,
+      rpActionText: rpActionText ?? this.rpActionText,
+      rpDialogueText: rpDialogueText ?? this.rpDialogueText,
       brightness: brightness ?? this.brightness,
     );
   }
@@ -175,6 +190,8 @@ class ThemePalette {
     'textMuted': colorToHex(textMuted),
     'userBubble': colorToHex(userBubble),
     'aiBubble': colorToHex(aiBubble),
+    if (rpActionText != null) 'rpActionText': colorToHex(rpActionText!),
+    if (rpDialogueText != null) 'rpDialogueText': colorToHex(rpDialogueText!),
     'brightness': brightness == Brightness.light ? 'light' : 'dark',
   };
 
@@ -195,6 +212,12 @@ class ThemePalette {
       textMuted: colorFromHex(json['textMuted'], base.textMuted),
       userBubble: colorFromHex(json['userBubble'], base.userBubble),
       aiBubble: colorFromHex(json['aiBubble'], base.aiBubble),
+      rpActionText: json['rpActionText'] == null
+          ? null
+          : colorFromHex(json['rpActionText'], base.resolvedRpActionText),
+      rpDialogueText: json['rpDialogueText'] == null
+          ? null
+          : colorFromHex(json['rpDialogueText'], base.resolvedRpDialogueText),
       brightness: '${json['brightness'] ?? ''}'.toLowerCase() == 'light'
           ? Brightness.light
           : Brightness.dark,

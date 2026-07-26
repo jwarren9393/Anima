@@ -93,11 +93,9 @@ class RpRichText extends StatelessWidget {
       return Text(text, style: baseStyle);
     }
 
-    // Dialogue: bright, solid. Actions: softer italic. Plain: in between.
-    final dialogueColor = baseStyle.color ?? scheme.onSurface;
-    final actionColor = isUser
-        ? (baseStyle.color ?? ui.userBubbleForeground).withValues(alpha: 0.78)
-        : ui.actionColor.withValues(alpha: 0.9);
+    // RP markup colors come from the theme (Appearance → chat text colors).
+    final actionColor = ui.actionColor;
+    final dialogueColor = ui.dialogueEmphasis;
     final plainColor = isUser
         ? (baseStyle.color ?? ui.userBubbleForeground).withValues(alpha: 0.92)
         : scheme.onSurfaceVariant;

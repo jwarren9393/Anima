@@ -7,6 +7,7 @@ import '../services/appearance_controller.dart';
 import '../services/settings_service.dart';
 import '../theme/anima_theme.dart';
 import '../widgets/anima_avatar.dart';
+import '../widgets/rp_rich_text.dart';
 import 'settings_ui.dart';
 
 /// Theme Studio — global presets plus advanced color / font / avatar controls.
@@ -361,6 +362,24 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
                     );
                   },
                 ),
+                _colorTile(
+                  label: 'RP action text (*asterisks*)',
+                  color: _draft.palette.resolvedRpActionText,
+                  onPicked: (c) {
+                    _draft = _draft.copyWith(
+                      palette: _draft.palette.copyWith(rpActionText: c),
+                    );
+                  },
+                ),
+                _colorTile(
+                  label: 'RP dialogue text ("quotes")',
+                  color: _draft.palette.resolvedRpDialogueText,
+                  onPicked: (c) {
+                    _draft = _draft.copyWith(
+                      palette: _draft.palette.copyWith(rpDialogueText: c),
+                    );
+                  },
+                ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Light surfaces'),
@@ -688,9 +707,9 @@ class _LivePreview extends StatelessWidget {
                     color: ui.aiBubbleColor,
                     borderRadius: BorderRadius.circular(ui.chatBubbleRadius),
                   ),
-                  child: Text(
-                    '*smiles* "Hello there."',
-                    style: theme.textTheme.bodyMedium?.copyWith(
+                  child: RpRichText(
+                    text: '*smiles* "Hello there."',
+                    baseStyle: theme.textTheme.bodyMedium!.copyWith(
                       color: ui.aiBubbleForeground,
                       fontSize: 14 * ui.chatFontScale,
                     ),

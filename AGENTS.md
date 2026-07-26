@@ -60,7 +60,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-25  
-**Last agent action:** Published **v1.0.0 build 24** — hotfix for Creation Center freeze/crash (reverted bad shared FocusNode; keyboard fix kept).
+**Last agent action:** Published **v1.0.0 build 25** — group name chips always generate when auto-reply is off; Theme Studio RP action/dialogue text colors.
 
 ### What works today
 
@@ -77,7 +77,7 @@ High-value SillyTavern concepts to aim for over time:
   - **AI collaborator** — wand guidance note + **Composer Format** note + **Roadway / Paths** note
   - **Character builds** — model, max tokens, temperature, top P, and prompt for **slim card JSON** generation (description, personality, mes_example, tags only — no scenario, greetings, or per-card system/post-history; Creation Center + New character from chat); separate from main chat model
   - **Global chat prompts** — app-wide **system prompt** + **post-history** merged into every chat (on top of each card; per-chat Author's Note still applies); preset pickers; `{{user}}` / `{{char}}`
-  - **Appearance (Theme Studio)** — 8 global presets (glass + solid), custom background/accent/header/menu/text/bubble colors, fonts, text scales, glass opacity/blur, chat avatars; live preview + immediate app-wide apply
+  - **Appearance (Theme Studio)** — 8 global presets (glass + solid), custom background/accent/header/menu/text/bubble colors, **RP action** (*asterisks*) + **RP dialogue** ("quotes") text colors, fonts, text scales, glass opacity/blur, chat avatars; live preview + immediate app-wide apply
   - **Backup & restore** — one `.anima-backup` JSON file (chats, characters, personas, categories, lorebooks, workshops, opening scenes, drafts, roadway cache, avatars, settings); **API key is not included** — re-enter after restore; on Linux/Windows Create backup opens a **Save** dialog (Downloads suggested); Android still uses the share sheet; restore replaces Anima data only (whitelist), then returns to Home; **Cross-device sync** — pick one sync file in Google Drive (or a synced folder on desktop); **Push to cloud** overwrites that file in place; **Pull from cloud** restores from it when switching phone ↔ PC (no delete-and-reupload)
   - API, Generation parameters
 - **Look** — Theme Studio with glass and solid presets (default Obsidian Gold soft-glow, no sparkle texture); Ivory Ink light preset + full color/font customization
@@ -102,13 +102,13 @@ High-value SillyTavern concepts to aim for over time:
 - **Clean chat chrome** — no Swipe/Regen/Continue bar under messages (those live in the long-press menu; compact swipe arrows under bubbles)
 - **Per-chat persona** — in a chat, ⋮ menu → **Persona: …** to switch who you are for that thread (saved on the chat)
 - **Per-chat World Info** — ⋮ menu → **World Info: …** to use Settings default, pick specific global lorebooks, or turn global lore off for this thread (character card lore still applies)
-- **Group chat controls** — tap a character name chip to choose who speaks next; auto-reply off by default (send only; tap a name or Continue for a reply; toggle via long-press); leading `Name:` is stripped from replies so the bubble header isn’t duplicated
+- **Group chat controls** — tap a character name chip to choose who speaks next and **always generate their reply** when auto-reply is off (even re-tapping the same chip); auto-reply off by default (send only; tap a name or Continue for a reply; toggle via long-press); leading `Name:` is stripped from replies so the bubble header isn’t duplicated
 - **Manage cast (mid-chat)** — ⋮ → **Manage cast** adds/removes characters in the **current** chat (solo or group) without starting over; ⋮ → **New character** opens a sheet to **type a name + generate from chat** or start blank; manage screen **+** uses the same flow when editing cast
 - **Avatars** — persona + character photos; **Generate avatar** on character and persona create/edit (and Creation Center character review) uses NanoGPT image models + an **auto prompt** that keeps the portrait framing but pulls only appearance-relevant lines from the card (skips scenario, backstory, and long personality blocks; stays under ~1,150 chars); prompt is still editable in the sheet; **tap an AI avatar in chat** to edit that character card (tap yours to edit the persona); PNG card import still grabs the card image; chat bubble shape/size via Appearance
 - **Context estimate** — chat ⋮ → **Context estimate** shows ~message/token gauges vs history budget and model window; Creation Center shows a live banner estimate
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar
 - **Linux install/update** — `./scripts/update_linux.sh` builds and installs the desktop app; add `--pull` to download GitHub changes first
-- **Smoke:** `flutter test` (165) + `flutter analyze` pass; Android + Linux desktop debug work
+- **Smoke:** `flutter test` (168) + `flutter analyze` pass; Android + Linux desktop debug work
 
 ### What does NOT work yet / limits
 

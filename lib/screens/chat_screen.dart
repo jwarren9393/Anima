@@ -881,7 +881,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   /// Pick who speaks next. In a group with auto-reply off, tapping a name
-  /// after your message also generates that character's reply.
+  /// generates that character's reply (even if they are already selected).
   Future<void> _selectSpeaker(int index) async {
     if (_busy || _session == null) return;
     if (index < 0 || index >= _participants.length) return;
@@ -891,9 +891,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     });
     await _persist();
 
-    final waitingForReply =
-        !_session!.autoReply && _messages.isNotEmpty && _messages.last.isUser;
-    if (!waitingForReply) return;
+    if (_session!.autoReply || _messages.isEmpty) return;
 
     if (!_hasApiKey) {
       setState(() {

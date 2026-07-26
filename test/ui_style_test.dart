@@ -40,6 +40,22 @@ void main() {
     },
   );
 
+  test('RP text colors round-trip in palette JSON', () {
+    final palette = ThemePresets.obsidianGold.palette.copyWith(
+      rpActionText: const Color(0xFFFF8800),
+      rpDialogueText: const Color(0xFFE0F0FF),
+    );
+    final restored = ThemePalette.fromJson(palette.toJson());
+    expect(restored.resolvedRpActionText.toARGB32(), 0xFFFF8800);
+    expect(restored.resolvedRpDialogueText.toARGB32(), 0xFFE0F0FF);
+  });
+
+  test('RP text colors default to accent and main text', () {
+    final palette = ThemePresets.obsidianGold.palette;
+    expect(palette.resolvedRpActionText, palette.accent);
+    expect(palette.resolvedRpDialogueText, palette.text);
+  });
+
   test('full theme JSON round-trips custom palette', () {
     final style = UiStyleSettings.fromPreset(ThemePresets.cyberViolet).copyWith(
       palette: ThemePresets.cyberViolet.palette.copyWith(

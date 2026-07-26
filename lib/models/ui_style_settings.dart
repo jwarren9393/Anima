@@ -408,8 +408,8 @@ class AnimaUiTheme extends ThemeExtension<AnimaUiTheme> {
       bubbleShadowColor: palette.brightness == Brightness.light
           ? Colors.black.withValues(alpha: 0.12)
           : Colors.black.withValues(alpha: 0.35),
-      actionColor: palette.accent,
-      dialogueEmphasis: onAi,
+      actionColor: palette.resolvedRpActionText,
+      dialogueEmphasis: palette.resolvedRpDialogueText,
       cornerRadius: settings.cornerRadius,
       glassOpacity: settings.glassOpacity,
       glassBlur: settings.glassBlur,
