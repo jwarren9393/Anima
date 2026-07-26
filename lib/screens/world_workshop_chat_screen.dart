@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -265,11 +266,11 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     setState(() => _workshop = saved);
   }
 
+  bool get _busy => _sending || _exporting || _loadingLinkedLorebook;
+
   Future<void> _send() async {
     final text = _input.text.trim();
-    if (text.isEmpty || _sending || _exporting || _loadingLinkedLorebook) {
-      return;
-    }
+    if (text.isEmpty || _busy) return;
 
     final userMessage = ChatMessage(
       id: ChatMessage.newId(),
@@ -302,13 +303,25 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       );
     });
 
+    await _streamAssistantReply(assistantIndex: _workshop.messages.length - 1);
+  }
+
+  Future<void> _streamAssistantReply({required int assistantIndex}) async {
+    if (assistantIndex < 0 || assistantIndex >= _workshop.messages.length) {
+      return;
+    }
+    final assistantId = _workshop.messages[assistantIndex].id;
+
     try {
       final collaborator = await widget.settingsService
           .getCollaboratorSettings();
       final model = await widget.settingsService.getModel();
-      final sampling = await widget.settingsService.getSampling();
+      final sampling = WorldWorkshopBuilder.workshopChatSampling(
+        await widget.settingsService.getSampling(),
+      );
       final baseUrl = await widget.settingsService.getApiBaseUrl();
 
+      final history = _workshop.messages.sublist(0, assistantIndex);
       final apiMessages = <Map<String, String>>[
         {
           'role': 'system',
@@ -318,7 +331,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
             importedSource: _workshop.importedSource,
           ),
         },
-        for (final message in messages) message.toApiMap(),
+        for (final message in history) message.toApiMap(),
       ];
 
       final buffer = StringBuffer();
@@ -341,24 +354,16 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
 
       await _persist(_workshop);
     } on NanoGptCancelledException {
-      final updated = List<ChatMessage>.from(_workshop.messages);
-      final index = updated.indexWhere((m) => m.id == assistantId);
-      if (index >= 0) {
-        final text = updated[index].text.trim();
-        if (text.isEmpty) {
-          updated.removeAt(index);
-        }
-        await _persist(_workshop.copyWith(messages: updated));
-      }
+      await _handleCancelledAssistant(assistantIndex);
     } on NanoGptException catch (error) {
       if (!mounted) return;
-      _removeEmptyAssistant(assistantId);
+      await _handleFailedAssistant(assistantIndex);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (error) {
       if (!mounted) return;
-      _removeEmptyAssistant(assistantId);
+      await _handleFailedAssistant(assistantIndex);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Something went wrong: $error')));
@@ -367,14 +372,299 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     }
   }
 
-  Future<void> _removeEmptyAssistant(String assistantId) async {
+  Future<void> _handleCancelledAssistant(int assistantIndex) async {
+    if (!mounted) return;
     final updated = List<ChatMessage>.from(_workshop.messages);
-    final index = updated.indexWhere((m) => m.id == assistantId);
-    if (index < 0) return;
-    if (updated[index].text.trim().isEmpty) {
-      updated.removeAt(index);
-      await _persist(_workshop.copyWith(messages: updated));
+    if (assistantIndex < 0 || assistantIndex >= updated.length) return;
+    final message = updated[assistantIndex];
+    if (message.text.trim().isNotEmpty) {
+      await _persist(_workshop);
+      return;
     }
+    if (message.swipes.length > 1) {
+      final previous = List<String>.from(message.swipes)..removeLast();
+      updated[assistantIndex] = ChatMessage(
+        id: message.id,
+        role: message.role,
+        text: previous.last,
+        swipes: previous,
+        swipeIndex: previous.length - 1,
+      );
+    } else {
+      updated.removeAt(assistantIndex);
+    }
+    setState(() {
+      _workshop = _workshop.copyWith(messages: updated);
+    });
+    await _persist(_workshop);
+  }
+
+  Future<void> _handleFailedAssistant(int assistantIndex) async {
+    if (!mounted) return;
+    final updated = List<ChatMessage>.from(_workshop.messages);
+    if (assistantIndex < 0 || assistantIndex >= updated.length) return;
+    final message = updated[assistantIndex];
+    if (message.text.trim().isEmpty) {
+      if (message.swipes.length > 1) {
+        final previous = List<String>.from(message.swipes)..removeLast();
+        updated[assistantIndex] = ChatMessage(
+          id: message.id,
+          role: message.role,
+          text: previous.last,
+          swipes: previous,
+          swipeIndex: previous.length - 1,
+        );
+      } else {
+        updated.removeAt(assistantIndex);
+      }
+      setState(() {
+        _workshop = _workshop.copyWith(messages: updated);
+      });
+      await _persist(_workshop);
+    }
+  }
+
+  ChatMessage _prepareAssistantForRegeneration(
+    ChatMessage message, {
+    required bool asNewSwipe,
+  }) {
+    if (asNewSwipe) {
+      return ChatMessage(
+        id: message.id,
+        role: message.role,
+        text: '',
+        swipes: [...message.swipes, ''],
+        swipeIndex: message.swipes.length,
+      );
+    }
+    final swipes = List<String>.from(message.swipes);
+    if (swipes.isEmpty) swipes.add('');
+    final swipeIndex = message.swipeIndex.clamp(0, swipes.length - 1);
+    swipes[swipeIndex] = '';
+    return ChatMessage(
+      id: message.id,
+      role: message.role,
+      text: '',
+      swipes: swipes,
+      swipeIndex: swipeIndex,
+    );
+  }
+
+  Future<bool> _confirmRegenerateTruncating(int index) async {
+    if (index >= _workshop.messages.length - 1) return true;
+    final later = _workshop.messages.length - index - 1;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Regenerate reply?'),
+        content: Text(
+          'This removes $later later message${later == 1 ? '' : 's'} '
+          'and generates a new reply here.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Regenerate'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  Future<void> _regenerateMessage(
+    int index, {
+    required bool asNewSwipe,
+  }) async {
+    if (_busy) return;
+    if (index < 0 || index >= _workshop.messages.length) return;
+    final message = _workshop.messages[index];
+    if (message.isUser) return;
+    if (!await _confirmRegenerateTruncating(index)) return;
+
+    var messages = _workshop.messages;
+    if (index < messages.length - 1) {
+      messages = messages.sublist(0, index + 1);
+    }
+    final prepared = _prepareAssistantForRegeneration(
+      messages[index],
+      asNewSwipe: asNewSwipe,
+    );
+    messages = List<ChatMessage>.from(messages)..[index] = prepared;
+
+    setState(() {
+      _sending = true;
+      _workshop = _workshop.copyWith(messages: messages);
+    });
+
+    await _streamAssistantReply(assistantIndex: index);
+  }
+
+  Future<void> _editMessage(int index) async {
+    if (_busy) return;
+    if (index < 0 || index >= _workshop.messages.length) return;
+    final message = _workshop.messages[index];
+    final controller = TextEditingController(text: message.text);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(message.isUser ? 'Edit your message' : 'Edit reply'),
+        content: TextField(
+          controller: controller,
+          minLines: 3,
+          maxLines: 12,
+          autofocus: true,
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
+    if (result == null || !mounted) return;
+    final trimmed = result.trim();
+    if (trimmed.isEmpty) return;
+    final updated = List<ChatMessage>.from(_workshop.messages);
+    updated[index] = message.withEditedText(trimmed);
+    setState(() => _workshop = _workshop.copyWith(messages: updated));
+    await _persist(_workshop);
+  }
+
+  Future<void> _deleteMessage(int index) async {
+    if (_busy) return;
+    if (index < 0 || index >= _workshop.messages.length) return;
+    final updated = List<ChatMessage>.from(_workshop.messages)..removeAt(index);
+    setState(() => _workshop = _workshop.copyWith(messages: updated));
+    await _persist(_workshop);
+  }
+
+  Future<void> _rewindToMessage(int index) async {
+    if (_busy) return;
+    if (index < 0 || index >= _workshop.messages.length) return;
+    if (index >= _workshop.messages.length - 1) return;
+    final messages = _workshop.messages.sublist(0, index + 1);
+    setState(() => _workshop = _workshop.copyWith(messages: messages));
+    await _persist(_workshop);
+  }
+
+  void _shiftSwipe(int index, int delta) {
+    if (_busy) return;
+    if (index < 0 || index >= _workshop.messages.length) return;
+    final message = _workshop.messages[index];
+    if (message.isUser || message.swipes.length < 2) return;
+    final next = message.withSwipeIndex(message.swipeIndex + delta);
+    if (next.swipeIndex == message.swipeIndex) return;
+    final updated = List<ChatMessage>.from(_workshop.messages);
+    updated[index] = next;
+    setState(() => _workshop = _workshop.copyWith(messages: updated));
+    unawaited(_persist(_workshop));
+  }
+
+  Future<void> _showMessageMenu(int index) async {
+    if (_busy || index < 0 || index >= _workshop.messages.length) return;
+    final message = _workshop.messages[index];
+    final canRewind = index < _workshop.messages.length - 1;
+    final isLast = index == _workshop.messages.length - 1;
+    final canSwipeNav = !message.isUser && message.swipes.length > 1;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Edit'),
+              onTap: () => Navigator.pop(context, 'edit'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline),
+              title: const Text('Delete'),
+              subtitle: const Text('Remove only this message'),
+              onTap: () => Navigator.pop(context, 'delete'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.undo),
+              title: const Text('Rewind to here'),
+              subtitle: Text(
+                canRewind
+                    ? 'Delete every message after this one'
+                    : 'Already the last message',
+              ),
+              enabled: canRewind,
+              onTap: canRewind
+                  ? () => Navigator.pop(context, 'rewind')
+                  : null,
+            ),
+            if (!message.isUser) ...[
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.refresh),
+                title: const Text('Regenerate'),
+                subtitle: Text(
+                  isLast
+                      ? 'Generate this reply again'
+                      : 'Removes later messages, then regenerates',
+                ),
+                onTap: () => Navigator.pop(context, 'regen'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.auto_awesome),
+                title: const Text('New swipe'),
+                subtitle: const Text('Keep this version and generate another'),
+                onTap: () => Navigator.pop(context, 'swipe'),
+              ),
+            ],
+            if (canSwipeNav) ...[
+              ListTile(
+                leading: const Icon(Icons.chevron_left),
+                title: const Text('Previous swipe'),
+                subtitle: Text(
+                  'Swipe ${message.swipeIndex + 1}/${message.swipes.length}',
+                ),
+                enabled: message.swipeIndex > 0,
+                onTap: message.swipeIndex > 0
+                    ? () => Navigator.pop(context, 'swipe_prev')
+                    : null,
+              ),
+              ListTile(
+                leading: const Icon(Icons.chevron_right),
+                title: const Text('Next swipe'),
+                enabled: message.swipeIndex < message.swipes.length - 1,
+                onTap: message.swipeIndex < message.swipes.length - 1
+                    ? () => Navigator.pop(context, 'swipe_next')
+                    : null,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+
+    if (action == 'edit') await _editMessage(index);
+    if (action == 'delete') await _deleteMessage(index);
+    if (action == 'rewind') await _rewindToMessage(index);
+    if (action == 'regen') {
+      await _regenerateMessage(index, asNewSwipe: false);
+    }
+    if (action == 'swipe') {
+      await _regenerateMessage(index, asNewSwipe: true);
+    }
+    if (action == 'swipe_prev') _shiftSwipe(index, -1);
+    if (action == 'swipe_next') _shiftSwipe(index, 1);
   }
 
   void _stop() {
@@ -1801,31 +2091,89 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                       itemBuilder: (context, index) {
                         final message = _workshop.messages[index];
                         final isUser = message.isUser;
+                        final isLast = index == _workshop.messages.length - 1;
+                        final thinking =
+                            _sending && isLast && !isUser && message.text.isEmpty;
+                        final isLastAi = isLast && !message.isUser;
+                        final canGoPrev =
+                            !message.isUser &&
+                            message.swipes.length > 1 &&
+                            message.swipeIndex > 0;
+                        final canGoNextExisting =
+                            !message.isUser &&
+                            message.swipes.length > 1 &&
+                            message.swipeIndex < message.swipes.length - 1;
+                        final canQuickSwipe =
+                            isLastAi &&
+                            !thinking &&
+                            !_busy &&
+                            message.swipeIndex >= message.swipes.length - 1;
+                        final showSwipePager =
+                            !message.isUser &&
+                            !thinking &&
+                            (message.swipes.length > 1 || isLastAi);
+
+                        Widget bubble = Material(
+                          color: isUser
+                              ? theme.colorScheme.primaryContainer
+                              : theme.colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(14),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(14),
+                            onTap: _busy ? null : () => _editMessage(index),
+                            onLongPress:
+                                _busy ? null : () => _showMessageMenu(index),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
+                              ),
+                              child: Text(
+                                thinking ? '…' : message.text,
+                                style: theme.textTheme.bodyMedium,
+                              ),
+                            ),
+                          ),
+                        );
+
+                        if (showSwipePager) {
+                          bubble = Column(
+                            crossAxisAlignment: isUser
+                                ? CrossAxisAlignment.end
+                                : CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              bubble,
+                              _WorkshopSwipePager(
+                                index: message.swipeIndex,
+                                total: message.swipes.length,
+                                onPrev: (!_busy && canGoPrev)
+                                    ? () => _shiftSwipe(index, -1)
+                                    : null,
+                                onNext: (!_busy && canGoNextExisting)
+                                    ? () => _shiftSwipe(index, 1)
+                                    : (canQuickSwipe
+                                          ? () => _regenerateMessage(
+                                                index,
+                                                asNewSwipe: true,
+                                              )
+                                          : null),
+                                nextGeneratesSwipe: canQuickSwipe,
+                              ),
+                            ],
+                          );
+                        }
+
                         return Align(
                           alignment: isUser
                               ? Alignment.centerRight
                               : Alignment.centerLeft,
                           child: Container(
                             margin: const EdgeInsets.only(bottom: 10),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 10,
-                            ),
                             constraints: BoxConstraints(
                               maxWidth: MediaQuery.sizeOf(context).width * 0.85,
                             ),
-                            decoration: BoxDecoration(
-                              color: isUser
-                                  ? theme.colorScheme.primaryContainer
-                                  : theme.colorScheme.surfaceContainerHighest,
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: Text(
-                              message.text.isEmpty && !isUser && _sending
-                                  ? '…'
-                                  : message.text,
-                              style: theme.textTheme.bodyMedium,
-                            ),
+                            child: bubble,
                           ),
                         );
                       },
@@ -1839,7 +2187,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                     Expanded(
                       child: ChatComposerField(
                         controller: _input,
-                        enabled: !_exporting,
+                        enabled: !_busy,
                         enterToSend: _enterToSend,
                         decoration: const InputDecoration(
                           hintText: 'Describe your world…',
@@ -1867,6 +2215,68 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _WorkshopSwipePager extends StatelessWidget {
+  const _WorkshopSwipePager({
+    required this.index,
+    required this.total,
+    this.onPrev,
+    this.onNext,
+    this.nextGeneratesSwipe = false,
+  });
+
+  final int index;
+  final int total;
+  final VoidCallback? onPrev;
+  final VoidCallback? onNext;
+  final bool nextGeneratesSwipe;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, right: 4, bottom: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: 'Previous swipe',
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
+            onPressed: onPrev,
+            icon: Icon(
+              Icons.chevron_left,
+              color: onPrev == null
+                  ? colorScheme.onSurface.withValues(alpha: 0.28)
+                  : colorScheme.primary,
+            ),
+          ),
+          Text(
+            '${index + 1}/$total',
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          IconButton(
+            tooltip: nextGeneratesSwipe ? 'Generate new swipe' : 'Next swipe',
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
+            onPressed: onNext,
+            icon: Icon(
+              Icons.chevron_right,
+              color: onNext == null
+                  ? colorScheme.onSurface.withValues(alpha: 0.28)
+                  : colorScheme.primary,
+            ),
+          ),
+        ],
       ),
     );
   }

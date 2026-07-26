@@ -43,6 +43,21 @@ class WorldWorkshopBuilder {
   /// Recent messages sent to live-chat character generation (smaller = faster).
   static const characterGenRecentMessages = 24;
 
+  /// Minimum completion budget for workshop brainstorming chat.
+  ///
+  /// Roleplay presets like "Short replies" (350 tokens) are too small for
+  /// numbered follow-up questions — this floor applies only in Creation Center.
+  static const workshopChatMinMaxTokens = 2048;
+
+  /// Applies [workshopChatMinMaxTokens] without letting low RP caps truncate
+  /// worldbuilding replies.
+  static SamplingSettings workshopChatSampling(SamplingSettings base) {
+    const minTokens = workshopChatMinMaxTokens;
+    final user = base.maxTokens;
+    final effective = user == null || user < minTokens ? minTokens : user;
+    return base.copyWith(maxTokens: effective.clamp(256, 8192));
+  }
+
   /// System prompt for the ongoing workshop chat (questions + brainstorming).
   String chatSystemPrompt({
     String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
@@ -91,8 +106,9 @@ $source
 Guidance note (follow closely):
 $guidance
 
-Keep replies conversational and useful on a phone — not huge walls of text
-unless the user asks for depth.
+When asking follow-up questions, finish every numbered or bulleted list —
+never stop mid-question. Prefer clear structure over long prose walls, but
+give yourself enough room to ask everything you need in one reply.
 '''
         .trim();
   }

@@ -60,7 +60,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-25  
-**Last agent action:** Published **v1.0.0 build 16** — fixes Backspace after Wispr Flow paste on Windows (stuck modifier cleanup).
+**Last agent action:** Published **v1.0.0 build 17** — Creation Center chat controls (edit, delete, rewind, regenerate, swipes) + 2048-token completion floor.
 
 ### What works today
 
@@ -73,7 +73,7 @@ High-value SillyTavern concepts to aim for over time:
   - **Characters** — character cards + **categories** (custom lists; one character can be in several); filter dropdown; **consistency check** (checklist icon) = read-only AI report; **Generate avatar** from card text
   - **World Info & lore** — **global lorebooks** (create / import ST JSON / export / on-off) + scan depth/budget + link to per-character books; **entry AI wand** + **Suggest keywords from content**
   - **Opening scenes** — saved narrator setups for new chats (manual + synced from Creation Center workshops)
-  - **Creation Center** — chat with AI to invent a world; **Import** can seed from an **existing chat** with an **Import options** sheet (memory summary + last N recent messages — same N as Summarize “keep recent”, default 10 — not the full 100+ message log; **World Info lorebooks off by default** and only books **explicitly linked** on that chat when enabled; toggles for character cards, persona, embedded card lore, opening scene, author’s note), a World Info lorebook, or a JSON file; **Create/Update lorebook** saves keyword entries as a selectable global lorebook (one workshop = one book); **Create/Update opening scene** saves narrator setup prose (syncs to **Opening scenes** library); editable **Opening scene** card on the workshop screen; **Start roleplay chat** (▶) is a **shortcut** that opens solo/group with the workshop opening prefilled — **not required**; you can also save characters/lore from the workshop and start a normal **New chat** from Home with the same opening scene from the library; the people menu can **Create AI characters** (multi-select + review each card), **Update existing character** (pick a saved card — imported-chat cast listed first — preserve-and-merge from workshop context, review, then overwrite only on Save), or **Create my persona** (choose one person from workshop chat + linked lore, generate player-focused fields, then review before saving); **context estimate** banner (tap for details) shows ~messages/tokens vs model window
+  - **Creation Center** — chat with AI to invent a world; workshop replies use a **2048-token floor** (not RP short-reply caps) and the updated system prompt; **tap** a bubble to **edit**, **long-press** for **Delete**, **Rewind to here**, **Regenerate**, **New swipe**, and swipe navigation (same feel as roleplay chat — regenerate rebuilds with current prompt + token limits); **Import** can seed from an **existing chat** with an **Import options** sheet (memory summary + last N recent messages — same N as Summarize “keep recent”, default 10 — not the full 100+ message log; **World Info lorebooks off by default** and only books **explicitly linked** on that chat when enabled; toggles for character cards, persona, embedded card lore, opening scene, author’s note), a World Info lorebook, or a JSON file; **Create/Update lorebook** saves keyword entries as a selectable global lorebook (one workshop = one book); **Create/Update opening scene** saves narrator setup prose (syncs to **Opening scenes** library); editable **Opening scene** card on the workshop screen; **Start roleplay chat** (▶) is a **shortcut** that opens solo/group with the workshop opening prefilled — **not required**; you can also save characters/lore from the workshop and start a normal **New chat** from Home with the same opening scene from the library; the people menu can **Create AI characters** (multi-select + review each card), **Update existing character** (pick a saved card — imported-chat cast listed first — preserve-and-merge from workshop context, review, then overwrite only on Save), or **Create my persona** (choose one person from workshop chat + linked lore, generate player-focused fields, then review before saving); **context estimate** banner (tap for details) shows ~messages/tokens vs model window
   - **AI collaborator** — wand guidance note + **Composer Format** note + **Roadway / Paths** note
   - **Character builds** — model, max tokens, temperature, top P, and prompt for **full card JSON** generation (New character from chat + Creation Center create/update); separate from main chat model
   - **Global chat prompts** — app-wide **system prompt** + **post-history** merged into every chat (on top of each card; per-chat Author's Note still applies); preset pickers; `{{user}}` / `{{char}}`
@@ -108,7 +108,7 @@ High-value SillyTavern concepts to aim for over time:
 - **Context estimate** — chat ⋮ → **Context estimate** shows ~message/token gauges vs history budget and model window; Creation Center shows a live banner estimate
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar
 - **Linux install/update** — `./scripts/update_linux.sh` builds and installs the desktop app; add `--pull` to download GitHub changes first
-- **Smoke:** `flutter test` (147) + `flutter analyze` pass; Android + Linux desktop debug work
+- **Smoke:** `flutter test` (159) + `flutter analyze` pass; Android + Linux desktop debug work
 
 ### What does NOT work yet / limits
 
@@ -391,9 +391,10 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. Spot-check: Creation Center **Create opening scene** → confirm it appears under **Settings → Opening scenes** → start a normal **New chat** from Home and pick that scene (no need to use **Start roleplay**).
-2. Spot-check Creation Center → Import existing chat → **Import options** on a long chat: confirm only memory + last 10 messages by default, lorebooks off unless enabled.
-3. Optional QoL backlog when you want more: undo send, last-chat resume, pinned Author’s Note / mood chips, memory preview panel.
+1. Spot-check Creation Center: long-press an AI reply → **Regenerate** (or ◀ **1/N** ▶ on the latest) — confirm the full reply is not cut off and uses the updated workshop prompt.
+2. Spot-check Creation Center: long-press an older message → **Rewind to here** or **Edit** — confirm later messages are removed / corrections stick before generating lore or characters.
+3. Spot-check: Creation Center **Create opening scene** → confirm it appears under **Settings → Opening scenes** → start a normal **New chat** from Home and pick that scene (no need to use **Start roleplay**).
+4. Optional QoL backlog when you want more: undo send, last-chat resume, pinned Author’s Note / mood chips, memory preview panel.
 
 ---
 

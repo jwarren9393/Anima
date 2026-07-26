@@ -8,6 +8,7 @@ import 'package:anima/models/lorebook.dart';
 import 'package:anima/models/persona.dart';
 import 'package:anima/models/world_workshop.dart';
 import 'package:anima/models/workshop_chat_import_options.dart';
+import 'package:anima/services/settings_service.dart';
 import 'package:anima/services/world_workshop_builder.dart';
 
 void main() {
@@ -41,6 +42,20 @@ void main() {
       ),
     ],
   );
+
+  group('WorldWorkshopBuilder workshop chat sampling', () {
+    test('raises low RP max_tokens floor for brainstorming', () {
+      const shortRp = SamplingSettings(maxTokens: 350);
+      final adjusted = WorldWorkshopBuilder.workshopChatSampling(shortRp);
+      expect(adjusted.maxTokens, WorldWorkshopBuilder.workshopChatMinMaxTokens);
+    });
+
+    test('keeps higher user max_tokens', () {
+      const longRp = SamplingSettings(maxTokens: 4096);
+      final adjusted = WorldWorkshopBuilder.workshopChatSampling(longRp);
+      expect(adjusted.maxTokens, 4096);
+    });
+  });
 
   group('WorldWorkshopBuilder lorebook', () {
     test('parseLorebookJson accepts plain JSON object', () {
