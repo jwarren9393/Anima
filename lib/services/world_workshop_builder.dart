@@ -742,6 +742,7 @@ Skip:
 
 Output rules:
 - Reply with ONLY a single JSON object. No markdown fences. No preamble.
+- Do NOT ask questions or offer to draft later — output the character list now.
 - Shape:
 {
   "characters": [
@@ -1222,6 +1223,12 @@ ${formatTranscript(conversation)}
       'Your previous reply was not valid lorebook JSON. '
       'Reply with ONLY one complete JSON object using the schema from the system '
       'message. No markdown fences, no preamble, no questions, no explanation.';
+
+  /// Follow-up when character detection did not return JSON.
+  static const characterDetectExportRetryUserMessage =
+      'Your previous reply was not valid character-list JSON. '
+      'Reply with ONLY one JSON object: {"characters":[{"name":"...","summary":"..."}]} '
+      'No markdown fences, no preamble, no questions.';
 
   /// Parse the detection pass into candidates (may be empty).
   List<WorkshopCharacterCandidate> parseCharacterCandidatesJson(String raw) {

@@ -60,7 +60,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-25  
-**Last agent action:** Published **v1.0.0 build 20** — Creation Center Short / Normal / Detailed reply-length presets (saved per workshop).
+**Last agent action:** Published **v1.0.0 build 21** — linked lorebook off by default in Creation Center + character export token/retry fixes.
 
 ### What works today
 

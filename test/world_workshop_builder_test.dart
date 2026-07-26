@@ -650,6 +650,7 @@ Here is the card you asked for:
       expect(restored.importedSource!.memorySummary, 'Kept.');
       expect(restored.importedSource!.characterNames, contains('Mira'));
       expect(restored.replyLength, WorkshopReplyLength.detailed);
+      expect(restored.includeLinkedLorebookInPrompt, isFalse);
 
       final legacy = WorldWorkshop.fromJson({
         'id': 'ws_old',
@@ -659,6 +660,7 @@ Here is the card you asked for:
       });
       expect(legacy.importedSource, isNull);
       expect(legacy.replyLength, WorkshopReplyLength.normal);
+      expect(legacy.includeLinkedLorebookInPrompt, isFalse);
     });
   });
 

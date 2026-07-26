@@ -243,6 +243,7 @@ class WorldWorkshop {
     this.importedSource,
     this.openingScene = '',
     this.replyLength = WorkshopReplyLength.normal,
+    this.includeLinkedLorebookInPrompt = false,
   });
 
   final String id;
@@ -266,6 +267,11 @@ class WorldWorkshop {
   /// Reply length preset for workshop brainstorming chat (not exports).
   final WorkshopReplyLength replyLength;
 
+  /// When false (default), the saved lorebook is not re-sent on every chat turn.
+  /// The workshop transcript is usually enough; turn on only if you want the AI
+  /// to read the exported book while brainstorming.
+  final bool includeLinkedLorebookInPrompt;
+
   WorldWorkshop copyWith({
     String? id,
     String? title,
@@ -277,6 +283,7 @@ class WorldWorkshop {
     bool clearImportedSource = false,
     String? openingScene,
     WorkshopReplyLength? replyLength,
+    bool? includeLinkedLorebookInPrompt,
   }) {
     return WorldWorkshop(
       id: id ?? this.id,
@@ -291,6 +298,8 @@ class WorldWorkshop {
           : (importedSource ?? this.importedSource),
       openingScene: openingScene ?? this.openingScene,
       replyLength: replyLength ?? this.replyLength,
+      includeLinkedLorebookInPrompt: includeLinkedLorebookInPrompt ??
+          this.includeLinkedLorebookInPrompt,
     );
   }
 
@@ -304,6 +313,7 @@ class WorldWorkshop {
         if (importedSource != null) 'importedSource': importedSource!.toJson(),
         if (openingScene.trim().isNotEmpty) 'openingScene': openingScene,
         'replyLength': replyLength.toJson(),
+        'includeLinkedLorebookInPrompt': includeLinkedLorebookInPrompt,
       };
 
   factory WorldWorkshop.fromJson(Map<String, dynamic> json) {
@@ -346,6 +356,8 @@ class WorldWorkshop {
       importedSource: imported,
       openingScene: (json['openingScene'] as String? ?? '').trim(),
       replyLength: WorkshopReplyLength.fromJson(json['replyLength']),
+      includeLinkedLorebookInPrompt:
+          json['includeLinkedLorebookInPrompt'] == true,
     );
   }
 

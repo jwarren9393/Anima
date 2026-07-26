@@ -148,10 +148,15 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       _linkedLorebook != null ||
       (_workshop.importedSource?.hasContent ?? false);
 
+  /// Linked lorebook text for chat / character prompts (optional).
+  Lorebook? get _lorebookForPrompt =>
+      _workshop.includeLinkedLorebookInPrompt ? _linkedLorebook?.book : null;
+
   ContextEstimate get _estimate {
-    final loreJson = _linkedLorebook == null
-        ? ''
-        : const JsonEncoder().convert(_linkedLorebook!.book.toJson());
+    final loreJson =
+        _workshop.includeLinkedLorebookInPrompt && _linkedLorebook != null
+        ? const JsonEncoder().convert(_linkedLorebook!.book.toJson())
+        : '';
     final imported = _workshop.importedSource?.promptText ?? '';
     return _contextService.estimateWorkshop(
       messages: _workshop.messages,
@@ -190,7 +195,14 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
               if (estimate.loreTokens > 0)
                 Text(
                   'Linked lorebook: ~${ContextEstimate.formatTokenCount(estimate.loreTokens)} tokens',
+                )
+              else if (_linkedLorebook != null &&
+                  !_workshop.includeLinkedLorebookInPrompt) ...[
+                Text(
+                  'Linked lorebook: ~${ContextEstimate.formatTokenCount(_contextService.estimateTokens(const JsonEncoder().convert(_linkedLorebook!.book.toJson())))} tokens (not sent — ⋮ to include)',
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
+              ],
               Text(
                 'Estimated send size: ~${ContextEstimate.formatTokenCount(estimate.estimatedSentTokens)} tokens',
               ),
@@ -333,7 +345,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           'role': 'system',
           'content': _builder.chatSystemPrompt(
             guidanceNote: collaborator.guidanceNote,
-            sourceLorebook: _linkedLorebook?.book,
+            sourceLorebook: _lorebookForPrompt,
             importedSource: _workshop.importedSource,
             replyLength: _workshop.replyLength,
           ),
@@ -674,6 +686,26 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     if (action == 'swipe_next') _shiftSwipe(index, 1);
   }
 
+  Future<void> _toggleLinkedLorebookInPrompt() async {
+    final next = !_workshop.includeLinkedLorebookInPrompt;
+    setState(
+      () => _workshop = _workshop.copyWith(
+        includeLinkedLorebookInPrompt: next,
+      ),
+    );
+    await _persist(_workshop);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          next
+              ? 'Linked lorebook will be sent with chat and character exports.'
+              : 'Linked lorebook hidden from prompts — using workshop chat only.',
+        ),
+      ),
+    );
+  }
+
   Future<void> _setReplyLength(WorkshopReplyLength length) async {
     if (_workshop.replyLength == length) return;
     setState(() => _workshop = _workshop.copyWith(replyLength: length));
@@ -811,7 +843,11 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           ? _workshop.title
           : book.name.trim();
       await _persist(
-        _workshop.copyWith(title: title, exportedLorebookId: global.id),
+        _workshop.copyWith(
+          title: title,
+          exportedLorebookId: global.id,
+          includeLinkedLorebookInPrompt: false,
+        ),
       );
 
       if (!mounted) return;
@@ -879,7 +915,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         messages: _builder.buildOpeningSceneExportMessages(
           conversation: _workshop.messages,
           guidanceNote: collaborator.guidanceNote,
-          sourceLorebook: _linkedLorebook?.book,
+          sourceLorebook: _lorebookForPrompt,
           importedSource: _workshop.importedSource,
           existingOpeningScene: _workshop.openingScene,
         ),
@@ -1089,19 +1125,43 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         for (final c in existingChars) c.name.trim().toLowerCase(),
       };
 
-      final detectRaw = await widget.nanoGptService.complete(
+      var detectRaw = await widget.nanoGptService.complete(
         model: model,
         messages: _builder.buildCharacterDetectMessages(
           conversation: _workshop.messages,
           guidanceNote: collaborator.guidanceNote,
-          sourceLorebook: _linkedLorebook?.book,
+          sourceLorebook: _lorebookForPrompt,
           importedSource: _workshop.importedSource,
         ),
         baseUrl: baseUrl,
         sampling: sampling,
       );
 
-      final candidates = _builder.parseCharacterCandidatesJson(detectRaw);
+      List<WorkshopCharacterCandidate> candidates;
+      try {
+        candidates = _builder.parseCharacterCandidatesJson(detectRaw);
+      } on FormatException {
+        detectRaw = await widget.nanoGptService.complete(
+          model: model,
+          messages: [
+            ..._builder.buildCharacterDetectMessages(
+              conversation: _workshop.messages,
+              guidanceNote: collaborator.guidanceNote,
+              sourceLorebook: _lorebookForPrompt,
+              importedSource: _workshop.importedSource,
+            ),
+            {'role': 'assistant', 'content': detectRaw},
+            {
+              'role': 'user',
+              'content':
+                  WorldWorkshopBuilder.characterDetectExportRetryUserMessage,
+            },
+          ],
+          baseUrl: baseUrl,
+          sampling: sampling,
+        );
+        candidates = _builder.parseCharacterCandidatesJson(detectRaw);
+      }
       if (!mounted) return;
 
       if (candidates.isEmpty) {
@@ -1151,11 +1211,11 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
               characterName: candidate.name,
               characterSummary: candidate.summary,
               buildPromptNote: build.promptNote,
-              sourceLorebook: _linkedLorebook?.book,
+              sourceLorebook: _lorebookForPrompt,
               importedSource: _workshop.importedSource,
             ),
             baseUrl: baseUrl,
-            sampling: build.sampling,
+            sampling: WorldWorkshopBuilder.workshopExportSampling(build.sampling),
           );
 
           final draft = _builder.parseCharacterJson(
@@ -1330,11 +1390,11 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           conversation: _workshop.messages,
           existing: selected,
           buildPromptNote: build.promptNote,
-          sourceLorebook: _linkedLorebook?.book,
+          sourceLorebook: _lorebookForPrompt,
           importedSource: _workshop.importedSource,
         ),
         baseUrl: baseUrl,
-        sampling: build.sampling,
+        sampling: WorldWorkshopBuilder.workshopExportSampling(build.sampling),
       );
 
       final draft = _builder.parseCharacterUpdateJson(
@@ -1496,18 +1556,42 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         for (final p in existingPersonas) p.name.trim().toLowerCase(),
       };
 
-      final detectRaw = await widget.nanoGptService.complete(
+      var detectRaw = await widget.nanoGptService.complete(
         model: model,
         messages: _builder.buildCharacterDetectMessages(
           conversation: _workshop.messages,
           guidanceNote: collaborator.guidanceNote,
-          sourceLorebook: _linkedLorebook?.book,
+          sourceLorebook: _lorebookForPrompt,
           importedSource: _workshop.importedSource,
         ),
         baseUrl: baseUrl,
         sampling: sampling,
       );
-      final candidates = _builder.parseCharacterCandidatesJson(detectRaw);
+      List<WorkshopCharacterCandidate> candidates;
+      try {
+        candidates = _builder.parseCharacterCandidatesJson(detectRaw);
+      } on FormatException {
+        detectRaw = await widget.nanoGptService.complete(
+          model: model,
+          messages: [
+            ..._builder.buildCharacterDetectMessages(
+              conversation: _workshop.messages,
+              guidanceNote: collaborator.guidanceNote,
+              sourceLorebook: _lorebookForPrompt,
+              importedSource: _workshop.importedSource,
+            ),
+            {'role': 'assistant', 'content': detectRaw},
+            {
+              'role': 'user',
+              'content':
+                  WorldWorkshopBuilder.characterDetectExportRetryUserMessage,
+            },
+          ],
+          baseUrl: baseUrl,
+          sampling: sampling,
+        );
+        candidates = _builder.parseCharacterCandidatesJson(detectRaw);
+      }
       if (!mounted) return;
       if (candidates.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1541,7 +1625,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           personaName: selected.name,
           personaSummary: selected.summary,
           guidanceNote: collaborator.guidanceNote,
-          sourceLorebook: _linkedLorebook?.book,
+          sourceLorebook: _lorebookForPrompt,
           importedSource: _workshop.importedSource,
         ),
         baseUrl: baseUrl,
@@ -2012,7 +2096,8 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                           (linkedName != null
                               ? 'Linked to “$linkedName” '
                                   '(${_linkedLorebook!.entryCount} entries). '
-                                  'Chat to revise it, then update lorebook or create characters.'
+                                  '${_workshop.includeLinkedLorebookInPrompt ? 'Lorebook included in prompts.' : 'Chat uses the workshop transcript only — ⋮ to include lorebook.'} '
+                                  'Update lorebook or create characters via ⋮.'
                               : hasImported
                                   ? 'Seeded from “${imported!.chatTitle}”. '
                                       'Chat to refine, then use ⋮ for lorebook, opening scene, or characters.'
@@ -2158,6 +2243,8 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                   _updateExistingCharacter();
                 case 'persona':
                   _createPersona();
+                case 'toggle_lore_prompt':
+                  _toggleLinkedLorebookInPrompt();
               }
             },
             itemBuilder: (context) => [
@@ -2218,6 +2305,26 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
+              if (_linkedLorebook != null) ...[
+                const PopupMenuDivider(),
+                PopupMenuItem(
+                  value: 'toggle_lore_prompt',
+                  child: ListTile(
+                    leading: Icon(
+                      _workshop.includeLinkedLorebookInPrompt
+                          ? Icons.check_box
+                          : Icons.check_box_outline_blank,
+                    ),
+                    title: const Text('Include linked lorebook in prompts'),
+                    subtitle: Text(
+                      _workshop.includeLinkedLorebookInPrompt
+                          ? 'Adds lorebook text to chat / character exports'
+                          : 'Off — saves tokens; chat transcript is enough',
+                    ),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ],
             ],
           ),
         ],
