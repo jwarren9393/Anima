@@ -49,10 +49,24 @@ class WorldWorkshopBuilder {
   /// numbered follow-up questions — this floor applies only in Creation Center.
   static const workshopChatMinMaxTokens = 2048;
 
+  /// Minimum completion budget for workshop exports (lorebook, opening scene).
+  ///
+  /// RP "Short replies" caps truncate large JSON payloads — exports need room
+  /// for many lore entries in one object.
+  static const workshopExportMinMaxTokens = 8192;
+
   /// Applies [workshopChatMinMaxTokens] without letting low RP caps truncate
   /// worldbuilding replies.
   static SamplingSettings workshopChatSampling(SamplingSettings base) {
     const minTokens = workshopChatMinMaxTokens;
+    final user = base.maxTokens;
+    final effective = user == null || user < minTokens ? minTokens : user;
+    return base.copyWith(maxTokens: effective.clamp(256, 8192));
+  }
+
+  /// Applies [workshopExportMinMaxTokens] for lorebook / opening-scene JSON.
+  static SamplingSettings workshopExportSampling(SamplingSettings base) {
+    const minTokens = workshopExportMinMaxTokens;
     final user = base.maxTokens;
     final effective = user == null || user < minTokens ? minTokens : user;
     return base.copyWith(maxTokens: effective.clamp(256, 8192));
@@ -595,6 +609,7 @@ $guidance
 
 Output rules:
 - Reply with ONLY a single JSON object. No markdown fences. No preamble.
+- Do NOT ask questions or offer to draft later — output the complete lorebook now.
 - Shape:
 {
   "name": "short book title",
@@ -1121,11 +1136,10 @@ ${formatTranscript(conversation)}
     final map = _extractJsonObject(
       raw,
       emptyMessage: 'The AI returned an empty lorebook.',
-      missingMessage:
-          'Could not find lorebook JSON in the AI reply. Try Create lorebook again.',
+      missingMessage: lorebookJsonMissingMessage(raw),
       notObjectMessage: 'Lorebook JSON must be an object.',
     );
-    final book = Lorebook.fromJson(map);
+    final book = Lorebook.parseImport(map);
     if (book.entries.isEmpty) {
       throw const FormatException(
         'The AI returned a lorebook with no entries. Try chatting a bit more, then Create again.',
@@ -1136,6 +1150,29 @@ ${formatTranscript(conversation)}
     }
     return book;
   }
+
+  /// User-facing hint when export JSON could not be parsed.
+  static String lorebookJsonMissingMessage(String raw) {
+    final text = raw.trim();
+    if (text.isEmpty) {
+      return 'The AI returned an empty reply. Try Create lorebook again.';
+    }
+    if (text.contains('{') && !text.trim().endsWith('}')) {
+      return 'The lorebook JSON was cut off before it finished. '
+          'Try Create lorebook again — this build uses a higher token limit for exports.';
+    }
+    if (!text.contains('{')) {
+      return 'The AI replied with text instead of lorebook JSON. '
+          'Try Create lorebook again (do not ask in chat — use the ⋮ menu button).';
+    }
+    return 'Could not find valid lorebook JSON in the AI reply. Try Create lorebook again.';
+  }
+
+  /// Follow-up user message when the first export pass did not return JSON.
+  static const lorebookExportRetryUserMessage =
+      'Your previous reply was not valid lorebook JSON. '
+      'Reply with ONLY one complete JSON object using the schema from the system '
+      'message. No markdown fences, no preamble, no questions, no explanation.';
 
   /// Parse the detection pass into candidates (may be empty).
   List<WorkshopCharacterCandidate> parseCharacterCandidatesJson(String raw) {

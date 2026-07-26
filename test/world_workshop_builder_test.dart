@@ -57,6 +57,39 @@ void main() {
     });
   });
 
+  group('WorldWorkshopBuilder workshop export sampling', () {
+    test('raises low RP max_tokens floor for lorebook JSON exports', () {
+      const shortRp = SamplingSettings(maxTokens: 350);
+      final adjusted = WorldWorkshopBuilder.workshopExportSampling(shortRp);
+      expect(
+        adjusted.maxTokens,
+        WorldWorkshopBuilder.workshopExportMinMaxTokens,
+      );
+    });
+
+    test('keeps user max_tokens when already at export ceiling', () {
+      const high = SamplingSettings(maxTokens: 8192);
+      final adjusted = WorldWorkshopBuilder.workshopExportSampling(high);
+      expect(adjusted.maxTokens, 8192);
+    });
+  });
+
+  group('WorldWorkshopBuilder lorebook export errors', () {
+    test('lorebookJsonMissingMessage detects prose-only replies', () {
+      final message = WorldWorkshopBuilder.lorebookJsonMissingMessage(
+        'Say the word and I will draft the lorebook JSON for you.',
+      );
+      expect(message, contains('text instead of lorebook JSON'));
+    });
+
+    test('lorebookJsonMissingMessage detects truncated JSON', () {
+      final message = WorldWorkshopBuilder.lorebookJsonMissingMessage(
+        '{"name":"Test","entries":[{"keys":["a"],"content":"hello"',
+      );
+      expect(message, contains('cut off'));
+    });
+  });
+
   group('WorldWorkshopBuilder lorebook', () {
     test('parseLorebookJson accepts plain JSON object', () {
       const raw = '''

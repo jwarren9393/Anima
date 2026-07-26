@@ -60,7 +60,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-25  
-**Last agent action:** Published **v1.0.0 build 18** — Creation Center compact header + opening-scene editor sheet (chat visible with keyboard).
+**Last agent action:** Published **v1.0.0 build 19** — Creation Center lorebook export fix (8192-token floor + JSON retry).
 
 ### What works today
 
@@ -108,7 +108,7 @@ High-value SillyTavern concepts to aim for over time:
 - **Context estimate** — chat ⋮ → **Context estimate** shows ~message/token gauges vs history budget and model window; Creation Center shows a live banner estimate
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar
 - **Linux install/update** — `./scripts/update_linux.sh` builds and installs the desktop app; add `--pull` to download GitHub changes first
-- **Smoke:** `flutter test` (159) + `flutter analyze` pass; Android + Linux desktop debug work
+- **Smoke:** `flutter test` (163) + `flutter analyze` pass; Android + Linux desktop debug work
 
 ### What does NOT work yet / limits
 

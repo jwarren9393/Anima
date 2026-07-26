@@ -7,6 +7,7 @@ import '../models/character.dart';
 import '../models/chat_message.dart';
 import '../models/chat_session.dart';
 import '../models/global_lorebook.dart';
+import '../models/lorebook.dart';
 import '../models/persona.dart';
 import '../models/world_workshop.dart';
 import '../services/api_key_service.dart';
@@ -706,22 +707,44 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       final collaborator = await widget.settingsService
           .getCollaboratorSettings();
       final model = await widget.settingsService.getModel();
-      final sampling = await widget.settingsService.getSampling();
+      final sampling = WorldWorkshopBuilder.workshopExportSampling(
+        await widget.settingsService.getSampling(),
+      );
       final baseUrl = await widget.settingsService.getApiBaseUrl();
 
-      final raw = await widget.nanoGptService.complete(
+      final exportMessages = _builder.buildExportMessages(
+        conversation: _workshop.messages,
+        guidanceNote: collaborator.guidanceNote,
+        sourceLorebook: _linkedLorebook?.book,
+        importedSource: _workshop.importedSource,
+      );
+
+      var raw = await widget.nanoGptService.complete(
         model: model,
-        messages: _builder.buildExportMessages(
-          conversation: _workshop.messages,
-          guidanceNote: collaborator.guidanceNote,
-          sourceLorebook: _linkedLorebook?.book,
-          importedSource: _workshop.importedSource,
-        ),
+        messages: exportMessages,
         baseUrl: baseUrl,
         sampling: sampling,
       );
 
-      final book = _builder.parseLorebookJson(raw);
+      Lorebook book;
+      try {
+        book = _builder.parseLorebookJson(raw);
+      } on FormatException {
+        raw = await widget.nanoGptService.complete(
+          model: model,
+          messages: [
+            ...exportMessages,
+            {'role': 'assistant', 'content': raw},
+            {
+              'role': 'user',
+              'content': WorldWorkshopBuilder.lorebookExportRetryUserMessage,
+            },
+          ],
+          baseUrl: baseUrl,
+          sampling: sampling,
+        );
+        book = _builder.parseLorebookJson(raw);
+      }
       final existingId = _workshop.exportedLorebookId;
       final global = GlobalLorebook(
         id: (existingId != null && existingId.isNotEmpty)
@@ -797,7 +820,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       final collaborator = await widget.settingsService
           .getCollaboratorSettings();
       final model = await widget.settingsService.getModel();
-      final sampling = await widget.settingsService.getSampling();
+      final sampling = WorldWorkshopBuilder.workshopExportSampling(
+        await widget.settingsService.getSampling(),
+      );
       final baseUrl = await widget.settingsService.getApiBaseUrl();
 
       final raw = await widget.nanoGptService.complete(
@@ -1006,7 +1031,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       final collaborator = await widget.settingsService
           .getCollaboratorSettings();
       final model = await widget.settingsService.getModel();
-      final sampling = await widget.settingsService.getSampling();
+      final sampling = WorldWorkshopBuilder.workshopExportSampling(
+        await widget.settingsService.getSampling(),
+      );
       final baseUrl = await widget.settingsService.getApiBaseUrl();
       final existingChars = await widget.characterService.loadCharacters();
       final existingNames = {
@@ -1411,7 +1438,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       final collaborator = await widget.settingsService
           .getCollaboratorSettings();
       final model = await widget.settingsService.getModel();
-      final sampling = await widget.settingsService.getSampling();
+      final sampling = WorldWorkshopBuilder.workshopExportSampling(
+        await widget.settingsService.getSampling(),
+      );
       final baseUrl = await widget.settingsService.getApiBaseUrl();
       final existingPersonas = await widget.personaService.loadPersonas();
       final existingNames = {
