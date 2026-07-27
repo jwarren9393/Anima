@@ -60,11 +60,11 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-25  
-**Last agent action:** Build **27** — opening scene always injects + seeds into memory on first summarize; Creation Center opening-scene **length** picker; **Rewrite reply** controls (shorten/expand/mood/custom) on long-press in chat + Creation Center; smarter memory-summary prompts + higher summarize token floor; regenerate any AI bubble.
+**Last agent action:** Group chats use short custom names (not member lists on Home); rename via group setup or chat ⋮ menu; tap avatars for fullscreen portrait.
 
 ### What works today
 
-- **Home screen** — chat history, Settings, New chat
+- **Home screen** — chat history (solo = character name; group = your custom name or short default like “Group chat (3)”), Settings, New chat
 - **New chat** — choose **Solo** or **Group**; if the character has several greetings, a **Choose opening** sheet picks which one starts (others stay as swipes); then an optional **Opening scene** sheet — pick a saved scene, browse **Opening scene library**, type fresh prose, or skip
 - **Opening scene (narrator)** — per-chat optional prose in a centered narrator card above messages (not a character bubble); **always injected into prompts by default** (turn off via ⋮ → **Stop injecting opening scene** to save tokens); on the **first memory summarize**, the scene is folded into the memory summary so it stays in long-term context; edit via ⋮ → **Opening scene**; works in solo and group; separate from card **Scenario** (still injects every turn)
 - **Opening scenes library** — **Settings → Opening scenes** lists saved narrator setups (create / edit / delete); scenes from Creation Center **auto-sync** when you save or AI-generate an opening scene there; also imported when starting a new chat or opening the library; included in backup
@@ -103,12 +103,12 @@ High-value SillyTavern concepts to aim for over time:
 - **Per-chat persona** — in a chat, ⋮ menu → **Persona: …** to switch who you are for that thread (saved on the chat)
 - **Per-chat World Info** — ⋮ menu → **World Info: …** to use Settings default, pick specific global lorebooks, or turn global lore off for this thread (character card lore still applies)
 - **Group chat controls** — tap a character name chip to choose who speaks next and **always generate their reply** when auto-reply is off (even re-tapping the same chip); auto-reply off by default (send only; tap a name or Continue for a reply; toggle via long-press); leading `Name:` is stripped from replies so the bubble header isn’t duplicated
-- **Manage cast (mid-chat)** — ⋮ → **Manage cast** adds/removes characters in the **current** chat (solo or group) without starting over; ⋮ → **New character** opens a sheet to **type a name + generate from chat** or start blank; ⋮ → **Update character from chat** revises one saved card from the thread (cast listed first; optional change notes); manage screen **+** uses the same flow when editing cast
-- **Avatars** — persona + character photos; **Generate avatar** on character and persona create/edit (and Creation Center character review) uses NanoGPT image models + an **auto prompt** that keeps the portrait framing but pulls only appearance-relevant lines from the card (skips scenario, backstory, and long personality blocks; stays under ~1,150 chars); prompt is still editable in the sheet; **tap an AI avatar in chat** to edit that character card (tap yours to edit the persona); PNG card import still grabs the card image; chat bubble shape/size via Appearance
+- **Manage cast (mid-chat)** — ⋮ → **Rename chat** (groups) or **Manage cast** adds/removes characters in the **current** chat (solo or group) without starting over; group setup includes an optional **Chat name** field; ⋮ → **New character** opens a sheet to **type a name + generate from chat** or start blank; ⋮ → **Update character from chat** revises one saved card from the thread (cast listed first; optional change notes); manage screen **+** uses the same flow when editing cast
+- **Avatars** — persona + character photos; **Generate avatar** on character and persona create/edit (and Creation Center character review) uses NanoGPT image models + an **auto prompt** that keeps the portrait framing but pulls only appearance-relevant lines from the card (skips scenario, backstory, and long personality blocks; stays under ~1,150 chars); prompt is still editable in the sheet; **tap any avatar** (chat, character list, editor, home) for a **full-screen portrait** — tap again (or ✕) to close; in chat, **long-press** an avatar to edit persona / character card; PNG card import still grabs the card image; chat bubble shape/size via Appearance
 - **Context estimate** — chat ⋮ → **Context estimate** shows ~message/token gauges vs history budget and model window; Creation Center shows a live banner estimate
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar
 - **Linux install/update** — `./scripts/update_linux.sh` builds and installs the desktop app; add `--pull` to download GitHub changes first
-- **Smoke:** `flutter test` (181) + `flutter analyze` pass; Android + Linux desktop debug work
+- **Smoke:** `flutter test` (184) + `flutter analyze` pass; Android + Linux desktop debug work
 
 ### What does NOT work yet / limits
 
@@ -264,7 +264,8 @@ lib/
     backup_restore_screen.dart    Full-app backup / restore + cross-device sync (.anima-backup JSON; no API key)
     settings_ui.dart              Shared settings form helpers
   widgets/
-    anima_avatar.dart             Local-file / initial avatar (circle or rect via style)
+    anima_avatar.dart             Local-file / initial avatar (circle or rect via style); tap → fullscreen
+    avatar_fullscreen.dart        Full-screen portrait viewer (tap to dismiss)
     chat_composer_field.dart      Chat composer with optional Enter-to-send (Shift+Enter newline)
     generate_avatar_sheet.dart    Shared NanoGPT Generate avatar sheet (characters + personas)
     keyboard_inset.dart           Lift UI above keyboard (chat composers)

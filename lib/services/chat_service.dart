@@ -237,6 +237,44 @@ class ChatService {
     return '${character.name} · $mm/$dd $hh:$min';
   }
 
+  /// Default label for a new group chat (no member names).
+  static String defaultGroupTitle(int memberCount) {
+    if (memberCount < 2) return 'Group chat';
+    return 'Group chat ($memberCount)';
+  }
+
+  /// True for old auto titles that listed every member (and optional timestamp).
+  static bool isLegacyGroupMemberListTitle(String title) {
+    final trimmed = title.trim();
+    if (trimmed.isEmpty) return false;
+    if (!trimmed.startsWith('Group')) return false;
+    if (trimmed.contains(',')) return true;
+    return RegExp(r'Group\s*·\s*.+\s·\s*\d{2}/\d{2}').hasMatch(trimmed);
+  }
+
+  /// Title shown in chat lists and the chat app bar.
+  static String displayTitle(ChatSession session) {
+    final raw = session.title.trim();
+    if (!session.isGroup) {
+      return raw.isEmpty ? 'Chat' : raw;
+    }
+    if (raw.isEmpty || isLegacyGroupMemberListTitle(raw)) {
+      return defaultGroupTitle(session.effectiveParticipantIds.length);
+    }
+    return raw;
+  }
+
+  static String _resolvedGroupTitle({
+    required String? requestedTitle,
+    required int memberCount,
+  }) {
+    final custom = requestedTitle?.trim() ?? '';
+    if (custom.isNotEmpty && !isLegacyGroupMemberListTitle(custom)) {
+      return custom;
+    }
+    return defaultGroupTitle(memberCount);
+  }
+
   /// Storage bucket for multi-character group chats.
   static const groupsKey = '__groups__';
 
@@ -256,6 +294,7 @@ class ChatService {
     int greetingIndex = 0,
     String openingScene = '',
     bool openingSceneInPrompt = true,
+    String? title,
   }) async {
     if (members.length < 2) {
       throw ArgumentError('Group chats need at least two characters.');
@@ -289,17 +328,13 @@ class ChatService {
       );
     }
 
-    final names = members.map((m) => m.name.trim()).where((n) => n.isNotEmpty);
-    final stamp = DateTime.now();
-    final mm = stamp.month.toString().padLeft(2, '0');
-    final dd = stamp.day.toString().padLeft(2, '0');
-    final hh = stamp.hour.toString().padLeft(2, '0');
-    final min = stamp.minute.toString().padLeft(2, '0');
-
     final session = ChatSession(
       id: ChatSession.newId(),
       characterId: groupsKey,
-      title: 'Group · ${names.join(', ')} · $mm/$dd $hh:$min',
+      title: _resolvedGroupTitle(
+        requestedTitle: title,
+        memberCount: members.length,
+      ),
       updatedAt: DateTime.now(),
       messages: messages,
       authorsNote: authorsNote.trim(),
@@ -331,6 +366,7 @@ class ChatService {
     String? authorsNote,
     bool? autoReply,
     List<String>? lorebookIds,
+    String? title,
   }) async {
     if (orderedMembers.isEmpty) {
       throw ArgumentError('A chat needs at least one character.');
@@ -357,18 +393,22 @@ class ChatService {
       }
     }
 
-    var title = session.title;
-    if (willBeGroup) {
-      final names =
-          orderedMembers.map((m) => m.name.trim()).where((n) => n.isNotEmpty);
-      title = 'Group · ${names.join(', ')}';
+    var nextTitle = session.title;
+    if (title != null && title.trim().isNotEmpty) {
+      nextTitle = title.trim();
+    } else if (willBeGroup) {
+      if (!session.isGroup) {
+        nextTitle = defaultGroupTitle(orderedIds.length);
+      } else if (isLegacyGroupMemberListTitle(nextTitle)) {
+        nextTitle = defaultGroupTitle(orderedIds.length);
+      }
     } else if (session.isGroup) {
-      title = _defaultTitle(orderedMembers.first);
+      nextTitle = _defaultTitle(orderedMembers.first);
     }
 
     final updated = session.copyWith(
       characterId: newBucket,
-      title: title,
+      title: nextTitle,
       participantIds: willBeGroup ? orderedIds : const [],
       nextSpeakerIndex: nextSpeakerIndex,
       authorsNote: authorsNote ?? session.authorsNote,

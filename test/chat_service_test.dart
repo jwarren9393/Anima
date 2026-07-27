@@ -146,4 +146,47 @@ void main() {
     expect(afterSummarize.openingSceneInMemory, isTrue);
     expect(afterSummarize.openingSceneInPrompt, isTrue);
   });
+
+  test('startGroupChat uses short default title', () async {
+    final session = await chatService.startGroupChat([
+      char('a', 'Alice'),
+      char('b', 'Bob'),
+      char('c', 'Cara'),
+    ]);
+
+    expect(session.title, 'Group chat (3)');
+    expect(ChatService.displayTitle(session), 'Group chat (3)');
+  });
+
+  test('displayTitle cleans legacy member-list group titles', () {
+    final legacy = ChatSession(
+      id: 'g1',
+      characterId: ChatService.groupsKey,
+      title: 'Group · Alice, Bob, Cara · 07/26 22:03',
+      updatedAt: DateTime.utc(2026),
+      participantIds: const ['a', 'b', 'c'],
+    );
+    expect(ChatService.isLegacyGroupMemberListTitle(legacy.title), isTrue);
+    expect(ChatService.displayTitle(legacy), 'Group chat (3)');
+  });
+
+  test('custom group title is preserved when cast changes', () async {
+    final group = ChatSession(
+      id: 'chat_group',
+      characterId: ChatService.groupsKey,
+      title: 'Harbor heist',
+      updatedAt: DateTime(2026, 1, 1),
+      participantIds: const ['alice', 'bob'],
+      messages: const [],
+    );
+    await chatService.saveChat(group);
+
+    final updated = await chatService.updateSessionCast(
+      group,
+      [char('alice', 'Alice'), char('bob', 'Bob'), char('cara', 'Cara')],
+    );
+
+    expect(updated.title, 'Harbor heist');
+    expect(ChatService.displayTitle(updated), 'Harbor heist');
+  });
 }

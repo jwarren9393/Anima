@@ -609,10 +609,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           itemBuilder: (context, index) {
             final chat = chats[index];
             final selected = chat.id == _session?.id;
-            final prefix = chat.isGroup ? 'Group · ' : '';
             return ListTile(
               selected: selected,
-              title: Text('$prefix${chat.title}'),
+              title: Text(ChatService.displayTitle(chat)),
               subtitle: Text(
                 '${chat.messages.length} messages · ${_shortDate(chat.updatedAt)}'
                 '${chat.authorsNote.trim().isEmpty ? '' : ' · Note'}',
@@ -1730,6 +1729,57 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _renameGroupChat() async {
+    final session = _session;
+    if (session == null || !session.isGroup || _busy) return;
+
+    final controller = TextEditingController(
+      text: ChatService.isLegacyGroupMemberListTitle(session.title)
+          ? ''
+          : session.title,
+    );
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Rename group chat'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: InputDecoration(
+            labelText: 'Chat name',
+            hintText: ChatService.defaultGroupTitle(
+              session.effectiveParticipantIds.length,
+            ),
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (result == null || !mounted) return;
+
+    final nextTitle = result.isEmpty
+        ? ChatService.defaultGroupTitle(session.effectiveParticipantIds.length)
+        : result;
+    final updated = session.copyWith(title: nextTitle);
+    await widget.chatService.saveChat(updated);
+    if (!mounted) return;
+    setState(() => _session = updated);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Renamed to “$nextTitle”')),
+    );
+  }
+
   Future<void> _startGroupChat() async {
     if (_busy) return;
     final session = await Navigator.of(context).push<ChatSession>(
@@ -2419,13 +2469,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final session = _session;
     final characterName = _isGroup
-        ? (_participants
-              .map((c) => c.name)
-              .where((n) => n.isNotEmpty)
-              .join(', '))
+        ? ChatService.displayTitle(session!)
         : (_character?.name ?? 'Anima');
-    final titleName = _isGroup ? 'Group' : (_character?.name ?? 'Anima');
+    final titleName = characterName;
+    final groupSubtitle = _isGroup && session != null
+        ? '${session.effectiveParticipantIds.length} characters'
+        : null;
     return Scaffold(
       // We lift the body ourselves via [KeyboardInset] so the composer stays
       // above the keyboard even with a transparent glass scaffold.
@@ -2442,9 +2493,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(titleName),
-            if (_session != null)
+            if (groupSubtitle != null)
               Text(
-                _isGroup ? characterName : _session!.title,
+                groupSubtitle,
+                style: Theme.of(context).textTheme.bodySmall,
+              )
+            else if (_session != null && !_isGroup)
+              Text(
+                _session!.title,
                 style: Theme.of(context).textTheme.bodySmall,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -2476,6 +2532,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               if (value == 'context') _showContextEstimate();
               if (value == 'characters') _openCharacters();
               if (value == 'manage_cast') _manageCast();
+              if (value == 'rename') _renameGroupChat();
               if (value == 'new_character') _createCharacterForChat();
               if (value == 'update_character') _updateCharacterFromChat();
               if (value == 'group') _startGroupChat();
@@ -2535,6 +2592,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 value: 'characters',
                 child: Text('Characters'),
               ),
+              if (_isGroup)
+                const PopupMenuItem(
+                  value: 'rename',
+                  child: Text('Rename chat'),
+                ),
               const PopupMenuItem(
                 value: 'manage_cast',
                 child: Text('Manage cast'),
@@ -2661,7 +2723,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                             onTap: (_busy || thinking)
                                 ? null
                                 : () => _editMessage(index),
-                            onAvatarTap: _busy
+                            onAvatarLongPress: _busy
                                 ? null
                                 : () {
                                     if (message.isUser) {
@@ -3126,7 +3188,7 @@ class _MessageBubble extends StatelessWidget {
     this.avatarLabel = '',
     this.avatarStyle = const AvatarStyleSettings(),
     this.onTap,
-    this.onAvatarTap,
+    this.onAvatarLongPress,
     this.onLongPress,
     this.onSwipePrev,
     this.onSwipeNext,
@@ -3140,7 +3202,7 @@ class _MessageBubble extends StatelessWidget {
   final String avatarLabel;
   final AvatarStyleSettings avatarStyle;
   final VoidCallback? onTap;
-  final VoidCallback? onAvatarTap;
+  final VoidCallback? onAvatarLongPress;
   final VoidCallback? onLongPress;
   final VoidCallback? onSwipePrev;
   final VoidCallback? onSwipeNext;
@@ -3159,30 +3221,20 @@ class _MessageBubble extends StatelessWidget {
         (Theme.of(context).textTheme.bodyLarge?.fontSize ?? 16) *
         ui.chatFontScale;
 
-    final avatarCore = AnimaAvatar(
+    final avatarWidget = AnimaAvatar(
       fileName: avatarFileName,
       label: avatarLabel,
       style: avatarStyle,
       icon: isUser ? Icons.person : Icons.smart_toy_outlined,
+      onLongPress: onAvatarLongPress,
     );
-    final avatar = onAvatarTap == null
-        ? avatarCore
+    final avatar = onAvatarLongPress == null
+        ? avatarWidget
         : Tooltip(
-            message: isUser ? 'Edit persona' : 'Edit character card',
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: onAvatarTap,
-                customBorder: avatarStyle.shape == AvatarShape.circle
-                    ? const CircleBorder()
-                    : RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(
-                          avatarStyle.shape == AvatarShape.square ? 8 : 12,
-                        ),
-                      ),
-                child: avatarCore,
-              ),
-            ),
+            message: isUser
+                ? 'Tap portrait · long-press to edit persona'
+                : 'Tap portrait · long-press to edit character',
+            child: avatarWidget,
           );
 
     final bubble = ConstrainedBox(

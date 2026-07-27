@@ -91,15 +91,9 @@ class _HomeScreenState extends State<HomeScreen> {
     return '$count message${count == 1 ? '' : 's'} · $date$note';
   }
 
-  String _chatLabel(ChatSession chat) {
+  String _chatListTitle(ChatSession chat) {
     if (chat.isGroup) {
-      final names = <String>[];
-      for (final id in chat.effectiveParticipantIds) {
-        final name = _characterById[id]?.name;
-        if (name != null && name.trim().isNotEmpty) names.add(name.trim());
-      }
-      if (names.isEmpty) return 'Group chat';
-      return 'Group · ${names.join(', ')}';
+      return ChatService.displayTitle(chat);
     }
     final solo = _characterById[chat.characterId]?.name;
     if (solo != null && solo.trim().isNotEmpty) return solo.trim();
@@ -344,27 +338,16 @@ class _HomeScreenState extends State<HomeScreen> {
                             radius: 22,
                           ),
                     title: Text(
-                      chat.title,
+                      _chatListTitle(chat),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _chatLabel(chat),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          preview == null
-                              ? _chatSubtitle(chat)
-                              : '$preview\n${_chatSubtitle(chat)}',
-                          maxLines: preview == null ? 1 : 3,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
+                    subtitle: Text(
+                      preview == null
+                          ? _chatSubtitle(chat)
+                          : '$preview\n${_chatSubtitle(chat)}',
+                      maxLines: preview == null ? 1 : 3,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     isThreeLine: preview != null,
                     onTap: () => _openChat(chat),

@@ -75,6 +75,7 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
   final Set<String> _selectedLoreIds = {};
   final _authorsNoteController = TextEditingController();
   final _openingSceneController = TextEditingController();
+  final _titleController = TextEditingController();
   bool _autoReply = false;
   bool _loading = true;
   bool _working = false;
@@ -151,6 +152,12 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
         _authorsNoteController.text = session.authorsNote;
         _openingSceneController.text = session.openingScene;
         _autoReply = session.autoReply;
+        final storedTitle = session.title.trim();
+        _titleController.text = ChatService.isLegacyGroupMemberListTitle(
+          storedTitle,
+        )
+            ? ''
+            : storedTitle;
       } else if (widget.initialOpeningScene.trim().isNotEmpty) {
         _openingSceneController.text = widget.initialOpeningScene.trim();
       }
@@ -182,6 +189,7 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
   void dispose() {
     _authorsNoteController.dispose();
     _openingSceneController.dispose();
+    _titleController.dispose();
     super.dispose();
   }
 
@@ -263,6 +271,7 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
           lorebookIds: _lorebooks.isEmpty
               ? const []
               : _selectedLoreIds.toList(growable: false),
+          title: _titleController.text,
         );
         if (!mounted) return;
         Navigator.of(context).pop(updated);
@@ -318,6 +327,7 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
             : _selectedLoreIds.toList(growable: false),
         greetingIndex: greetingIndex,
         openingScene: openingPick.text,
+        title: _titleController.text,
       );
       if (!mounted) return;
       Navigator.of(context).pop(session);
@@ -383,6 +393,21 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
                           : 'Pick who is in the group, drag to set reply order, then '
                               'tune auto-reply, lore, and Author’s Note.',
                       style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 20),
+                    TextField(
+                      controller: _titleController,
+                      enabled: !_working,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: InputDecoration(
+                        labelText: 'Chat name',
+                        hintText: ChatService.defaultGroupTitle(
+                          _ordered.length.clamp(2, 99),
+                        ),
+                        helperText:
+                            'Optional. Give this group a name you will recognize.',
+                        border: const OutlineInputBorder(),
+                      ),
                     ),
                     const SizedBox(height: 20),
                     Text(
