@@ -11,9 +11,11 @@ import '../models/character.dart';
 import '../models/chat_message.dart';
 import '../models/chat_session.dart';
 import '../models/persona.dart';
+import '../models/chat_experience_settings.dart';
 import '../models/ui_style_settings.dart';
 import '../services/api_key_service.dart';
 import '../services/appearance_controller.dart';
+import '../services/avatar_service.dart';
 import '../services/character_category_service.dart';
 import '../services/character_service.dart';
 import '../services/chat_context_service.dart';
@@ -36,6 +38,7 @@ import '../services/opening_scene_service.dart';
 import '../utils/scroll_to_end.dart';
 import '../widgets/chat_composer_field.dart';
 import '../widgets/chat_lorebook_picker.dart';
+import '../widgets/chat_portrait_background.dart';
 import '../widgets/create_character_from_chat_sheet.dart';
 import '../widgets/update_character_from_chat_sheet.dart';
 import '../widgets/anima_avatar.dart';
@@ -107,6 +110,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   /// When on, Send wraps the message as `(OOC: …)` for out-of-character talk.
   bool _oocMode = false;
   AvatarStyleSettings _avatarStyle = const AvatarStyleSettings();
+  String? _portraitBackgroundPath;
+  final _avatarService = AvatarService();
   String? _error;
   Character? _character;
   List<Character> _participants = const [];
@@ -202,6 +207,22 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _loading = false;
     });
     _scrollToBottom(jump: true);
+    unawaited(_refreshPortraitBackgroundPath());
+  }
+
+  Future<void> _refreshPortraitBackgroundPath() async {
+    final fileName = _character?.avatarFileName;
+    if (fileName == null || fileName.trim().isEmpty) {
+      if (mounted && _portraitBackgroundPath != null) {
+        setState(() => _portraitBackgroundPath = null);
+      }
+      return;
+    }
+    final path = await _avatarService.resolvePath(fileName);
+    if (!mounted) return;
+    if (path != _portraitBackgroundPath) {
+      setState(() => _portraitBackgroundPath = path);
+    }
   }
 
   Future<Character> _resolveCharacterForSession(ChatSession session) async {
@@ -582,6 +603,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _error = null;
     });
     _scrollToBottom(jump: true);
+    unawaited(_refreshPortraitBackgroundPath());
   }
 
   Future<void> _pickChat() async {
@@ -2477,6 +2499,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final groupSubtitle = _isGroup && session != null
         ? '${session.effectiveParticipantIds.length} characters'
         : null;
+    final ui = AnimaUiTheme.of(context);
+    final showPortraitBg =
+        ui.chatExperience.portraitBackground && _portraitBackgroundPath != null;
     return Scaffold(
       // We lift the body ourselves via [KeyboardInset] so the composer stays
       // above the keyboard even with a transparent glass scaffold.
@@ -2649,15 +2674,26 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 ),
               ),
             Expanded(
-              child: _messages.isEmpty && !_busy && !_hasOpeningScene
-                  ? _EmptyChat(
-                      hasApiKey: _hasApiKey,
-                      characterName: characterName,
-                      onOpenSettings: _openSettings,
-                      onOpenCharacters: _openCharacters,
-                      onNewChat: _newChat,
-                    )
-                  : CustomScrollView(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (showPortraitBg)
+                    ChatPortraitBackground(
+                      key: ValueKey(
+                        '${_portraitBackgroundPath!}|${ui.chatExperience.portraitBlur}',
+                      ),
+                      imagePath: _portraitBackgroundPath!,
+                      blurSigma: ui.chatExperience.portraitBlur,
+                    ),
+                  _messages.isEmpty && !_busy && !_hasOpeningScene
+                      ? _EmptyChat(
+                          hasApiKey: _hasApiKey,
+                          characterName: characterName,
+                          onOpenSettings: _openSettings,
+                          onOpenCharacters: _openCharacters,
+                          onNewChat: _newChat,
+                        )
+                      : CustomScrollView(
                       controller: _scrollController,
                       slivers: [
                         if (_hasOpeningScene)
@@ -2755,6 +2791,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         ),
                       ],
                     ),
+                ],
+              ),
             ),
             if (_error != null)
               Material(
@@ -3212,6 +3250,9 @@ class _MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final ui = AnimaUiTheme.of(context);
+    final exp = ui.chatExperience;
+    final storybook = exp.isStorybook;
+    final showHeader = exp.showSpeakerHeader;
     final isUser = message.isUser;
     final alignment = isUser ? Alignment.centerRight : Alignment.centerLeft;
     final background = isUser ? ui.userBubbleColor : ui.aiBubbleColor;
@@ -3220,11 +3261,24 @@ class _MessageBubble extends StatelessWidget {
     final chatFontSize =
         (Theme.of(context).textTheme.bodyLarge?.fontSize ?? 16) *
         ui.chatFontScale;
+    final maxBubbleWidth = storybook ? 0.88 : 0.68;
+
+    final speakerName = isUser
+        ? avatarLabel
+        : (message.speakerName?.trim().isNotEmpty == true
+            ? message.speakerName!.trim()
+            : avatarLabel);
 
     final avatarWidget = AnimaAvatar(
       fileName: avatarFileName,
       label: avatarLabel,
-      style: avatarStyle,
+      style: storybook
+          ? AvatarStyleSettings(
+              shape: avatarStyle.shape,
+              sizeTier: AvatarSizeTier.small,
+              scale: 0.85,
+            )
+          : avatarStyle,
       icon: isUser ? Icons.person : Icons.smart_toy_outlined,
       onLongPress: onAvatarLongPress,
     );
@@ -3239,7 +3293,7 @@ class _MessageBubble extends StatelessWidget {
 
     final bubble = ConstrainedBox(
       constraints: BoxConstraints(
-        maxWidth: MediaQuery.sizeOf(context).width * 0.68,
+        maxWidth: MediaQuery.sizeOf(context).width * maxBubbleWidth,
       ),
       child: Material(
         color: Colors.transparent,
@@ -3289,38 +3343,19 @@ class _MessageBubble extends StatelessWidget {
                       ),
                     ],
                   )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (!isUser &&
-                          message.speakerName != null &&
-                          message.speakerName!.trim().isNotEmpty) ...[
-                        Text(
-                          message.speakerName!,
-                          style: Theme.of(context).textTheme.labelMedium
-                              ?.copyWith(
-                                color: colorScheme.primary,
-                                fontWeight: FontWeight.w600,
-                              ),
+                : RpRichText(
+                    text: !isUser
+                        ? stripLeadingSpeakerPrefix(
+                            message.text,
+                            message.speakerName,
+                          )
+                        : message.text,
+                    isUser: isUser,
+                    baseStyle: Theme.of(context).textTheme.bodyLarge!.copyWith(
+                          color: foreground,
+                          height: storybook ? 1.55 : 1.4,
+                          fontSize: chatFontSize,
                         ),
-                        const SizedBox(height: 4),
-                      ],
-                      RpRichText(
-                        text: !isUser
-                            ? stripLeadingSpeakerPrefix(
-                                message.text,
-                                message.speakerName,
-                              )
-                            : message.text,
-                        isUser: isUser,
-                        baseStyle: Theme.of(context).textTheme.bodyLarge!
-                            .copyWith(
-                              color: foreground,
-                              height: 1.4,
-                              fontSize: chatFontSize,
-                            ),
-                      ),
-                    ],
                   ),
           ),
         ),
@@ -3333,6 +3368,25 @@ class _MessageBubble extends StatelessWidget {
           ? CrossAxisAlignment.end
           : CrossAxisAlignment.start,
       children: [
+        if (showHeader) ...[
+          Padding(
+            padding: const EdgeInsets.only(left: 2, right: 2, bottom: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                avatar,
+                const SizedBox(width: 8),
+                Text(
+                  speakerName,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: colorScheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ],
         bubble,
         if (showSwipePager)
           _SwipePager(
@@ -3345,6 +3399,16 @@ class _MessageBubble extends StatelessWidget {
       ],
     );
 
+    if (storybook) {
+      return Align(
+        alignment: alignment,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: column,
+        ),
+      );
+    }
+
     return Align(
       alignment: alignment,
       child: Padding(
@@ -3353,8 +3417,8 @@ class _MessageBubble extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: isUser
-              ? [column, const SizedBox(width: 8), avatar]
-              : [avatar, const SizedBox(width: 8), column],
+              ? [column, if (!showHeader) ...[const SizedBox(width: 8), avatar]]
+              : [if (!showHeader) ...[avatar, const SizedBox(width: 8)], column],
         ),
       ),
     );

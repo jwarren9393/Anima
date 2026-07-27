@@ -3,6 +3,7 @@ import 'dart:ui' show lerpDouble;
 import 'package:flutter/material.dart';
 
 import 'theme_palette.dart';
+import 'chat_experience_settings.dart';
 
 /// How chat-message avatars look (shape, size tier, fine scale).
 enum AvatarShape {
@@ -134,6 +135,7 @@ class UiStyleSettings {
     this.glassOpacity = 0.72,
     this.glassBlur = 18,
     this.avatarStyle = const AvatarStyleSettings(),
+    this.chatExperience = const ChatExperienceSettings(),
   });
 
   static const _defaultPalette = ThemePalette(
@@ -177,6 +179,7 @@ class UiStyleSettings {
   final double glassOpacity;
   final double glassBlur;
   final AvatarStyleSettings avatarStyle;
+  final ChatExperienceSettings chatExperience;
 
   bool get isGlass => visualStyle == VisualStyle.glass;
   bool get isCustom => presetId == ThemePresets.customId;
@@ -200,6 +203,7 @@ class UiStyleSettings {
       glassOpacity: preset.glassOpacity,
       glassBlur: preset.glassBlur,
       avatarStyle: avatarStyle,
+      chatExperience: const ChatExperienceSettings(),
     );
   }
 
@@ -226,6 +230,7 @@ class UiStyleSettings {
     double? glassOpacity,
     double? glassBlur,
     AvatarStyleSettings? avatarStyle,
+    ChatExperienceSettings? chatExperience,
     bool markCustom = false,
   }) {
     return UiStyleSettings(
@@ -244,6 +249,7 @@ class UiStyleSettings {
       glassOpacity: glassOpacity ?? this.glassOpacity,
       glassBlur: glassBlur ?? this.glassBlur,
       avatarStyle: avatarStyle ?? this.avatarStyle,
+      chatExperience: chatExperience ?? this.chatExperience,
     );
   }
 
@@ -261,6 +267,7 @@ class UiStyleSettings {
     'glassOpacity': glassOpacity,
     'glassBlur': glassBlur,
     ...avatarStyle.toJson(),
+    ...chatExperience.toJson(),
   };
 
   factory UiStyleSettings.fromJson(Map<String, dynamic> json) {
@@ -363,6 +370,7 @@ class UiStyleSettings {
         maxGlassBlur,
       ),
       avatarStyle: avatar,
+      chatExperience: ChatExperienceSettings.fromJson(json),
     );
   }
 }
@@ -388,6 +396,7 @@ class AnimaUiTheme extends ThemeExtension<AnimaUiTheme> {
     required this.background,
     required this.backgroundAlt,
     required this.accentDeep,
+    required this.chatExperience,
   });
 
   /// Default Obsidian Gold glass values.
@@ -400,7 +409,7 @@ class AnimaUiTheme extends ThemeExtension<AnimaUiTheme> {
     return AnimaUiTheme(
       chatFontScale: settings.chatFontScale,
       chatBubbleRadius: settings.cornerRadius.clamp(12, 24),
-      messageSpacing: 6,
+      messageSpacing: settings.chatExperience.isStorybook ? 10 : 6,
       userBubbleColor: palette.userBubble,
       aiBubbleColor: palette.aiBubble,
       userBubbleForeground: onUser,
@@ -418,6 +427,7 @@ class AnimaUiTheme extends ThemeExtension<AnimaUiTheme> {
       background: palette.background,
       backgroundAlt: palette.backgroundAlt,
       accentDeep: palette.accentDeep,
+      chatExperience: settings.chatExperience,
     );
   }
 
@@ -439,6 +449,7 @@ class AnimaUiTheme extends ThemeExtension<AnimaUiTheme> {
   final Color background;
   final Color backgroundAlt;
   final Color accentDeep;
+  final ChatExperienceSettings chatExperience;
 
   static AnimaUiTheme of(BuildContext context) {
     return Theme.of(context).extension<AnimaUiTheme>() ?? standard;
@@ -469,6 +480,7 @@ class AnimaUiTheme extends ThemeExtension<AnimaUiTheme> {
     Color? background,
     Color? backgroundAlt,
     Color? accentDeep,
+    ChatExperienceSettings? chatExperience,
   }) {
     return AnimaUiTheme(
       chatFontScale: chatFontScale ?? this.chatFontScale,
@@ -489,6 +501,7 @@ class AnimaUiTheme extends ThemeExtension<AnimaUiTheme> {
       background: background ?? this.background,
       backgroundAlt: backgroundAlt ?? this.backgroundAlt,
       accentDeep: accentDeep ?? this.accentDeep,
+      chatExperience: chatExperience ?? this.chatExperience,
     );
   }
 
@@ -532,6 +545,7 @@ class AnimaUiTheme extends ThemeExtension<AnimaUiTheme> {
       backgroundAlt:
           Color.lerp(backgroundAlt, other.backgroundAlt, t) ?? backgroundAlt,
       accentDeep: Color.lerp(accentDeep, other.accentDeep, t) ?? accentDeep,
+      chatExperience: t < 0.5 ? chatExperience : other.chatExperience,
     );
   }
 }

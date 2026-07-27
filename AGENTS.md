@@ -60,7 +60,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-25  
-**Last agent action:** Group chats use short custom names (not member lists on Home); rename via group setup or chat ⋮ menu; tap avatars for fullscreen portrait.
+**Last agent action:** Storybook chat mode in Theme Studio — speaker headers, blurred portrait background with blur slider, Classic/Storybook layout preset (build 29).
 
 ### What works today
 
@@ -77,7 +77,7 @@ High-value SillyTavern concepts to aim for over time:
   - **AI collaborator** — wand guidance note + **Composer Format** note + **Roadway / Paths** note
   - **Character builds** — model, max tokens, temperature, top P, and prompt for **slim card JSON** generation (description, personality, mes_example, tags only — no scenario, greetings, or per-card system/post-history; Creation Center + New character from chat); separate from main chat model
   - **Global chat prompts** — app-wide **system prompt** + **post-history** merged into every chat (on top of each card; per-chat Author's Note still applies); preset pickers; `{{user}}` / `{{char}}`
-  - **Appearance (Theme Studio)** — 8 global presets (glass + solid), custom background/accent/header/menu/text/bubble colors, **RP action** (*asterisks*) + **RP dialogue** ("quotes") text colors, fonts, text scales, glass opacity/blur, chat avatars; live preview + immediate app-wide apply
+  - **Appearance (Theme Studio)** — 8 global presets (glass + solid), custom background/accent/header/menu/text/bubble colors, **RP action** (*asterisks*) + **RP dialogue** ("quotes") text colors, fonts, text scales, glass opacity/blur, chat avatars; **Chat experience** — Classic vs **Storybook** layout, optional **blurred portrait background** (character avatar, blur strength slider), **speaker name above messages**; live preview + immediate app-wide apply
   - **Backup & restore** — one `.anima-backup` JSON file (chats, characters, personas, categories, lorebooks, workshops, opening scenes, drafts, roadway cache, avatars, settings); **API key is not included** — re-enter after restore; on Linux/Windows Create backup opens a **Save** dialog (Downloads suggested); Android still uses the share sheet; restore replaces Anima data only (whitelist), then returns to Home; **Cross-device sync** — pick one sync file in Google Drive (or a synced folder on desktop); **Push to cloud** overwrites that file in place; **Pull from cloud** restores from it when switching phone ↔ PC (no delete-and-reupload)
   - API, Generation parameters
 - **Look** — Theme Studio with glass and solid presets (default Obsidian Gold soft-glow, no sparkle texture); Ivory Ink light preset + full color/font customization
@@ -108,7 +108,7 @@ High-value SillyTavern concepts to aim for over time:
 - **Context estimate** — chat ⋮ → **Context estimate** shows ~message/token gauges vs history budget and model window; Creation Center shows a live banner estimate
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar
 - **Linux install/update** — `./scripts/update_linux.sh` builds and installs the desktop app; add `--pull` to download GitHub changes first
-- **Smoke:** `flutter test` (184) + `flutter analyze` pass; Android + Linux desktop debug work
+- **Smoke:** `flutter test` (187) + `flutter analyze` pass; Android + Linux desktop debug work
 
 ### What does NOT work yet / limits
 
@@ -234,6 +234,7 @@ lib/
     global_lorebook.dart          Standalone global lorebook (id + enabled + book)
     world_workshop.dart           Creation Center workshop + imported chat source + openingScene + openingSceneLength
     opening_scene_length.dart     Short / Medium / Long hints for Creation Center opening-scene AI
+    chat_experience_settings.dart Classic vs Storybook chat layout + portrait background options
     saved_opening_scene.dart      Saved opening scene (title, text, optional workshop link)
     sync_target.dart              Sync file location (desktop path or Android URI)
     ui_style_settings.dart        Theme Studio settings + AnimaUiTheme extension + avatars
@@ -266,6 +267,7 @@ lib/
   widgets/
     anima_avatar.dart             Local-file / initial avatar (circle or rect via style); tap → fullscreen
     avatar_fullscreen.dart        Full-screen portrait viewer (tap to dismiss)
+    chat_portrait_background.dart Cached blurred portrait behind chat messages
     chat_composer_field.dart      Chat composer with optional Enter-to-send (Shift+Enter newline)
     generate_avatar_sheet.dart    Shared NanoGPT Generate avatar sheet (characters + personas)
     keyboard_inset.dart           Lift UI above keyboard (chat composers)

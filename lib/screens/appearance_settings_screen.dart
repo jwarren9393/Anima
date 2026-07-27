@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../models/chat_experience_settings.dart';
 import '../models/theme_palette.dart';
 import '../models/ui_style_settings.dart';
 import '../services/appearance_controller.dart';
@@ -541,6 +542,96 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
                     },
                   ),
                 ],
+                const SizedBox(height: 16),
+                SettingsUi.sectionTitle(context, 'Chat experience'),
+                const SizedBox(height: 8),
+                Text(
+                  'Storybook mode is inspired by immersive RP themes — speaker '
+                  'headers, wider bubbles, and an optional blurred portrait '
+                  'behind the chat (uses the main character\'s avatar).',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 12),
+                SegmentedButton<ChatLayoutMode>(
+                  segments: [
+                    for (final mode in ChatLayoutMode.values)
+                      ButtonSegment(
+                        value: mode,
+                        label: Text(mode.label),
+                      ),
+                  ],
+                  selected: {_draft.chatExperience.layoutMode},
+                  onSelectionChanged: (selected) {
+                    if (selected.isEmpty) return;
+                    final mode = selected.first;
+                    setState(() {
+                      _draft = _draft.copyWith(
+                        chatExperience: mode == ChatLayoutMode.storybook
+                            ? ChatExperienceSettings.storybook
+                            : const ChatExperienceSettings(),
+                        markCustom: true,
+                      );
+                    });
+                  },
+                ),
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Blurred portrait background'),
+                  subtitle: const Text(
+                    'Uses the chat character\'s avatar — stays fixed for the session',
+                  ),
+                  value: _draft.chatExperience.portraitBackground,
+                  onChanged: (value) {
+                    setState(() {
+                      _draft = _draft.copyWith(
+                        chatExperience: _draft.chatExperience.copyWith(
+                          portraitBackground: value,
+                        ),
+                        markCustom: true,
+                      );
+                    });
+                  },
+                ),
+                if (_draft.chatExperience.portraitBackground) ...[
+                  Text(
+                    'Portrait blur (${_draft.chatExperience.portraitBlur.round()})',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  Slider(
+                    value: _draft.chatExperience.portraitBlur,
+                    min: ChatExperienceSettings.minPortraitBlur,
+                    max: ChatExperienceSettings.maxPortraitBlur,
+                    onChanged: (v) {
+                      setState(() {
+                        _draft = _draft.copyWith(
+                          chatExperience: _draft.chatExperience.copyWith(
+                            portraitBlur: v,
+                          ),
+                          markCustom: true,
+                        );
+                      });
+                    },
+                  ),
+                ],
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Speaker name above messages'),
+                  subtitle: const Text(
+                    'Small avatar + name header on each bubble',
+                  ),
+                  value: _draft.chatExperience.showSpeakerHeader,
+                  onChanged: (value) {
+                    setState(() {
+                      _draft = _draft.copyWith(
+                        chatExperience: _draft.chatExperience.copyWith(
+                          showSpeakerHeader: value,
+                        ),
+                        markCustom: true,
+                      );
+                    });
+                  },
+                ),
                 const SizedBox(height: 16),
                 SettingsUi.sectionTitle(context, 'Chat avatars'),
                 const SizedBox(height: 12),
