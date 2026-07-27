@@ -60,7 +60,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-26  
-**Last agent action:** Build 30 — Storybook **side hero portraits** (fade into bubbles), user-picked chat backgrounds, bubble opacity slider.
+**Last agent action:** Published **v1.0.0 build 31** — fixed Storybook hero portraits (fixed size, corner-anchored, fade into unified bubble).
 
 ### What works today
 

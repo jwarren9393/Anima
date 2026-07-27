@@ -3271,7 +3271,55 @@ class _MessageBubble extends StatelessWidget {
     final chatFontSize =
         (Theme.of(context).textTheme.bodyLarge?.fontSize ?? 16) *
         ui.chatFontScale;
-    final maxBubbleWidth = storybook ? (showHero ? 0.76 : 0.88) : 0.68;
+    final maxBubbleWidth = storybook ? 0.88 : 0.68;
+    final borderColor = isUser
+        ? colorScheme.primary.withValues(alpha: 0.55)
+        : colorScheme.primary.withValues(alpha: 0.18);
+    final boxShadow = [
+      BoxShadow(
+        color: isUser
+            ? colorScheme.primary.withValues(alpha: 0.22)
+            : ui.bubbleShadowColor,
+        blurRadius: isUser ? 14 : 10,
+        offset: const Offset(0, 3),
+      ),
+    ];
+
+    final messageContent = showThinking
+        ? Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                message.speakerName?.trim().isNotEmpty == true
+                    ? '${message.speakerName} is typing…'
+                    : 'Thinking…',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ],
+          )
+        : RpRichText(
+            text: !isUser
+                ? stripLeadingSpeakerPrefix(
+                    message.text,
+                    message.speakerName,
+                  )
+                : message.text,
+            isUser: isUser,
+            baseStyle: Theme.of(context).textTheme.bodyLarge!.copyWith(
+                  color: foreground,
+                  height: storybook ? 1.55 : 1.4,
+                  fontSize: chatFontSize,
+                ),
+          );
 
     final speakerName = isUser
         ? avatarLabel
@@ -3301,81 +3349,104 @@ class _MessageBubble extends StatelessWidget {
             child: avatarWidget,
           );
 
-    final bubble = ConstrainedBox(
-      constraints: BoxConstraints(
-        maxWidth: MediaQuery.sizeOf(context).width * maxBubbleWidth,
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: showThinking ? null : onTap,
-          onLongPress: showThinking ? null : onLongPress,
-          borderRadius: bubbleRadius,
-          child: Container(
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            padding: EdgeInsets.fromLTRB(
-              showHero && !isUser ? 18 : 14,
-              10,
-              showHero && isUser ? 18 : 14,
-              10,
-            ),
-            decoration: BoxDecoration(
-              color: background,
-              borderRadius: bubbleRadius,
-              border: Border.all(
-                color: isUser
-                    ? colorScheme.primary.withValues(alpha: 0.55)
-                    : colorScheme.primary.withValues(alpha: 0.18),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: isUser
-                      ? colorScheme.primary.withValues(alpha: 0.22)
-                      : ui.bubbleShadowColor,
-                  blurRadius: isUser ? 14 : 10,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: showThinking
-                ? Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: colorScheme.primary,
+    final textPad = showHero
+        ? EdgeInsets.fromLTRB(isUser ? 6 : 14, 10, isUser ? 14 : 6, 10)
+        : const EdgeInsets.symmetric(horizontal: 14, vertical: 10);
+
+    final Widget bubble;
+    if (showHero) {
+      final heroStrip = ChatHeroPortraitStrip(
+        fileName: avatarFileName,
+        label: avatarLabel,
+        portraitOnStart: isUser,
+        icon: isUser ? Icons.person : Icons.smart_toy_outlined,
+        onLongPress: onAvatarLongPress,
+      );
+
+      bubble = ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.sizeOf(context).width * maxBubbleWidth,
+        ),
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          decoration: BoxDecoration(
+            color: background,
+            borderRadius: bubbleRadius,
+            border: Border.all(color: borderColor),
+            boxShadow: boxShadow,
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: isUser
+                ? [
+                    heroStrip,
+                    Flexible(
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: showThinking ? null : onTap,
+                          onLongPress: showThinking ? null : onLongPress,
+                          borderRadius: BorderRadius.horizontal(
+                            right: Radius.circular(ui.chatBubbleRadius),
+                          ),
+                          child: Padding(
+                            padding: textPad,
+                            child: messageContent,
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      Text(
-                        message.speakerName?.trim().isNotEmpty == true
-                            ? '${message.speakerName} is typing…'
-                            : 'Thinking…',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
-                  )
-                : RpRichText(
-                    text: !isUser
-                        ? stripLeadingSpeakerPrefix(
-                            message.text,
-                            message.speakerName,
-                          )
-                        : message.text,
-                    isUser: isUser,
-                    baseStyle: Theme.of(context).textTheme.bodyLarge!.copyWith(
-                          color: foreground,
-                          height: storybook ? 1.55 : 1.4,
-                          fontSize: chatFontSize,
+                    ),
+                  ]
+                : [
+                    Flexible(
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: showThinking ? null : onTap,
+                          onLongPress: showThinking ? null : onLongPress,
+                          borderRadius: BorderRadius.horizontal(
+                            left: Radius.circular(ui.chatBubbleRadius),
+                          ),
+                          child: Padding(
+                            padding: textPad,
+                            child: messageContent,
+                          ),
                         ),
-                  ),
+                      ),
+                    ),
+                    heroStrip,
+                  ],
           ),
         ),
-      ),
-    );
+      );
+    } else {
+      bubble = ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.sizeOf(context).width * maxBubbleWidth,
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: showThinking ? null : onTap,
+            onLongPress: showThinking ? null : onLongPress,
+            borderRadius: bubbleRadius,
+            child: Container(
+              margin: const EdgeInsets.symmetric(vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: background,
+                borderRadius: bubbleRadius,
+                border: Border.all(color: borderColor),
+                boxShadow: boxShadow,
+              ),
+              child: messageContent,
+            ),
+          ),
+        ),
+      );
+    }
 
     final column = Column(
       mainAxisSize: MainAxisSize.min,
@@ -3415,66 +3486,11 @@ class _MessageBubble extends StatelessWidget {
     );
 
     if (storybook) {
-      final hero = showHero
-          ? ChatHeroPortrait(
-              fileName: avatarFileName,
-              label: avatarLabel,
-              onLeft: isUser,
-              icon: isUser ? Icons.person : Icons.smart_toy_outlined,
-              onLongPress: onAvatarLongPress,
-            )
-          : null;
-
-      final messageBody = showHero
-          ? Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: isUser
-                  ? [if (hero != null) hero, bubble]
-                  : [bubble, if (hero != null) hero],
-            )
-          : bubble;
-
       return Align(
         alignment: alignment,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 2),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: isUser
-                ? CrossAxisAlignment.end
-                : CrossAxisAlignment.start,
-            children: [
-              if (showHeader) ...[
-                Padding(
-                  padding: const EdgeInsets.only(left: 2, right: 2, bottom: 4),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      avatar,
-                      const SizedBox(width: 8),
-                      Text(
-                        speakerName,
-                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                              color: colorScheme.primary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-              messageBody,
-              if (showSwipePager)
-                _SwipePager(
-                  index: message.swipeIndex,
-                  total: message.swipes.length,
-                  onPrev: onSwipePrev,
-                  onNext: onSwipeNext,
-                  nextGeneratesSwipe: nextGeneratesSwipe,
-                ),
-            ],
-          ),
+          child: column,
         ),
       );
     }

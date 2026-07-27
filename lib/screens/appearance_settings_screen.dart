@@ -791,7 +791,7 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Side hero portrait'),
                   subtitle: const Text(
-                    'Tall portrait beside each bubble — fades into the message',
+                    'Portrait inside each bubble — one border, fades into the text',
                   ),
                   value: _draft.chatExperience.showSideHeroPortrait,
                   onChanged: (value) {
