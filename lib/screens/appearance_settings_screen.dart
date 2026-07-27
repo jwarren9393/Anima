@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -5,6 +8,7 @@ import '../models/chat_experience_settings.dart';
 import '../models/theme_palette.dart';
 import '../models/ui_style_settings.dart';
 import '../services/appearance_controller.dart';
+import '../services/chat_background_service.dart';
 import '../services/settings_service.dart';
 import '../theme/anima_theme.dart';
 import '../widgets/anima_avatar.dart';
@@ -31,6 +35,8 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
   bool _loading = true;
   bool _saving = false;
   late UiStyleSettings _draft;
+  final _chatBackgroundService = ChatBackgroundService();
+  String? _backgroundPreviewPath;
 
   @override
   void initState() {
@@ -41,10 +47,88 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
 
   Future<void> _load() async {
     final style = await widget.settingsService.getUiStyle();
+    final previewPath = await _resolveBackgroundPreview(
+      style.chatExperience.backgroundImageFileName,
+    );
     if (!mounted) return;
     setState(() {
       _draft = style;
+      _backgroundPreviewPath = previewPath;
       _loading = false;
+    });
+  }
+
+  Future<String?> _resolveBackgroundPreview(String? fileName) async {
+    if (fileName == null || fileName.trim().isEmpty) return null;
+    return _chatBackgroundService.resolvePath(fileName);
+  }
+
+  Future<void> _pickChatBackground() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+
+    final file = result.files.first;
+    Uint8List? bytes = file.bytes;
+    if (bytes == null && file.path != null) {
+      bytes = await File(file.path!).readAsBytes();
+    }
+    if (bytes == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not read that image.')),
+      );
+      return;
+    }
+
+    var ext = '.jpg';
+    final name = file.name.toLowerCase();
+    if (name.endsWith('.png')) {
+      ext = '.png';
+    } else if (name.endsWith('.webp')) {
+      ext = '.webp';
+    }
+
+    final previous = _draft.chatExperience.backgroundImageFileName;
+    final saved = await _chatBackgroundService.saveBytes(
+      stem: 'chat_bg_${DateTime.now().millisecondsSinceEpoch}',
+      bytes: bytes,
+      extension: ext,
+    );
+    if (previous != null && previous != saved) {
+      await _chatBackgroundService.delete(previous);
+    }
+
+    final previewPath = await _chatBackgroundService.resolvePath(saved);
+    if (!mounted) return;
+    setState(() {
+      _draft = _draft.copyWith(
+        chatExperience: _draft.chatExperience.copyWith(
+          backgroundEnabled: true,
+          backgroundImageFileName: saved,
+        ),
+        markCustom: true,
+      );
+      _backgroundPreviewPath = previewPath;
+    });
+  }
+
+  Future<void> _clearChatBackground() async {
+    final previous = _draft.chatExperience.backgroundImageFileName;
+    if (previous != null) {
+      await _chatBackgroundService.delete(previous);
+    }
+    if (!mounted) return;
+    setState(() {
+      _draft = _draft.copyWith(
+        chatExperience: _draft.chatExperience.copyWith(
+          clearBackgroundImage: true,
+        ),
+        markCustom: true,
+      );
+      _backgroundPreviewPath = null;
     });
   }
 
@@ -547,8 +631,8 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
                 const SizedBox(height: 8),
                 Text(
                   'Storybook mode is inspired by immersive RP themes — speaker '
-                  'headers, wider bubbles, and an optional blurred portrait '
-                  'behind the chat (uses the main character\'s avatar).',
+                  'headers, side hero portraits that fade into bubbles, and an '
+                  'optional custom image behind the chat.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 12),
@@ -577,36 +661,88 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
                 const SizedBox(height: 12),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Blurred portrait background'),
+                  title: const Text('Chat background image'),
                   subtitle: const Text(
-                    'Uses the chat character\'s avatar — stays fixed for the session',
+                    'Pick a photo from your device — stays fixed while you chat',
                   ),
-                  value: _draft.chatExperience.portraitBackground,
+                  value: _draft.chatExperience.backgroundEnabled,
                   onChanged: (value) {
                     setState(() {
                       _draft = _draft.copyWith(
                         chatExperience: _draft.chatExperience.copyWith(
-                          portraitBackground: value,
+                          backgroundEnabled: value,
                         ),
                         markCustom: true,
                       );
                     });
                   },
                 ),
-                if (_draft.chatExperience.portraitBackground) ...[
+                if (_draft.chatExperience.backgroundEnabled) ...[
+                  const SizedBox(height: 8),
+                  if (_backgroundPreviewPath != null)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: AspectRatio(
+                        aspectRatio: 16 / 9,
+                        child: Image.file(
+                          File(_backgroundPreviewPath!),
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    )
+                  else
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.outlineVariant,
+                        ),
+                      ),
+                      child: Text(
+                        'No background chosen yet.',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _pickChatBackground,
+                          icon: const Icon(Icons.image_outlined),
+                          label: Text(
+                            _draft.chatExperience.hasBackgroundImage
+                                ? 'Change image'
+                                : 'Choose image',
+                          ),
+                        ),
+                      ),
+                      if (_draft.chatExperience.hasBackgroundImage) ...[
+                        const SizedBox(width: 8),
+                        IconButton(
+                          tooltip: 'Remove background',
+                          onPressed: _clearChatBackground,
+                          icon: const Icon(Icons.delete_outline),
+                        ),
+                      ],
+                    ],
+                  ),
                   Text(
-                    'Portrait blur (${_draft.chatExperience.portraitBlur.round()})',
+                    'Background blur (${_draft.chatExperience.backgroundBlur.round()})',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                   Slider(
-                    value: _draft.chatExperience.portraitBlur,
-                    min: ChatExperienceSettings.minPortraitBlur,
-                    max: ChatExperienceSettings.maxPortraitBlur,
+                    value: _draft.chatExperience.backgroundBlur,
+                    min: ChatExperienceSettings.minBackgroundBlur,
+                    max: ChatExperienceSettings.maxBackgroundBlur,
                     onChanged: (v) {
                       setState(() {
                         _draft = _draft.copyWith(
                           chatExperience: _draft.chatExperience.copyWith(
-                            portraitBlur: v,
+                            backgroundBlur: v,
                           ),
                           markCustom: true,
                         );
@@ -614,6 +750,25 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
                     },
                   ),
                 ],
+                Text(
+                  'Bubble opacity (${(_draft.chatExperience.bubbleOpacity * 100).round()}%)',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                Slider(
+                  value: _draft.chatExperience.bubbleOpacity,
+                  min: ChatExperienceSettings.minBubbleOpacity,
+                  max: ChatExperienceSettings.maxBubbleOpacity,
+                  onChanged: (v) {
+                    setState(() {
+                      _draft = _draft.copyWith(
+                        chatExperience: _draft.chatExperience.copyWith(
+                          bubbleOpacity: v,
+                        ),
+                        markCustom: true,
+                      );
+                    });
+                  },
+                ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Speaker name above messages'),
@@ -626,6 +781,24 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
                       _draft = _draft.copyWith(
                         chatExperience: _draft.chatExperience.copyWith(
                           showSpeakerHeader: value,
+                        ),
+                        markCustom: true,
+                      );
+                    });
+                  },
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Side hero portrait'),
+                  subtitle: const Text(
+                    'Tall portrait beside each bubble — fades into the message',
+                  ),
+                  value: _draft.chatExperience.showSideHeroPortrait,
+                  onChanged: (value) {
+                    setState(() {
+                      _draft = _draft.copyWith(
+                        chatExperience: _draft.chatExperience.copyWith(
+                          showSideHeroPortrait: value,
                         ),
                         markCustom: true,
                       );
@@ -774,7 +947,7 @@ class _LivePreview extends StatelessWidget {
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: ui.userBubbleColor,
+                    color: style.chatExperience.bubbleFill(ui.userBubbleColor),
                     borderRadius: BorderRadius.circular(ui.chatBubbleRadius),
                   ),
                   child: Text(
@@ -795,7 +968,7 @@ class _LivePreview extends StatelessWidget {
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: ui.aiBubbleColor,
+                    color: style.chatExperience.bubbleFill(ui.aiBubbleColor),
                     borderRadius: BorderRadius.circular(ui.chatBubbleRadius),
                   ),
                   child: RpRichText(

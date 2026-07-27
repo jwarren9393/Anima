@@ -59,8 +59,8 @@ High-value SillyTavern concepts to aim for over time:
 
 **Phase:** Post-roadmap tweaks
 
-**Last updated:** 2026-07-25  
-**Last agent action:** Storybook chat mode in Theme Studio — speaker headers, blurred portrait background with blur slider, Classic/Storybook layout preset (build 29).
+**Last updated:** 2026-07-26  
+**Last agent action:** Build 30 — Storybook **side hero portraits** (fade into bubbles), user-picked chat backgrounds, bubble opacity slider.
 
 ### What works today
 
@@ -77,7 +77,7 @@ High-value SillyTavern concepts to aim for over time:
   - **AI collaborator** — wand guidance note + **Composer Format** note + **Roadway / Paths** note
   - **Character builds** — model, max tokens, temperature, top P, and prompt for **slim card JSON** generation (description, personality, mes_example, tags only — no scenario, greetings, or per-card system/post-history; Creation Center + New character from chat); separate from main chat model
   - **Global chat prompts** — app-wide **system prompt** + **post-history** merged into every chat (on top of each card; per-chat Author's Note still applies); preset pickers; `{{user}}` / `{{char}}`
-  - **Appearance (Theme Studio)** — 8 global presets (glass + solid), custom background/accent/header/menu/text/bubble colors, **RP action** (*asterisks*) + **RP dialogue** ("quotes") text colors, fonts, text scales, glass opacity/blur, chat avatars; **Chat experience** — Classic vs **Storybook** layout, optional **blurred portrait background** (character avatar, blur strength slider), **speaker name above messages**; live preview + immediate app-wide apply
+  - **Appearance (Theme Studio)** — 8 global presets (glass + solid), custom background/accent/header/menu/text/bubble colors, **RP action** (*asterisks*) + **RP dialogue** ("quotes") text colors, fonts, text scales, glass opacity/blur, chat avatars; **Chat experience** — Classic vs **Storybook** layout, **choose/upload chat background image** (blur strength slider), **bubble opacity** slider, **speaker name above messages**, **side hero portrait** beside each bubble (fades into message); live preview + immediate app-wide apply
   - **Backup & restore** — one `.anima-backup` JSON file (chats, characters, personas, categories, lorebooks, workshops, opening scenes, drafts, roadway cache, avatars, settings); **API key is not included** — re-enter after restore; on Linux/Windows Create backup opens a **Save** dialog (Downloads suggested); Android still uses the share sheet; restore replaces Anima data only (whitelist), then returns to Home; **Cross-device sync** — pick one sync file in Google Drive (or a synced folder on desktop); **Push to cloud** overwrites that file in place; **Pull from cloud** restores from it when switching phone ↔ PC (no delete-and-reupload)
   - API, Generation parameters
 - **Look** — Theme Studio with glass and solid presets (default Obsidian Gold soft-glow, no sparkle texture); Ivory Ink light preset + full color/font customization
@@ -108,7 +108,7 @@ High-value SillyTavern concepts to aim for over time:
 - **Context estimate** — chat ⋮ → **Context estimate** shows ~message/token gauges vs history budget and model window; Creation Center shows a live banner estimate
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar
 - **Linux install/update** — `./scripts/update_linux.sh` builds and installs the desktop app; add `--pull` to download GitHub changes first
-- **Smoke:** `flutter test` (187) + `flutter analyze` pass; Android + Linux desktop debug work
+- **Smoke:** `flutter test` (189) + `flutter analyze` pass; Android + Linux desktop debug work
 
 ### What does NOT work yet / limits
 
@@ -234,7 +234,8 @@ lib/
     global_lorebook.dart          Standalone global lorebook (id + enabled + book)
     world_workshop.dart           Creation Center workshop + imported chat source + openingScene + openingSceneLength
     opening_scene_length.dart     Short / Medium / Long hints for Creation Center opening-scene AI
-    chat_experience_settings.dart Classic vs Storybook chat layout + portrait background options
+    chat_experience_settings.dart Classic vs Storybook layout + background + bubble opacity + hero portrait
+    chat_background_service.dart User-picked chat background images (chat_backgrounds/)
     saved_opening_scene.dart      Saved opening scene (title, text, optional workshop link)
     sync_target.dart              Sync file location (desktop path or Android URI)
     ui_style_settings.dart        Theme Studio settings + AnimaUiTheme extension + avatars
@@ -267,7 +268,8 @@ lib/
   widgets/
     anima_avatar.dart             Local-file / initial avatar (circle or rect via style); tap → fullscreen
     avatar_fullscreen.dart        Full-screen portrait viewer (tap to dismiss)
-    chat_portrait_background.dart Cached blurred portrait behind chat messages
+    chat_hero_portrait.dart Tall side portrait with fade into storybook bubbles
+    chat_image_background.dart Cached blurred image behind chat messages
     chat_composer_field.dart      Chat composer with optional Enter-to-send (Shift+Enter newline)
     generate_avatar_sheet.dart    Shared NanoGPT Generate avatar sheet (characters + personas)
     keyboard_inset.dart           Lift UI above keyboard (chat composers)
@@ -398,10 +400,11 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. Spot-check opening scene: start a chat with an opening scene → send a few messages → confirm the AI still respects the scene (⋮ injection stays on). Run **Summarize now** once → confirm memory summary includes the setup; later turns should still feel consistent.
-2. Spot-check **Rewrite reply…** on a long-press AI bubble (chat + Creation Center): try Shorten, Tenser, and Custom; test both replace and **Save as new swipe**.
-3. Spot-check Creation Center opening-scene editor: try **Short** vs **Long** length, then **Fresh from chat** / **Revise from chat**.
-4. Optional QoL backlog when you want more: undo send, last-chat resume, pinned Author’s Note / mood chips, memory preview panel.
+1. Spot-check **Storybook side heroes**: Settings → Appearance → Chat experience → Storybook → confirm tall portraits beside bubbles fade into messages; tap hero for fullscreen.
+2. Spot-check **custom background + bubble opacity**: choose/upload background, lower bubble opacity to see it through messages.
+2. Spot-check fullscreen avatars: tap any avatar in chat → full-screen portrait; long-press to edit persona/character.
+3. Spot-check group chat names: rename a group via ⋮ → **Rename chat**; confirm Home list shows the custom name.
+4. Optional QoL backlog when you want more: undo send, last-chat resume, pinned Author’s Note / mood chips, memory preview panel; Storybook phase 2 (side hero portrait).
 
 ---
 

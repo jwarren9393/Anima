@@ -11,11 +11,10 @@ import '../models/character.dart';
 import '../models/chat_message.dart';
 import '../models/chat_session.dart';
 import '../models/persona.dart';
-import '../models/chat_experience_settings.dart';
 import '../models/ui_style_settings.dart';
 import '../services/api_key_service.dart';
 import '../services/appearance_controller.dart';
-import '../services/avatar_service.dart';
+import '../services/chat_background_service.dart';
 import '../services/character_category_service.dart';
 import '../services/character_service.dart';
 import '../services/chat_context_service.dart';
@@ -38,7 +37,8 @@ import '../services/opening_scene_service.dart';
 import '../utils/scroll_to_end.dart';
 import '../widgets/chat_composer_field.dart';
 import '../widgets/chat_lorebook_picker.dart';
-import '../widgets/chat_portrait_background.dart';
+import '../widgets/chat_hero_portrait.dart';
+import '../widgets/chat_image_background.dart';
 import '../widgets/create_character_from_chat_sheet.dart';
 import '../widgets/update_character_from_chat_sheet.dart';
 import '../widgets/anima_avatar.dart';
@@ -110,8 +110,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   /// When on, Send wraps the message as `(OOC: …)` for out-of-character talk.
   bool _oocMode = false;
   AvatarStyleSettings _avatarStyle = const AvatarStyleSettings();
-  String? _portraitBackgroundPath;
-  final _avatarService = AvatarService();
+  String? _chatBackgroundPath;
+  String? _resolvedBackgroundFileName;
+  final _chatBackgroundService = ChatBackgroundService();
   String? _error;
   Character? _character;
   List<Character> _participants = const [];
@@ -207,21 +208,27 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _loading = false;
     });
     _scrollToBottom(jump: true);
-    unawaited(_refreshPortraitBackgroundPath());
+    unawaited(_syncChatBackgroundPath());
   }
 
-  Future<void> _refreshPortraitBackgroundPath() async {
-    final fileName = _character?.avatarFileName;
-    if (fileName == null || fileName.trim().isEmpty) {
-      if (mounted && _portraitBackgroundPath != null) {
-        setState(() => _portraitBackgroundPath = null);
-      }
-      return;
-    }
-    final path = await _avatarService.resolvePath(fileName);
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    unawaited(_syncChatBackgroundPath());
+  }
+
+  Future<void> _syncChatBackgroundPath() async {
+    final exp = AnimaUiTheme.of(context).chatExperience;
+    final fileName = exp.backgroundEnabled && exp.hasBackgroundImage
+        ? exp.backgroundImageFileName
+        : null;
+    if (fileName == _resolvedBackgroundFileName) return;
+    _resolvedBackgroundFileName = fileName;
+    final path =
+        fileName != null ? await _chatBackgroundService.resolvePath(fileName) : null;
     if (!mounted) return;
-    if (path != _portraitBackgroundPath) {
-      setState(() => _portraitBackgroundPath = path);
+    if (path != _chatBackgroundPath) {
+      setState(() => _chatBackgroundPath = path);
     }
   }
 
@@ -603,7 +610,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _error = null;
     });
     _scrollToBottom(jump: true);
-    unawaited(_refreshPortraitBackgroundPath());
+    unawaited(_syncChatBackgroundPath());
   }
 
   Future<void> _pickChat() async {
@@ -2500,8 +2507,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         ? '${session.effectiveParticipantIds.length} characters'
         : null;
     final ui = AnimaUiTheme.of(context);
-    final showPortraitBg =
-        ui.chatExperience.portraitBackground && _portraitBackgroundPath != null;
+    final showChatBackground = ui.chatExperience.backgroundEnabled &&
+        _chatBackgroundPath != null;
     return Scaffold(
       // We lift the body ourselves via [KeyboardInset] so the composer stays
       // above the keyboard even with a transparent glass scaffold.
@@ -2677,13 +2684,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  if (showPortraitBg)
-                    ChatPortraitBackground(
+                  if (showChatBackground)
+                    ChatImageBackground(
                       key: ValueKey(
-                        '${_portraitBackgroundPath!}|${ui.chatExperience.portraitBlur}',
+                        '${_chatBackgroundPath!}|${ui.chatExperience.backgroundBlur}',
                       ),
-                      imagePath: _portraitBackgroundPath!,
-                      blurSigma: ui.chatExperience.portraitBlur,
+                      imagePath: _chatBackgroundPath!,
+                      blurSigma: ui.chatExperience.backgroundBlur,
                     ),
                   _messages.isEmpty && !_busy && !_hasOpeningScene
                       ? _EmptyChat(
@@ -3253,15 +3260,18 @@ class _MessageBubble extends StatelessWidget {
     final exp = ui.chatExperience;
     final storybook = exp.isStorybook;
     final showHeader = exp.showSpeakerHeader;
+    final showHero = storybook && exp.showSideHeroPortrait;
     final isUser = message.isUser;
     final alignment = isUser ? Alignment.centerRight : Alignment.centerLeft;
-    final background = isUser ? ui.userBubbleColor : ui.aiBubbleColor;
+    final background = exp.bubbleFill(
+      isUser ? ui.userBubbleColor : ui.aiBubbleColor,
+    );
     final foreground = isUser ? ui.userBubbleForeground : ui.aiBubbleForeground;
     final bubbleRadius = BorderRadius.circular(ui.chatBubbleRadius);
     final chatFontSize =
         (Theme.of(context).textTheme.bodyLarge?.fontSize ?? 16) *
         ui.chatFontScale;
-    final maxBubbleWidth = storybook ? 0.88 : 0.68;
+    final maxBubbleWidth = storybook ? (showHero ? 0.76 : 0.88) : 0.68;
 
     final speakerName = isUser
         ? avatarLabel
@@ -3303,7 +3313,12 @@ class _MessageBubble extends StatelessWidget {
           borderRadius: bubbleRadius,
           child: Container(
             margin: const EdgeInsets.symmetric(vertical: 4),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: EdgeInsets.fromLTRB(
+              showHero && !isUser ? 18 : 14,
+              10,
+              showHero && isUser ? 18 : 14,
+              10,
+            ),
             decoration: BoxDecoration(
               color: background,
               borderRadius: bubbleRadius,
@@ -3400,11 +3415,66 @@ class _MessageBubble extends StatelessWidget {
     );
 
     if (storybook) {
+      final hero = showHero
+          ? ChatHeroPortrait(
+              fileName: avatarFileName,
+              label: avatarLabel,
+              onLeft: isUser,
+              icon: isUser ? Icons.person : Icons.smart_toy_outlined,
+              onLongPress: onAvatarLongPress,
+            )
+          : null;
+
+      final messageBody = showHero
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: isUser
+                  ? [if (hero != null) hero, bubble]
+                  : [bubble, if (hero != null) hero],
+            )
+          : bubble;
+
       return Align(
         alignment: alignment,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 2),
-          child: column,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: isUser
+                ? CrossAxisAlignment.end
+                : CrossAxisAlignment.start,
+            children: [
+              if (showHeader) ...[
+                Padding(
+                  padding: const EdgeInsets.only(left: 2, right: 2, bottom: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      avatar,
+                      const SizedBox(width: 8),
+                      Text(
+                        speakerName,
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                              color: colorScheme.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              messageBody,
+              if (showSwipePager)
+                _SwipePager(
+                  index: message.swipeIndex,
+                  total: message.swipes.length,
+                  onPrev: onSwipePrev,
+                  onNext: onSwipeNext,
+                  nextGeneratesSwipe: nextGeneratesSwipe,
+                ),
+            ],
+          ),
         ),
       );
     }

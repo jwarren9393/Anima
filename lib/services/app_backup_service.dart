@@ -75,7 +75,7 @@ class AppBackupService {
       await for (final entity in avatarsDir.list(followLinks: false)) {
         if (entity is! File) continue;
         final name = p.basename(entity.path);
-        if (!_isSafeAvatarName(name)) continue;
+        if (!_isSafeImageFileName(name)) continue;
         final bytes = await entity.readAsBytes();
         if (bytes.length > _maxAvatarBytes) {
           throw AppBackupException(
@@ -83,6 +83,23 @@ class AppBackupService {
           );
         }
         avatars[name] = base64Encode(bytes);
+      }
+    }
+
+    final chatBackgrounds = <String, String>{};
+    final backgroundsDir = Directory(p.join(docs.path, 'chat_backgrounds'));
+    if (await backgroundsDir.exists()) {
+      await for (final entity in backgroundsDir.list(followLinks: false)) {
+        if (entity is! File) continue;
+        final name = p.basename(entity.path);
+        if (!_isSafeImageFileName(name)) continue;
+        final bytes = await entity.readAsBytes();
+        if (bytes.length > _maxAvatarBytes) {
+          throw AppBackupException(
+            'Chat background “$name” is too large to include in a backup.',
+          );
+        }
+        chatBackgrounds[name] = base64Encode(bytes);
       }
     }
 
@@ -94,6 +111,7 @@ class AppBackupService {
       'createdAt': createdAt.toIso8601String(),
       'files': files,
       'avatars': avatars,
+      if (chatBackgrounds.isNotEmpty) 'chatBackgrounds': chatBackgrounds,
       'settings': preferences,
     };
 
@@ -137,6 +155,14 @@ class AppBackupService {
         await out.writeAsBytes(entry.value, flush: true);
       }
 
+      final stagedBackgrounds =
+          Directory(p.join(staging.path, 'chat_backgrounds'));
+      await stagedBackgrounds.create(recursive: true);
+      for (final entry in payload.chatBackgrounds.entries) {
+        final out = File(p.join(stagedBackgrounds.path, entry.key));
+        await out.writeAsBytes(entry.value, flush: true);
+      }
+
       // Apply document files (write present; delete known files absent from backup).
       for (final name in documentFileNames) {
         final target = File(p.join(docs.path, name));
@@ -165,6 +191,25 @@ class AppBackupService {
         if (entity is! File) continue;
         final name = p.basename(entity.path);
         final dest = File(p.join(avatarsDir.path, name));
+        await dest.writeAsBytes(await entity.readAsBytes(), flush: true);
+      }
+
+      final backgroundsDir = Directory(p.join(docs.path, 'chat_backgrounds'));
+      if (await backgroundsDir.exists()) {
+        await for (final entity in backgroundsDir.list(followLinks: false)) {
+          if (entity is File) {
+            try {
+              await entity.delete();
+            } catch (_) {}
+          }
+        }
+      } else {
+        await backgroundsDir.create(recursive: true);
+      }
+      await for (final entity in stagedBackgrounds.list(followLinks: false)) {
+        if (entity is! File) continue;
+        final name = p.basename(entity.path);
+        final dest = File(p.join(backgroundsDir.path, name));
         await dest.writeAsBytes(await entity.readAsBytes(), flush: true);
       }
 
@@ -241,7 +286,7 @@ class AppBackupService {
       }
       for (final entry in avatarsRaw.entries) {
         final name = entry.key.toString();
-        if (!_isSafeAvatarName(name)) {
+        if (!_isSafeImageFileName(name)) {
           throw AppBackupException('Backup has an unsafe avatar name: $name');
         }
         try {
@@ -253,6 +298,37 @@ class AppBackupService {
         } catch (e) {
           if (e is AppBackupException) rethrow;
           throw AppBackupException('Avatar “$name” could not be decoded.');
+        }
+      }
+    }
+
+    final chatBackgroundsRaw = map['chatBackgrounds'];
+    if (chatBackgroundsRaw != null && chatBackgroundsRaw is! Map) {
+      throw AppBackupException('Backup chat background list is invalid.');
+    }
+    final chatBackgrounds = <String, Uint8List>{};
+    if (chatBackgroundsRaw is Map) {
+      if (chatBackgroundsRaw.length > _maxAvatarCount) {
+        throw AppBackupException('Backup has too many chat backgrounds.');
+      }
+      for (final entry in chatBackgroundsRaw.entries) {
+        final name = entry.key.toString();
+        if (!_isSafeImageFileName(name)) {
+          throw AppBackupException(
+            'Backup has an unsafe chat background name: $name',
+          );
+        }
+        try {
+          final raw = base64Decode(entry.value?.toString() ?? '');
+          if (raw.length > _maxAvatarBytes) {
+            throw AppBackupException('Chat background “$name” is too large.');
+          }
+          chatBackgrounds[name] = Uint8List.fromList(raw);
+        } catch (e) {
+          if (e is AppBackupException) rethrow;
+          throw AppBackupException(
+            'Chat background “$name” could not be decoded.',
+          );
         }
       }
     }
@@ -286,6 +362,7 @@ class AppBackupService {
     return AppBackupPayload(
       files: files,
       avatars: avatars,
+      chatBackgrounds: chatBackgrounds,
       settings: settings,
       summary: AppBackupSummary(
         createdAt: createdAt,
@@ -332,7 +409,7 @@ class AppBackupService {
     return documentFileNames.contains(name);
   }
 
-  bool _isSafeAvatarName(String name) {
+  bool _isSafeImageFileName(String name) {
     if (name.isEmpty || name != p.basename(name)) return false;
     if (name.contains('..') || name.contains('/') || name.contains('\\')) {
       return false;
@@ -361,12 +438,14 @@ class AppBackupPayload {
   const AppBackupPayload({
     required this.files,
     required this.avatars,
+    this.chatBackgrounds = const {},
     required this.settings,
     required this.summary,
   });
 
   final Map<String, String> files;
   final Map<String, Uint8List> avatars;
+  final Map<String, Uint8List> chatBackgrounds;
   final Map<String, String> settings;
   final AppBackupSummary summary;
 }

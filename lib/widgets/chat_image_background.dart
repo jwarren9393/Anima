@@ -3,12 +3,12 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
-/// Cached blurred portrait behind the chat message list.
+/// Cached blurred image behind the chat message list.
 ///
 /// Wrapped in [RepaintBoundary] so the blur is rasterized once per
 /// image/blur pair — not re-computed every scroll frame.
-class ChatPortraitBackground extends StatelessWidget {
-  const ChatPortraitBackground({
+class ChatImageBackground extends StatelessWidget {
+  const ChatImageBackground({
     super.key,
     required this.imagePath,
     required this.blurSigma,
