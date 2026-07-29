@@ -1,0 +1,332 @@
+import 'package:flutter/material.dart';
+
+import '../services/nanogpt_service.dart';
+
+/// Snapshot card for the currently selected chat model.
+class TextModelSummaryCard extends StatelessWidget {
+  const TextModelSummaryCard({
+    super.key,
+    required this.model,
+    this.runtimeStats = const NanoGptModelRuntimeStats(),
+    this.loadingRuntime = false,
+    this.onBrowse,
+  });
+
+  final NanoGptModelInfo model;
+  final NanoGptModelRuntimeStats runtimeStats;
+  final bool loadingRuntime;
+  final VoidCallback? onBrowse;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final description = model.description.trim();
+    final statLine = model.statChipLine(runtime: runtimeStats);
+    final pricing = model.pricingLine;
+    final caps = model.capabilities.shortLabels;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        model.displayName,
+                        style: theme.textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        model.id,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (onBrowse != null)
+                  TextButton(
+                    onPressed: onBrowse,
+                    child: const Text('Browse'),
+                  ),
+              ],
+            ),
+            if (statLine.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final label in statLine.split(' · '))
+                    _StatChip(label: label),
+                  if (loadingRuntime)
+                    _StatChip(
+                      label: 'Loading stats…',
+                      muted: true,
+                    ),
+                ],
+              ),
+            ],
+            if (caps.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final cap in caps) _StatChip(label: cap, outline: true),
+                ],
+              ),
+            ],
+            if (description.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(
+                description,
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodyMedium,
+              ),
+            ],
+            if (pricing != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                pricing,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatChip extends StatelessWidget {
+  const _StatChip({
+    required this.label,
+    this.muted = false,
+    this.outline = false,
+  });
+
+  final String label;
+  final bool muted;
+  final bool outline;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final bg = muted
+        ? theme.colorScheme.surfaceContainerHighest
+        : outline
+            ? theme.colorScheme.surface
+            : theme.colorScheme.primaryContainer.withValues(alpha: 0.55);
+    final fg = muted
+        ? theme.colorScheme.onSurfaceVariant
+        : outline
+            ? theme.colorScheme.onSurfaceVariant
+            : theme.colorScheme.onPrimaryContainer;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(8),
+        border: outline
+            ? Border.all(color: theme.colorScheme.outlineVariant)
+            : null,
+      ),
+      child: Text(
+        label,
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: fg,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+/// Full-screen-ish sheet to browse models with stats at a glance.
+Future<String?> showTextModelPickerSheet({
+  required BuildContext context,
+  required List<NanoGptModelInfo> models,
+  required String? selectedId,
+  required NanoGptService nanoGptService,
+}) {
+  return showModalBottomSheet<String>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (context) {
+      return _TextModelPickerSheet(
+        models: models,
+        selectedId: selectedId,
+        nanoGptService: nanoGptService,
+      );
+    },
+  );
+}
+
+class _TextModelPickerSheet extends StatefulWidget {
+  const _TextModelPickerSheet({
+    required this.models,
+    required this.selectedId,
+    required this.nanoGptService,
+  });
+
+  final List<NanoGptModelInfo> models;
+  final String? selectedId;
+  final NanoGptService nanoGptService;
+
+  @override
+  State<_TextModelPickerSheet> createState() => _TextModelPickerSheetState();
+}
+
+class _TextModelPickerSheetState extends State<_TextModelPickerSheet> {
+  late final TextEditingController _searchController;
+  bool _loadingStats = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController = TextEditingController();
+    _prefetchStats();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _prefetchStats() async {
+    setState(() => _loadingStats = true);
+    await widget.nanoGptService.prefetchModelRuntimeStats(
+      widget.models.map((m) => m.id).toList(),
+    );
+    if (mounted) setState(() => _loadingStats = false);
+  }
+
+  List<NanoGptModelInfo> _filteredModels(String query) {
+    final lower = query.trim().toLowerCase();
+    if (lower.isEmpty) return widget.models;
+    return [
+      for (final model in widget.models)
+        if (model.displayName.toLowerCase().contains(lower) ||
+            model.id.toLowerCase().contains(lower) ||
+            model.description.toLowerCase().contains(lower) ||
+            (model.category?.toLowerCase().contains(lower) ?? false))
+          model,
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final query = _searchController.text;
+    final visible = _filteredModels(query);
+    final height = MediaQuery.sizeOf(context).height * 0.88;
+
+    return SafeArea(
+      child: SizedBox(
+        height: height,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Browse models',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  if (_loadingStats)
+                    Text(
+                      'Loading stats…',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                controller: _searchController,
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.search),
+                  hintText: 'Search name, id, category, description…',
+                  isDense: true,
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView.builder(
+                itemCount: visible.length,
+                itemBuilder: (context, index) {
+                  final model = visible[index];
+                  final selected = model.id == widget.selectedId;
+                  final runtime = widget.nanoGptService.cachedRuntimeStats(
+                    model.id,
+                  );
+                  final statLine = model.statChipLine(runtime: runtime);
+                  final description = model.description.trim();
+
+                  return ListTile(
+                    selected: selected,
+                    title: Text(model.displayName),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (statLine.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            statLine,
+                            style: Theme.of(context).textTheme.labelMedium,
+                          ),
+                        ],
+                        if (description.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            description,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                        const SizedBox(height: 4),
+                        Text(
+                          model.id,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                    isThreeLine: true,
+                    trailing: selected
+                        ? Icon(
+                            Icons.check_circle,
+                            color: Theme.of(context).colorScheme.primary,
+                          )
+                        : null,
+                    onTap: () => Navigator.pop(context, model.id),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

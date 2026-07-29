@@ -8,6 +8,132 @@ import 'package:http/http.dart' as http;
 import 'api_key_service.dart';
 import 'settings_service.dart';
 
+/// Capability flags from NanoGPT `detailed=true` catalog entries.
+class NanoGptModelCapabilities {
+  const NanoGptModelCapabilities({
+    this.vision = false,
+    this.reasoning = false,
+    this.toolCalling = false,
+    this.parallelToolCalls = false,
+    this.structuredOutput = false,
+    this.pdfUpload = false,
+    this.videoInput = false,
+    this.audioInput = false,
+  });
+
+  final bool vision;
+  final bool reasoning;
+  final bool toolCalling;
+  final bool parallelToolCalls;
+  final bool structuredOutput;
+  final bool pdfUpload;
+  final bool videoInput;
+  final bool audioInput;
+
+  static NanoGptModelCapabilities parse(Map<String, dynamic>? map) {
+    if (map == null || map.isEmpty) return const NanoGptModelCapabilities();
+    return NanoGptModelCapabilities(
+      vision: map['vision'] == true,
+      reasoning: map['reasoning'] == true,
+      toolCalling: map['tool_calling'] == true,
+      parallelToolCalls: map['parallel_tool_calls'] == true,
+      structuredOutput: map['structured_output'] == true,
+      pdfUpload: map['pdf_upload'] == true,
+      videoInput: map['video_input'] == true,
+      audioInput: map['audio_input'] == true,
+    );
+  }
+
+  /// Short labels for stat chips (Vision, Reasoning, Tools, …).
+  List<String> get shortLabels {
+    final labels = <String>[];
+    if (vision) labels.add('Vision');
+    if (videoInput) labels.add('Video');
+    if (audioInput) labels.add('Audio');
+    if (reasoning) labels.add('Reasoning');
+    if (toolCalling) labels.add('Tools');
+    if (structuredOutput) labels.add('JSON');
+    if (pdfUpload) labels.add('PDF');
+    return labels;
+  }
+}
+
+/// Routing / performance hints from `GET /api/models/:id/providers`.
+class NanoGptModelRuntimeStats {
+  const NanoGptModelRuntimeStats({
+    this.tps,
+    this.ttftMs,
+    this.uptimePercent,
+  });
+
+  final double? tps;
+  final double? ttftMs;
+
+  /// Share of provider routes currently marked available (0–100).
+  final int? uptimePercent;
+
+  bool get isEmpty => tps == null && ttftMs == null && uptimePercent == null;
+
+  String? get tpsLabel {
+    final value = tps;
+    if (value == null || value <= 0) return null;
+    return value == value.roundToDouble()
+        ? '${value.round()} TPS'
+        : '${value.toStringAsFixed(1)} TPS';
+  }
+
+  String? get ttftLabel {
+    final ms = ttftMs;
+    if (ms == null || ms <= 0) return null;
+    if (ms < 1000) return '${ms.round()}ms TTFT';
+    final seconds = ms / 1000;
+    return seconds == seconds.roundToDouble()
+        ? '${seconds.round()}s TTFT'
+        : '${seconds.toStringAsFixed(1)}s TTFT';
+  }
+
+  String? get uptimeLabel {
+    final value = uptimePercent;
+    if (value == null) return null;
+    return '$value% up';
+  }
+
+  /// Parses `GET /api/models/:id/providers` JSON.
+  static NanoGptModelRuntimeStats fromProvidersMap(Map<String, dynamic> map) {
+    final tps = _positiveDouble(map['autoTps']);
+    final ttftMs = _positiveDouble(map['autoTtftMs']);
+
+    int? uptimePercent;
+    final providers = map['providers'];
+    if (providers is List && providers.isNotEmpty) {
+      var available = 0;
+      for (final item in providers) {
+        if (item is Map && item['available'] == true) {
+          available++;
+        }
+      }
+      uptimePercent = ((available / providers.length) * 100).round();
+    }
+
+    return NanoGptModelRuntimeStats(
+      tps: tps,
+      ttftMs: ttftMs,
+      uptimePercent: uptimePercent,
+    );
+  }
+
+  static double? _positiveDouble(dynamic value) {
+    if (value is int) return value > 0 ? value.toDouble() : null;
+    if (value is num) {
+      final n = value.toDouble();
+      return n > 0 ? n : null;
+    }
+    final parsed = double.tryParse('$value'.trim());
+    if (parsed == null || parsed <= 0) return null;
+    return parsed;
+  }
+}
+
 /// One text model from NanoGPT's `/models` catalog.
 class NanoGptModelInfo {
   const NanoGptModelInfo({
@@ -16,6 +142,16 @@ class NanoGptModelInfo {
     required this.name,
     this.contextLength,
     this.maxOutputTokens,
+    this.category,
+    this.description = '',
+    this.subscriptionIncluded = false,
+    this.capabilities = const NanoGptModelCapabilities(),
+    this.openWeights = false,
+    this.pricingPromptPerMillion,
+    this.pricingCompletionPerMillion,
+    this.costEstimateUsd,
+    this.created,
+    this.parameterSizeLabel,
   });
 
   /// Value sent as `model` on chat completions.
@@ -33,7 +169,60 @@ class NanoGptModelInfo {
   /// Max completion tokens when NanoGPT reports it (`max_output_tokens`).
   final int? maxOutputTokens;
 
+  /// NanoGPT category when `detailed=true` (e.g. `Uncensored`, `Roleplay`).
+  final String? category;
+
+  /// Short catalog description — used for uncensored heuristics.
+  final String description;
+
+  /// When NanoGPT reports `subscription.included` on the model object.
+  final bool subscriptionIncluded;
+
+  final NanoGptModelCapabilities capabilities;
+
+  final bool openWeights;
+
+  /// USD per million input tokens when `pricing.prompt` is present.
+  final double? pricingPromptPerMillion;
+
+  /// USD per million output tokens when `pricing.completion` is present.
+  final double? pricingCompletionPerMillion;
+
+  /// NanoGPT `cost_estimate` when numeric (est. per-message USD).
+  final double? costEstimateUsd;
+
+  /// Unix timestamp from catalog `created`.
+  final int? created;
+
+  /// Parsed size hint (e.g. `70B`) from name/id when detectable.
+  final String? parameterSizeLabel;
+
+  /// Matches id / name / description for uncensored-style model labels.
+  static final RegExp uncensoredNameHeuristic = RegExp(
+    r'abliterat|uncensor|derestrict|de-restrict|unfiltered|unrestricted',
+    caseSensitive: false,
+  );
+
   String get displayName => name.trim().isEmpty ? id : name.trim();
+
+  /// NanoGPT `category` contains "uncensored" (case-insensitive).
+  bool get isUncensoredCategory {
+    final cat = category?.trim().toLowerCase() ?? '';
+    return cat.contains('uncensor');
+  }
+
+  /// Broad RP-friendly bucket: official Uncensored category OR name/id heuristic.
+  bool get isUncensoredFriendly =>
+      isUncensoredCategory || uncensoredNameHeuristic.hasMatch(
+        '$id $displayName $description',
+      );
+
+  /// Label for API settings category dropdown rows.
+  String get catalogPickerLabel {
+    final parts = <String>[displayNameWithContext];
+    if (subscriptionIncluded) parts.add('Included');
+    return parts.join(' · ');
+  }
 
   /// Formats a token count for UI: `850`, `1.2K`, `16K`, `128K`.
   static String formatTokenCount(int tokens) {
@@ -59,6 +248,64 @@ class NanoGptModelInfo {
     final n = contextLength;
     if (n == null || n <= 0) return null;
     return '${formatTokenCount(n)} ctx';
+  }
+
+  String? get maxOutputLabel {
+    final n = maxOutputTokens;
+    if (n == null || n <= 0) return null;
+    return '${formatTokenCount(n)} out';
+  }
+
+  String? get parameterLabel {
+    final label = parameterSizeLabel?.trim();
+    if (label == null || label.isEmpty) return null;
+    return label;
+  }
+
+  /// One-line stat summary for list rows (no description).
+  String statChipLine({NanoGptModelRuntimeStats? runtime}) {
+    final parts = <String>[];
+    final ctx = contextLabel;
+    if (ctx != null) parts.add(ctx);
+    final out = maxOutputLabel;
+    if (out != null) parts.add(out);
+    final params = parameterLabel;
+    if (params != null) parts.add(params);
+    if (runtime != null) {
+      final tps = runtime.tpsLabel;
+      if (tps != null) parts.add(tps);
+      final ttft = runtime.ttftLabel;
+      if (ttft != null) parts.add(ttft);
+      final uptime = runtime.uptimeLabel;
+      if (uptime != null) parts.add(uptime);
+    }
+    if (subscriptionIncluded) parts.add('Included');
+    final cat = category?.trim();
+    if (cat != null && cat.isNotEmpty) parts.add(cat);
+    return parts.join(' · ');
+  }
+
+  String? get pricingLine {
+    if (subscriptionIncluded) return 'Included in subscription';
+    final prompt = pricingPromptPerMillion;
+    final completion = pricingCompletionPerMillion;
+    if (prompt != null && completion != null) {
+      return 'Input ${formatUsd(prompt)} · Output ${formatUsd(completion)} per 1M tokens';
+    }
+    if (costEstimateUsd != null) {
+      return 'Est. ${formatUsd(costEstimateUsd!)} / message';
+    }
+    return null;
+  }
+
+  static String formatUsd(double value) {
+    if (value >= 1) {
+      return '\$${value.toStringAsFixed(2)}';
+    }
+    if (value >= 0.01) {
+      return '\$${value.toStringAsFixed(2)}';
+    }
+    return '\$${value.toStringAsFixed(4)}';
   }
 
   /// Display name plus context when known (e.g. `GPT-4o Mini · 128K ctx`).
@@ -104,6 +351,128 @@ class NanoGptModelInfo {
     final parsed = int.tryParse('$value'.trim());
     if (parsed == null || parsed <= 0) return null;
     return parsed;
+  }
+
+  static bool parseSubscriptionIncluded(Map<String, dynamic> map) {
+    final sub = map['subscription'];
+    if (sub is Map) {
+      return sub['included'] == true;
+    }
+    return false;
+  }
+
+  static String? parseCategory(Map<String, dynamic> map) {
+    final raw = '${map['category'] ?? ''}'.trim();
+    return raw.isEmpty ? null : raw;
+  }
+
+  static double? parseCostEstimateUsd(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) return null;
+      if (RegExp(r'^\$+$').hasMatch(trimmed)) return null;
+      return double.tryParse(trimmed.replaceAll('\$', ''));
+    }
+    return null;
+  }
+
+  static double? parsePricingPerMillion(Map<String, dynamic> map, String key) {
+    final pricing = map['pricing'];
+    if (pricing is! Map) return null;
+    final raw = pricing[key];
+    if (raw is num) return raw.toDouble();
+    return double.tryParse('$raw'.trim());
+  }
+
+  static int? parseCreated(Map<String, dynamic> map) {
+    final raw = map['created'];
+    if (raw is int && raw > 0) return raw;
+    if (raw is num) return raw.round();
+    return int.tryParse('$raw'.trim());
+  }
+
+  /// Pull `70B`, `405B`, `8B`, etc. from model name or id.
+  static String? inferParameterSizeLabel({
+    required String id,
+    required String name,
+    String description = '',
+  }) {
+    final sizes = <_ParameterMatch>[];
+    void scan(String text) {
+      for (final match in _parameterSizePattern.allMatches(text)) {
+        final amount = double.tryParse(match.group(1) ?? '');
+        if (amount == null || amount <= 0) continue;
+        final unit = match.group(2) ?? 'B';
+        sizes.add(_ParameterMatch(amount, unit.toUpperCase()));
+      }
+    }
+    scan(name);
+    scan(id);
+    scan(description);
+    if (sizes.isEmpty) return null;
+    sizes.sort((a, b) => b.amount.compareTo(a.amount));
+    final best = sizes.first;
+    final amountText = best.amount == best.amount.roundToDouble()
+        ? '${best.amount.round()}'
+        : best.amount.toStringAsFixed(1);
+    return '$amountText${best.unit}';
+  }
+
+  static final RegExp _parameterSizePattern = RegExp(
+    r'(?<![\d.])(\d+(?:\.\d+)?)\s*([Bb])(?![a-z])',
+  );
+}
+
+class _ParameterMatch {
+  _ParameterMatch(this.amount, this.unit);
+  final double amount;
+  final String unit;
+}
+
+/// Category filters for the text model catalog in API settings.
+class NanoGptTextModelCatalogFilter {
+  const NanoGptTextModelCatalogFilter._();
+
+  static const allId = '__all__';
+  static const uncensoredFriendlyId = '__uncensored_friendly__';
+
+  static const uncensoredFriendlyLabel = 'Uncensored & derestricted (broad)';
+
+  static String labelFor(String filterId) {
+    if (filterId == allId) return 'All categories';
+    if (filterId == uncensoredFriendlyId) return uncensoredFriendlyLabel;
+    return filterId;
+  }
+
+  /// Dropdown options: All, broad uncensored bucket, then each NanoGPT category.
+  static List<String> categoryFilterIds(List<NanoGptModelInfo> models) {
+    final categories = <String>{};
+    for (final model in models) {
+      final cat = model.category?.trim();
+      if (cat != null && cat.isNotEmpty) categories.add(cat);
+    }
+    final sorted = categories.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return [allId, uncensoredFriendlyId, ...sorted];
+  }
+
+  static List<NanoGptModelInfo> apply(
+    List<NanoGptModelInfo> models,
+    String filterId,
+  ) {
+    if (filterId == allId) return models;
+    if (filterId == uncensoredFriendlyId) {
+      return [for (final m in models) if (m.isUncensoredFriendly) m];
+    }
+    return [
+      for (final m in models)
+        if (m.category?.trim() == filterId) m,
+    ];
+  }
+
+  static int countFor(List<NanoGptModelInfo> models, String filterId) {
+    return apply(models, filterId).length;
   }
 }
 
@@ -258,6 +627,86 @@ class NanoGptService {
   /// Client used for the in-flight stream — closed by [cancelActiveStream].
   http.Client? _streamClient;
   bool _cancelRequested = false;
+
+  final Map<String, NanoGptModelRuntimeStats> _runtimeStatsCache = {};
+
+  /// Clears cached routing stats (e.g. after refreshing the catalog).
+  void clearRuntimeStatsCache() => _runtimeStatsCache.clear();
+
+  /// Routing stats from `GET /api/models/:id/providers` (TPS, TTFT, uptime).
+  Future<NanoGptModelRuntimeStats?> fetchModelRuntimeStats(String modelId) async {
+    final id = modelId.trim();
+    if (id.isEmpty) return null;
+    if (_runtimeStatsCache.containsKey(id)) {
+      return _runtimeStatsCache[id];
+    }
+
+    final uri = Uri.parse(
+      'https://nano-gpt.com/api/models/${Uri.encodeComponent(id)}/providers',
+    );
+    final headers = <String, String>{'Accept': 'application/json'};
+    final apiKey = await _apiKeyService.getApiKey();
+    if (apiKey != null) {
+      headers['Authorization'] = 'Bearer $apiKey';
+    }
+
+    try {
+      final response = await _http
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 12));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        _runtimeStatsCache[id] = const NanoGptModelRuntimeStats();
+        return _runtimeStatsCache[id];
+      }
+      final stats = _parseModelProvidersBody(response.body);
+      _runtimeStatsCache[id] = stats;
+      return stats;
+    } on SocketException {
+      return null;
+    } on TimeoutException {
+      return null;
+    } on http.ClientException {
+      return null;
+    } catch (_) {
+      _runtimeStatsCache[id] = const NanoGptModelRuntimeStats();
+      return _runtimeStatsCache[id];
+    }
+  }
+
+  /// Loads routing stats for many models with modest concurrency.
+  Future<void> prefetchModelRuntimeStats(
+    List<String> modelIds, {
+    int maxConcurrent = 6,
+  }) async {
+    final pending = <String>{};
+    for (final raw in modelIds) {
+      final id = raw.trim();
+      if (id.isEmpty || _runtimeStatsCache.containsKey(id)) continue;
+      pending.add(id);
+    }
+    if (pending.isEmpty) return;
+
+    final queue = pending.toList();
+    var index = 0;
+    Future<void> worker() async {
+      while (index < queue.length) {
+        final current = queue[index];
+        index++;
+        await fetchModelRuntimeStats(current);
+      }
+    }
+
+    final workers = <Future<void>>[];
+    final count = maxConcurrent.clamp(1, 12);
+    for (var i = 0; i < count; i++) {
+      workers.add(worker());
+    }
+    await Future.wait(workers);
+  }
+
+  NanoGptModelRuntimeStats cachedRuntimeStats(String modelId) {
+    return _runtimeStatsCache[modelId.trim()] ?? const NanoGptModelRuntimeStats();
+  }
 
   /// Loads wallet dollars and subscription allowance usage for the saved key.
   ///
@@ -439,20 +888,47 @@ class NanoGptService {
         if (id.isEmpty || !seenIds.add(id)) continue;
         final rawOwner = '${map['owned_by'] ?? 'other'}'.trim();
         final name = '${map['name'] ?? ''}'.trim();
+        final description = '${map['description'] ?? ''}'.trim();
         // Surface NanoGPT Auto Model under its own "Auto" provider (top of list).
         final ownedBy = NanoGptModelInfo.isAutoModelId(id)
             ? autoProviderLabel
             : (rawOwner.isEmpty ? 'other' : rawOwner);
+        final displayName = name.isEmpty ? id : name;
         models.add(
           NanoGptModelInfo(
             id: id,
             ownedBy: ownedBy,
-            name: name.isEmpty ? id : name,
+            name: displayName,
             contextLength: NanoGptModelInfo.parseContextLength(map),
             maxOutputTokens: NanoGptModelInfo.parseMaxOutputTokens(map),
+            category: NanoGptModelInfo.parseCategory(map),
+            description: description,
+            subscriptionIncluded:
+                NanoGptModelInfo.parseSubscriptionIncluded(map),
+            capabilities: NanoGptModelCapabilities.parse(
+              map['capabilities'] is Map
+                  ? Map<String, dynamic>.from(map['capabilities'] as Map)
+                  : null,
+            ),
+            openWeights: map['open_weights'] == true,
+            pricingPromptPerMillion:
+                NanoGptModelInfo.parsePricingPerMillion(map, 'prompt'),
+            pricingCompletionPerMillion:
+                NanoGptModelInfo.parsePricingPerMillion(map, 'completion'),
+            costEstimateUsd: NanoGptModelInfo.parseCostEstimateUsd(
+              map['cost_estimate'],
+            ),
+            created: NanoGptModelInfo.parseCreated(map),
+            parameterSizeLabel: NanoGptModelInfo.inferParameterSizeLabel(
+              id: id,
+              name: displayName,
+              description: description,
+            ),
           ),
         );
       }
+
+      clearRuntimeStatsCache();
 
       for (final fallback in autoModelFallbacks) {
         if (seenIds.add(fallback.id)) {
@@ -1359,6 +1835,14 @@ class NanoGptService {
       return DateTime.fromMillisecondsSinceEpoch(epoch, isUtc: true);
     }
     return DateTime.tryParse(raw);
+  }
+
+  NanoGptModelRuntimeStats _parseModelProvidersBody(String body) {
+    final decoded = jsonDecode(body);
+    if (decoded is! Map) return const NanoGptModelRuntimeStats();
+    return NanoGptModelRuntimeStats.fromProvidersMap(
+      Map<String, dynamic>.from(decoded),
+    );
   }
 
   String _shortBody(String body) {

@@ -10,7 +10,7 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **Also builds** | Linux desktop (works); Windows desktop (needs a Windows host) |
 | **Distribution** | Personal use only — **not** published to app stores |
 | **Repo** | https://github.com/jwarren9393/Anima (private) |
-| **Version** | **1.0.0** build **34** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
+| **Version** | **1.0.0** build **35** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
 
 API base (pay-as-you-go): `https://nano-gpt.com/api/v1/chat/completions`  
 Auth: `Authorization: Bearer <API_KEY>`  
@@ -298,9 +298,11 @@ Opened from Home or Chat ⋮ → **Settings**. Grouped sections: **World**, **AI
 **AI model (chat)**
 
 - Live NanoGPT **model catalog**.
-- Providers: **Auto** first (`auto-model`, `auto-model-basic`, `auto-model-standard`, `auto-model-premium`), then A–Z.
+- **Category** filter first: **All**, **Uncensored & derestricted (broad)** (NanoGPT’s Uncensored category plus any model whose id/name/description contains uncensored, abliterated, derestricted, unfiltered, or unrestricted), then each NanoGPT category (Roleplay, Coding, etc.).
+- **Provider** filter second: **Auto** first (`auto-model`, `auto-model-basic`, `auto-model-standard`, `auto-model-premium`), then A–Z — scoped to the category filter.
+- Status line shows filtered count (e.g. `54 of 200 models`).
+- **Browse models** opens a searchable sheet: context, max output, parameter size (e.g. 70B), TPS, TTFT, uptime %, NanoGPT description, capability chips, Included/pricing — loaded from the live catalog + routing stats API (no browser needed).
 - Refresh catalog; optional **custom model id**.
-- Dropdown shows **context window** when NanoGPT reports `context_length`.
 
 **Image model (avatars)**
 

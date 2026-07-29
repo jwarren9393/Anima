@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/api_key_service.dart';
 import '../services/nanogpt_service.dart';
 import '../services/settings_service.dart';
+import '../widgets/text_model_catalog_widgets.dart';
 import 'settings_ui.dart';
 
 /// API key, model catalog dropdowns, and subscription endpoint toggle.
@@ -38,10 +39,12 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
   String? _modelsError;
   List<NanoGptModelInfo> _models = const [];
   String? _selectedProvider;
+  String _selectedCategoryFilter = NanoGptTextModelCatalogFilter.allId;
 
   bool _loadingImageModels = false;
   String? _imageModelsError;
   List<NanoGptImageModelInfo> _imageModels = const [];
+  bool _loadingSelectedRuntime = false;
 
   @override
   void initState() {
@@ -82,8 +85,14 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
       setState(() {
         _models = models;
         _loadingModels = false;
+        if (!NanoGptTextModelCatalogFilter.categoryFilterIds(models)
+            .contains(_selectedCategoryFilter)) {
+          _selectedCategoryFilter = NanoGptTextModelCatalogFilter.allId;
+        }
         _selectedProvider = _providerForCurrentModel();
+        _syncProviderAfterCatalogChange();
       });
+      await _refreshSelectedRuntimeStats();
     } on NanoGptException catch (error) {
       if (!mounted) return;
       setState(() {
@@ -112,10 +121,20 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
     return _providers.isEmpty ? null : _providers.first;
   }
 
+  List<NanoGptModelInfo> get _modelsForCategory {
+    return NanoGptTextModelCatalogFilter.apply(
+      _models,
+      _selectedCategoryFilter,
+    );
+  }
+
+  List<String> get _categoryFilters =>
+      NanoGptTextModelCatalogFilter.categoryFilterIds(_models);
+
   List<String> get _providers {
     final seen = <String>{};
     final list = <String>[];
-    for (final model in _models) {
+    for (final model in _modelsForCategory) {
       if (seen.add(model.ownedBy)) list.add(model.ownedBy);
     }
     // Auto first, then A–Z (catalog is already sorted this way; keep stable).
@@ -136,16 +155,33 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
   List<NanoGptModelInfo> get _modelsForProvider {
     final provider = _selectedProvider;
     if (provider == null) return const [];
-    return _models.where((m) => m.ownedBy == provider).toList();
+    return _modelsForCategory.where((m) => m.ownedBy == provider).toList();
   }
 
-  String? get _selectedModelId {
-    final current = _modelController.text.trim();
-    if (current.isEmpty) return null;
-    for (final model in _modelsForProvider) {
-      if (model.id == current) return current;
+  void _syncProviderAfterCatalogChange() {
+    final providers = _providers;
+    if (providers.isEmpty) {
+      _selectedProvider = null;
+      return;
     }
-    return null;
+    if (_selectedProvider == null || !providers.contains(_selectedProvider)) {
+      _selectedProvider = providers.first;
+    }
+    final forProvider = _modelsForProvider;
+    if (forProvider.isEmpty) return;
+    final current = _modelController.text.trim();
+    final stillValid = forProvider.any((m) => m.id == current);
+    if (!stillValid) {
+      _modelController.text = forProvider.first.id;
+    }
+  }
+
+  void _onCategoryFilterChanged(String? filterId) {
+    if (filterId == null) return;
+    setState(() {
+      _selectedCategoryFilter = filterId;
+      _syncProviderAfterCatalogChange();
+    });
   }
 
   NanoGptModelInfo? get _selectedModelInfo {
@@ -155,6 +191,29 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
       if (model.id == id) return model;
     }
     return null;
+  }
+
+  Future<void> _refreshSelectedRuntimeStats() async {
+    final id = _modelController.text.trim();
+    if (id.isEmpty) return;
+    setState(() => _loadingSelectedRuntime = true);
+    await widget.nanoGptService.fetchModelRuntimeStats(id);
+    if (!mounted) return;
+    setState(() => _loadingSelectedRuntime = false);
+  }
+
+  Future<void> _openModelPicker() async {
+    final models = _modelsForProvider;
+    if (models.isEmpty) return;
+    final picked = await showTextModelPickerSheet(
+      context: context,
+      models: models,
+      selectedId: _modelController.text.trim(),
+      nanoGptService: widget.nanoGptService,
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _modelController.text = picked);
+    await _refreshSelectedRuntimeStats();
   }
 
   Future<void> _loadImageModels() async {
@@ -303,6 +362,8 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
   Widget build(BuildContext context) {
     final providers = _providers;
     final modelsForProvider = _modelsForProvider;
+    final categoryFilters = _categoryFilters;
+    final filteredModelCount = _modelsForCategory.length;
 
     return Scaffold(
       appBar: AppBar(title: const Text('API & connection')),
@@ -375,9 +436,9 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
                 const SizedBox(height: 8),
                 SettingsUi.sectionHint(
                   context,
-                  'Pick a provider (Auto is NanoGPT’s automatic router), then a '
-                  'model. Lists are sorted A–Z. You can still type a custom '
-                  'model id below.',
+                  'Filter by category, then provider. Tap Browse models for context, '
+                  'output, parameters, TPS, uptime, description, and capabilities — '
+                  'without leaving the app. Custom model id still works below.',
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -388,7 +449,8 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
                             ? 'Loading models from NanoGPT…'
                             : _modelsError != null
                                 ? 'Could not load catalog'
-                                : '${_models.length} models · ${providers.length} providers',
+                                : '$filteredModelCount of ${_models.length} models · '
+                                    '${providers.length} providers',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
@@ -416,6 +478,35 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
                 ],
                 if (!_loadingModels && _models.isNotEmpty) ...[
                   DropdownButtonFormField<String>(
+                    key: ValueKey('category-$_selectedCategoryFilter'),
+                    initialValue: categoryFilters.contains(
+                      _selectedCategoryFilter,
+                    )
+                        ? _selectedCategoryFilter
+                        : NanoGptTextModelCatalogFilter.allId,
+                    isExpanded: true,
+                    decoration: SettingsUi.fieldDecoration(
+                      label: 'Category',
+                      helperText: _selectedCategoryFilter ==
+                              NanoGptTextModelCatalogFilter.uncensoredFriendlyId
+                          ? 'NanoGPT Uncensored category + any id/name with '
+                              'uncensored, abliterated, or derestricted'
+                          : '$filteredModelCount models in this filter',
+                    ),
+                    items: [
+                      for (final filterId in categoryFilters)
+                        DropdownMenuItem(
+                          value: filterId,
+                          child: Text(
+                            NanoGptTextModelCatalogFilter.labelFor(filterId),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                    onChanged: _onCategoryFilterChanged,
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
                     key: ValueKey('provider-$_selectedProvider'),
                     initialValue: _selectedProvider != null &&
                             providers.contains(_selectedProvider)
@@ -437,9 +528,7 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
                       if (provider == null) return;
                       setState(() {
                         _selectedProvider = provider;
-                        final forProvider = _models
-                            .where((m) => m.ownedBy == provider)
-                            .toList();
+                        final forProvider = _modelsForProvider;
                         if (forProvider.isEmpty) return;
                         final stillValid = forProvider.any(
                           (m) => m.id == _modelController.text.trim(),
@@ -451,43 +540,38 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
                     },
                   ),
                   const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    key: ValueKey(
-                      'model-$_selectedProvider-$_selectedModelId',
-                    ),
-                    initialValue: _selectedModelId,
-                    isExpanded: true,
-                    decoration: SettingsUi.fieldDecoration(
-                      label: 'Model',
-                      helperText: modelsForProvider.isEmpty
-                          ? 'Pick a provider first'
-                          : '${modelsForProvider.length} models from $_selectedProvider',
-                    ),
-                    items: [
-                      for (final model in modelsForProvider)
-                        DropdownMenuItem(
-                          value: model.id,
-                          child: Text(
-                            model.displayNameWithContext,
-                            overflow: TextOverflow.ellipsis,
+                  if (modelsForProvider.isEmpty)
+                    Text(
+                      'No models for this provider in the current category filter.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    )
+                  else ...[
+                    if (_selectedModelInfo != null)
+                      TextModelSummaryCard(
+                        model: _selectedModelInfo!,
+                        runtimeStats: widget.nanoGptService.cachedRuntimeStats(
+                          _selectedModelInfo!.id,
+                        ),
+                        loadingRuntime: _loadingSelectedRuntime,
+                        onBrowse: _openModelPicker,
+                      )
+                    else if (_modelController.text.trim().isNotEmpty)
+                      Card(
+                        margin: EdgeInsets.zero,
+                        child: ListTile(
+                          title: Text(_modelController.text.trim()),
+                          subtitle: const Text(
+                            'Custom model id — stats load when NanoGPT recognizes it',
                           ),
                         ),
-                    ],
-                    onChanged: modelsForProvider.isEmpty
-                        ? null
-                        : (id) {
-                            if (id == null) return;
-                            setState(() => _modelController.text = id);
-                          },
-                  ),
-                  if (_selectedModelInfo?.contextLength != null) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      'Context window: '
-                      '${NanoGptModelInfo.formatTokenCount(_selectedModelInfo!.contextLength!)}'
-                      ' tokens'
-                      '${_selectedModelInfo!.maxOutputTokens == null ? '' : ' · max output ${_selectedModelInfo!.maxOutputTokens}'}',
-                      style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: _openModelPicker,
+                      icon: const Icon(Icons.view_list_outlined),
+                      label: Text(
+                        'Browse ${modelsForProvider.length} models',
+                      ),
                     ),
                   ],
                   const SizedBox(height: 16),
@@ -506,6 +590,7 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
                     setState(() {
                       _selectedProvider = _providerForCurrentModel();
                     });
+                    _refreshSelectedRuntimeStats();
                   },
                 ),
                 const SizedBox(height: 16),

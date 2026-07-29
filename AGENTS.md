@@ -60,7 +60,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-29  
-**Last agent action:** Published **v1.0.0 build 34** — lorebook update merge fix + Update my persona.
+**Last agent action:** Published **v1.0.0 build 35** — API model category filter + Browse models sheet with at-a-glance stats (context, output, params, TPS, TTFT, uptime, description).
 
 ### What works today
 
@@ -88,7 +88,7 @@ High-value SillyTavern concepts to aim for over time:
 - **Text presets** — expanded Author’s Note / System prompt / Post-history / collaborator guidance sheets
 - **Character AI wand** — sparkle icon on creative card fields; sends all filled fields as context; appends NanoGPT text below what’s already there (uses chat model + sampling)
 - **World Info entry AI wand** — sparkle on Label / Keywords / Lore content (and Secondary keywords when Selective); uses book + sibling entry context; appends (keywords merge comma-separated); same model + collaborator guidance
-- **API & connection** — live NanoGPT model catalog: **Auto** provider (auto-model / basic / standard / premium) listed first, then providers A–Z; refresh; custom model id; subscription toggle reloads catalog; model dropdown shows **context window** when NanoGPT reports `context_length`; **image model** picker uses NanoGPT’s subscription image catalog when **Use subscription API** is on (hides paid models); otherwise full catalog with Paid/Included labels; **See remaining credits** shows wallet USD/NANO + weekly/daily/monthly + daily images allowance data returned by NanoGPT
+- **API & connection** — live NanoGPT model catalog: **Category** filter (All · **Uncensored & derestricted (broad)** · Roleplay · …) then **provider**; **Browse models** sheet shows context, max output, parameter size, TPS, TTFT, uptime %, description, capabilities, and pricing/Included — stats from `detailed=true` catalog + providers API; filtered count in status line; refresh; custom model id; subscription toggle reloads catalog; **image model** picker; **See remaining credits**
 - **Chat stop** — while a reply streams, the send button becomes **Stop** (keeps any partial text); the list does **not** auto-scroll during streaming — scroll freely while a reply types in (regular chat + Creation Center)
 - **Composer shortcuts** — **OOC**, **Format** (✨), **Continue** (▶), Send/Stop; Format has its own collaborator note; **desktop:** Enter sends (Shift+Enter = new line; toggle in **Settings → AI collaborator**)
 - **Draft autosave** — composer text saved per chat (survives leaving chat/app); cleared on send
@@ -110,7 +110,7 @@ High-value SillyTavern concepts to aim for over time:
 - **Context estimate** — chat ⋮ → **Context estimate** shows ~message/token gauges vs history budget and model window; Creation Center shows a live banner estimate
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar
 - **Linux install/update** — `./scripts/update_linux.sh` builds and installs the desktop app; add `--pull` to download GitHub changes first
-- **Smoke:** `flutter test` (190) + `flutter analyze` pass; Android + Linux desktop debug work
+- **Smoke:** `flutter test` (203) + `flutter analyze` pass; Android + Linux desktop debug work
 
 ### What does NOT work yet / limits
 
@@ -269,6 +269,7 @@ lib/
     backup_restore_screen.dart    Full-app backup / restore + cross-device sync (.anima-backup JSON; no API key)
     settings_ui.dart              Shared settings form helpers
   widgets/
+    text_model_catalog_widgets.dart Model browse sheet + summary card (ctx, TPS, …)
     anima_avatar.dart             Local-file / initial avatar (circle or rect via style); tap → fullscreen
     avatar_fullscreen.dart        Full-screen portrait viewer (tap to dismiss)
     chat_hero_portrait.dart Tall side portrait with fade into storybook bubbles
@@ -408,9 +409,9 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. Spot-check **Creation Center hub** on device: World dashboard, Play this world, canon pins, glossary → lorebook, world bundle import/export.
-2. Spot-check **workshop Fix last** and **Fold older chat into summary** on a long workshop thread.
-3. Spot-check **minimal UI** on phone: chat ⋮ menu, home New sheet, group setup Lore/Scene chips.
+1. Spot-check **Browse models** sheet: Settings → API → Category **Uncensored & derestricted** → Browse — confirm ctx/out/params/TPS/uptime/description on rows without opening the browser.
+2. Spot-check **Creation Center hub** on device: World dashboard, Play this world, canon pins, glossary → lorebook, world bundle import/export.
+3. Spot-check **workshop Fix last** and **Fold older chat into summary** on a long workshop thread.
 
 ---
 
