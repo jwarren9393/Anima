@@ -25,7 +25,7 @@ import 'sampling_settings_screen.dart';
 import 'world_workshop_list_screen.dart';
 
 /// Top-level settings menu — each area opens its own screen.
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
     required this.apiKeyService,
@@ -53,12 +53,51 @@ class SettingsScreen extends StatelessWidget {
   final OpeningSceneService openingSceneService;
   final AppearanceController appearanceController;
 
-  Future<void> _openAppearance(BuildContext context) async {
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  String _modelLabel = '';
+  bool _hasKey = false;
+  bool _loadingStatus = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStatus();
+  }
+
+  Future<void> _loadStatus() async {
+    final model = await widget.settingsService.getModel();
+    final key = await widget.apiKeyService.getApiKey();
+    if (!mounted) return;
+    setState(() {
+      _modelLabel = model;
+      _hasKey = key != null && key.trim().isNotEmpty;
+      _loadingStatus = false;
+    });
+  }
+
+  Future<void> _openApiSettings() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ApiSettingsScreen(
+          apiKeyService: widget.apiKeyService,
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
+        ),
+      ),
+    );
+    await _loadStatus();
+  }
+
+  Future<void> _openAppearance() async {
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => AppearanceSettingsScreen(
-          settingsService: settingsService,
-          appearanceController: appearanceController,
+          settingsService: widget.settingsService,
+          appearanceController: widget.appearanceController,
         ),
       ),
     );
@@ -66,34 +105,69 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final statusLine = _loadingStatus
+        ? 'Loading…'
+        : _hasKey
+        ? 'Model: $_modelLabel'
+        : 'No API key — tap to add';
+
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
         children: [
-          _SettingsTile(
-            icon: Icons.key,
-            title: 'API & connection',
-            subtitle: 'API key, model, subscription endpoint',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => ApiSettingsScreen(
-                  apiKeyService: apiKeyService,
-                  settingsService: settingsService,
-                  nanoGptService: nanoGptService,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Material(
+              color: scheme.surfaceContainerHigh,
+              borderRadius: BorderRadius.circular(12),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: _openApiSettings,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _hasKey ? Icons.link : Icons.key_off,
+                        color: _hasKey ? scheme.primary : scheme.error,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'API & connection',
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            Text(
+                              statusLine,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
+          const _SettingsSectionHeader('World'),
           _SettingsTile(
             icon: Icons.face,
             title: 'Personas',
-            subtitle: 'Who you are ({{user}}) — create and switch',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => PersonasScreen(
-                  personaService: personaService,
-                  settingsService: settingsService,
-                  nanoGptService: nanoGptService,
+                  personaService: widget.personaService,
+                  settingsService: widget.settingsService,
+                  nanoGptService: widget.nanoGptService,
                 ),
               ),
             ),
@@ -101,14 +175,13 @@ class SettingsScreen extends StatelessWidget {
           _SettingsTile(
             icon: Icons.people_outline,
             title: 'Characters',
-            subtitle: 'Create, import, and edit character cards',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => CharactersScreen(
-                  characterService: characterService,
-                  categoryService: characterCategoryService,
-                  settingsService: settingsService,
-                  nanoGptService: nanoGptService,
+                  characterService: widget.characterService,
+                  categoryService: widget.characterCategoryService,
+                  settingsService: widget.settingsService,
+                  nanoGptService: widget.nanoGptService,
                 ),
               ),
             ),
@@ -116,12 +189,11 @@ class SettingsScreen extends StatelessWidget {
           _SettingsTile(
             icon: Icons.auto_stories_outlined,
             title: 'Opening scenes',
-            subtitle: 'Saved narrator setups for new chats (incl. Creation Center)',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => OpeningScenesScreen(
-                  openingSceneService: openingSceneService,
-                  workshopService: worldWorkshopService,
+                  openingSceneService: widget.openingSceneService,
+                  workshopService: widget.worldWorkshopService,
                 ),
               ),
             ),
@@ -129,15 +201,14 @@ class SettingsScreen extends StatelessWidget {
           _SettingsTile(
             icon: Icons.menu_book,
             title: 'World Info & lore',
-            subtitle: 'Global lorebooks, scan depth, character books',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => LoreSettingsScreen(
-                  settingsService: settingsService,
-                  characterService: characterService,
-                  characterCategoryService: characterCategoryService,
-                  worldInfoService: worldInfoService,
-                  nanoGptService: nanoGptService,
+                  settingsService: widget.settingsService,
+                  characterService: widget.characterService,
+                  characterCategoryService: widget.characterCategoryService,
+                  worldInfoService: widget.worldInfoService,
+                  nanoGptService: widget.nanoGptService,
                 ),
               ),
             ),
@@ -145,44 +216,43 @@ class SettingsScreen extends StatelessWidget {
           _SettingsTile(
             icon: Icons.travel_explore,
             title: 'Creation Center',
-            subtitle: 'Build lorebooks/characters; import chat or lorebook',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => WorldWorkshopListScreen(
-                  workshopService: worldWorkshopService,
-                  worldInfoService: worldInfoService,
-                  characterService: characterService,
-                  characterCategoryService: characterCategoryService,
-                  personaService: personaService,
-                  chatService: chatService,
-                  apiKeyService: apiKeyService,
-                  settingsService: settingsService,
-                  nanoGptService: nanoGptService,
-                  openingSceneService: openingSceneService,
-                  appearanceController: appearanceController,
+                  workshopService: widget.worldWorkshopService,
+                  worldInfoService: widget.worldInfoService,
+                  characterService: widget.characterService,
+                  characterCategoryService: widget.characterCategoryService,
+                  personaService: widget.personaService,
+                  chatService: widget.chatService,
+                  apiKeyService: widget.apiKeyService,
+                  settingsService: widget.settingsService,
+                  nanoGptService: widget.nanoGptService,
+                  openingSceneService: widget.openingSceneService,
+                  appearanceController: widget.appearanceController,
                 ),
               ),
             ),
           ),
+          const _SettingsSectionHeader('AI'),
           _SettingsTile(
             icon: Icons.tune,
             title: 'Generation parameters',
-            subtitle: 'Presets, context size, summarization, sampling help',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (_) =>
-                    SamplingSettingsScreen(settingsService: settingsService),
+                builder: (_) => SamplingSettingsScreen(
+                  settingsService: widget.settingsService,
+                ),
               ),
             ),
           ),
           _SettingsTile(
             icon: Icons.article_outlined,
             title: 'Global chat prompts',
-            subtitle: 'System prompt + post-history for every chat',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => GlobalChatPromptsScreen(
-                  settingsService: settingsService,
+                  settingsService: widget.settingsService,
                 ),
               ),
             ),
@@ -190,11 +260,10 @@ class SettingsScreen extends StatelessWidget {
           _SettingsTile(
             icon: Icons.auto_awesome,
             title: 'AI collaborator',
-            subtitle: 'Wand + Format + Roadway + Enter to send',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => CollaboratorSettingsScreen(
-                  settingsService: settingsService,
+                  settingsService: widget.settingsService,
                 ),
               ),
             ),
@@ -202,46 +271,60 @@ class SettingsScreen extends StatelessWidget {
           _SettingsTile(
             icon: Icons.badge_outlined,
             title: 'Character builds',
-            subtitle: 'Model, tokens, and prompt for full card generation',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => CharacterBuildSettingsScreen(
-                  settingsService: settingsService,
+                  settingsService: widget.settingsService,
                 ),
               ),
             ),
           ),
+          const _SettingsSectionHeader('App'),
           _SettingsTile(
             icon: Icons.palette,
             title: 'Appearance',
-            subtitle: 'Theme presets, colors, fonts, chat avatars',
-            onTap: () => _openAppearance(context),
+            onTap: _openAppearance,
           ),
           _SettingsTile(
             icon: Icons.backup,
             title: 'Backup, restore & sync',
-            subtitle:
-                'Push / pull one Google Drive file between phone and desktop',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => BackupRestoreScreen(
-                  settingsService: settingsService,
-                  personaService: personaService,
-                  appearanceController: appearanceController,
+                  settingsService: widget.settingsService,
+                  personaService: widget.personaService,
+                  appearanceController: widget.appearanceController,
                 ),
               ),
             ),
           ),
-          const Divider(height: 32),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
             child: Text(
-              'Get a NanoGPT key at nano-gpt.com. Secrets stay on this device only.',
+              'NanoGPT key at nano-gpt.com — stored on this device only.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
-          const SizedBox(height: 24),
         ],
+      ),
+    );
+  }
+}
+
+class _SettingsSectionHeader extends StatelessWidget {
+  const _SettingsSectionHeader(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+          color: Theme.of(context).colorScheme.primary,
+        ),
       ),
     );
   }
@@ -251,13 +334,11 @@ class _SettingsTile extends StatelessWidget {
   const _SettingsTile({
     required this.icon,
     required this.title,
-    required this.subtitle,
     required this.onTap,
   });
 
   final IconData icon;
   final String title;
-  final String subtitle;
   final VoidCallback onTap;
 
   @override
@@ -265,7 +346,6 @@ class _SettingsTile extends StatelessWidget {
     return ListTile(
       leading: Icon(icon),
       title: Text(title),
-      subtitle: Text(subtitle),
       trailing: const Icon(Icons.chevron_right),
       onTap: onTap,
     );

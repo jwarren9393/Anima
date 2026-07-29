@@ -188,23 +188,40 @@ Critical rules:
     return total;
   }
 
-  /// Estimate for Creation Center: chat + optional linked lorebook + prompt overhead.
+  /// Estimate for Creation Center: trimmed chat + world summary + lore + overhead.
   ContextEstimate estimateWorkshop({
     required List<ChatMessage> messages,
     String linkedLorebookJson = '',
     String importedSourceText = '',
+    String worldSummary = '',
+    int worldSummaryCoveredCount = 0,
+    int historyTokenBudget = ContextSettings.defaultHistoryTokens,
     int? modelContextLength,
     int systemOverheadTokens = 450,
   }) {
-    final chatTokens = estimateConversationTokens(messages);
+    final full = estimateConversationTokens(messages);
+    final summaryTokens = estimateTokens(worldSummary);
+    final history = selectHistory(
+      messages: messages,
+      endExclusive: messages.length,
+      memoryCoveredCount: worldSummaryCoveredCount,
+      historyTokenBudget: historyTokenBudget,
+    );
+    final historyTokens = estimateConversationTokens(history);
     final loreTokens = estimateTokens(linkedLorebookJson);
     final importedTokens = estimateTokens(importedSourceText);
-    final estimatedSent = chatTokens +
+    final estimatedSent = historyTokens +
+        summaryTokens +
         loreTokens +
         importedTokens +
         systemOverheadTokens.clamp(0, 5000);
+    final trimmedAway = (messages.length - history.length).clamp(0, messages.length);
     final notes = <String>[
-      'Includes a small system-prompt cushion. Creation Center sends the full chat.',
+      if (trimmedAway > 0 || worldSummaryCoveredCount > 0)
+        'Older workshop lines stay on device; only ~${historyTokenBudget} tokens of '
+            'recent chat are sent (plus world summary).'
+      else
+        'Sends recent workshop chat within your history budget (plus world summary).',
     ];
     if (importedTokens > 0) {
       notes.add(
@@ -214,14 +231,19 @@ Critical rules:
     if (loreTokens > 0) {
       notes.add('Includes the linked lorebook.');
     }
+    if (summaryTokens > 0) {
+      notes.add('World summary is injected instead of folded messages.');
+    }
     return ContextEstimate(
       messageCount: messages.where((m) => m.text.trim().isNotEmpty).length,
-      fullTranscriptTokens: chatTokens,
+      fullTranscriptTokens: full,
       estimatedSentTokens: estimatedSent,
-      memoryTokens: importedTokens,
+      memoryTokens: summaryTokens + importedTokens,
       loreTokens: loreTokens,
-      historyBudgetTokens: null,
+      historyBudgetTokens: historyTokenBudget,
       modelContextLength: modelContextLength,
+      messagesInPrompt: history.length,
+      messagesTrimmedAway: trimmedAway,
       notes: notes.join(' '),
     );
   }

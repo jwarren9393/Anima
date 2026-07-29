@@ -25,10 +25,16 @@ import '../services/world_info_service.dart';
 import '../services/world_workshop_builder.dart';
 import '../services/opening_scene_service.dart';
 import '../services/world_workshop_service.dart';
+import '../models/workshop_hub_models.dart';
+import '../services/workshop_hub_controller.dart';
+import '../widgets/workshop_compact_toolbar.dart';
+import '../widgets/workshop_overview_sheet.dart';
+import 'lorebooks_screen.dart';
 import '../utils/scroll_to_end.dart';
 import '../widgets/chat_composer_field.dart';
 import '../widgets/greeting_picker.dart';
 import '../widgets/keyboard_inset.dart';
+import '../widgets/minimal_chip_button.dart';
 import '../widgets/narrator_bubble.dart';
 import '../widgets/opening_scene_picker.dart';
 import '../widgets/reply_rewrite_sheet.dart';
@@ -79,6 +85,7 @@ class WorldWorkshopChatScreen extends StatefulWidget {
 class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     with WidgetsBindingObserver {
   final _builder = WorldWorkshopBuilder();
+  final _hubController = WorkshopHubController();
   final _contextService = const ChatContextService();
   static const _replyRewrite = ReplyRewriteService();
 
@@ -94,6 +101,34 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   bool _exporting = false;
   String? _exportStatus;
   bool _enterToSend = false;
+  bool _fixLastReplyMode = false;
+
+  bool get _canFixLastReply {
+    if (_workshop.messages.isEmpty) return false;
+    final last = _workshop.messages.last;
+    return !last.isUser && last.text.trim().isNotEmpty;
+  }
+
+  Future<void> _pickModeFromSheet() async {
+    final picked = await pickWorkshopMode(context, current: _workshop.mode);
+    if (picked == null || !mounted) return;
+    await _setMode(picked);
+  }
+
+  Future<void> _pickReplyLengthFromSheet() async {
+    final picked = await pickWorkshopReplyLength(
+      context,
+      current: _workshop.replyLength,
+    );
+    if (picked == null || !mounted) return;
+    await _setReplyLength(picked);
+  }
+
+  Future<void> _pickPromptIdeaFromSheet() async {
+    final idea = await pickWorkshopPromptIdea(context);
+    if (idea == null || !mounted) return;
+    _applyPromptChip(idea);
+  }
 
   @override
   void initState() {
@@ -101,8 +136,10 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     WidgetsBinding.instance.addObserver(this);
     _workshop = widget.workshop;
     _openingSceneController.text = _workshop.openingScene;
+    unawaited(widget.workshopService.setLastOpenedId(_workshop.id));
     _loadLinkedLorebook();
     _loadModelContext();
+    _loadContextBudget();
     if (_workshop.messages.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         scrollListToEnd(_scroll, jump: true);
@@ -165,8 +202,34 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       messages: _workshop.messages,
       linkedLorebookJson: loreJson,
       importedSourceText: imported,
+      worldSummary: _workshop.worldSummary,
+      worldSummaryCoveredCount:
+          _workshop.worldSummary.trim().isEmpty
+              ? 0
+              : _workshop.worldSummaryCoveredCount,
+      historyTokenBudget: _historyTokenBudget,
       modelContextLength: _modelContextLength,
     );
+  }
+
+  int _historyTokenBudget = ContextSettings.defaultHistoryTokens;
+
+  List<ChatMessage> _workshopHistoryForApi(int endExclusive) {
+    final covered = _workshop.worldSummary.trim().isEmpty
+        ? 0
+        : _workshop.worldSummaryCoveredCount;
+    return _contextService.selectHistory(
+      messages: _workshop.messages,
+      endExclusive: endExclusive,
+      memoryCoveredCount: covered,
+      historyTokenBudget: _historyTokenBudget,
+    );
+  }
+
+  Future<void> _loadContextBudget() async {
+    final ctx = await widget.settingsService.getContextSettings();
+    if (!mounted) return;
+    setState(() => _historyTokenBudget = ctx.historyTokenBudget);
   }
 
   Future<void> _showContextEstimate() async {
@@ -187,13 +250,28 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 12),
-              Text('Messages: ${estimate.messageCount}'),
-              Text(
-                'Chat transcript: ~${ContextEstimate.formatTokenCount(estimate.fullTranscriptTokens)} tokens',
-              ),
-              if (estimate.memoryTokens > 0)
+              Text('Messages saved: ${estimate.messageCount}'),
+              if (estimate.messagesInPrompt != null)
                 Text(
-                  'Imported chat source: ~${ContextEstimate.formatTokenCount(estimate.memoryTokens)} tokens',
+                  'Messages sent on next turn: ${estimate.messagesInPrompt}',
+                ),
+              if (estimate.messagesTrimmedAway != null &&
+                  estimate.messagesTrimmedAway! > 0)
+                Text(
+                  'Folded / trimmed from send: ${estimate.messagesTrimmedAway}',
+                ),
+              if (_workshop.worldSummaryCoveredCount > 0)
+                Text(
+                  'Folded into world summary: '
+                  '${_workshop.worldSummaryCoveredCount} messages',
+                ),
+              Text(
+                'Full transcript on device: '
+                '~${ContextEstimate.formatTokenCount(estimate.fullTranscriptTokens)} tokens',
+              ),
+              if (_workshop.worldSummary.trim().isNotEmpty)
+                Text(
+                  'World summary: ~${ContextEstimate.formatTokenCount(_contextService.estimateTokens(_workshop.worldSummary))} tokens',
                 ),
               if (estimate.loreTokens > 0)
                 Text(
@@ -286,6 +364,12 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     final text = _input.text.trim();
     if (text.isEmpty || _busy) return;
 
+    if (_fixLastReplyMode && _canFixLastReply) {
+      _input.clear();
+      await _sendFixLastReply(text);
+      return;
+    }
+
     final userMessage = ChatMessage(
       id: ChatMessage.newId(),
       role: ChatRole.user,
@@ -320,6 +404,179 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     await _streamAssistantReply(assistantIndex: _workshop.messages.length - 1);
   }
 
+  /// User correction note + revise the previous assistant bubble (no new AI reply).
+  Future<void> _sendFixLastReply(String correction) async {
+    if (!_canFixLastReply || correction.trim().isEmpty) return;
+
+    final assistantIndex = _workshop.messages.length - 1;
+    final assistant = _workshop.messages[assistantIndex];
+    final original = assistant.text;
+
+    final userMessage = ChatMessage(
+      id: ChatMessage.newId(),
+      role: ChatRole.user,
+      text: correction.trim(),
+    );
+    final messages = [..._workshop.messages, userMessage];
+
+    setState(() {
+      _sending = true;
+      _fixLastReplyMode = false;
+      _workshop = _workshop.copyWith(messages: messages);
+    });
+    await _persist(_workshop);
+    _scrollToEnd();
+
+    try {
+      final model = await widget.settingsService.getModel();
+      final sampling = WorldWorkshopBuilder.workshopCorrectionSampling(
+        await widget.settingsService.getSampling(),
+        originalCharCount: original.length,
+      );
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+      final revised = await widget.nanoGptService.complete(
+        model: model,
+        messages: _builder.buildApplyCorrectionMessages(
+          assistantReply: original,
+          correctionNote: correction.trim(),
+        ),
+        baseUrl: baseUrl,
+        sampling: sampling,
+      );
+      final trimmed = revised.trim();
+      if (trimmed.isEmpty) {
+        throw NanoGptException('NanoGPT returned an empty revision. Try again.');
+      }
+      if (!mounted) return;
+      final updated = List<ChatMessage>.from(_workshop.messages);
+      updated[assistantIndex] = assistant.withEditedText(trimmed);
+      await _persist(_workshop.copyWith(messages: updated));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Last reply updated in place.')),
+      );
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not apply correction: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _promptApplyCorrection(int assistantIndex) async {
+    if (_busy) return;
+    if (assistantIndex < 0 || assistantIndex >= _workshop.messages.length) {
+      return;
+    }
+    final message = _workshop.messages[assistantIndex];
+    if (message.isUser || message.text.trim().isEmpty) return;
+    final controller = TextEditingController();
+    final note = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Apply correction'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Describe what to change. The AI will rewrite this reply in place '
+              '— not add a new message.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              minLines: 2,
+              maxLines: 6,
+              autofocus: true,
+              decoration: const InputDecoration(
+                hintText: 'e.g. He was already from the U.S., not moved there.',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Apply'),
+          ),
+        ],
+      ),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
+    if (note == null || note.isEmpty || !mounted) return;
+
+    if (assistantIndex == _workshop.messages.length - 1) {
+      await _sendFixLastReply(note);
+      return;
+    }
+
+    await _applyCorrectionAtIndex(assistantIndex, note);
+  }
+
+  Future<void> _applyCorrectionAtIndex(int assistantIndex, String correction) async {
+    if (_busy) return;
+    final assistant = _workshop.messages[assistantIndex];
+    final original = assistant.text.trim();
+    if (original.isEmpty || correction.trim().isEmpty) return;
+
+    setState(() => _sending = true);
+    try {
+      final model = await widget.settingsService.getModel();
+      final sampling = WorldWorkshopBuilder.workshopCorrectionSampling(
+        await widget.settingsService.getSampling(),
+        originalCharCount: original.length,
+      );
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+      final revised = await widget.nanoGptService.complete(
+        model: model,
+        messages: _builder.buildApplyCorrectionMessages(
+          assistantReply: original,
+          correctionNote: correction.trim(),
+        ),
+        baseUrl: baseUrl,
+        sampling: sampling,
+      );
+      final trimmed = revised.trim();
+      if (trimmed.isEmpty) {
+        throw NanoGptException('NanoGPT returned an empty revision. Try again.');
+      }
+      if (!mounted) return;
+      final updated = List<ChatMessage>.from(_workshop.messages);
+      updated[assistantIndex] = assistant.withEditedText(trimmed);
+      await _persist(_workshop.copyWith(messages: updated));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Reply updated in place.')),
+      );
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not apply correction: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
   Future<void> _streamAssistantReply({
     required int assistantIndex,
     List<Map<String, String>>? rewriteMessages,
@@ -339,15 +596,23 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       );
       final baseUrl = await widget.settingsService.getApiBaseUrl();
 
-      final history = _workshop.messages.sublist(0, assistantIndex);
+      final history = _workshopHistoryForApi(assistantIndex);
+      final guidance = _workshop.workshopGuidanceNote.trim().isNotEmpty
+          ? _workshop.workshopGuidanceNote
+          : collaborator.guidanceNote;
       final apiMessages = <Map<String, String>>[
         {
           'role': 'system',
           'content': _builder.chatSystemPrompt(
-            guidanceNote: collaborator.guidanceNote,
+            guidanceNote: guidance,
             sourceLorebook: _lorebookForPrompt,
             importedSource: _workshop.importedSource,
             replyLength: _workshop.replyLength,
+            mode: _workshop.mode,
+            workshopGuidanceNote: _workshop.workshopGuidanceNote,
+            worldSummary: _workshop.worldSummary,
+            conversation: _workshop.messages,
+            canonPinMessageIds: _workshop.canonPinMessageIds,
           ),
         },
         for (final message in history) message.toApiMap(),
@@ -375,6 +640,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       }
 
       await _persist(_workshop);
+      await _maybeAutoFoldWorkshop();
     } on NanoGptCancelledException {
       await _handleCancelledAssistant(assistantIndex);
     } on NanoGptException catch (error) {
@@ -391,6 +657,134 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       ).showSnackBar(SnackBar(content: Text('Something went wrong: $error')));
     } finally {
       if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _maybeAutoFoldWorkshop() async {
+    if (_busy) return;
+    final contextSettings = await widget.settingsService.getContextSettings();
+    if (!_contextService.shouldAutoSummarize(
+      messageCount: _workshop.messages.length,
+      memoryCoveredCount: _workshop.worldSummaryCoveredCount,
+      context: contextSettings,
+    )) {
+      return;
+    }
+    await _foldWorkshopNow(quiet: true, contextSettings: contextSettings);
+  }
+
+  Future<void> _foldWorkshopNow({
+    bool quiet = false,
+    ContextSettings? contextSettings,
+    bool fullTranscript = false,
+  }) async {
+    if (_busy && !quiet) return;
+    final ctx = contextSettings ?? await widget.settingsService.getContextSettings();
+    setState(() => _historyTokenBudget = ctx.historyTokenBudget);
+    final cut = _contextService.summarizeCutIndex(
+      messageCount: _workshop.messages.length,
+      memoryCoveredCount: _workshop.worldSummaryCoveredCount,
+      summarizeKeepRecent: ctx.summarizeKeepRecent,
+    );
+    if (!fullTranscript && cut <= _workshop.worldSummaryCoveredCount) {
+      if (!quiet && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Not enough older messages to fold yet. Chat more, or lower '
+              '“Keep recent” in Generation parameters.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    if (!quiet) {
+      setState(() {
+        _exporting = true;
+        _exportStatus = 'Folding chat into world summary…';
+      });
+    }
+
+    try {
+      final collaborator = await widget.settingsService.getCollaboratorSettings();
+      final model = await widget.settingsService.getModel();
+      final sampling = ChatContextService.summarizeSampling(
+        await widget.settingsService.getSampling(),
+      );
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+      final guidance = _workshop.workshopGuidanceNote.trim().isNotEmpty
+          ? _workshop.workshopGuidanceNote
+          : collaborator.guidanceNote;
+      final chunk = fullTranscript
+          ? _workshop.messages
+          : _workshop.messages.sublist(
+              _workshop.worldSummaryCoveredCount,
+              cut,
+            );
+      final updatedSummary = await widget.nanoGptService.complete(
+        model: model,
+        messages: _builder.buildWorldSummaryMessages(
+          conversation: _workshop.messages,
+          chunk: fullTranscript ? null : chunk,
+          existingSummary: _workshop.worldSummary,
+          guidanceNote: guidance,
+          importedSource: _workshop.importedSource,
+          sourceLorebook: _linkedLorebook?.book,
+          canonPinMessageIds: _workshop.canonPinMessageIds,
+        ),
+        baseUrl: baseUrl,
+        sampling: sampling,
+      );
+      if (!mounted) return;
+      final trimmed = updatedSummary.trim();
+      if (trimmed.isEmpty) return;
+      final newCovered = fullTranscript
+          ? _contextService.summarizeCutIndex(
+              messageCount: _workshop.messages.length,
+              memoryCoveredCount: 0,
+              summarizeKeepRecent: ctx.summarizeKeepRecent,
+            )
+          : cut;
+      await _persist(
+        _workshop.copyWith(
+          worldSummary: trimmed,
+          worldSummaryCoveredCount: newCovered,
+        ),
+      );
+      if (!quiet && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'World summary updated (folded $newCovered messages).',
+            ),
+          ),
+        );
+      } else if (quiet && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('World summary optimized')),
+        );
+      }
+    } on NanoGptException catch (error) {
+      if (!quiet && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Fold failed: ${error.message}')),
+        );
+      }
+    } catch (error) {
+      if (!quiet && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Fold failed: $error')),
+        );
+      }
+    } finally {
+      if (!quiet && mounted) {
+        setState(() {
+          _exporting = false;
+          _exportStatus = null;
+        });
+      }
     }
   }
 
@@ -673,8 +1067,13 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   Future<void> _deleteMessage(int index) async {
     if (_busy) return;
     if (index < 0 || index >= _workshop.messages.length) return;
+    final clearFold = index < _workshop.worldSummaryCoveredCount;
     final updated = List<ChatMessage>.from(_workshop.messages)..removeAt(index);
-    setState(() => _workshop = _workshop.copyWith(messages: updated));
+    setState(() => _workshop = _workshop.copyWith(
+      messages: updated,
+      worldSummaryCoveredCount:
+          clearFold ? 0 : _workshop.worldSummaryCoveredCount,
+    ));
     await _persist(_workshop);
   }
 
@@ -683,7 +1082,12 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     if (index < 0 || index >= _workshop.messages.length) return;
     if (index >= _workshop.messages.length - 1) return;
     final messages = _workshop.messages.sublist(0, index + 1);
-    setState(() => _workshop = _workshop.copyWith(messages: messages));
+    final clearFold = index + 1 < _workshop.worldSummaryCoveredCount;
+    setState(() => _workshop = _workshop.copyWith(
+      messages: messages,
+      worldSummaryCoveredCount:
+          clearFold ? 0 : _workshop.worldSummaryCoveredCount,
+    ));
     await _persist(_workshop);
   }
 
@@ -709,100 +1113,138 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     final action = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.edit_outlined),
-              title: const Text('Edit'),
-              onTap: () => Navigator.pop(context, 'edit'),
+      isScrollControlled: true,
+      builder: (context) {
+        final height = MediaQuery.sizeOf(context).height * 0.55;
+        return SafeArea(
+          child: SizedBox(
+            height: height,
+            child: ListView(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.push_pin_outlined),
+                  title: Text(
+                    _workshop.canonPinMessageIds.contains(message.id)
+                        ? 'Unpin canon'
+                        : 'Pin as canon',
+                  ),
+                  onTap: () => Navigator.pop(context, 'canon'),
+                ),
+                if (_workshop.messages.length >= 4)
+                  ListTile(
+                    leading: const Icon(Icons.compress),
+                    title: const Text('Fold older chat into summary'),
+                    subtitle: const Text(
+                      'Merge earlier messages into world summary to save tokens',
+                    ),
+                    onTap: () => Navigator.pop(context, 'fold'),
+                  ),
+                ListTile(
+                  leading: const Icon(Icons.edit_outlined),
+                  title: const Text('Edit'),
+                  onTap: () => Navigator.pop(context, 'edit'),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.delete_outline),
+                  title: const Text('Delete'),
+                  subtitle: const Text('Remove only this message'),
+                  onTap: () => Navigator.pop(context, 'delete'),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.undo),
+                  title: const Text('Rewind to here'),
+                  subtitle: Text(
+                    canRewind
+                        ? 'Delete every message after this one'
+                        : 'Already the last message',
+                  ),
+                  enabled: canRewind,
+                  onTap: canRewind
+                      ? () => Navigator.pop(context, 'rewind')
+                      : null,
+                ),
+                if (message.isUser) ...[
+                  const Divider(),
+                  ListTile(
+                    leading: const Icon(Icons.play_arrow),
+                    title: const Text('Regenerate reply'),
+                    subtitle: Text(
+                      isLast
+                          ? 'Generate an AI reply to this message'
+                          : 'Remove later messages, then generate a new reply',
+                    ),
+                    onTap: () => Navigator.pop(context, 'regen_reply'),
+                  ),
+                ],
+                if (!message.isUser) ...[
+                  const Divider(),
+                  ListTile(
+                    leading: const Icon(Icons.edit_note),
+                    title: const Text('Apply correction'),
+                    subtitle: const Text(
+                      'Rewrite this reply in place from a short fix note',
+                    ),
+                    onTap: () => Navigator.pop(context, 'apply_fix'),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.tune),
+                    title: const Text('Rewrite reply…'),
+                    subtitle: const Text(
+                      'Shorten, expand, change mood, or custom',
+                    ),
+                    onTap: () => Navigator.pop(context, 'rewrite'),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.refresh),
+                    title: const Text('Regenerate'),
+                    subtitle: Text(
+                      isLast
+                          ? 'Generate this reply again'
+                          : 'Removes later messages, then regenerates',
+                    ),
+                    onTap: () => Navigator.pop(context, 'regen'),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.auto_awesome),
+                    title: const Text('New swipe'),
+                    subtitle: const Text('Keep this version and generate another'),
+                    onTap: () => Navigator.pop(context, 'swipe'),
+                  ),
+                ],
+                if (canSwipeNav) ...[
+                  ListTile(
+                    leading: const Icon(Icons.chevron_left),
+                    title: const Text('Previous swipe'),
+                    subtitle: Text(
+                      'Swipe ${message.swipeIndex + 1}/${message.swipes.length}',
+                    ),
+                    enabled: message.swipeIndex > 0,
+                    onTap: message.swipeIndex > 0
+                        ? () => Navigator.pop(context, 'swipe_prev')
+                        : null,
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.chevron_right),
+                    title: const Text('Next swipe'),
+                    enabled: message.swipeIndex < message.swipes.length - 1,
+                    onTap: message.swipeIndex < message.swipes.length - 1
+                        ? () => Navigator.pop(context, 'swipe_next')
+                        : null,
+                  ),
+                ],
+              ],
             ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline),
-              title: const Text('Delete'),
-              subtitle: const Text('Remove only this message'),
-              onTap: () => Navigator.pop(context, 'delete'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.undo),
-              title: const Text('Rewind to here'),
-              subtitle: Text(
-                canRewind
-                    ? 'Delete every message after this one'
-                    : 'Already the last message',
-              ),
-              enabled: canRewind,
-              onTap: canRewind
-                  ? () => Navigator.pop(context, 'rewind')
-                  : null,
-            ),
-            if (message.isUser) ...[
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.play_arrow),
-                title: const Text('Regenerate reply'),
-                subtitle: Text(
-                  isLast
-                      ? 'Generate an AI reply to this message'
-                      : 'Remove later messages, then generate a new reply',
-                ),
-                onTap: () => Navigator.pop(context, 'regen_reply'),
-              ),
-            ],
-            if (!message.isUser) ...[
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.tune),
-                title: const Text('Rewrite reply…'),
-                subtitle: const Text(
-                  'Shorten, expand, change mood, or custom',
-                ),
-                onTap: () => Navigator.pop(context, 'rewrite'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.refresh),
-                title: const Text('Regenerate'),
-                subtitle: Text(
-                  isLast
-                      ? 'Generate this reply again'
-                      : 'Removes later messages, then regenerates',
-                ),
-                onTap: () => Navigator.pop(context, 'regen'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.auto_awesome),
-                title: const Text('New swipe'),
-                subtitle: const Text('Keep this version and generate another'),
-                onTap: () => Navigator.pop(context, 'swipe'),
-              ),
-            ],
-            if (canSwipeNav) ...[
-              ListTile(
-                leading: const Icon(Icons.chevron_left),
-                title: const Text('Previous swipe'),
-                subtitle: Text(
-                  'Swipe ${message.swipeIndex + 1}/${message.swipes.length}',
-                ),
-                enabled: message.swipeIndex > 0,
-                onTap: message.swipeIndex > 0
-                    ? () => Navigator.pop(context, 'swipe_prev')
-                    : null,
-              ),
-              ListTile(
-                leading: const Icon(Icons.chevron_right),
-                title: const Text('Next swipe'),
-                enabled: message.swipeIndex < message.swipes.length - 1,
-                onTap: message.swipeIndex < message.swipes.length - 1
-                    ? () => Navigator.pop(context, 'swipe_next')
-                    : null,
-              ),
-            ],
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
 
+    if (action == 'canon') {
+      final next = _hubController.hub.toggleCanonPin(_workshop, message.id);
+      setState(() => _workshop = next);
+      await _persist(next);
+    }
+    if (action == 'fold') await _foldWorkshopNow();
     if (action == 'edit') await _editMessage(index);
     if (action == 'delete') await _deleteMessage(index);
     if (action == 'rewind') await _rewindToMessage(index);
@@ -814,6 +1256,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       await _regenerateMessage(index, asNewSwipe: true);
     }
     if (action == 'rewrite') await _rewriteMessage(index);
+    if (action == 'apply_fix') await _promptApplyCorrection(index);
     if (action == 'swipe_prev') _shiftSwipe(index, -1);
     if (action == 'swipe_next') _shiftSwipe(index, 1);
   }
@@ -890,47 +1333,6 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     await _persist(_workshop);
   }
 
-  Widget _replyLengthPicker(ThemeData theme) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SegmentedButton<WorkshopReplyLength>(
-            segments: [
-              for (final mode in WorkshopReplyLength.values)
-                ButtonSegment<WorkshopReplyLength>(
-                  value: mode,
-                  label: Text(mode.label),
-                  tooltip: mode.subtitle,
-                ),
-            ],
-            selected: {_workshop.replyLength},
-            onSelectionChanged: _busy
-                ? null
-                : (selected) {
-                    if (selected.isEmpty) return;
-                    unawaited(_setReplyLength(selected.first));
-                  },
-            showSelectedIcon: false,
-            style: ButtonStyle(
-              visualDensity: VisualDensity.compact,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            _workshop.replyLength.subtitle,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
   void _stop() {
     widget.nanoGptService.cancelActiveStream();
   }
@@ -958,6 +1360,47 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       return;
     }
 
+    final localChecks = _hubController.hub.localExportChecklist(_workshop);
+    final aiChecks = await _hubController.aiChecklist(
+      workshop: _workshop,
+      nanoGpt: widget.nanoGptService,
+      settings: widget.settingsService,
+      sourceLorebook: _linkedLorebook?.book,
+    );
+    if (!mounted) return;
+    final allChecks = [...localChecks, ...aiChecks];
+    if (allChecks.isNotEmpty) {
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Before lorebook export'),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final item in allChecks)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text('• $item'),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Export anyway'),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true) return;
+    }
+
     setState(() {
       _exporting = true;
       _exportStatus = 'Creating lorebook…';
@@ -971,11 +1414,16 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       );
       final baseUrl = await widget.settingsService.getApiBaseUrl();
 
+      final guidance = _workshop.workshopGuidanceNote.trim().isNotEmpty
+          ? _workshop.workshopGuidanceNote
+          : collaborator.guidanceNote;
       final exportMessages = _builder.buildExportMessages(
         conversation: _workshop.messages,
-        guidanceNote: collaborator.guidanceNote,
+        guidanceNote: guidance,
         sourceLorebook: _linkedLorebook?.book,
         importedSource: _workshop.importedSource,
+        worldSummary: _workshop.worldSummary,
+        canonPinMessageIds: _workshop.canonPinMessageIds,
       );
 
       var raw = await widget.nanoGptService.complete(
@@ -1025,6 +1473,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           title: title,
           exportedLorebookId: global.id,
           includeLinkedLorebookInPrompt: false,
+          lorebookUpdatedAtMessageCount: _workshop.messages.length,
         ),
       );
 
@@ -1267,9 +1716,102 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       personaId: persona.id,
       greetingIndex: greetingIndex,
       openingScene: openingPick.text,
+      sourceWorkshopId: _workshop.id,
     );
     if (!mounted) return;
-    await _openChat(session);
+    var linked = session;
+    if (_workshop.chatKit.defaultAuthorsNote.trim().isNotEmpty) {
+      linked = linked.copyWith(
+        authorsNote: _workshop.chatKit.defaultAuthorsNote,
+      );
+      await widget.chatService.saveChat(linked);
+    }
+    await _openChat(linked);
+  }
+
+  Future<void> _playThisWorld() async {
+    if (_sending || _exporting || _loadingLinkedLorebook) return;
+    await _saveOpeningSceneField();
+    if (!mounted) return;
+
+    final allChars = await widget.characterService.loadCharacters();
+    final defaultPersona = await widget.personaService.getActivePersona();
+    if (!mounted) return;
+
+    final plan = await _hubController.playPlan(
+      workshop: _workshop,
+      allCharacters: allChars,
+      defaultPersona: defaultPersona,
+      linkedLorebook: _linkedLorebook,
+    );
+
+    if (!plan.canPlaySolo && !plan.canPlayGroup) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Save characters from this workshop first (⋮ → Create characters), '
+            'then Play this world.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    Persona? persona = defaultPersona;
+  final personaId = plan.personaId;
+    if (personaId != null) {
+      persona = await widget.personaService.getById(personaId);
+    }
+    persona ??= defaultPersona;
+    if (!mounted) return;
+
+    if (plan.canPlayGroup && plan.characters.length >= 2) {
+      final ordered = plan.characters;
+      final session = await widget.chatService.startGroupChat(
+        ordered,
+        userName: persona!.name,
+        personaId: persona.id,
+        authorsNote: plan.authorsNote,
+        autoReply: plan.autoReply,
+        lorebookIds: plan.lorebookIds,
+        openingScene: plan.openingScene,
+        title: plan.title,
+        sourceWorkshopId: plan.sourceWorkshopId,
+      );
+      if (!mounted) return;
+      await _openChat(session);
+      return;
+    }
+
+    final character = plan.characters.first;
+    final greetingIndex = await pickGreetingIndex(
+      context,
+      character: character,
+      userName: persona!.name,
+    );
+    if (greetingIndex == null || !mounted) return;
+
+    final session = await widget.chatService.startNewChat(
+      character,
+      userName: persona.name,
+      personaId: persona.id,
+      greetingIndex: greetingIndex,
+      openingScene: plan.openingScene,
+      sourceWorkshopId: plan.sourceWorkshopId,
+    );
+    if (!mounted) return;
+    var linked = session;
+    if (plan.authorsNote.trim().isNotEmpty) {
+      linked = linked.copyWith(authorsNote: plan.authorsNote);
+    }
+    if (plan.lorebookIds != null) {
+      linked = linked.copyWith(lorebookIds: plan.lorebookIds);
+    }
+    if (plan.autoReply) {
+      linked = linked.copyWith(autoReply: true);
+    }
+    await widget.chatService.saveChat(linked);
+    await _openChat(linked);
   }
 
   Future<void> _createCharacters() async {
@@ -1429,6 +1971,16 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           );
 
           if (saved != null) {
+            final tagged = saved.sourceWorkshopId == _workshop.id
+                ? saved
+                : (await widget.characterService.upsert(
+                    saved.copyWith(sourceWorkshopId: _workshop.id),
+                  ))
+                    .where((c) => c.id == saved.id)
+                    .first;
+            final nextWorkshop =
+                _hubController.hub.linkCharacter(_workshop, tagged.id);
+            await _persist(nextWorkshop);
             savedCount++;
           } else {
             skippedCount++;
@@ -1841,8 +2393,18 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         ),
       );
       if (!mounted || saved == null) return;
+      final tagged = saved.sourceWorkshopId == _workshop.id
+          ? saved
+          : (await widget.personaService.upsert(
+              saved.copyWith(sourceWorkshopId: _workshop.id),
+            ))
+              .where((p) => p.id == saved.id)
+              .first;
+      await _persist(
+        _workshop.copyWith(linkedPersonaId: tagged.id),
+      );
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Saved ${saved.name} to Personas.')),
+        SnackBar(content: Text('Saved ${tagged.name} to Personas.')),
       );
     } on FormatException catch (error) {
       if (!mounted) return;
@@ -2113,63 +2675,6 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     );
   }
 
-  Widget _openingSceneCompactBar(ThemeData theme) {
-    final scene = _workshop.openingScene.trim();
-    final hasScene = scene.isNotEmpty;
-    final preview = hasScene
-        ? scene.replaceAll(RegExp(r'\s+'), ' ')
-        : 'Tap to add narrator setup for new chats';
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      child: Material(
-        color: theme.colorScheme.tertiaryContainer.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: _showOpeningSceneEditor,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.auto_stories_outlined,
-                  size: 20,
-                  color: theme.colorScheme.onTertiaryContainer,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Opening scene',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          color: theme.colorScheme.onTertiaryContainer,
-                        ),
-                      ),
-                      Text(
-                        preview,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onTertiaryContainer,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(
-                  Icons.chevron_right,
-                  color: theme.colorScheme.onTertiaryContainer,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Future<void> _showOpeningSceneEditor() async {
     if (_exporting) return;
     _openingSceneController.text = _workshop.openingScene;
@@ -2288,18 +2793,762 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     await _saveOpeningSceneField();
   }
 
-  Widget _statusBanner(ThemeData theme, {required bool compact}) {
-    final linkedName = _linkedLorebook?.displayName;
-    final imported = _workshop.importedSource;
-    final hasImported = imported?.hasContent ?? false;
+  Future<void> _showOverview() async {
+    final allChars = await widget.characterService.loadCharacters();
+    final chats = await widget.chatService.listChatsForWorkshop(_workshop.id);
+    Persona? persona = null;
+    if (_workshop.linkedPersonaId != null) {
+      persona = await widget.personaService.getById(_workshop.linkedPersonaId!);
+    }
+    if (!mounted) return;
+
+    final linkedChars = <Character>[];
+    for (final id in _workshop.linkedCharacterIds) {
+      for (final c in allChars) {
+        if (c.id == id) linkedChars.add(c);
+      }
+    }
+    for (final c in allChars) {
+      if (c.sourceWorkshopId == _workshop.id &&
+          !linkedChars.any((x) => x.id == c.id)) {
+        linkedChars.add(c);
+      }
+    }
+
+    final status = _hubController.statusFor(
+      workshop: _workshop,
+      allCharacters: allChars,
+      workshopChats: chats,
+      linkedLorebook: _linkedLorebook,
+    );
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => WorkshopOverviewSheet(
+        workshop: _workshop,
+        status: status,
+        linkedLorebook: _linkedLorebook,
+        linkedCharacters: linkedChars,
+        linkedPersona: persona,
+        workshopChats: chats,
+        onPlayWorld: _busy ? null : () {
+          Navigator.pop(context);
+          _playThisWorld();
+        },
+        onOpenLorebook: _linkedLorebook == null
+            ? null
+            : () {
+                Navigator.pop(context);
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => LorebooksScreen(
+                      worldInfoService: widget.worldInfoService,
+                      settingsService: widget.settingsService,
+                      nanoGptService: widget.nanoGptService,
+                    ),
+                  ),
+                );
+              },
+        onOpenOpeningScene: () {
+          Navigator.pop(context);
+          _showOpeningSceneEditor();
+        },
+        onOpenChat: (chat) {
+          Navigator.pop(context);
+          _openChat(chat);
+        },
+        onSummarizeWorld: _busy
+            ? null
+            : () {
+                Navigator.pop(context);
+                _summarizeWorkshop();
+              },
+        onGenerateOverview: _busy
+            ? null
+            : () {
+                Navigator.pop(context);
+                _generateWorldOverview();
+              },
+        onGlossary: _busy
+            ? null
+            : () {
+                Navigator.pop(context);
+                _glossaryToLorebook();
+              },
+        onSceneIdeas: _busy
+            ? null
+            : () {
+                Navigator.pop(context);
+                _generateSceneIdeas();
+              },
+        onEditSheets: () {
+          Navigator.pop(context);
+          _editSheets();
+        },
+        onEditChatKit: () {
+          Navigator.pop(context);
+          _editChatKit();
+        },
+        onEditWorldSummary: () {
+          Navigator.pop(context);
+          _editWorldSummary();
+        },
+        onRefreshFromChat: chats.isEmpty
+            ? null
+            : () {
+                Navigator.pop(context);
+                _refreshFromChat(chats.first);
+              },
+        onExportBundle: () {
+          Navigator.pop(context);
+          _exportBundle(linkedChars, persona);
+        },
+        onDuplicate: () {
+          Navigator.pop(context);
+          _duplicateWorkshop();
+        },
+        onMerge: () {
+          Navigator.pop(context);
+          _mergeWorkshop();
+        },
+      ),
+    );
+  }
+
+  Future<void> _summarizeWorkshop() async {
+    await _foldWorkshopNow(fullTranscript: true);
+  }
+
+  Future<void> _generateWorldOverview() async {
+    setState(() {
+      _exporting = true;
+      _exportStatus = 'Generating overview…';
+    });
+    try {
+      final overview = await _hubController.generateOverview(
+        workshop: _workshop,
+        nanoGpt: widget.nanoGptService,
+        settings: widget.settingsService,
+        sourceLorebook: _linkedLorebook?.book,
+      );
+      if (overview == null || overview.trim().isEmpty) return;
+      await _persist(_workshop.copyWith(worldOverview: overview.trim()));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('World overview saved.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Overview failed: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _exporting = false;
+          _exportStatus = null;
+        });
+      }
+    }
+  }
+
+  Future<void> _glossaryToLorebook() async {
+    if (_linkedLorebook == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Create or link a lorebook first.')),
+      );
+      return;
+    }
+    setState(() {
+      _exporting = true;
+      _exportStatus = 'Extracting glossary…';
+    });
+    try {
+      final entries = await _hubController.extractGlossary(
+        workshop: _workshop,
+        nanoGpt: widget.nanoGptService,
+        settings: widget.settingsService,
+        sourceLorebook: _linkedLorebook?.book,
+      );
+      if (entries.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No glossary terms found.')),
+        );
+        return;
+      }
+      final merged = _hubController.mergeGlossaryIntoBook(
+        _linkedLorebook!.book,
+        entries,
+      );
+      final global = _linkedLorebook!.copyWith(book: merged);
+      await widget.worldInfoService.upsert(global);
+      if (mounted) setState(() => _linkedLorebook = global);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Added ${entries.length} glossary entries to lorebook.'),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Glossary failed: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _exporting = false;
+          _exportStatus = null;
+        });
+      }
+    }
+  }
+
+  Future<void> _generateSceneIdeas() async {
+    setState(() {
+      _exporting = true;
+      _exportStatus = 'Generating scene ideas…';
+    });
+    try {
+      final ideas = await _hubController.generateSceneIdeas(
+        workshop: _workshop,
+        nanoGpt: widget.nanoGptService,
+        settings: widget.settingsService,
+      );
+      if (ideas.isEmpty) return;
+      await _persist(
+        _workshop.copyWith(
+          sceneIdeas: [..._workshop.sceneIdeas, ...ideas],
+        ),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Added ${ideas.length} scene ideas.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Scene ideas failed: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _exporting = false;
+          _exportStatus = null;
+        });
+      }
+    }
+  }
+
+  Future<void> _editSheets() async {
+    final locController = TextEditingController(
+      text: _workshop.locations
+          .map((l) => '${l.name}: ${l.description}')
+          .join('\n'),
+    );
+    final relController = TextEditingController(
+      text: _workshop.relationships
+          .map((r) => '${r.fromName} ↔ ${r.toName}: ${r.relationDynamic}')
+          .join('\n'),
+    );
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Locations & relationships',
+                    style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: locController,
+                  minLines: 3,
+                  maxLines: 8,
+                  decoration: const InputDecoration(
+                    labelText: 'Locations (name: description per line)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: relController,
+                  minLines: 3,
+                  maxLines: 8,
+                  decoration: const InputDecoration(
+                    labelText: 'Relationships (A ↔ B: dynamic per line)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: _busy
+                      ? null
+                      : () async {
+                          setState(() {
+                            _exporting = true;
+                            _exportStatus = 'Extracting sheets…';
+                          });
+                          try {
+                            final (locs, rels) =
+                                await _hubController.extractSheets(
+                              workshop: _workshop,
+                              nanoGpt: widget.nanoGptService,
+                              settings: widget.settingsService,
+                            );
+                            locController.text = locs
+                                .map((l) => '${l.name}: ${l.description}')
+                                .join('\n');
+                            relController.text = rels
+                                .map(
+                                  (r) =>
+                                      '${r.fromName} ↔ ${r.toName}: ${r.relationDynamic}',
+                                )
+                                .join('\n');
+                          } finally {
+                            if (mounted) {
+                              setState(() {
+                                _exporting = false;
+                                _exportStatus = null;
+                              });
+                            }
+                          }
+                        },
+                  child: const Text('AI extract from chat'),
+                ),
+                const SizedBox(height: 8),
+                FilledButton(
+                  onPressed: () {
+                    final locs = <WorkshopLocation>[];
+                    for (final line in locController.text.split('\n')) {
+                      final parts = line.split(':');
+                      if (parts.isEmpty || parts.first.trim().isEmpty) continue;
+                      locs.add(
+                        WorkshopLocation(
+                          name: parts.first.trim(),
+                          description: parts.length > 1
+                              ? parts.sublist(1).join(':').trim()
+                              : '',
+                        ),
+                      );
+                    }
+                    final rels = <WorkshopRelationship>[];
+                    for (final line in relController.text.split('\n')) {
+                      final trimmed = line.trim();
+                      if (trimmed.isEmpty) continue;
+                      final sep = trimmed.contains('↔') ? '↔' : ':';
+                      final parts = trimmed.split(sep);
+                      if (parts.length < 2) continue;
+                      final relDynamic = parts.length > 2
+                          ? parts.sublist(2).join(sep).trim()
+                          : parts[1].contains(':')
+                              ? parts[1].split(':').skip(1).join(':').trim()
+                              : '';
+                      rels.add(
+                        WorkshopRelationship(
+                          fromName: parts[0].trim(),
+                          toName: parts[1].split(':').first.trim(),
+                          relationDynamic: relDynamic,
+                        ),
+                      );
+                    }
+                    unawaited(_persist(
+                      _workshop.copyWith(
+                        locations: locs,
+                        relationships: rels,
+                      ),
+                    ));
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _editWorldSummary() async {
+    final controller = TextEditingController(text: _workshop.worldSummary);
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('World summary'),
+        content: TextField(
+          controller: controller,
+          minLines: 4,
+          maxLines: 12,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            hintText: 'Established facts for this world…',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              unawaited(
+                _persist(_workshop.copyWith(worldSummary: controller.text)),
+              );
+              Navigator.pop(context);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _editChatKit() async {
+    final kit = _workshop.chatKit;
+    final noteController = TextEditingController(text: kit.defaultAuthorsNote);
+    bool loreEnabled = kit.defaultLorebookEnabled;
+    bool autoReply = kit.autoReply;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheet) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Default chat kit',
+                    style: Theme.of(context).textTheme.titleLarge),
+                SwitchListTile(
+                  title: const Text('Enable linked lorebook on new chats'),
+                  value: loreEnabled,
+                  onChanged: (v) => setSheet(() => loreEnabled = v),
+                ),
+                SwitchListTile(
+                  title: const Text('Auto-reply on new chats'),
+                  value: autoReply,
+                  onChanged: (v) => setSheet(() => autoReply = v),
+                ),
+                TextField(
+                  controller: noteController,
+                  minLines: 2,
+                  maxLines: 6,
+                  decoration: const InputDecoration(
+                    labelText: "Default Author's Note",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: () {
+                    unawaited(
+                      _persist(
+                        _workshop.copyWith(
+                          chatKit: kit.copyWith(
+                            defaultLorebookEnabled: loreEnabled,
+                            autoReply: autoReply,
+                            defaultAuthorsNote: noteController.text,
+                          ),
+                        ),
+                      ),
+                    );
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _refreshFromChat(ChatSession chat) async {
+    final chars = await widget.characterService.loadCharacters();
+    final cast = <Character>[];
+    for (final id in chat.effectiveParticipantIds) {
+      for (final c in chars) {
+        if (c.id == id) cast.add(c);
+      }
+    }
+    Persona? persona;
+    if (chat.personaId != null) {
+      persona = await widget.personaService.getById(chat.personaId!);
+    }
+    setState(() {
+      _exporting = true;
+      _exportStatus = 'Refreshing from chat…';
+    });
+    try {
+      final next = await _hubController.refreshWorkshopSource(
+        workshop: _workshop,
+        chat: chat,
+        characters: cast,
+        persona: persona,
+      );
+      if (next == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No new source material from that chat.')),
+        );
+        return;
+      }
+      await _persist(next);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Imported source refreshed from chat.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Refresh failed: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _exporting = false;
+          _exportStatus = null;
+        });
+      }
+    }
+  }
+
+  Future<void> _exportBundle(
+    List<Character> characters,
+    Persona? persona,
+  ) async {
+    try {
+      await _hubController.exportBundleFile(
+        context: context,
+        workshop: _workshop,
+        lorebook: _linkedLorebook,
+        characters: characters,
+        persona: persona,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Export failed: $error')),
+      );
+    }
+  }
+
+  Future<void> _duplicateWorkshop() async {
+    final copy = _hubController.hub.duplicate(_workshop);
+    await widget.workshopService.upsert(copy);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Duplicated as “${copy.title}”.')),
+    );
+  }
+
+  Future<void> _mergeWorkshop() async {
+    final workshops = await widget.workshopService.loadWorkshops();
+    final others = workshops.where((w) => w.id != _workshop.id).toList();
+    if (!mounted || others.isEmpty) return;
+    final pick = await showModalBottomSheet<WorldWorkshop>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const ListTile(title: Text('Merge with workshop')),
+            for (final w in others)
+              ListTile(
+                title: Text(w.title),
+                subtitle: Text('${w.messages.length} messages'),
+                onTap: () => Navigator.pop(context, w),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (pick == null || !mounted) return;
+    final merged = _hubController.hub.merge(_workshop, pick);
+    await widget.workshopService.upsert(merged);
+    await widget.workshopService.delete(pick.id);
+    if (!mounted) return;
+    setState(() => _workshop = merged);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Workshops merged.')),
+    );
+  }
+
+  Future<void> _setMode(WorkshopMode mode) async {
+    if (mode == _workshop.mode) return;
+    await _persist(_workshop.copyWith(mode: mode));
+  }
+
+  void _applyPromptChip(String text) {
+    _input.text = text;
+    _input.selection = TextSelection.collapsed(offset: text.length);
+  }
+
+  Widget _workshopOverflowButton({
+    required bool busy,
+    required String lorebookLabel,
+    required String openingLabel,
+  }) {
+    return PopupMenuButton<String>(
+      tooltip: 'Workshop menu',
+      enabled: !busy,
+      onSelected: _handleWorkshopMenuAction,
+      itemBuilder: (context) => [
+        const PopupMenuItem(
+          value: 'dashboard',
+          child: ListTile(
+            leading: Icon(Icons.dashboard_outlined),
+            title: Text('World dashboard'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'context',
+          child: ListTile(
+            leading: Icon(Icons.data_usage_outlined),
+            title: Text('Context estimate'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'play_roleplay',
+          child: ListTile(
+            leading: Icon(Icons.play_arrow_outlined),
+            title: Text('Start roleplay (pick cast)'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          value: 'lorebook',
+          child: ListTile(
+            leading:
+                _exporting &&
+                    (_exportStatus != null &&
+                        _exportStatus!.contains('lorebook'))
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.menu_book_outlined),
+            title: Text(lorebookLabel),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        PopupMenuItem(
+          value: 'opening',
+          child: ListTile(
+            leading:
+                _exporting && (_exportStatus?.contains('opening') == true)
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.auto_stories_outlined),
+            title: Text(openingLabel),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: 'characters',
+          child: ListTile(
+            leading: Icon(Icons.groups_outlined),
+            title: Text('Create AI characters'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'update',
+          child: ListTile(
+            leading: Icon(Icons.person_search_outlined),
+            title: Text('Update existing character'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'persona',
+          child: ListTile(
+            leading: Icon(Icons.person_outline),
+            title: Text('Create my persona'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        if (_linkedLorebook != null) ...[
+          const PopupMenuDivider(),
+          PopupMenuItem(
+            value: 'toggle_lore_prompt',
+            child: ListTile(
+              leading: Icon(
+                _workshop.includeLinkedLorebookInPrompt
+                    ? Icons.check_box
+                    : Icons.check_box_outline_blank,
+              ),
+              title: const Text('Include linked lorebook in prompts'),
+              subtitle: Text(
+                _workshop.includeLinkedLorebookInPrompt
+                    ? 'Adds lorebook text to chat / character exports'
+                    : 'Off — saves tokens; chat transcript is enough',
+              ),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  void _handleWorkshopMenuAction(String value) {
+    switch (value) {
+      case 'dashboard':
+        _showOverview();
+      case 'context':
+        _showContextEstimate();
+      case 'play_roleplay':
+        _startRoleplay();
+      case 'lorebook':
+        _createLorebook();
+      case 'opening':
+        _showOpeningSceneEditor();
+      case 'characters':
+        _createCharacters();
+      case 'update':
+        _updateExistingCharacter();
+      case 'persona':
+        _createPersona();
+      case 'toggle_lore_prompt':
+        _toggleLinkedLorebookInPrompt();
+    }
+  }
+
+  Widget _statusBanner(ThemeData theme) {
     return Material(
       color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
       child: InkWell(
         onTap: _showContextEstimate,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: compact
-              ? Text(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
                   _exportStatus ?? _estimate.compactBannerLine,
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: (_estimate.fillRatio ?? 0) >= 0.85
@@ -2308,108 +3557,16 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      _exportStatus ??
-                          (linkedName != null
-                              ? 'Linked to “$linkedName” '
-                                  '(${_linkedLorebook!.entryCount} entries). '
-                                  '${_workshop.includeLinkedLorebookInPrompt ? 'Lorebook included in prompts.' : 'Chat uses the workshop transcript only — ⋮ to include lorebook.'} '
-                                  'Update lorebook or create characters via ⋮.'
-                              : hasImported
-                                  ? 'Seeded from “${imported!.chatTitle}”. '
-                                      'Chat to refine, then use ⋮ for lorebook, opening scene, or characters.'
-                                  : 'Talk about your world. Use ⋮ for lorebook, opening scene, or characters.'),
-                      style: theme.textTheme.bodySmall,
-                    ),
-                    if (_exportStatus == null) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        _estimate.compactBannerLine,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: (_estimate.fillRatio ?? 0) >= 0.85
-                              ? theme.colorScheme.error
-                              : theme.colorScheme.tertiary,
-                        ),
-                      ),
-                    ],
-                  ],
                 ),
-        ),
-      ),
-    );
-  }
-
-  Widget _importedSourceCard(ThemeData theme) {
-    final source = _workshop.importedSource;
-    if (source == null || !source.hasContent) {
-      return const SizedBox.shrink();
-    }
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      child: Material(
-        color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(14),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: _showImportedSourceDetails,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.forum_outlined,
-                  color: theme.colorScheme.onSecondaryContainer,
+              ),
+              if (_exportStatus == null && _workshop.isLorebookStale)
+                IconButton(
+                  tooltip: 'Update lorebook',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: _busy ? null : _createLorebook,
+                  icon: const Icon(Icons.refresh, size: 20),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Imported from chat',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          color: theme.colorScheme.onSecondaryContainer,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${source.chatTitle} · ${source.compactSummary}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSecondaryContainer,
-                        ),
-                      ),
-                      if (source.importProfile.trim().isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          source.importProfile.trim(),
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.onSecondaryContainer,
-                          ),
-                        ),
-                      ],
-                      if (source.skippedNotes.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          '${source.skippedNotes.length} missing reference'
-                          '${source.skippedNotes.length == 1 ? '' : 's'} skipped',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.error,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                Icon(
-                  Icons.chevron_right,
-                  color: theme.colorScheme.onSecondaryContainer,
-                ),
-              ],
-            ),
+            ],
           ),
         ),
       ),
@@ -2434,134 +3591,43 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     return Scaffold(
       resizeToAvoidBottomInset: false,
       appBar: AppBar(
-        title: Text(
-          _workshop.title,
-          overflow: TextOverflow.ellipsis,
+        title: GestureDetector(
+          onTap: _showOverview,
+          child: Text(
+            _workshop.title,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         actions: [
           IconButton(
-            tooltip: 'Context estimate',
-            onPressed: _showContextEstimate,
-            icon: const Icon(Icons.data_usage_outlined),
+            tooltip: 'Play this world',
+            onPressed: busy ? null : _playThisWorld,
+            icon: const Icon(Icons.play_circle_outline),
           ),
-          IconButton(
-            tooltip: 'Start roleplay chat',
-            onPressed: busy ? null : _startRoleplay,
-            icon: const Icon(Icons.play_arrow_outlined),
-          ),
-          PopupMenuButton<String>(
-            tooltip: 'Workshop actions',
-            enabled: !busy,
-            onSelected: (value) {
-              switch (value) {
-                case 'lorebook':
-                  _createLorebook();
-                case 'opening':
-                  _showOpeningSceneEditor();
-                case 'characters':
-                  _createCharacters();
-                case 'update':
-                  _updateExistingCharacter();
-                case 'persona':
-                  _createPersona();
-                case 'toggle_lore_prompt':
-                  _toggleLinkedLorebookInPrompt();
-              }
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'lorebook',
-                child: ListTile(
-                  leading:
-                      _exporting &&
-                          (_exportStatus != null &&
-                              _exportStatus!.contains('lorebook'))
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.menu_book_outlined),
-                  title: Text(lorebookLabel),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-              PopupMenuItem(
-                value: 'opening',
-                child: ListTile(
-                  leading:
-                      _exporting && (_exportStatus?.contains('opening') == true)
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.auto_stories_outlined),
-                  title: Text(openingLabel),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-              const PopupMenuDivider(),
-              const PopupMenuItem(
-                value: 'characters',
-                child: ListTile(
-                  leading: Icon(Icons.groups_outlined),
-                  title: Text('Create AI characters'),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'update',
-                child: ListTile(
-                  leading: Icon(Icons.person_search_outlined),
-                  title: Text('Update existing character'),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'persona',
-                child: ListTile(
-                  leading: Icon(Icons.person_outline),
-                  title: Text('Create my persona'),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-              if (_linkedLorebook != null) ...[
-                const PopupMenuDivider(),
-                PopupMenuItem(
-                  value: 'toggle_lore_prompt',
-                  child: ListTile(
-                    leading: Icon(
-                      _workshop.includeLinkedLorebookInPrompt
-                          ? Icons.check_box
-                          : Icons.check_box_outline_blank,
-                    ),
-                    title: const Text('Include linked lorebook in prompts'),
-                    subtitle: Text(
-                      _workshop.includeLinkedLorebookInPrompt
-                          ? 'Adds lorebook text to chat / character exports'
-                          : 'Off — saves tokens; chat transcript is enough',
-                    ),
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-              ],
-            ],
+          _workshopOverflowButton(
+            busy: busy,
+            lorebookLabel: lorebookLabel,
+            openingLabel: openingLabel,
           ),
         ],
       ),
       body: KeyboardInset(
         child: Column(
           children: [
-            _statusBanner(theme, compact: keyboardOpen),
-            Offstage(
-              offstage: keyboardOpen,
-              child: _importedSourceCard(theme),
-            ),
-            Offstage(
-              offstage: keyboardOpen,
-              child: _openingSceneCompactBar(theme),
-            ),
+            if (!keyboardOpen) _statusBanner(theme),
+            if (!keyboardOpen)
+              WorkshopCompactToolbar(
+                workshop: _workshop,
+                hasImportedSource: hasImported,
+                enabled: !busy,
+                onPickMode: _pickModeFromSheet,
+                onPickReplyLength: _pickReplyLengthFromSheet,
+                onOpeningScene: _showOpeningSceneEditor,
+                onImportedSource:
+                    hasImported ? _showImportedSourceDetails : null,
+                onPromptIdeas: _pickPromptIdeaFromSheet,
+                showPromptIdeas: _workshop.messages.isEmpty,
+              ),
             Expanded(
               child: _workshop.messages.isEmpty
                   ? Center(
@@ -2678,48 +3744,55 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                     ),
             ),
             SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Offstage(
-                    offstage: keyboardOpen,
-                    child: _replyLengthPicker(theme),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: ChatComposerField(
-                            key: const ValueKey('workshop_composer'),
-                            controller: _input,
-                            enabled: !_busy,
-                            enterToSend: _enterToSend,
-                            decoration: const InputDecoration(
-                              hintText: 'Describe your world…',
-                              border: OutlineInputBorder(),
-                              isDense: true,
-                            ),
-                            onSend: () {
-                              if (_sending) {
-                                _stop();
-                              } else {
-                                _send();
-                              }
-                            },
-                          ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                child: Row(
+                  children: [
+                    if (_canFixLastReply)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: MinimalChipButton(
+                          label: 'Fix last',
+                          icon: Icons.edit_note,
+                          selected: _fixLastReplyMode,
+                          onPressed: busy
+                              ? null
+                              : () => setState(
+                                  () => _fixLastReplyMode = !_fixLastReplyMode,
+                                ),
                         ),
-                        const SizedBox(width: 8),
-                        IconButton.filled(
-                          onPressed:
-                              _exporting ? null : (_sending ? _stop : _send),
-                          icon: Icon(_sending ? Icons.stop : Icons.send),
-                          tooltip: _sending ? 'Stop' : 'Send',
+                      ),
+                    Expanded(
+                      child: ChatComposerField(
+                        key: const ValueKey('workshop_composer'),
+                        controller: _input,
+                        enabled: !busy,
+                        enterToSend: _enterToSend,
+                        decoration: InputDecoration(
+                          hintText: _fixLastReplyMode && _canFixLastReply
+                              ? 'Correction for last reply…'
+                              : 'Describe your world…',
+                          border: OutlineInputBorder(),
+                          isDense: true,
                         ),
-                      ],
+                        onSend: () {
+                          if (_sending) {
+                            _stop();
+                          } else {
+                            _send();
+                          }
+                        },
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    IconButton.filled(
+                      onPressed:
+                          _exporting ? null : (_sending ? _stop : _send),
+                      icon: Icon(_sending ? Icons.stop : Icons.send),
+                      tooltip: _sending ? 'Stop' : 'Send',
+                    ),
+                  ],
+                ),
               ),
             ),
           ],

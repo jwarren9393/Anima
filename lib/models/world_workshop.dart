@@ -1,5 +1,6 @@
 import 'chat_message.dart';
 import 'opening_scene_length.dart';
+import 'workshop_hub_models.dart';
 
 /// How long Creation Center chat replies are allowed to be (max_tokens cap).
 enum WorkshopReplyLength {
@@ -246,6 +247,22 @@ class WorldWorkshop {
     this.openingSceneLength = OpeningSceneLength.medium,
     this.replyLength = WorkshopReplyLength.normal,
     this.includeLinkedLorebookInPrompt = false,
+    this.pinned = false,
+    this.tags = const [],
+    this.coverFileName,
+    this.worldSummary = '',
+    this.worldOverview = '',
+    this.worldSummaryCoveredCount = 0,
+    this.canonPinMessageIds = const [],
+    this.mode = WorkshopMode.explore,
+    this.workshopGuidanceNote = '',
+    this.linkedCharacterIds = const [],
+    this.linkedPersonaId,
+    this.lorebookUpdatedAtMessageCount = 0,
+    this.chatKit = const WorkshopChatKit(),
+    this.locations = const [],
+    this.relationships = const [],
+    this.sceneIdeas = const [],
   });
 
   final String id;
@@ -277,6 +294,60 @@ class WorldWorkshop {
   /// to read the exported book while brainstorming.
   final bool includeLinkedLorebookInPrompt;
 
+  /// Pinned workshops sort to the top of the Creation Center list.
+  final bool pinned;
+
+  /// Genre / tone tags for filtering (e.g. Fantasy, Horror).
+  final List<String> tags;
+
+  /// Optional cover image under app avatars/ (Anima-only).
+  final String? coverFileName;
+
+  /// Editable running summary of the workshop (like chat memory summary).
+  final String worldSummary;
+
+  /// Auto-generated one-page world bible (overview doc).
+  final String worldOverview;
+
+  /// Messages [0..worldSummaryCoveredCount) are folded into [worldSummary] for API
+  /// prompts — same idea as [ChatSession.memoryCoveredCount].
+  final int worldSummaryCoveredCount;
+
+  /// Message ids pinned as canon — always injected into exports.
+  final List<String> canonPinMessageIds;
+
+  /// Brainstorm mode / intent for the collaborator AI.
+  final WorkshopMode mode;
+
+  /// Per-workshop override of global collaborator guidance (empty = use global).
+  final String workshopGuidanceNote;
+
+  /// Character ids saved from or linked to this workshop.
+  final List<String> linkedCharacterIds;
+
+  /// Persona id created for this world (optional).
+  final String? linkedPersonaId;
+
+  /// [messages].length when lorebook was last created/updated (stale detection).
+  final int lorebookUpdatedAtMessageCount;
+
+  /// Defaults when starting roleplay from this workshop.
+  final WorkshopChatKit chatKit;
+
+  final List<WorkshopLocation> locations;
+  final List<WorkshopRelationship> relationships;
+  final List<WorkshopSceneIdea> sceneIdeas;
+
+  int get messagesSinceLorebookUpdate {
+    if (lorebookUpdatedAtMessageCount <= 0) return messages.length;
+    return (messages.length - lorebookUpdatedAtMessageCount).clamp(0, 100000);
+  }
+
+  bool get isLorebookStale =>
+      exportedLorebookId != null &&
+      messagesSinceLorebookUpdate >= 8 &&
+      messages.isNotEmpty;
+
   WorldWorkshop copyWith({
     String? id,
     String? title,
@@ -290,6 +361,24 @@ class WorldWorkshop {
     OpeningSceneLength? openingSceneLength,
     WorkshopReplyLength? replyLength,
     bool? includeLinkedLorebookInPrompt,
+    bool? pinned,
+    List<String>? tags,
+    String? coverFileName,
+    bool clearCoverFileName = false,
+    String? worldSummary,
+    String? worldOverview,
+    int? worldSummaryCoveredCount,
+    List<String>? canonPinMessageIds,
+    WorkshopMode? mode,
+    String? workshopGuidanceNote,
+    List<String>? linkedCharacterIds,
+    String? linkedPersonaId,
+    bool clearLinkedPersonaId = false,
+    int? lorebookUpdatedAtMessageCount,
+    WorkshopChatKit? chatKit,
+    List<WorkshopLocation>? locations,
+    List<WorkshopRelationship>? relationships,
+    List<WorkshopSceneIdea>? sceneIdeas,
   }) {
     return WorldWorkshop(
       id: id ?? this.id,
@@ -307,6 +396,27 @@ class WorldWorkshop {
       replyLength: replyLength ?? this.replyLength,
       includeLinkedLorebookInPrompt: includeLinkedLorebookInPrompt ??
           this.includeLinkedLorebookInPrompt,
+      pinned: pinned ?? this.pinned,
+      tags: tags ?? this.tags,
+      coverFileName:
+          clearCoverFileName ? null : (coverFileName ?? this.coverFileName),
+      worldSummary: worldSummary ?? this.worldSummary,
+      worldOverview: worldOverview ?? this.worldOverview,
+      worldSummaryCoveredCount:
+          worldSummaryCoveredCount ?? this.worldSummaryCoveredCount,
+      canonPinMessageIds: canonPinMessageIds ?? this.canonPinMessageIds,
+      mode: mode ?? this.mode,
+      workshopGuidanceNote: workshopGuidanceNote ?? this.workshopGuidanceNote,
+      linkedCharacterIds: linkedCharacterIds ?? this.linkedCharacterIds,
+      linkedPersonaId: clearLinkedPersonaId
+          ? null
+          : (linkedPersonaId ?? this.linkedPersonaId),
+      lorebookUpdatedAtMessageCount:
+          lorebookUpdatedAtMessageCount ?? this.lorebookUpdatedAtMessageCount,
+      chatKit: chatKit ?? this.chatKit,
+      locations: locations ?? this.locations,
+      relationships: relationships ?? this.relationships,
+      sceneIdeas: sceneIdeas ?? this.sceneIdeas,
     );
   }
 
@@ -322,6 +432,32 @@ class WorldWorkshop {
         'openingSceneLength': openingSceneLength.toJson(),
         'replyLength': replyLength.toJson(),
         'includeLinkedLorebookInPrompt': includeLinkedLorebookInPrompt,
+        if (pinned) 'pinned': true,
+        if (tags.isNotEmpty) 'tags': tags,
+        if (coverFileName != null && coverFileName!.isNotEmpty)
+          'coverFileName': coverFileName,
+        if (worldSummary.trim().isNotEmpty) 'worldSummary': worldSummary,
+        if (worldOverview.trim().isNotEmpty) 'worldOverview': worldOverview,
+        if (worldSummaryCoveredCount > 0)
+          'worldSummaryCoveredCount': worldSummaryCoveredCount,
+        if (canonPinMessageIds.isNotEmpty)
+          'canonPinMessageIds': canonPinMessageIds,
+        if (mode != WorkshopMode.explore) 'mode': mode.toJson(),
+        if (workshopGuidanceNote.trim().isNotEmpty)
+          'workshopGuidanceNote': workshopGuidanceNote,
+        if (linkedCharacterIds.isNotEmpty)
+          'linkedCharacterIds': linkedCharacterIds,
+        if (linkedPersonaId != null && linkedPersonaId!.isNotEmpty)
+          'linkedPersonaId': linkedPersonaId,
+        if (lorebookUpdatedAtMessageCount > 0)
+          'lorebookUpdatedAtMessageCount': lorebookUpdatedAtMessageCount,
+        if (chatKit != const WorkshopChatKit()) 'chatKit': chatKit.toJson(),
+        if (locations.isNotEmpty)
+          'locations': locations.map((l) => l.toJson()).toList(),
+        if (relationships.isNotEmpty)
+          'relationships': relationships.map((r) => r.toJson()).toList(),
+        if (sceneIdeas.isNotEmpty)
+          'sceneIdeas': sceneIdeas.map((s) => s.toJson()).toList(),
       };
 
   factory WorldWorkshop.fromJson(Map<String, dynamic> json) {
@@ -345,7 +481,45 @@ class WorldWorkshop {
       );
     }
 
+    List<String> stringList(dynamic raw) {
+      if (raw is! List) return const [];
+      return [
+        for (final item in raw)
+          if ('$item'.trim().isNotEmpty) '$item'.trim(),
+      ];
+    }
+
+    List<WorkshopLocation> parseLocations(dynamic raw) {
+      if (raw is! List) return const [];
+      return [
+        for (final item in raw)
+          if (item is Map)
+            WorkshopLocation.fromJson(Map<String, dynamic>.from(item)),
+      ];
+    }
+
+    List<WorkshopRelationship> parseRelationships(dynamic raw) {
+      if (raw is! List) return const [];
+      return [
+        for (final item in raw)
+          if (item is Map)
+            WorkshopRelationship.fromJson(Map<String, dynamic>.from(item)),
+      ];
+    }
+
+    List<WorkshopSceneIdea> parseSceneIdeas(dynamic raw) {
+      if (raw is! List) return const [];
+      return [
+        for (final item in raw)
+          if (item is Map)
+            WorkshopSceneIdea.fromJson(Map<String, dynamic>.from(item)),
+      ];
+    }
+
     final updatedRaw = json['updatedAt'] as String?;
+    final personaRaw = '${json['linkedPersonaId'] ?? ''}'.trim();
+    final coverRaw = '${json['coverFileName'] ?? ''}'.trim();
+  final chatKitRaw = json['chatKit'];
     return WorldWorkshop(
       id: '${json['id'] ?? ''}'.trim().isEmpty
           ? newId()
@@ -368,6 +542,34 @@ class WorldWorkshop {
       replyLength: WorkshopReplyLength.fromJson(json['replyLength']),
       includeLinkedLorebookInPrompt:
           json['includeLinkedLorebookInPrompt'] == true,
+      pinned: json['pinned'] == true,
+      tags: stringList(json['tags']),
+      coverFileName: coverRaw.isEmpty ? null : coverRaw,
+      worldSummary: '${json['worldSummary'] ?? ''}'.trim(),
+      worldOverview: '${json['worldOverview'] ?? ''}'.trim(),
+      worldSummaryCoveredCount:
+          (json['worldSummaryCoveredCount'] as num?)?.toInt().clamp(
+                0,
+                100000,
+              ) ??
+              0,
+      canonPinMessageIds: stringList(json['canonPinMessageIds']),
+      mode: WorkshopMode.fromJson(json['mode']),
+      workshopGuidanceNote: '${json['workshopGuidanceNote'] ?? ''}'.trim(),
+      linkedCharacterIds: stringList(json['linkedCharacterIds']),
+      linkedPersonaId: personaRaw.isEmpty ? null : personaRaw,
+      lorebookUpdatedAtMessageCount:
+          (json['lorebookUpdatedAtMessageCount'] as num?)?.toInt().clamp(
+                0,
+                100000,
+              ) ??
+              0,
+      chatKit: chatKitRaw is Map
+          ? WorkshopChatKit.fromJson(Map<String, dynamic>.from(chatKitRaw))
+          : const WorkshopChatKit(),
+      locations: parseLocations(json['locations']),
+      relationships: parseRelationships(json['relationships']),
+      sceneIdeas: parseSceneIdeas(json['sceneIdeas']),
     );
   }
 

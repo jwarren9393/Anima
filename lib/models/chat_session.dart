@@ -19,6 +19,7 @@ class ChatSession {
     this.openingScene = '',
     this.openingSceneInPrompt = true,
     this.openingSceneInMemory = false,
+    this.sourceWorkshopId,
   })  : messages = List<ChatMessage>.from(messages ?? const []),
         participantIds = List<String>.from(participantIds ?? const []),
         lorebookIds =
@@ -74,6 +75,9 @@ class ChatSession {
   /// True after the opening scene has been folded into [memorySummary] once.
   final bool openingSceneInMemory;
 
+  /// Creation Center workshop this chat was started from (provenance).
+  final String? sourceWorkshopId;
+
   bool get isGroup => participantIds.length > 1;
 
   /// Effective cast for prompting (falls back to [characterId] when solo).
@@ -102,6 +106,8 @@ class ChatSession {
     String? openingScene,
     bool? openingSceneInPrompt,
     bool? openingSceneInMemory,
+    String? sourceWorkshopId,
+    bool clearSourceWorkshopId = false,
   }) {
     return ChatSession(
       id: id ?? this.id,
@@ -122,6 +128,9 @@ class ChatSession {
           openingSceneInPrompt ?? this.openingSceneInPrompt,
       openingSceneInMemory:
           openingSceneInMemory ?? this.openingSceneInMemory,
+      sourceWorkshopId: clearSourceWorkshopId
+          ? null
+          : (sourceWorkshopId ?? this.sourceWorkshopId),
     );
   }
 
@@ -142,6 +151,8 @@ class ChatSession {
         if (openingScene.trim().isNotEmpty) 'openingScene': openingScene,
         if (!openingSceneInPrompt) 'openingSceneInPrompt': false,
         if (openingSceneInMemory) 'openingSceneInMemory': true,
+        if (sourceWorkshopId != null && sourceWorkshopId!.isNotEmpty)
+          'sourceWorkshopId': sourceWorkshopId,
       };
 
   factory ChatSession.fromJson(Map<String, dynamic> json) {
@@ -207,6 +218,10 @@ class ChatSession {
       openingScene: (json['openingScene'] as String? ?? '').trim(),
       openingSceneInPrompt: json['openingSceneInPrompt'] != false,
       openingSceneInMemory: json['openingSceneInMemory'] == true,
+      sourceWorkshopId: () {
+        final raw = '${json['sourceWorkshopId'] ?? ''}'.trim();
+        return raw.isEmpty ? null : raw;
+      }(),
     );
   }
 

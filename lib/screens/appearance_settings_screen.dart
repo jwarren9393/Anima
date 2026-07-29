@@ -12,8 +12,11 @@ import '../services/chat_background_service.dart';
 import '../services/settings_service.dart';
 import '../theme/anima_theme.dart';
 import '../widgets/anima_avatar.dart';
+import '../widgets/minimal_chip_button.dart';
 import '../widgets/rp_rich_text.dart';
 import 'settings_ui.dart';
+
+enum _AppearanceCategory { presets, layout, colors, fonts, chat, avatars }
 
 /// Theme Studio — global presets plus advanced color / font / avatar controls.
 class AppearanceSettingsScreen extends StatefulWidget {
@@ -37,6 +40,7 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
   late UiStyleSettings _draft;
   final _chatBackgroundService = ChatBackgroundService();
   String? _backgroundPreviewPath;
+  _AppearanceCategory _category = _AppearanceCategory.presets;
 
   @override
   void initState() {
@@ -233,7 +237,60 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
                 ),
                 const SizedBox(height: 16),
                 _LivePreview(theme: previewTheme, style: _draft),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
+                MinimalChipRow(
+                  children: [
+                    MinimalChipButton(
+                      label: 'Presets',
+                      selected: _category == _AppearanceCategory.presets,
+                      onPressed: () => setState(
+                        () => _category = _AppearanceCategory.presets,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    MinimalChipButton(
+                      label: 'Layout',
+                      selected: _category == _AppearanceCategory.layout,
+                      onPressed: () => setState(
+                        () => _category = _AppearanceCategory.layout,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    MinimalChipButton(
+                      label: 'Colors',
+                      selected: _category == _AppearanceCategory.colors,
+                      onPressed: () => setState(
+                        () => _category = _AppearanceCategory.colors,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    MinimalChipButton(
+                      label: 'Fonts',
+                      selected: _category == _AppearanceCategory.fonts,
+                      onPressed: () => setState(
+                        () => _category = _AppearanceCategory.fonts,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    MinimalChipButton(
+                      label: 'Chat',
+                      selected: _category == _AppearanceCategory.chat,
+                      onPressed: () => setState(
+                        () => _category = _AppearanceCategory.chat,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    MinimalChipButton(
+                      label: 'Avatars',
+                      selected: _category == _AppearanceCategory.avatars,
+                      onPressed: () => setState(
+                        () => _category = _AppearanceCategory.avatars,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                if (_category == _AppearanceCategory.presets) ...[
                 SettingsUi.sectionTitle(context, 'Theme presets'),
                 const SizedBox(height: 10),
                 ...ThemePresets.all.map((preset) {
@@ -294,7 +351,8 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
                     ),
                   ),
                 ],
-                const SizedBox(height: 24),
+                ],
+                if (_category == _AppearanceCategory.layout) ...[
                 SettingsUi.sectionTitle(context, 'Background'),
                 const SizedBox(height: 8),
                 Text('Style', style: Theme.of(context).textTheme.titleSmall),
@@ -356,6 +414,8 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
                   },
                 ),
                 const SizedBox(height: 12),
+                ],
+                if (_category == _AppearanceCategory.colors) ...[
                 SettingsUi.sectionTitle(context, 'Colors'),
                 _colorTile(
                   label: 'Accent',
@@ -486,6 +546,8 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
                   },
                 ),
                 const SizedBox(height: 12),
+                ],
+                if (_category == _AppearanceCategory.fonts) ...[
                 SettingsUi.sectionTitle(context, 'Fonts & size'),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<AnimaFontChoice>(
@@ -572,6 +634,8 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
                   },
                 ),
                 const SizedBox(height: 8),
+                ],
+                if (_category == _AppearanceCategory.layout) ...[
                 SettingsUi.sectionTitle(context, 'Shape & glass'),
                 Text(
                   'Corner roundness (${_draft.cornerRadius.round()})',
@@ -626,7 +690,8 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
                     },
                   ),
                 ],
-                const SizedBox(height: 16),
+                ],
+                if (_category == _AppearanceCategory.chat) ...[
                 SettingsUi.sectionTitle(context, 'Chat experience'),
                 const SizedBox(height: 8),
                 Text(
@@ -805,7 +870,8 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
                     });
                   },
                 ),
-                const SizedBox(height: 16),
+                ],
+                if (_category == _AppearanceCategory.avatars) ...[
                 SettingsUi.sectionTitle(context, 'Chat avatars'),
                 const SizedBox(height: 12),
                 Center(
@@ -869,6 +935,7 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
                     });
                   },
                 ),
+                ],
                 const SizedBox(height: 28),
                 SettingsUi.saveButton(
                   saving: _saving,

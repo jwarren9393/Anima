@@ -16,9 +16,12 @@ import '../services/world_workshop_builder.dart';
 import '../widgets/anima_avatar.dart';
 import '../widgets/generate_avatar_sheet.dart';
 import '../widgets/keyboard_inset.dart';
+import '../widgets/minimal_chip_button.dart';
 import '../widgets/preset_picker.dart';
 import '../models/anima_presets.dart';
 import 'lorebook_edit_screen.dart';
+
+enum _CharacterSection { identity, story, chat, lore, advanced }
 
 /// Form to create/edit a SillyTavern-style character card.
 class CharacterEditScreen extends StatefulWidget {
@@ -82,6 +85,8 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
   String _preservedCreator = '';
   String _preservedCharacterVersion = '';
   List<String> _preservedTags = const [];
+
+  _CharacterSection _section = _CharacterSection.identity;
 
   bool get _isEditing =>
       widget.existing != null &&
@@ -733,48 +738,122 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         : (_isGeneratedDraft
             ? 'Review generated character'
             : (_isEditing ? 'Edit character card' : 'New character card'));
-    final intro = _isUpdatingExisting
-        ? 'Review this AI update from Creation Center. Established facts were '
-            'kept where possible; edit anything you like, then Save to update '
-            'the original character — or go back to leave it unchanged. '
-            'You can use {{char}} and {{user}} in the text.'
-        : (_isGeneratedDraft
-            ? 'Review this AI draft from Creation Center. Edit anything you like, '
-                'then Save to add it to Characters — or go back to skip it. '
-                'You can use {{char}} and {{user}} in the text.'
-            : 'Fields match SillyTavern Character Cards (V2/V3). '
-                'You can use {{char}} and {{user}} in the text. '
-                'Tap the wand on a creative field to append AI text '
-                '(uses your NanoGPT model + Settings → AI collaborator). '
-                'Use the checklist icon for a read-only consistency report.');
-
+    final intro = _isUpdatingExisting || _isGeneratedDraft
+        ? 'Review AI draft — edit then Save. Use {{char}} and {{user}}.'
+        : '';
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
         actions: [
-          IconButton(
-            tooltip: 'Consistency check (read-only report)',
-            onPressed: (_wandBusy != null || _consistencyBusy || _saving)
-                ? null
-                : _runConsistencyCheck,
-            icon: _consistencyBusy
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.fact_check_outlined),
+          PopupMenuButton<String>(
+            enabled: !_saving && _wandBusy == null && !_aiCardBusy,
+            onSelected: (value) {
+              if (value == 'consistency') _runConsistencyCheck();
+              if (value == 'avatar_pick') _pickAvatar();
+              if (value == 'avatar_gen') _generateAvatar();
+              if (value == 'avatar_clear') _clearAvatar();
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'consistency',
+                child: Text('Consistency check'),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'avatar_pick',
+                child: Text('Pick avatar photo'),
+              ),
+              const PopupMenuItem(
+                value: 'avatar_gen',
+                child: Text('Generate avatar'),
+              ),
+              if (_avatarFileName != null)
+                const PopupMenuItem(
+                  value: 'avatar_clear',
+                  child: Text('Remove avatar'),
+                ),
+            ],
           ),
         ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          Text(
-            intro,
-            style: Theme.of(context).textTheme.bodyMedium,
+          if (intro.isNotEmpty)
+            Text(
+              intro,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          const SizedBox(height: 12),
+          MinimalChipRow(
+            children: [
+              MinimalChipButton(
+                label: 'Identity',
+                selected: _section == _CharacterSection.identity,
+                onPressed: () =>
+                    setState(() => _section = _CharacterSection.identity),
+              ),
+              const SizedBox(width: 8),
+              MinimalChipButton(
+                label: 'Story',
+                selected: _section == _CharacterSection.story,
+                onPressed: () =>
+                    setState(() => _section = _CharacterSection.story),
+              ),
+              const SizedBox(width: 8),
+              MinimalChipButton(
+                label: 'Chat',
+                selected: _section == _CharacterSection.chat,
+                onPressed: () =>
+                    setState(() => _section = _CharacterSection.chat),
+              ),
+              const SizedBox(width: 8),
+              MinimalChipButton(
+                label: 'Lore',
+                selected: _section == _CharacterSection.lore,
+                onPressed: () =>
+                    setState(() => _section = _CharacterSection.lore),
+              ),
+              const SizedBox(width: 8),
+              MinimalChipButton(
+                label: 'Advanced',
+                selected: _section == _CharacterSection.advanced,
+                onPressed: () =>
+                    setState(() => _section = _CharacterSection.advanced),
+              ),
+            ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
+          if (_section == _CharacterSection.identity) ..._identitySection(),
+          if (_section == _CharacterSection.story) ..._storySection(),
+          if (_section == _CharacterSection.chat) ..._chatSection(),
+          if (_section == _CharacterSection.lore) ..._loreSection(loreCount, loreEnabled),
+          if (_section == _CharacterSection.advanced) ..._advancedSection(),
+          FilledButton(
+            onPressed:
+                _saving || _wandBusy != null || _aiCardBusy ? null : _save,
+            child: _saving
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Text(
+                    _isUpdatingExisting
+                        ? 'Save update'
+                        : _isGeneratedDraft || _isEditing
+                        ? 'Save character'
+                        : 'Create character',
+                  ),
+          ),
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _identitySection() {
+    return [
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -850,45 +929,9 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
                   radius: 48,
                   avatarService: _avatarService,
                 ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  alignment: WrapAlignment.center,
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: (_avatarBusy || _saving) ? null : _pickAvatar,
-                      icon: const Icon(Icons.photo),
-                      label: Text(
-                        _avatarFileName == null
-                            ? 'Add avatar'
-                            : 'Change avatar',
-                      ),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed:
-                          (_avatarBusy || _saving) ? null : _generateAvatar,
-                      icon: _avatarBusy
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.auto_awesome),
-                      label: const Text('Generate avatar'),
-                    ),
-                    if (_avatarFileName != null)
-                      TextButton(
-                        onPressed:
-                            (_avatarBusy || _saving) ? null : _clearAvatar,
-                        child: const Text('Remove'),
-                      ),
-                  ],
-                ),
                 const SizedBox(height: 8),
                 Text(
-                  'Pick a photo or generate one with NanoGPT from the card text. '
-                  'PNG card imports use the card image automatically.',
+                  'Avatar: ⋮ menu → pick or generate.',
                   style: Theme.of(context).textTheme.bodySmall,
                   textAlign: TextAlign.center,
                 ),
@@ -897,6 +940,11 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
           ),
           const SizedBox(height: 24),
           _field(_name, label: 'Name', hint: 'e.g. Luna'),
+    ];
+  }
+
+  List<Widget> _storySection() {
+    return [
           _field(
             _description,
             label: 'Description',
@@ -922,6 +970,11 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
             maxLines: 6,
             wandField: CharacterCollaboratorField.scenario,
           ),
+    ];
+  }
+
+  List<Widget> _chatSection() {
+    return [
           _field(
             _firstMes,
             label: 'First message',
@@ -949,6 +1002,34 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
             maxLines: 12,
             wandField: CharacterCollaboratorField.mesExample,
           ),
+    ];
+  }
+
+  List<Widget> _loreSection(int loreCount, int loreEnabled) {
+    return [
+          OutlinedButton.icon(
+            onPressed: _openLorebook,
+            icon: const Icon(Icons.menu_book_outlined),
+            label: Text(
+              loreCount == 0
+                  ? 'World Info / lorebook'
+                  : 'World Info / lorebook ($loreEnabled/$loreCount on)',
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 6, bottom: 16),
+            child: Text(
+              loreCount == 0
+                  ? 'Optional keyword lore (also used for imported character_book).'
+                  : 'Keyword lore is injected during chat when keys match.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+    ];
+  }
+
+  List<Widget> _advancedSection() {
+    return [
           _field(
             _systemPrompt,
             label: 'System prompt (optional)',
@@ -972,44 +1053,6 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
             presetLabel: 'Post-history presets',
             presetList: AnimaPresets.postHistory,
           ),
-          OutlinedButton.icon(
-            onPressed: _openLorebook,
-            icon: const Icon(Icons.menu_book_outlined),
-            label: Text(
-              loreCount == 0
-                  ? 'World Info / lorebook'
-                  : 'World Info / lorebook ($loreEnabled/$loreCount on)',
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(top: 6, bottom: 16),
-            child: Text(
-              loreCount == 0
-                  ? 'Optional keyword lore (also used for imported character_book).'
-                  : 'Keyword lore is injected during chat when keys match.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ),
-          FilledButton(
-            onPressed:
-                _saving || _wandBusy != null || _aiCardBusy ? null : _save,
-            child: _saving
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Text(
-                    _isUpdatingExisting
-                        ? 'Save update'
-                        : _isGeneratedDraft || _isEditing
-                        ? 'Save character'
-                        : 'Create character',
-                  ),
-          ),
-          const SizedBox(height: 24),
-        ],
-      ),
-    );
+    ];
   }
 }

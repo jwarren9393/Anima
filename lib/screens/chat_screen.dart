@@ -32,6 +32,8 @@ import '../services/reply_rewrite_service.dart';
 import '../services/settings_service.dart';
 import '../services/speaker_prefix.dart';
 import '../services/world_info_service.dart';
+import '../models/world_workshop.dart';
+import '../models/workshop_chat_import_options.dart';
 import '../services/world_workshop_service.dart';
 import '../services/opening_scene_service.dart';
 import '../utils/scroll_to_end.dart';
@@ -44,6 +46,7 @@ import '../widgets/update_character_from_chat_sheet.dart';
 import '../widgets/anima_avatar.dart';
 import '../widgets/greeting_picker.dart';
 import '../widgets/keyboard_inset.dart';
+import '../widgets/minimal_chip_button.dart';
 import '../widgets/narrator_bubble.dart';
 import '../widgets/preset_picker.dart';
 import '../widgets/reply_rewrite_sheet.dart';
@@ -53,7 +56,9 @@ import 'character_edit_screen.dart';
 import 'group_chat_setup_screen.dart';
 import 'persona_edit_screen.dart';
 import 'personas_screen.dart';
+import '../services/world_workshop_builder.dart';
 import 'settings_screen.dart';
+import 'world_workshop_chat_screen.dart';
 
 /// Main chat screen with saved history, streaming, and SillyTavern-like controls.
 class ChatScreen extends StatefulWidget {
@@ -397,6 +402,88 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _avatarStyle = uiStyle.avatarStyle;
       _persona = persona;
     });
+  }
+
+  Future<void> _openCreationCenter() async {
+    if (_session == null) return;
+    final wsId = _session!.sourceWorkshopId;
+    if (wsId != null && wsId.isNotEmpty) {
+      final workshop = await widget.worldWorkshopService.getById(wsId);
+      if (workshop != null && mounted) {
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => WorldWorkshopChatScreen(
+              workshop: workshop,
+              workshopService: widget.worldWorkshopService,
+              worldInfoService: widget.worldInfoService,
+              characterService: widget.characterService,
+              characterCategoryService: widget.characterCategoryService,
+              personaService: widget.personaService,
+              chatService: widget.chatService,
+              apiKeyService: widget.apiKeyService,
+              settingsService: widget.settingsService,
+              nanoGptService: widget.nanoGptService,
+              worldWorkshopService: widget.worldWorkshopService,
+              openingSceneService: widget.openingSceneService,
+              appearanceController: widget.appearanceController,
+            ),
+          ),
+        );
+        return;
+      }
+    }
+
+    final builder = WorldWorkshopBuilder();
+    final contextSettings =
+        await widget.settingsService.getContextSettings();
+    final source = builder.buildImportedChatSource(
+      session: _session!,
+      characters: _participants,
+      persona: _persona,
+      options: WorkshopChatImportOptions(
+        keepRecent: contextSettings.summarizeKeepRecent,
+        includeRecentMessages: true,
+        includeMemorySummary: _session!.memorySummary.trim().isNotEmpty,
+        includeCharacters: true,
+        includePersona: _persona != null,
+        includeGlobalLorebooks: false,
+        includeEmbeddedCharacterLore: false,
+        includeAuthorsNote: _session!.authorsNote.trim().isNotEmpty,
+        includeOpeningScene: _session!.openingScene.trim().isNotEmpty,
+      ),
+    );
+    if (!source.hasContent) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This chat has no content to import yet.')),
+      );
+      return;
+    }
+    final workshop = await widget.worldWorkshopService.upsert(
+      WorldWorkshop.empty(title: 'From: ${_session!.title}').copyWith(
+        importedSource: source,
+      ),
+    );
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => WorldWorkshopChatScreen(
+          workshop: workshop,
+          workshopService: widget.worldWorkshopService,
+          worldInfoService: widget.worldInfoService,
+          characterService: widget.characterService,
+          characterCategoryService: widget.characterCategoryService,
+          personaService: widget.personaService,
+          chatService: widget.chatService,
+          apiKeyService: widget.apiKeyService,
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
+          worldWorkshopService: widget.worldWorkshopService,
+          openingSceneService: widget.openingSceneService,
+          appearanceController: widget.appearanceController,
+        ),
+      ),
+    );
   }
 
   Future<void> _pickPersona() async {
@@ -2509,6 +2596,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final ui = AnimaUiTheme.of(context);
     final showChatBackground = ui.chatExperience.backgroundEnabled &&
         _chatBackgroundPath != null;
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 24;
+    final hasMemory =
+        (_session?.memorySummary.trim().isNotEmpty ?? false);
+    final hasAuthorsNote =
+        (_session?.authorsNote.trim().isNotEmpty ?? false);
     return Scaffold(
       // We lift the body ourselves via [KeyboardInset] so the composer stays
       // above the keyboard even with a transparent glass scaffold.
@@ -2540,20 +2632,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           ],
         ),
         actions: [
-          IconButton(
-            tooltip: 'Saved chats',
-            icon: const Icon(Icons.history),
-            onPressed: _loading || _busy ? null : _pickChat,
-          ),
-          IconButton(
-            tooltip: 'New chat',
-            icon: const Icon(Icons.add_comment_outlined),
-            onPressed: _loading || _busy ? null : _newChat,
-          ),
           PopupMenuButton<String>(
             tooltip: 'More',
             enabled: !_loading && !_busy,
             onSelected: (value) {
+              if (value == 'saved_chats') _pickChat();
+              if (value == 'new_chat') _newChat();
               if (value == 'persona') _pickPersona();
               if (value == 'authors_note') _editAuthorsNote();
               if (value == 'lorebooks') _pickChatLorebooks();
@@ -2568,11 +2652,21 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               if (value == 'new_character') _createCharacterForChat();
               if (value == 'update_character') _updateCharacterFromChat();
               if (value == 'group') _startGroupChat();
+              if (value == 'creation_center') _openCreationCenter();
               if (value == 'export') _exportChat();
               if (value == 'import') _importChat();
               if (value == 'settings') _openSettings();
             },
             itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'saved_chats',
+                child: Text('Saved chats'),
+              ),
+              const PopupMenuItem(
+                value: 'new_chat',
+                child: Text('New chat'),
+              ),
+              const PopupMenuDivider(),
               PopupMenuItem(
                 value: 'persona',
                 child: Text(
@@ -2646,6 +2740,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 child: Text('Start new group chat'),
               ),
               const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'creation_center',
+                child: Text('Open in Creation Center'),
+              ),
               const PopupMenuItem(value: 'export', child: Text('Export chat')),
               const PopupMenuItem(value: 'import', child: Text('Import chat')),
               const PopupMenuItem(value: 'settings', child: Text('Settings')),
@@ -2840,7 +2938,26 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (_isGroup)
+                    if (!keyboardOpen && (hasMemory || hasAuthorsNote))
+                      MinimalChipRow(
+                        children: [
+                          if (hasMemory)
+                            MinimalChipButton(
+                              label: 'Memory',
+                              icon: Icons.psychology_outlined,
+                              onPressed: _busy ? null : _editMemorySummary,
+                            ),
+                          if (hasMemory && hasAuthorsNote)
+                            const SizedBox(width: 8),
+                          if (hasAuthorsNote)
+                            MinimalChipButton(
+                              label: 'Note',
+                              icon: Icons.edit_note,
+                              onPressed: _busy ? null : _editAuthorsNote,
+                            ),
+                        ],
+                      ),
+                    if (!keyboardOpen && _isGroup)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: SingleChildScrollView(
@@ -2890,35 +3007,18 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Tooltip(
-                          message: _oocMode
-                              ? 'OOC on — message will send as (OOC: …)'
-                              : 'OOC off — tap for out-of-character',
-                          child: TextButton(
-                            onPressed: _busy || _formatting
-                                ? null
-                                : _toggleOocMode,
-                            style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 12,
-                              ),
-                              minimumSize: const Size(40, 48),
-                              foregroundColor: _oocMode
-                                  ? colorScheme.primary
-                                  : colorScheme.outline,
-                            ),
-                            child: Text(
-                              'OOC',
-                              style: TextStyle(
-                                fontWeight: _oocMode
-                                    ? FontWeight.w700
-                                    : FontWeight.w500,
-                                fontSize: 12,
-                                letterSpacing: 0.4,
-                              ),
-                            ),
-                          ),
+                        IconButton(
+                          tooltip: _oocMode
+                              ? 'OOC on — sends as (OOC: …)'
+                              : 'OOC off',
+                          onPressed: _busy || _formatting
+                              ? null
+                              : _toggleOocMode,
+                          visualDensity: VisualDensity.compact,
+                          color: _oocMode
+                              ? colorScheme.primary
+                              : colorScheme.outline,
+                          icon: const Icon(Icons.chat_bubble_outline),
                         ),
                         Expanded(
                           child: ChatComposerField(
@@ -2935,7 +3035,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                         : 'Send only — tap a name to reply…')
                                   : ((_session?.autoReply ?? false)
                                         ? 'Message $characterName…'
-                                        : 'Send only — tap Continue or long-press…'),
+                                        : 'Send only — Continue or long-press…'),
                               filled: true,
                               border: const OutlineInputBorder(),
                               isDense: true,
@@ -2943,25 +3043,22 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                             onSend: _send,
                           ),
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: 2),
                         if (_busy)
                           FilledButton(
                             onPressed: _stopGeneration,
                             style: FilledButton.styleFrom(
                               padding: const EdgeInsets.all(14),
                               minimumSize: const Size(48, 48),
-                              backgroundColor: Theme.of(
-                                context,
-                              ).colorScheme.error,
-                              foregroundColor: Theme.of(
-                                context,
-                              ).colorScheme.onError,
+                              backgroundColor: colorScheme.error,
+                              foregroundColor: colorScheme.onError,
                             ),
                             child: const Icon(Icons.stop),
                           )
                         else ...[
                           IconButton(
-                            tooltip: 'Format draft (*actions* and "dialogue")',
+                            tooltip: 'Format (*actions* / "dialogue")',
+                            visualDensity: VisualDensity.compact,
                             onPressed: _formatting ? null : _formatDraft,
                             icon: _formatting
                                 ? const SizedBox(
@@ -2975,6 +3072,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                           ),
                           IconButton(
                             tooltip: 'Continue',
+                            visualDensity: VisualDensity.compact,
                             onPressed: _formatting ? null : _continueScene,
                             icon: const Icon(Icons.play_arrow),
                           ),

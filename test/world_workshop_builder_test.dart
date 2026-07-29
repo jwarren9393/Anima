@@ -189,6 +189,18 @@ Here you go:
       expect(update[1]['content'], contains('"priority": 25'));
       expect(update[1]['content'], contains('Preserve its entries'));
     });
+
+    test('buildApplyCorrectionMessages asks for in-place full revision', () {
+      final messages = builder.buildApplyCorrectionMessages(
+        assistantReply: 'He moved to the U.S. from Europe.',
+        correctionNote: 'He was already from the U.S. originally.',
+      );
+      expect(messages.length, 2);
+      expect(messages[0]['content'], contains('in place'));
+      expect(messages[1]['content'], contains('moved to the U.S.'));
+      expect(messages[1]['content'], contains('already from the U.S.'));
+      expect(messages[1]['content'], contains('full revised'));
+    });
   });
 
   group('WorldWorkshopBuilder characters', () {

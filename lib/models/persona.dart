@@ -9,6 +9,7 @@ class Persona {
     this.background = '',
     this.goals = '',
     this.avatarFileName,
+    this.sourceWorkshopId,
   });
 
   final String id;
@@ -24,6 +25,9 @@ class Persona {
 
   /// Local avatar under app `avatars/` (Anima-only).
   final String? avatarFileName;
+
+  /// Creation Center workshop this persona was saved from (provenance).
+  final String? sourceWorkshopId;
 
   /// Structured player identity sent to NanoGPT on every generation.
   String get promptText {
@@ -48,6 +52,8 @@ class Persona {
     String? goals,
     String? avatarFileName,
     bool clearAvatar = false,
+    String? sourceWorkshopId,
+    bool clearSourceWorkshopId = false,
   }) {
     return Persona(
       id: id ?? this.id,
@@ -60,6 +66,9 @@ class Persona {
       avatarFileName: clearAvatar
           ? null
           : (avatarFileName ?? this.avatarFileName),
+      sourceWorkshopId: clearSourceWorkshopId
+          ? null
+          : (sourceWorkshopId ?? this.sourceWorkshopId),
     );
   }
 
@@ -73,6 +82,8 @@ class Persona {
     'goals': goals,
     if (avatarFileName != null && avatarFileName!.isNotEmpty)
       'avatar_file': avatarFileName,
+    if (sourceWorkshopId != null && sourceWorkshopId!.isNotEmpty)
+      'sourceWorkshopId': sourceWorkshopId,
   };
 
   factory Persona.fromJson(Map<String, dynamic> json) {
@@ -90,6 +101,10 @@ class Persona {
       background: '${json['background'] ?? ''}'.trim(),
       goals: '${json['goals'] ?? ''}'.trim(),
       avatarFileName: avatar.isEmpty ? null : avatar,
+      sourceWorkshopId: () {
+        final raw = '${json['sourceWorkshopId'] ?? ''}'.trim();
+        return raw.isEmpty ? null : raw;
+      }(),
     );
   }
 

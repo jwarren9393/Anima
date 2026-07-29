@@ -25,6 +25,7 @@ class Character {
     this.characterBook,
     this.extensions = const {},
     this.avatarFileName,
+    this.sourceWorkshopId,
   });
 
   /// Anima-only stable id (not part of the ST card spec).
@@ -63,6 +64,9 @@ class Character {
 
   /// Local avatar file name under app `avatars/` (Anima-only; not an ST field).
   final String? avatarFileName;
+
+  /// Creation Center workshop this character was saved from (provenance).
+  final String? sourceWorkshopId;
 
   /// Typed view of [characterBook], or null if missing/empty.
   Lorebook? get lorebook {
@@ -112,6 +116,8 @@ class Character {
     String? avatarFileName,
     bool clearCharacterBook = false,
     bool clearAvatar = false,
+    String? sourceWorkshopId,
+    bool clearSourceWorkshopId = false,
   }) {
     return Character(
       id: id ?? this.id,
@@ -134,6 +140,9 @@ class Character {
       extensions: extensions ?? this.extensions,
       avatarFileName:
           clearAvatar ? null : (avatarFileName ?? this.avatarFileName),
+      sourceWorkshopId: clearSourceWorkshopId
+          ? null
+          : (sourceWorkshopId ?? this.sourceWorkshopId),
     );
   }
 
@@ -157,6 +166,8 @@ class Character {
         'extensions': extensions,
         if (avatarFileName != null && avatarFileName!.isNotEmpty)
           'avatar_file': avatarFileName,
+        if (sourceWorkshopId != null && sourceWorkshopId!.isNotEmpty)
+          'sourceWorkshopId': sourceWorkshopId,
       };
 
   factory Character.fromJson(Map<String, dynamic> json) {
@@ -226,6 +237,10 @@ class Character {
       extensions: extensions,
       avatarFileName: () {
         final raw = _str(json['avatar_file']);
+        return raw.isEmpty ? null : raw;
+      }(),
+      sourceWorkshopId: () {
+        final raw = _str(json['sourceWorkshopId']);
         return raw.isEmpty ? null : raw;
       }(),
     );

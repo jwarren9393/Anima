@@ -112,16 +112,35 @@ void main() {
         messages: messages,
         linkedLorebookJson: '{"name":"Harbor","entries":[{"content":"docks"}]}',
         importedSourceText: 'IMPORTED CHAT SOURCE\nMemory summary: dock heist.',
+        worldSummary: 'A rainy harbor with rival guilds.',
+        worldSummaryCoveredCount: 0,
+        historyTokenBudget: 4000,
         modelContextLength: 16000,
       );
       expect(workshop.messageCount, 2);
-      expect(workshop.estimatedSentTokens, greaterThan(workshop.fullTranscriptTokens));
+      expect(workshop.estimatedSentTokens, greaterThan(0));
       expect(workshop.loreTokens, greaterThan(0));
       expect(workshop.memoryTokens, greaterThan(0));
-      expect(workshop.notes, contains('Imported chat source'));
+      expect(workshop.notes, contains('history budget'));
       expect(workshop.fillRatio, isNotNull);
       expect(workshop.compactBannerLine, contains('2 msgs'));
       expect(workshop.compactBannerLine, contains('16K'));
+
+      final longWorkshop = service.estimateWorkshop(
+        messages: [
+          for (var i = 0; i < 20; i++)
+            msg('w$i', 'Long workshop brainstorm line $i ' * 40),
+        ],
+        worldSummary: 'Established canon.',
+        worldSummaryCoveredCount: 10,
+        historyTokenBudget: 300,
+        modelContextLength: 16000,
+      );
+      expect(longWorkshop.messagesTrimmedAway, greaterThan(0));
+      expect(
+        longWorkshop.estimatedSentTokens,
+        lessThan(longWorkshop.fullTranscriptTokens),
+      );
 
       final chat = service.estimateChat(
         messages: [

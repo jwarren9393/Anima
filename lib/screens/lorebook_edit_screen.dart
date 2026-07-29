@@ -6,6 +6,9 @@ import '../services/lore_collaborator.dart';
 import '../services/nanogpt_service.dart';
 import '../services/settings_service.dart';
 import '../widgets/keyboard_inset.dart';
+import '../widgets/minimal_chip_button.dart';
+
+enum _LoreEntryFilter { all, on, off }
 
 /// Edit a character's or global World Info / lorebook (SillyTavern-style).
 class LorebookEditScreen extends StatefulWidget {
@@ -33,6 +36,8 @@ class _LorebookEditScreenState extends State<LorebookEditScreen> {
   late TextEditingController _tokenBudget;
   late List<LorebookEntry> _entries;
   late Map<String, dynamic> _extensions;
+  String _entrySearch = '';
+  _LoreEntryFilter _entryFilter = _LoreEntryFilter.all;
 
   @override
   void initState() {
@@ -137,6 +142,23 @@ class _LorebookEditScreenState extends State<LorebookEditScreen> {
     }
   }
 
+  List<LorebookEntry> get _visibleEntries {
+    final q = _entrySearch.trim().toLowerCase();
+    return [
+      for (final e in _entries)
+        if ((_entryFilter == _LoreEntryFilter.all ||
+                (_entryFilter == _LoreEntryFilter.on && e.enabled) ||
+                (_entryFilter == _LoreEntryFilter.off && !e.enabled)) &&
+            (q.isEmpty ||
+                e.displayLabel.toLowerCase().contains(q) ||
+                e.keys.any((k) => k.toLowerCase().contains(q)) ||
+                e.content.toLowerCase().contains(q)))
+          e,
+    ];
+  }
+
+  int _entryIndexOf(LorebookEntry entry) => _entries.indexOf(entry);
+
   @override
   Widget build(BuildContext context) {
     final title = widget.characterName.trim().isEmpty
@@ -162,17 +184,10 @@ class _LorebookEditScreenState extends State<LorebookEditScreen> {
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
         children: [
           Text(
-            'World Info only sends lore when a keyword shows up in recent chat '
-            '(or when an entry is set to Always on). That keeps prompts small on a phone.',
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Open an entry (or Add entry) and tap the wand on Label, Keywords, '
-            'or Lore content to append AI text — same as the character editor.',
+            'Keyword lore injected when keys match recent chat.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           TextField(
             controller: _name,
             decoration: const InputDecoration(
@@ -182,51 +197,93 @@ class _LorebookEditScreenState extends State<LorebookEditScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          TextField(
-            controller: _description,
-            minLines: 2,
-            maxLines: 4,
-            decoration: const InputDecoration(
-              labelText: 'Book notes (optional)',
-              hintText: 'For you — not sent to the AI',
-              border: OutlineInputBorder(),
-              alignLabelWithHint: true,
+          ExpansionTile(
+            title: const Text('Book settings'),
+            subtitle: Text(
+              'Scan ${_scanDepth.text} · budget ${_tokenBudget.text} tokens',
             ),
-          ),
-          const SizedBox(height: 12),
-          Row(
             children: [
-              Expanded(
-                child: TextField(
-                  controller: _scanDepth,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(
-                    labelText: 'Scan depth',
-                    helperText: 'Recent messages to scan',
-                    border: OutlineInputBorder(),
-                  ),
+              TextField(
+                controller: _description,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: 'Book notes (optional)',
+                  hintText: 'For you — not sent to the AI',
+                  border: OutlineInputBorder(),
+                  alignLabelWithHint: true,
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextField(
-                  controller: _tokenBudget,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(
-                    labelText: 'Token budget',
-                    helperText: 'Max lore size (~chars÷4)',
-                    border: OutlineInputBorder(),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _scanDepth,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: const InputDecoration(
+                        labelText: 'Scan depth',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _tokenBudget,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: const InputDecoration(
+                        labelText: 'Token budget',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ],
               ),
+              const SizedBox(height: 8),
             ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           Text(
             'Entries (${_entries.length})',
             style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            decoration: const InputDecoration(
+              hintText: 'Search entries…',
+              prefixIcon: Icon(Icons.search),
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            onChanged: (v) => setState(() => _entrySearch = v),
+          ),
+          const SizedBox(height: 8),
+          MinimalChipRow(
+            children: [
+              MinimalChipButton(
+                label: 'All',
+                selected: _entryFilter == _LoreEntryFilter.all,
+                onPressed: () =>
+                    setState(() => _entryFilter = _LoreEntryFilter.all),
+              ),
+              const SizedBox(width: 8),
+              MinimalChipButton(
+                label: 'On',
+                selected: _entryFilter == _LoreEntryFilter.on,
+                onPressed: () =>
+                    setState(() => _entryFilter = _LoreEntryFilter.on),
+              ),
+              const SizedBox(width: 8),
+              MinimalChipButton(
+                label: 'Off',
+                selected: _entryFilter == _LoreEntryFilter.off,
+                onPressed: () =>
+                    setState(() => _entryFilter = _LoreEntryFilter.off),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           if (_entries.isEmpty)
@@ -238,9 +295,17 @@ class _LorebookEditScreenState extends State<LorebookEditScreen> {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             )
+          else if (_visibleEntries.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Text(
+                'No entries match your search or filter.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            )
           else
-            ...List.generate(_entries.length, (index) {
-              final entry = _entries[index];
+            ..._visibleEntries.map((entry) {
+              final index = _entryIndexOf(entry);
               final subtitleParts = <String>[
                 if (entry.constant)
                   'Always on'
@@ -641,35 +706,6 @@ class _LorebookEntryEditScreenState extends State<_LorebookEntryEditScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Selective (two-key)'),
-            subtitle: const Text(
-              'Require a primary keyword AND a secondary keyword.',
-            ),
-            value: _selective,
-            onChanged: (v) => setState(() => _selective = v),
-          ),
-          if (_selective) ...[
-            TextField(
-              controller: _secondaryKeys,
-              scrollPadding: kAnimaKeyboardScrollPadding,
-              decoration: InputDecoration(
-                labelText: 'Secondary keywords',
-                hintText: 'quest, legend',
-                border: const OutlineInputBorder(),
-                suffixIcon: _wandSuffix(LoreCollaboratorField.secondaryKeys),
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Case-sensitive keys'),
-            value: _caseSensitive,
-            onChanged: (v) => setState(() => _caseSensitive = v),
-          ),
-          const SizedBox(height: 8),
           TextField(
             controller: _content,
             minLines: 5,
@@ -684,74 +720,102 @@ class _LorebookEntryEditScreenState extends State<_LorebookEntryEditScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          Text(
-            'Placement',
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
-          const SizedBox(height: 8),
-          SegmentedButton<LorebookPosition>(
-            segments: const [
-              ButtonSegment(
-                value: LorebookPosition.beforeChar,
-                label: Text('Before desc'),
-              ),
-              ButtonSegment(
-                value: LorebookPosition.afterChar,
-                label: Text('After desc'),
-              ),
-            ],
-            selected: {_position},
-            onSelectionChanged: (selected) {
-              setState(() => _position = selected.first);
-            },
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Before puts lore above the character description; after puts it below.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 12),
-          Row(
+          ExpansionTile(
+            title: const Text('Advanced'),
             children: [
-              Expanded(
-                child: TextField(
-                  controller: _order,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(
-                    labelText: 'Insertion order',
-                    helperText: 'Lower = earlier',
-                    border: OutlineInputBorder(),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Selective (two-key)'),
+                subtitle: const Text(
+                  'Require a primary keyword AND a secondary keyword.',
+                ),
+                value: _selective,
+                onChanged: (v) => setState(() => _selective = v),
+              ),
+              if (_selective) ...[
+                TextField(
+                  controller: _secondaryKeys,
+                  scrollPadding: kAnimaKeyboardScrollPadding,
+                  decoration: InputDecoration(
+                    labelText: 'Secondary keywords',
+                    hintText: 'quest, legend',
+                    border: const OutlineInputBorder(),
+                    suffixIcon: _wandSuffix(LoreCollaboratorField.secondaryKeys),
                   ),
                 ),
+                const SizedBox(height: 12),
+              ],
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Case-sensitive keys'),
+                value: _caseSensitive,
+                onChanged: (v) => setState(() => _caseSensitive = v),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextField(
-                  controller: _priority,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(
-                    labelText: 'Priority',
-                    helperText: 'Lower drops first',
-                    border: OutlineInputBorder(),
+              const SizedBox(height: 8),
+              Text(
+                'Placement',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 8),
+              SegmentedButton<LorebookPosition>(
+                segments: const [
+                  ButtonSegment(
+                    value: LorebookPosition.beforeChar,
+                    label: Text('Before desc'),
                   ),
+                  ButtonSegment(
+                    value: LorebookPosition.afterChar,
+                    label: Text('After desc'),
+                  ),
+                ],
+                selected: {_position},
+                onSelectionChanged: (selected) {
+                  setState(() => _position = selected.first);
+                },
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _order,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: const InputDecoration(
+                        labelText: 'Insertion order',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _priority,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: const InputDecoration(
+                        labelText: 'Priority',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _comment,
+                minLines: 2,
+                maxLines: 4,
+                scrollPadding: kAnimaKeyboardScrollPadding,
+                decoration: const InputDecoration(
+                  labelText: 'Comment (optional)',
+                  hintText: 'Notes for you — not sent to the AI',
+                  alignLabelWithHint: true,
+                  border: OutlineInputBorder(),
                 ),
               ),
+              const SizedBox(height: 8),
             ],
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _comment,
-            minLines: 2,
-            maxLines: 4,
-            scrollPadding: kAnimaKeyboardScrollPadding,
-            decoration: const InputDecoration(
-              labelText: 'Comment (optional)',
-              hintText: 'Notes for you — not sent to the AI',
-              alignLabelWithHint: true,
-              border: OutlineInputBorder(),
-            ),
           ),
           const SizedBox(height: 24),
           FilledButton(

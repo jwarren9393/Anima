@@ -9,6 +9,7 @@ import '../models/opening_scene_length.dart';
 import '../models/persona.dart';
 import '../models/workshop_chat_import_options.dart';
 import '../models/world_workshop.dart';
+import '../models/workshop_hub_models.dart';
 import 'character_card_codec.dart';
 import 'settings_service.dart';
 
@@ -145,16 +146,38 @@ class WorldWorkshopBuilder {
     return base.copyWith(maxTokens: effective.clamp(256, 8192));
   }
 
+  /// Tight cap for revising the last workshop reply in place (correction notes).
+  static SamplingSettings workshopCorrectionSampling(
+    SamplingSettings base, {
+    required int originalCharCount,
+  }) {
+    final estTokens = (originalCharCount / 4).ceil() + 256;
+    final cap = estTokens.clamp(512, workshopChatMinMaxTokens);
+    return base.copyWith(
+      maxTokens: cap,
+      temperature: base.temperature.clamp(0.1, 1.0) <= 0.45
+          ? base.temperature
+          : 0.35,
+    );
+  }
+
   /// System prompt for the ongoing workshop chat (questions + brainstorming).
   String chatSystemPrompt({
     String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
     Lorebook? sourceLorebook,
     WorkshopSourceContext? importedSource,
     WorkshopReplyLength replyLength = WorkshopReplyLength.normal,
+    WorkshopMode mode = WorkshopMode.explore,
+    String workshopGuidanceNote = '',
+    String worldSummary = '',
+    List<ChatMessage> conversation = const [],
+    List<String> canonPinMessageIds = const [],
   }) {
-    final guidance = guidanceNote.trim().isEmpty
+    final globalGuidance = guidanceNote.trim().isEmpty
         ? CollaboratorSettings.defaultGuidanceNote
         : guidanceNote.trim();
+    final localGuidance = workshopGuidanceNote.trim();
+    final guidance = localGuidance.isNotEmpty ? localGuidance : globalGuidance;
 
     final source = formatLorebookContext(sourceLorebook);
     final imported = formatImportedSource(importedSource);
@@ -170,11 +193,31 @@ class WorldWorkshopBuilder {
         'ideas fully, ask multiple follow-up questions, and finish every numbered '
         'or bulleted list you start.',
     };
+    final modeNote = switch (mode) {
+      WorkshopMode.explore =>
+        'Mode: EXPLORE — brainstorm freely, ask questions, propose ideas.',
+      WorkshopMode.canon =>
+        'Mode: CANON — consolidate established facts, flag contradictions, '
+        'and help lock in what is officially true in this world.',
+      WorkshopMode.characters =>
+        'Mode: CHARACTERS — focus on cast, voices, relationships, and motives.',
+      WorkshopMode.playtest =>
+        'Mode: PLAYTEST — write short in-character vignettes to test tone and dynamics.',
+    };
+    final summaryBlock = worldSummary.trim().isEmpty
+        ? ''
+        : '''
+WORLD SUMMARY (established facts — treat as canon unless the user revises):
+${worldSummary.trim()}
+''';
+    final canonBlock = formatCanonPins(conversation, canonPinMessageIds);
     return '''
 You are Anima's World Info collaborator. You help the user invent a setting,
 factions, places, magic, history, and lore for a private roleplay app.
 
 $lengthNote
+
+$modeNote
 
 Your job in this chat:
 - Ask clear follow-up questions when useful.
@@ -189,6 +232,20 @@ Your job in this chat:
   Opening scene field (Create opening scene button). When the user describes
   how the story should begin, help them shape it and remind them to save it
   there — do not bury opening narration only in lore entries.
+
+TOKEN EFFICIENCY (important):
+- The app keeps a WORLD SUMMARY and only sends recent chat lines to you.
+  Do not repeat the entire world overview every turn — reference the summary
+  and add only what changed.
+- When the user confirms ideas or asks for a small revision ("change X",
+  "update that part", "sounds good but…"), reply with a SHORT delta: only the
+  lines that changed or the one section they asked about. Do NOT reprint the
+  full character sheet, estate layout, or numbered recap unless they explicitly
+  ask for a full rewrite.
+- Prefer bullet deltas over walls of prose. If you already laid out a big block
+  in a prior turn, later turns should be brief unless they request depth.
+- After a large brainstorm dump, suggest they tap ⋮ → Summarize world (or fold
+  into summary) so the thread stays lean.
 ${imported.isEmpty ? '' : '''
 - An existing roleplay chat was imported below as read-only source material.
   Use it to propose a NEW lorebook and optional NEW characters. Do not treat
@@ -204,6 +261,8 @@ ${source.isEmpty ? '' : '''
 CURRENT LINKED LOREBOOK:
 $source
 '''}
+${summaryBlock.isEmpty ? '' : '$summaryBlock\n'}
+${canonBlock.isEmpty ? '' : '$canonBlock\n'}
 
 Guidance note (follow closely):
 $guidance
@@ -214,6 +273,39 @@ give yourself enough room to ask everything you need in one reply.
 '''
         .trim();
   }
+
+  /// Pinned canon lines from workshop messages.
+  String formatCanonPins(
+    List<ChatMessage> conversation,
+    List<String> canonPinMessageIds,
+  ) {
+    if (canonPinMessageIds.isEmpty) return '';
+    final lines = <String>[];
+    for (final id in canonPinMessageIds) {
+      for (final msg in conversation) {
+        if (msg.id != id) continue;
+        final role = msg.role == ChatRole.user ? 'User' : 'Collaborator';
+        final text = msg.text.trim();
+        if (text.isEmpty) continue;
+        lines.add('$role: $text');
+        break;
+      }
+    }
+    if (lines.isEmpty) return '';
+    return '''
+CANON PINS (user-locked facts — always honor these):
+${lines.join('\n')}
+''';
+  }
+
+  static const workshopPromptChips = [
+    'Describe the setting in 3 sentences',
+    'Who are the main factions?',
+    'What is the central conflict?',
+    'Suggest 5 lorebook entry ideas',
+    'What locations matter most?',
+    'Who should the cast include?',
+  ];
 
   /// Build read-only Creation Center source from a saved roleplay chat.
   WorkshopSourceContext buildImportedChatSource({
@@ -864,6 +956,8 @@ $transcriptBlock
     String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
     Lorebook? sourceLorebook,
     WorkshopSourceContext? importedSource,
+    String worldSummary = '',
+    List<String> canonPinMessageIds = const [],
   }) {
     final guidance = guidanceNote.trim().isEmpty
         ? CollaboratorSettings.defaultGuidanceNote
@@ -914,9 +1008,13 @@ Output rules:
 
     final source = formatLorebookContext(sourceLorebook);
     final imported = _importedBlock(importedSource);
+    final summaryBlock = worldSummary.trim().isEmpty
+        ? ''
+        : 'World summary:\n${worldSummary.trim()}\n\n';
+    final canonBlock = formatCanonPins(conversation, canonPinMessageIds);
     final user =
         '''
-$imported${source.isEmpty ? '' : '''
+$imported$summaryBlock${canonBlock.isEmpty ? '' : '$canonBlock\n'}${source.isEmpty ? '' : '''
 This is the current linked lorebook. Preserve its entries, IDs, settings, and
 extensions unless the conversation explicitly asks to change or remove them:
 
@@ -1656,5 +1754,380 @@ ${formatTranscript(conversation)}
       }
     }
     return null;
+  }
+
+  List<Map<String, String>> buildWorldSummaryMessages({
+    required List<ChatMessage> conversation,
+    String existingSummary = '',
+    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+    WorkshopSourceContext? importedSource,
+    Lorebook? sourceLorebook,
+    List<String> canonPinMessageIds = const [],
+    List<ChatMessage>? chunk,
+  }) {
+    final guidance = guidanceNote.trim().isEmpty
+        ? CollaboratorSettings.defaultGuidanceNote
+        : guidanceNote.trim();
+    final system =
+        '''
+You maintain a concise WORLD SUMMARY for a Creation Center workshop.
+Output plain prose only (no JSON). Revise stale facts, keep key names and facts.
+Max ~800 words. Do not moralize.
+Guidance: $guidance
+'''
+            .trim();
+    final imported = _importedBlock(importedSource);
+    final canon = formatCanonPins(conversation, canonPinMessageIds);
+    final transcriptSource = chunk ?? conversation;
+    final transcriptLabel = chunk != null
+        ? 'New workshop segment to fold in:'
+        : 'Workshop transcript:';
+    final user =
+        '''
+$imported
+${existingSummary.trim().isEmpty ? '' : 'Current summary:\n${existingSummary.trim()}\n\n'}
+${canon.isEmpty ? '' : '$canon\n'}
+$transcriptLabel
+${formatTranscript(transcriptSource)}
+
+Write an updated world summary.
+'''
+            .trim();
+    return [
+      {'role': 'system', 'content': system},
+      {'role': 'user', 'content': user},
+    ];
+  }
+
+  /// Revise the last workshop assistant bubble in place from a short user correction.
+  List<Map<String, String>> buildApplyCorrectionMessages({
+    required String assistantReply,
+    required String correctionNote,
+  }) {
+    final original = assistantReply.trim();
+    final note = correctionNote.trim();
+    if (original.isEmpty || note.isEmpty) {
+      throw ArgumentError('Need both the assistant reply and a correction note.');
+    }
+    return [
+      {
+        'role': 'system',
+        'content':
+            'You revise ONE Creation Center workshop assistant message in place. '
+            'The user likes almost everything in the original. Apply ONLY their '
+            'correction. Output the FULL revised message (complete replacement text) '
+            'with the same structure, sections, and bullets as the original — but '
+            'with the correction applied. Do not add new plot facts unless the '
+            'correction requires them. Do not add preamble or meta commentary. '
+            'Keep length close to the original.',
+      },
+      {
+        'role': 'user',
+        'content':
+            '''
+Original assistant message:
+$original
+
+User correction (apply this; keep everything else unchanged):
+$note
+
+Output the full revised assistant message only.
+'''
+                .trim(),
+      },
+    ];
+  }
+
+  List<Map<String, String>> buildWorldOverviewMessages({
+    required List<ChatMessage> conversation,
+    String worldSummary = '',
+    WorkshopSourceContext? importedSource,
+    Lorebook? sourceLorebook,
+    List<String> canonPinMessageIds = const [],
+  }) {
+    final system =
+        '''
+You write a one-page WORLD OVERVIEW (markdown) for a roleplay setting.
+Sections: Setting, Tone, Rules (magic/tech), Factions, Key locations, Timeline, Cast.
+Plain markdown only. No JSON. ~600-1200 words max.
+'''
+            .trim();
+    final imported = _importedBlock(importedSource);
+    final source = formatLorebookContext(sourceLorebook);
+    final canon = formatCanonPins(conversation, canonPinMessageIds);
+    final user =
+        '''
+$imported
+${worldSummary.trim().isEmpty ? '' : 'Summary:\n${worldSummary.trim()}\n\n'}
+${source.isEmpty ? '' : 'Lorebook:\n$source\n\n'}
+${canon.isEmpty ? '' : '$canon\n'}
+Transcript:
+${formatTranscript(conversation)}
+
+Generate the world overview document.
+'''
+            .trim();
+    return [
+      {'role': 'system', 'content': system},
+      {'role': 'user', 'content': user},
+    ];
+  }
+
+  List<Map<String, String>> buildGlossaryExportMessages({
+    required List<ChatMessage> conversation,
+    WorkshopSourceContext? importedSource,
+    Lorebook? sourceLorebook,
+    List<String> canonPinMessageIds = const [],
+  }) {
+    final system =
+        '''
+Extract glossary terms from a world-building workshop. Reply with ONLY JSON:
+{
+  "entries": [
+    {"term": "Name", "definition": "short definition", "keywords": ["alias1"]}
+  ]
+}
+At least 3 entries when possible. keywords are trigger words for lorebook entries.
+'''
+            .trim();
+    final imported = _importedBlock(importedSource);
+    final canon = formatCanonPins(conversation, canonPinMessageIds);
+    final user =
+        '''
+$imported
+${canon.isEmpty ? '' : '$canon\n'}
+${formatTranscript(conversation)}
+'''
+            .trim();
+    return [
+      {'role': 'system', 'content': system},
+      {'role': 'user', 'content': user},
+    ];
+  }
+
+  List<GlossaryEntry> parseGlossaryJson(String raw) {
+    final map = _extractJsonObject(
+      raw,
+      emptyMessage: 'Glossary response was empty.',
+      missingMessage: 'Could not find glossary JSON.',
+      notObjectMessage: 'Glossary JSON must be an object.',
+    );
+    final rawEntries = map['entries'];
+    if (rawEntries is! List) return const [];
+    final out = <GlossaryEntry>[];
+    for (final item in rawEntries) {
+      if (item is! Map) continue;
+      final term = '${item['term'] ?? ''}'.trim();
+      if (term.isEmpty) continue;
+      final keywords = <String>[];
+      final rawKeys = item['keywords'];
+      if (rawKeys is List) {
+        for (final k in rawKeys) {
+          final s = '$k'.trim();
+          if (s.isNotEmpty) keywords.add(s);
+        }
+      }
+      out.add(
+        GlossaryEntry(
+          term: term,
+          definition: '${item['definition'] ?? ''}'.trim(),
+          keywords: keywords.isEmpty ? [term] : keywords,
+        ),
+      );
+    }
+    return out;
+  }
+
+  List<Map<String, String>> buildGreetingsExportMessages({
+    required List<ChatMessage> conversation,
+    required String characterName,
+    WorkshopSourceContext? importedSource,
+    Lorebook? sourceLorebook,
+    int count = 3,
+  }) {
+    final name = characterName.trim();
+    final system =
+        '''
+Generate $count alternate opening greetings for character "$name" in this world.
+Reply with ONLY JSON: {"greetings": ["line1", "line2", ...]}
+Use *actions* and "dialogue" RP style. Each greeting is a full opening message.
+'''
+            .trim();
+    final imported = _importedBlock(importedSource);
+    final user =
+        '''
+$imported
+Character: $name
+${formatTranscript(conversation)}
+'''
+            .trim();
+    return [
+      {'role': 'system', 'content': system},
+      {'role': 'user', 'content': user},
+    ];
+  }
+
+  List<String> parseGreetingsJson(String raw) {
+    final map = _extractJsonObject(
+      raw,
+      emptyMessage: 'Greetings response was empty.',
+      missingMessage: 'Could not find greetings JSON.',
+      notObjectMessage: 'Greetings JSON must be an object.',
+    );
+    final rawG = map['greetings'];
+    if (rawG is! List) return const [];
+    return [
+      for (final g in rawG)
+        if ('$g'.trim().isNotEmpty) '$g'.trim(),
+    ];
+  }
+
+  List<Map<String, String>> buildSheetsExtractMessages({
+    required List<ChatMessage> conversation,
+    WorkshopSourceContext? importedSource,
+  }) {
+    final system =
+        '''
+Extract locations and relationships from a workshop. Reply with ONLY JSON:
+{
+  "locations": [{"name": "Place", "description": "vibe"}],
+  "relationships": [{"fromName": "A", "toName": "B", "dynamic": "allies"}]
+}
+'''
+            .trim();
+    final imported = _importedBlock(importedSource);
+    final user = '$imported\n${formatTranscript(conversation)}';
+    return [
+      {'role': 'system', 'content': system},
+      {'role': 'user', 'content': user},
+    ];
+  }
+
+  (List<WorkshopLocation>, List<WorkshopRelationship>) parseSheetsJson(
+    String raw,
+  ) {
+    final map = _extractJsonObject(
+      raw,
+      emptyMessage: 'Sheets response was empty.',
+      missingMessage: 'Could not find sheets JSON.',
+      notObjectMessage: 'Sheets JSON must be an object.',
+    );
+    final locations = <WorkshopLocation>[];
+    final rawLocs = map['locations'];
+    if (rawLocs is List) {
+      for (final item in rawLocs) {
+        if (item is Map) {
+          locations.add(
+            WorkshopLocation.fromJson(Map<String, dynamic>.from(item)),
+          );
+        }
+      }
+    }
+    final relationships = <WorkshopRelationship>[];
+    final rawRels = map['relationships'];
+    if (rawRels is List) {
+      for (final item in rawRels) {
+        if (item is Map) {
+          relationships.add(
+            WorkshopRelationship.fromJson(Map<String, dynamic>.from(item)),
+          );
+        }
+      }
+    }
+    return (locations, relationships);
+  }
+
+  List<Map<String, String>> buildPreExportChecklistMessages({
+    required List<ChatMessage> conversation,
+    WorkshopSourceContext? importedSource,
+    Lorebook? sourceLorebook,
+    String worldSummary = '',
+    List<String> canonPinMessageIds = const [],
+  }) {
+    final system =
+        '''
+Audit a workshop before lorebook export. Reply with ONLY JSON:
+{"items": ["short actionable note", ...]}
+List gaps: missing locations, unnamed factions, characters mentioned but thin,
+contradictions, stale lorebook vs chat. Max 8 items. Empty list if ready.
+'''
+            .trim();
+    final imported = _importedBlock(importedSource);
+    final source = formatLorebookContext(sourceLorebook);
+    final canon = formatCanonPins(conversation, canonPinMessageIds);
+    final user =
+        '''
+$imported
+${worldSummary.trim().isEmpty ? '' : 'Summary:\n${worldSummary.trim()}\n\n'}
+${source.isEmpty ? '' : 'Lorebook:\n$source\n\n'}
+${canon.isEmpty ? '' : '$canon\n'}
+${formatTranscript(conversation)}
+'''
+            .trim();
+    return [
+      {'role': 'system', 'content': system},
+      {'role': 'user', 'content': user},
+    ];
+  }
+
+  List<String> parseChecklistJson(String raw) {
+    final map = _extractJsonObject(
+      raw,
+      emptyMessage: 'Checklist response was empty.',
+      missingMessage: 'Could not find checklist JSON.',
+      notObjectMessage: 'Checklist JSON must be an object.',
+    );
+    final rawItems = map['items'];
+    if (rawItems is! List) return const [];
+    return [
+      for (final item in rawItems)
+        if ('$item'.trim().isNotEmpty) '$item'.trim(),
+    ];
+  }
+
+  List<Map<String, String>> buildSceneIdeasMessages({
+    required List<ChatMessage> conversation,
+    int count = 3,
+    WorkshopSourceContext? importedSource,
+  }) {
+    final system =
+        '''
+Suggest $count mid-story SCENE IDEAS (not opening scenes). Reply with ONLY JSON:
+{"scenes": [{"title": "short label", "text": "2-4 sentences of setup"}]}
+'''
+            .trim();
+    final imported = _importedBlock(importedSource);
+    final user = '$imported\n${formatTranscript(conversation)}';
+    return [
+      {'role': 'system', 'content': system},
+      {'role': 'user', 'content': user},
+    ];
+  }
+
+  List<WorkshopSceneIdea> parseSceneIdeasJson(String raw) {
+    final map = _extractJsonObject(
+      raw,
+      emptyMessage: 'Scene ideas response was empty.',
+      missingMessage: 'Could not find scene ideas JSON.',
+      notObjectMessage: 'Scene ideas JSON must be an object.',
+    );
+    final rawScenes = map['scenes'];
+    if (rawScenes is! List) return const [];
+    final out = <WorkshopSceneIdea>[];
+    for (final item in rawScenes) {
+      if (item is! Map) continue;
+      final title = '${item['title'] ?? ''}'.trim();
+      final text = '${item['text'] ?? ''}'.trim();
+      if (title.isEmpty && text.isEmpty) continue;
+      out.add(
+        WorkshopSceneIdea(
+          id: WorkshopSceneIdea.newId(),
+          title: title.isEmpty ? 'Scene idea' : title,
+          text: text,
+          updatedAt: DateTime.now(),
+        ),
+      );
+    }
+    return out;
   }
 }

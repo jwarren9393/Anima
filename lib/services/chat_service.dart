@@ -59,6 +59,17 @@ class ChatService {
     return all;
   }
 
+  /// Chats started from a Creation Center workshop.
+  Future<List<ChatSession>> listChatsForWorkshop(String workshopId) async {
+    final id = workshopId.trim();
+    if (id.isEmpty) return const [];
+    final all = await listAllChats();
+    return [
+      for (final chat in all)
+        if (chat.sourceWorkshopId == id) chat,
+    ];
+  }
+
   /// All chats for one character, newest first.
   Future<List<ChatSession>> listChats(String characterId) async {
     final root = await _readRoot();
@@ -131,6 +142,7 @@ class ChatService {
     int greetingIndex = 0,
     String openingScene = '',
     bool openingSceneInPrompt = true,
+    String? sourceWorkshopId,
   }) async {
     final builder = const PromptBuilder();
     final greetings = character.allGreetings
@@ -169,6 +181,9 @@ class ChatService {
       openingSceneInPrompt: openingScene.trim().isNotEmpty
           ? openingSceneInPrompt
           : true,
+      sourceWorkshopId: sourceWorkshopId?.trim().isEmpty == true
+          ? null
+          : sourceWorkshopId?.trim(),
     );
 
     await saveChat(session);
@@ -295,6 +310,7 @@ class ChatService {
     String openingScene = '',
     bool openingSceneInPrompt = true,
     String? title,
+    String? sourceWorkshopId,
   }) async {
     if (members.length < 2) {
       throw ArgumentError('Group chats need at least two characters.');
@@ -347,6 +363,9 @@ class ChatService {
       openingSceneInPrompt: openingScene.trim().isNotEmpty
           ? openingSceneInPrompt
           : true,
+      sourceWorkshopId: sourceWorkshopId?.trim().isEmpty == true
+          ? null
+          : sourceWorkshopId?.trim(),
     );
 
     await saveChat(session);

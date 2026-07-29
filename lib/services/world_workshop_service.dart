@@ -15,8 +15,37 @@ class WorldWorkshopService {
             documentsDirectory ?? getApplicationDocumentsDirectory;
 
   static const _fileName = 'anima_world_workshops.json';
+  static const _metaFileName = 'anima_workshop_meta.json';
 
   final Future<Directory> Function() _documentsDirectory;
+
+  Future<File> _metaFile() async {
+    final dir = await _documentsDirectory();
+    return File('${dir.path}/$_metaFileName');
+  }
+
+  Future<String?> getLastOpenedId() async {
+    final file = await _metaFile();
+    if (!await file.exists()) return null;
+    try {
+      final raw = await file.readAsString();
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        final id = '${decoded['lastOpenedId'] ?? ''}'.trim();
+        return id.isEmpty ? null : id;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> setLastOpenedId(String id) async {
+    final trimmed = id.trim();
+    if (trimmed.isEmpty) return;
+    final file = await _metaFile();
+    await file.writeAsString(
+      const JsonEncoder.withIndent('  ').convert({'lastOpenedId': trimmed}),
+    );
+  }
 
   Future<File> _file() async {
     final dir = await _documentsDirectory();
@@ -38,7 +67,10 @@ class WorldWorkshopService {
           .map((item) => WorldWorkshop.fromJson(Map<String, dynamic>.from(item)))
           .where((w) => w.id.isNotEmpty)
           .toList();
-      workshops.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      workshops.sort((a, b) {
+        if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
+        return b.updatedAt.compareTo(a.updatedAt);
+      });
       return workshops;
     } catch (_) {
       return <WorldWorkshop>[];

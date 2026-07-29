@@ -20,8 +20,12 @@ import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
 import '../services/world_workshop_builder.dart';
 import '../services/world_workshop_service.dart';
+import '../services/workshop_hub_controller.dart';
+import '../widgets/minimal_chip_button.dart';
 import '../widgets/workshop_chat_import_sheet.dart';
 import 'world_workshop_chat_screen.dart';
+
+enum _WorkshopListFilter { all, pinned, lore, cast }
 
 /// Settings → Creation Center: list of world-building workshop chats.
 class WorldWorkshopListScreen extends StatefulWidget {
@@ -59,8 +63,11 @@ class WorldWorkshopListScreen extends StatefulWidget {
 
 class _WorldWorkshopListScreenState extends State<WorldWorkshopListScreen> {
   final _builder = WorldWorkshopBuilder();
+  final _hubController = WorkshopHubController();
 
   List<WorldWorkshop> _workshops = [];
+  String _searchQuery = '';
+  _WorkshopListFilter _filter = _WorkshopListFilter.all;
   bool _loading = true;
   bool _busy = false;
 
@@ -537,6 +544,106 @@ class _WorldWorkshopListScreenState extends State<WorldWorkshopListScreen> {
     await _load();
   }
 
+  Future<void> _togglePin(WorldWorkshop workshop) async {
+    await widget.workshopService.upsert(
+      workshop.copyWith(pinned: !workshop.pinned),
+    );
+    await _load();
+  }
+
+  Future<void> _duplicate(WorldWorkshop workshop) async {
+    final copy = _hubController.hub.duplicate(workshop);
+    await widget.workshopService.upsert(copy);
+    await _load();
+  }
+
+  Future<void> _importBundle() async {
+    try {
+      final bundle = await _hubController.importBundleFile();
+      if (bundle == null) return;
+      if (bundle.lorebook != null) {
+        await widget.worldInfoService.upsert(bundle.lorebook!);
+      }
+      for (final c in bundle.characters) {
+        await widget.characterService.upsert(c);
+      }
+      if (bundle.persona != null) {
+        await widget.personaService.upsert(bundle.persona!);
+      }
+      await widget.workshopService.upsert(bundle.workshop);
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('World bundle imported.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Import failed: $error')),
+      );
+    }
+  }
+
+  List<WorldWorkshop> get _filteredWorkshops {
+    final q = _searchQuery.trim().toLowerCase();
+    return [
+      for (final w in _workshops)
+        if (_matchesFilter(w) &&
+            (q.isEmpty ||
+                w.title.toLowerCase().contains(q) ||
+                w.tags.any((t) => t.toLowerCase().contains(q))))
+          w,
+    ];
+  }
+
+  bool _matchesFilter(WorldWorkshop w) {
+    switch (_filter) {
+      case _WorkshopListFilter.all:
+        return true;
+      case _WorkshopListFilter.pinned:
+        return w.pinned;
+      case _WorkshopListFilter.lore:
+        return w.exportedLorebookId != null;
+      case _WorkshopListFilter.cast:
+        return w.linkedCharacterIds.isNotEmpty;
+    }
+  }
+
+  Future<void> _showWorkshopActions(WorldWorkshop workshop) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(
+                workshop.pinned ? Icons.push_pin_outlined : Icons.push_pin,
+              ),
+              title: Text(workshop.pinned ? 'Unpin' : 'Pin'),
+              onTap: () => Navigator.pop(context, 'pin'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.copy_outlined),
+              title: const Text('Duplicate'),
+              onTap: () => Navigator.pop(context, 'duplicate'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline),
+              title: const Text('Delete'),
+              onTap: () => Navigator.pop(context, 'delete'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (action == null || !mounted) return;
+    if (action == 'pin') await _togglePin(workshop);
+    if (action == 'duplicate') await _duplicate(workshop);
+    if (action == 'delete') await _delete(workshop);
+  }
+
   String _subtitle(WorldWorkshop workshop) {
     final count = workshop.messages.length;
     final bits = <String>[];
@@ -551,6 +658,7 @@ class _WorldWorkshopListScreenState extends State<WorldWorkshopListScreen> {
     if (workshop.exportedLorebookId != null) {
       bits.add('Linked to World Info');
     }
+    if (workshop.pinned) bits.add('pinned');
     return bits.join(' · ');
   }
 
@@ -560,6 +668,11 @@ class _WorldWorkshopListScreenState extends State<WorldWorkshopListScreen> {
       appBar: AppBar(
         title: const Text('Creation Center'),
         actions: [
+          IconButton(
+            tooltip: 'Import world bundle',
+            onPressed: _busy ? null : _importBundle,
+            icon: const Icon(Icons.archive_outlined),
+          ),
           IconButton(
             tooltip: 'Import',
             onPressed: _busy ? null : _showImportOptions,
@@ -598,29 +711,79 @@ class _WorldWorkshopListScreenState extends State<WorldWorkshopListScreen> {
                     ),
                   ],
                 )
-              : ListView.builder(
-                  itemCount: _workshops.length,
-                  itemBuilder: (context, index) {
-                    final workshop = _workshops[index];
-                    return ListTile(
-                      leading: Icon(
-                        workshop.importedSource != null
-                            ? Icons.forum_outlined
-                            : Icons.travel_explore,
+              : Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: TextField(
+                        decoration: const InputDecoration(
+                          hintText: 'Search worlds…',
+                          prefixIcon: Icon(Icons.search),
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        onChanged: (v) => setState(() => _searchQuery = v),
                       ),
-                      title: Text(workshop.title),
-                      subtitle: Text(_subtitle(workshop)),
-                      trailing: PopupMenuButton<String>(
-                        onSelected: (value) {
-                          if (value == 'delete') _delete(workshop);
+                    ),
+                    MinimalChipRow(
+                      children: [
+                        MinimalChipButton(
+                          label: 'All',
+                          selected: _filter == _WorkshopListFilter.all,
+                          onPressed: () => setState(
+                            () => _filter = _WorkshopListFilter.all,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        MinimalChipButton(
+                          label: 'Pinned',
+                          selected: _filter == _WorkshopListFilter.pinned,
+                          onPressed: () => setState(
+                            () => _filter = _WorkshopListFilter.pinned,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        MinimalChipButton(
+                          label: 'Has lore',
+                          selected: _filter == _WorkshopListFilter.lore,
+                          onPressed: () => setState(
+                            () => _filter = _WorkshopListFilter.lore,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        MinimalChipButton(
+                          label: 'Has cast',
+                          selected: _filter == _WorkshopListFilter.cast,
+                          onPressed: () => setState(
+                            () => _filter = _WorkshopListFilter.cast,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: _filteredWorkshops.length,
+                        itemBuilder: (context, index) {
+                          final workshop = _filteredWorkshops[index];
+                          return ListTile(
+                            leading: Icon(
+                              workshop.pinned
+                                  ? Icons.push_pin
+                                  : workshop.importedSource != null
+                                      ? Icons.forum_outlined
+                                      : Icons.travel_explore,
+                            ),
+                            title: Text(workshop.title),
+                            subtitle: Text(_subtitle(workshop)),
+                            onTap: () => _open(workshop),
+                            onLongPress: _busy
+                                ? null
+                                : () => _showWorkshopActions(workshop),
+                          );
                         },
-                        itemBuilder: (context) => const [
-                          PopupMenuItem(value: 'delete', child: Text('Delete')),
-                        ],
                       ),
-                      onTap: () => _open(workshop),
-                    );
-                  },
+                    ),
+                  ],
                 ),
     );
   }

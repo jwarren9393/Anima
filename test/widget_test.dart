@@ -55,6 +55,6 @@ void main() {
 
     expect(find.text('Anima'), findsOneWidget);
     expect(find.byTooltip('Settings'), findsOneWidget);
-    expect(find.text('New chat'), findsOneWidget);
+    expect(find.text('New'), findsOneWidget);
   });
 }

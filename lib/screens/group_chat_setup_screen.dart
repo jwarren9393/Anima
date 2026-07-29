@@ -18,6 +18,7 @@ import '../widgets/anima_avatar.dart';
 import '../widgets/character_category_controls.dart';
 import '../widgets/create_character_from_chat_sheet.dart';
 import '../widgets/greeting_picker.dart';
+import '../widgets/minimal_chip_button.dart';
 import '../widgets/opening_scene_picker.dart';
 import '../widgets/preset_picker.dart';
 import 'character_edit_screen.dart';
@@ -356,6 +357,230 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
     return 'Start group chat';
   }
 
+  Future<void> _showLorePicker() async {
+    if (_lorebooks.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No global lorebooks yet. Add them under Settings → World Info.',
+          ),
+        ),
+      );
+      return;
+    }
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        final height = MediaQuery.sizeOf(sheetContext).height * 0.55;
+        return SafeArea(
+          child: SizedBox(
+            height: height,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                  child: Text(
+                    'Global lorebooks',
+                    style: Theme.of(sheetContext).textTheme.titleMedium,
+                  ),
+                ),
+                Expanded(
+                  child: ListView(
+                    children: [
+                      for (final book in _lorebooks)
+                        CheckboxListTile(
+                          value: _selectedLoreIds.contains(book.id),
+                          title: Text(book.displayName),
+                          subtitle: Text(
+                            '${book.enabledEntryCount} entries'
+                            '${book.enabled ? '' : ' · off in Settings'}',
+                          ),
+                          onChanged: (v) {
+                            setState(() {
+                              if (v == true) {
+                                _selectedLoreIds.add(book.id);
+                              } else {
+                                _selectedLoreIds.remove(book.id);
+                              }
+                            });
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(sheetContext),
+                    child: const Text('Done'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showOpeningSceneEditor() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
+          ),
+          child: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Opening scene',
+                    style: Theme.of(sheetContext).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Optional narrator setup at the top of the chat.',
+                    style: Theme.of(sheetContext).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _openingSceneController,
+                    minLines: 4,
+                    maxLines: 10,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: const InputDecoration(
+                      hintText: 'The harbor fog lifts as your party gathers…',
+                      border: OutlineInputBorder(),
+                      alignLabelWithHint: true,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(sheetContext),
+                    child: const Text('Done'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    setState(() {});
+  }
+
+  Future<void> _showAuthorsNoteEditor() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
+          ),
+          child: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    "Author's Note",
+                    style: Theme.of(sheetContext).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Injected every turn for this chat only.',
+                    style: Theme.of(sheetContext).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 12),
+                  PresetButton(
+                    label: 'Author’s Note presets',
+                    onPressed: () async {
+                      final preset = await pickTextPreset(
+                        context: sheetContext,
+                        title: "Author's Note presets",
+                        presets: AnimaPresets.authorsNotes,
+                      );
+                      if (preset == null) return;
+                      _authorsNoteController.text = preset.text;
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _authorsNoteController,
+                    minLines: 4,
+                    maxLines: 10,
+                    decoration: const InputDecoration(
+                      hintText: 'e.g. Keep replies short. Stay in character.',
+                      border: OutlineInputBorder(),
+                      alignLabelWithHint: true,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(sheetContext),
+                    child: const Text('Done'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    setState(() {});
+  }
+
+  Widget _optionsChipRow() {
+    final hasScene = _openingSceneController.text.trim().isNotEmpty;
+    final hasNote = _authorsNoteController.text.trim().isNotEmpty;
+    return MinimalChipRow(
+      children: [
+        MinimalChipButton(
+          label: 'Lore (${_selectedLoreIds.length})',
+          icon: Icons.menu_book_outlined,
+          onPressed: _working ? null : _showLorePicker,
+        ),
+        const SizedBox(width: 8),
+        MinimalChipButton(
+          label: hasScene ? 'Scene' : 'Add scene',
+          icon: hasScene
+              ? Icons.check_circle_outline
+              : Icons.auto_stories_outlined,
+          onPressed: _working ? null : _showOpeningSceneEditor,
+        ),
+        const SizedBox(width: 8),
+        MinimalChipButton(
+          label: hasNote ? 'Note' : 'Add note',
+          icon: hasNote ? Icons.check_circle_outline : Icons.edit_note,
+          onPressed: _working ? null : _showAuthorsNoteEditor,
+        ),
+        const SizedBox(width: 8),
+        MinimalChipButton(
+          label: _autoReply ? 'Auto-reply' : 'Manual',
+          icon: _autoReply ? Icons.bolt : Icons.touch_app_outlined,
+          selected: _autoReply,
+          onPressed: _working
+              ? null
+              : () => setState(() => _autoReply = !_autoReply),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final minCharacters = _isEditMode ? 1 : 2;
@@ -388,13 +613,11 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
                   children: [
                     Text(
                       _isEditMode
-                          ? 'Add or remove characters in this chat. Drag to set '
-                              'reply order. History stays — nothing starts over.'
-                          : 'Pick who is in the group, drag to set reply order, then '
-                              'tune auto-reply, lore, and Author’s Note.',
-                      style: Theme.of(context).textTheme.bodyMedium,
+                          ? 'Add or remove characters. Drag to set reply order.'
+                          : 'Pick characters, set order, then tune options below.',
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 16),
                     TextField(
                       controller: _titleController,
                       enabled: !_working,
@@ -414,15 +637,7 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
                       'Characters',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _isEditMode
-                          ? 'Check characters to include. Uncheck to remove them '
-                              'from this chat. Use + in the app bar to create someone new.'
-                          : 'Checked characters join the chat. Drag the list below '
-                              'to set who speaks first (round-robin after that).',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
+                    const SizedBox(height: 8),
                     CharacterCategoryFilterBar(
                       state: _categoryState,
                       selectedCategoryId: _filterCategoryId,
@@ -452,11 +667,6 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
                         'Reply order',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'First in the list speaks next when auto-reply is on.',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
                       const SizedBox(height: 8),
                       ReorderableListView.builder(
                         shrinkWrap: true,
@@ -481,124 +691,8 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
                         },
                       ),
                     ],
-                    const SizedBox(height: 20),
-                    Text(
-                      'Replies',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Auto-reply'),
-                      subtitle: Text(
-                        _autoReply
-                            ? 'Sending a message also generates the next AI reply.'
-                            : 'Manual mode — your message posts alone. Tap a '
-                                'name chip or Continue for a reply.',
-                      ),
-                      value: _autoReply,
-                      onChanged: (v) => setState(() => _autoReply = v),
-                    ),
                     const SizedBox(height: 12),
-                    Text(
-                      'World Info / lorebooks',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 4),
-                    if (_lorebooks.isEmpty)
-                      Text(
-                        'No global lorebooks yet. Add them under Settings → '
-                        'World Info & lore. Each character’s own book still '
-                        'applies when they speak.',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      )
-                    else ...[
-                      Text(
-                        'Choose which global lorebooks apply to this chat. '
-                        'Each character’s card lorebook still applies when '
-                        'they speak.',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                      const SizedBox(height: 8),
-                      ..._lorebooks.map((book) {
-                        final on = _selectedLoreIds.contains(book.id);
-                        return CheckboxListTile(
-                          value: on,
-                          title: Text(book.displayName),
-                          subtitle: Text(
-                            '${book.enabledEntryCount} entries'
-                            '${book.enabled ? '' : ' · off in Settings'}',
-                          ),
-                          controlAffinity: ListTileControlAffinity.leading,
-                          contentPadding: EdgeInsets.zero,
-                          onChanged: (v) {
-                            setState(() {
-                              if (v == true) {
-                                _selectedLoreIds.add(book.id);
-                              } else {
-                                _selectedLoreIds.remove(book.id);
-                              }
-                            });
-                          },
-                        );
-                      }),
-                    ],
-                    const SizedBox(height: 20),
-                    Text(
-                      'Opening scene',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Optional narrator setup shown once at the top of the chat '
-                      '(not the character’s first line).',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    TextField(
-                      controller: _openingSceneController,
-                      minLines: 3,
-                      maxLines: 6,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: const InputDecoration(
-                        hintText: 'The harbor fog lifts as your party gathers…',
-                        border: OutlineInputBorder(),
-                        alignLabelWithHint: true,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      'Author’s Note',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Optional chat instructions injected every turn '
-                      '(same as ⋮ → Author’s Note).',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    PresetButton(
-                      label: 'Author’s Note presets',
-                      onPressed: () async {
-                        final preset = await pickTextPreset(
-                          context: context,
-                          title: "Author's Note presets",
-                          presets: AnimaPresets.authorsNotes,
-                        );
-                        if (preset == null) return;
-                        setState(() {
-                          _authorsNoteController.text = preset.text;
-                        });
-                      },
-                    ),
-                    TextField(
-                      controller: _authorsNoteController,
-                      minLines: 3,
-                      maxLines: 6,
-                      decoration: const InputDecoration(
-                        hintText: 'e.g. Keep replies short. Stay in character.',
-                        border: OutlineInputBorder(),
-                        alignLabelWithHint: true,
-                      ),
-                    ),
+                    _optionsChipRow(),
                     if (_all.length < minCharacters) ...[
                       const SizedBox(height: 16),
                       Text(

@@ -14,6 +14,7 @@ import '../services/roadway_cache_service.dart';
 import '../services/persona_service.dart';
 import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
+import '../models/world_workshop.dart';
 import '../services/world_workshop_service.dart';
 import '../widgets/anima_avatar.dart';
 import '../widgets/greeting_picker.dart';
@@ -22,6 +23,8 @@ import 'characters_screen.dart';
 import 'chat_screen.dart';
 import 'group_chat_setup_screen.dart';
 import 'settings_screen.dart';
+import 'world_workshop_chat_screen.dart';
+import 'world_workshop_list_screen.dart';
 
 /// Default landing screen — chat history and shortcuts to start chatting.
 class HomeScreen extends StatefulWidget {
@@ -59,6 +62,8 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   List<ChatSession> _chats = [];
   List<Character> _characters = [];
+  List<WorldWorkshop> _workshops = [];
+  String? _lastWorkshopId;
   bool _loading = true;
   final _draftService = ComposerDraftService();
   final _roadwayCache = RoadwayCacheService();
@@ -72,10 +77,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _load() async {
     final chats = await widget.chatService.listAllChats();
     final characters = await widget.characterService.loadCharacters();
+    final workshops = await widget.worldWorkshopService.loadWorkshops();
+    final lastId = await widget.worldWorkshopService.getLastOpenedId();
     if (!mounted) return;
     setState(() {
       _chats = chats;
       _characters = characters;
+      _workshops = workshops;
+      _lastWorkshopId = lastId;
       _loading = false;
     });
   }
@@ -160,7 +169,7 @@ class _HomeScreenState extends State<HomeScreen> {
     await _load();
   }
 
-  Future<void> _startNewChat() async {
+  Future<void> _showNewSheet() async {
     final choice = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -171,16 +180,17 @@ class _HomeScreenState extends State<HomeScreen> {
             ListTile(
               leading: const Icon(Icons.person_outline),
               title: const Text('Solo chat'),
-              subtitle: const Text('One character'),
               onTap: () => Navigator.pop(context, 'solo'),
             ),
             ListTile(
               leading: const Icon(Icons.groups_outlined),
               title: const Text('Group chat'),
-              subtitle: const Text(
-                'Several characters — set reply order, auto-reply, lore, note',
-              ),
               onTap: () => Navigator.pop(context, 'group'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.travel_explore),
+              title: const Text('New workshop'),
+              onTap: () => Navigator.pop(context, 'workshop'),
             ),
           ],
         ),
@@ -189,10 +199,14 @@ class _HomeScreenState extends State<HomeScreen> {
     if (choice == null || !mounted) return;
     if (choice == 'group') {
       await _startGroupChat();
+    } else if (choice == 'workshop') {
+      await _openCreationCenter(createNew: true);
     } else {
       await _startSoloChat();
     }
   }
+
+  Future<void> _startNewChat() async => _showNewSheet();
 
   Future<void> _startSoloChat() async {
     final character = await Navigator.of(context).push<Character>(
@@ -262,6 +276,152 @@ class _HomeScreenState extends State<HomeScreen> {
     await _openChat(session);
   }
 
+  Future<void> _openCreationCenter({bool createNew = false}) async {
+    if (createNew) {
+      final workshop =
+          await widget.worldWorkshopService.upsert(WorldWorkshop.empty());
+      if (!mounted) return;
+      await _openWorkshop(workshop);
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => WorldWorkshopListScreen(
+          workshopService: widget.worldWorkshopService,
+          worldInfoService: widget.worldInfoService,
+          characterService: widget.characterService,
+          characterCategoryService: widget.characterCategoryService,
+          personaService: widget.personaService,
+          chatService: widget.chatService,
+          apiKeyService: widget.apiKeyService,
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
+          openingSceneService: widget.openingSceneService,
+          appearanceController: widget.appearanceController,
+        ),
+      ),
+    );
+    await _load();
+  }
+
+  Future<void> _openWorkshop(WorldWorkshop workshop) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => WorldWorkshopChatScreen(
+          workshop: workshop,
+          workshopService: widget.worldWorkshopService,
+          worldInfoService: widget.worldInfoService,
+          characterService: widget.characterService,
+          characterCategoryService: widget.characterCategoryService,
+          personaService: widget.personaService,
+          chatService: widget.chatService,
+          apiKeyService: widget.apiKeyService,
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
+          worldWorkshopService: widget.worldWorkshopService,
+          openingSceneService: widget.openingSceneService,
+          appearanceController: widget.appearanceController,
+        ),
+      ),
+    );
+    await _load();
+  }
+
+  Widget _workshopsSection() {
+    if (_workshops.isEmpty) return const SizedBox.shrink();
+    WorldWorkshop? continueWorkshop;
+    if (_lastWorkshopId != null) {
+      for (final w in _workshops) {
+        if (w.id == _lastWorkshopId) continueWorkshop = w;
+      }
+    }
+    continueWorkshop ??= _workshops.first;
+    final continueW = continueWorkshop;
+    final tiles = <WorldWorkshop>[continueW];
+    for (final w in _workshops.take(3)) {
+      if (w.id != continueW.id) tiles.add(w);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Row(
+            children: [
+              Text(
+                'Creation Center',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const Spacer(),
+              TextButton(
+                onPressed: _openCreationCenter,
+                child: const Text('All worlds'),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: 88,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            itemCount: tiles.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              final w = tiles[index];
+              final isContinue = w.id == continueW.id;
+              final bits = <String>[];
+              if (isContinue) bits.add('continue');
+              if (w.exportedLorebookId != null) bits.add('lore');
+              if (w.openingScene.trim().isNotEmpty) bits.add('scene');
+              if (w.linkedCharacterIds.isNotEmpty) {
+                bits.add('${w.linkedCharacterIds.length} cast');
+              }
+              return Material(
+                color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(12),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => _openWorkshop(w),
+                  child: Container(
+                    width: 140,
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (isContinue)
+                          Text(
+                            'Continue',
+                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                        Text(
+                          w.title,
+                          maxLines: isContinue ? 1 : 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        const Spacer(),
+                        Text(
+                          bits.isEmpty
+                              ? '${w.messages.length} msgs'
+                              : bits.join(' · '),
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+
   Future<void> _deleteChat(ChatSession chat) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -312,54 +472,58 @@ class _HomeScreenState extends State<HomeScreen> {
           ? _EmptyHome(onStartChat: _startNewChat)
           : RefreshIndicator(
               onRefresh: _load,
-              child: ListView.separated(
-                padding: const EdgeInsets.only(bottom: 88),
-                itemCount: _chats.length,
-                separatorBuilder: (_, _) => const Divider(height: 1),
-                itemBuilder: (context, index) {
-                  final chat = _chats[index];
-                  final preview = _lastMessagePreview(chat);
-                  final solo = chat.isGroup
-                      ? null
-                      : _characterById[chat.characterId];
-                  return ListTile(
-                    leading: chat.isGroup
-                        ? CircleAvatar(
-                            child: Icon(
-                              Icons.groups,
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onPrimaryContainer,
-                            ),
-                          )
-                        : AnimaAvatar(
-                            fileName: solo?.avatarFileName,
-                            label: solo?.name ?? chat.title,
-                            radius: 22,
-                          ),
-                    title: Text(
-                      _chatListTitle(chat),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: Text(
-                      preview == null
-                          ? _chatSubtitle(chat)
-                          : '$preview\n${_chatSubtitle(chat)}',
-                      maxLines: preview == null ? 1 : 3,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    isThreeLine: preview != null,
-                    onTap: () => _openChat(chat),
-                    onLongPress: () => _deleteChat(chat),
-                  );
-                },
+              child: CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(child: _workshopsSection()),
+                  SliverList.separated(
+                    itemCount: _chats.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final chat = _chats[index];
+                      final preview = _lastMessagePreview(chat);
+                      final solo = chat.isGroup
+                          ? null
+                          : _characterById[chat.characterId];
+                      return ListTile(
+                        leading: chat.isGroup
+                            ? CircleAvatar(
+                                child: Icon(
+                                  Icons.groups,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onPrimaryContainer,
+                                ),
+                              )
+                            : AnimaAvatar(
+                                fileName: solo?.avatarFileName,
+                                label: solo?.name ?? chat.title,
+                                radius: 22,
+                              ),
+                        title: Text(
+                          _chatListTitle(chat),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          preview == null
+                              ? _chatSubtitle(chat)
+                              : '$preview · ${_shortDate(chat.updatedAt)}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onTap: () => _openChat(chat),
+                        onLongPress: () => _deleteChat(chat),
+                      );
+                    },
+                  ),
+                  const SliverPadding(padding: EdgeInsets.only(bottom: 88)),
+                ],
               ),
             ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _startNewChat,
-        icon: const Icon(Icons.add_comment_outlined),
-        label: const Text('New chat'),
+        onPressed: _showNewSheet,
+        icon: const Icon(Icons.add),
+        label: const Text('New'),
       ),
     );
   }
