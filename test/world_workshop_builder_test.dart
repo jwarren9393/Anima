@@ -990,5 +990,27 @@ Here is the card you asked for:
       );
       expect(ordered.map((e) => e.id).toList(), ['b', 'a', 'c']);
     });
+
+    test('workshopCastCharacters merges linked ids and source workshop', () {
+      const linked = Character(id: 'l1', name: 'Linked');
+      const sourced = Character(
+        id: 's1',
+        name: 'Sourced',
+        sourceWorkshopId: 'w1',
+      );
+      const other = Character(id: 'o1', name: 'Other');
+      final workshop = WorldWorkshop(
+        id: 'w1',
+        title: 'Test',
+        messages: const [],
+        updatedAt: DateTime(2026),
+        linkedCharacterIds: ['l1'],
+      );
+      final cast = builder.workshopCastCharacters(
+        workshop: workshop,
+        allCharacters: [linked, sourced, other],
+      );
+      expect(cast.map((c) => c.id).toList(), ['l1', 's1']);
+    });
   });
 }

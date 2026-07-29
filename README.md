@@ -10,7 +10,7 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **Also builds** | Linux desktop (works); Windows desktop (needs a Windows host) |
 | **Distribution** | Personal use only — **not** published to app stores |
 | **Repo** | https://github.com/jwarren9393/Anima (private) |
-| **Version** | **1.0.0** build **32** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
+| **Version** | **1.0.0** build **33** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
 
 API base (pay-as-you-go): `https://nano-gpt.com/api/v1/chat/completions`  
 Auth: `Authorization: Bearer <API_KEY>`  
@@ -491,7 +491,7 @@ Hub on **Home** (world tiles) and **Settings → Creation Center**.
 | **Create/Update lorebook** | NanoGPT → keyword entries → one global lorebook (one workshop ↔ one book) |
 | **Create/Update opening scene** | Saves narrator prose; syncs to Opening scenes library |
 | **Create AI characters** | Multi-select people from chat + lore → generate cards → review before save |
-| **Update existing character** | Pick saved card (imported-chat cast first) → merge from workshop → review → overwrite on Save |
+| **Update workshop cast** | Pick a character tied to this workshop → merge latest chat into card → review → overwrite on Save |
 | **Create my persona** | Pick one person from workshop + lore → player-focused fields → review before save |
 | **Include linked lorebook in prompts** | Toggle — **off by default** after create; saves tokens; **Update lorebook** export still uses the book |
 

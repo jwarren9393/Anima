@@ -31,6 +31,7 @@ import '../widgets/workshop_compact_toolbar.dart';
 import '../widgets/workshop_overview_sheet.dart';
 import 'lorebooks_screen.dart';
 import '../utils/scroll_to_end.dart';
+import '../widgets/anima_avatar.dart';
 import '../widgets/chat_composer_field.dart';
 import '../widgets/greeting_picker.dart';
 import '../widgets/keyboard_inset.dart';
@@ -2059,7 +2060,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     }
   }
 
-  Future<void> _updateExistingCharacter() async {
+  Future<void> _updateWorkshopCast({Character? preselected}) async {
     if (_sending || _exporting || _loadingLinkedLorebook) return;
     if (_workshop.exportedLorebookId != null && _linkedLorebook == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2082,28 +2083,22 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       return;
     }
 
+    if (preselected != null) {
+      await _runCharacterUpdate(preselected);
+      return;
+    }
+
     setState(() {
       _exporting = true;
-      _exportStatus = 'Loading characters…';
+      _exportStatus = 'Loading workshop cast…';
     });
 
     try {
       final existingChars = await widget.characterService.loadCharacters();
       if (!mounted) return;
-      if (existingChars.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'No saved characters yet. Create one first, then update it here.',
-            ),
-          ),
-        );
-        return;
-      }
-
-      final ordered = _builder.prioritizeCharactersForUpdate(
-        characters: existingChars,
-        importedSource: _workshop.importedSource,
+      final cast = _builder.workshopCastCharacters(
+        workshop: _workshop,
+        allCharacters: existingChars,
       );
 
       setState(() {
@@ -2111,14 +2106,45 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         _exportStatus = null;
       });
 
-      final selected = await _pickExistingCharacter(ordered);
+      if (cast.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No workshop characters yet. Use ⋮ → Create AI characters first.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      Character? selected = await _pickWorkshopCastCharacter(cast);
       if (!mounted || selected == null) return;
 
-      setState(() {
-        _exporting = true;
-        _exportStatus = 'Updating ${selected.name}…';
-      });
+      await _runCharacterUpdate(selected);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not load cast: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _exporting = false;
+          _exportStatus = null;
+        });
+      }
+    }
+  }
 
+  Future<void> _runCharacterUpdate(Character selected) async {
+    if (_sending || _exporting || _loadingLinkedLorebook) return;
+
+    setState(() {
+      _exporting = true;
+      _exportStatus = 'Updating ${selected.name}…';
+    });
+
+    try {
       final build = await widget.settingsService.resolveCharacterBuild();
       final baseUrl = await widget.settingsService.getApiBaseUrl();
 
@@ -2161,8 +2187,20 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
 
       if (!mounted) return;
       if (saved != null) {
+        final tagged = saved.sourceWorkshopId == _workshop.id
+            ? saved
+            : (await widget.characterService.upsert(
+                saved.copyWith(sourceWorkshopId: _workshop.id),
+              ))
+                .where((c) => c.id == saved.id)
+                .first;
+        final nextWorkshop = _hubController.hub.linkCharacter(
+          _workshop,
+          tagged.id,
+        );
+        await _persist(nextWorkshop);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Updated “${saved.name}”.')),
+          SnackBar(content: Text('Updated “${tagged.name}”.')),
         );
       }
     } on FormatException catch (error) {
@@ -2190,7 +2228,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     }
   }
 
-  Future<Character?> _pickExistingCharacter(List<Character> characters) async {
+  Future<Character?> _pickWorkshopCastCharacter(List<Character> cast) async {
     return showModalBottomSheet<Character>(
       context: context,
       showDragHandle: true,
@@ -2208,44 +2246,53 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
                   child: Text(
-                    'Update existing character',
+                    'Update workshop cast',
                     style: theme.textTheme.titleLarge,
                   ),
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                   child: Text(
-                    'Choose a saved card to revise from this workshop. '
-                    'You’ll review the merge before it overwrites the original.',
+                    'Characters created or linked in this workshop. Pick one to '
+                    'merge the latest chat into that card — you review before save.',
                     style: theme.textTheme.bodySmall,
                   ),
                 ),
                 Flexible(
                   child: ListView.builder(
                     shrinkWrap: true,
-                    itemCount: characters.length,
+                    itemCount: cast.length,
                     itemBuilder: (context, index) {
-                      final character = characters[index];
-                      final fromImport = _builder.isImportedChatCharacter(
-                        character,
-                        _workshop.importedSource,
-                      );
+                      final character = cast[index];
                       return ListTile(
-                        leading: const Icon(Icons.person_outline),
+                        leading: AnimaAvatar(
+                          fileName: character.avatarFileName,
+                          label: character.name,
+                          radius: 20,
+                        ),
                         title: Text(character.name),
                         subtitle: Text(
-                          [
-                            if (character.description.trim().isNotEmpty)
-                              character.description.trim(),
-                            if (fromImport) 'In imported chat',
-                            'Saved character — updates overwrite this card',
-                          ].join('\n'),
-                          maxLines: 3,
+                          character.description.trim().isNotEmpty
+                              ? character.description.trim()
+                              : 'Tap to update from workshop chat',
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
+                        trailing: const Icon(Icons.chevron_right),
                         onTap: () => Navigator.pop(context, character),
                       );
                     },
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _createCharacters();
+                    },
+                    icon: const Icon(Icons.person_add_outlined),
+                    label: const Text('Create new characters'),
                   ),
                 ),
               ],
@@ -2802,18 +2849,10 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     }
     if (!mounted) return;
 
-    final linkedChars = <Character>[];
-    for (final id in _workshop.linkedCharacterIds) {
-      for (final c in allChars) {
-        if (c.id == id) linkedChars.add(c);
-      }
-    }
-    for (final c in allChars) {
-      if (c.sourceWorkshopId == _workshop.id &&
-          !linkedChars.any((x) => x.id == c.id)) {
-        linkedChars.add(c);
-      }
-    }
+    final linkedChars = _builder.workshopCastCharacters(
+      workshop: _workshop,
+      allCharacters: allChars,
+    );
 
     final status = _hubController.statusFor(
       workshop: _workshop,
@@ -2913,6 +2952,12 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           Navigator.pop(context);
           _mergeWorkshop();
         },
+        onUpdateCharacter: _busy
+            ? null
+            : (character) {
+                Navigator.pop(context);
+                _updateWorkshopCast(preselected: character);
+              },
       ),
     );
   }
@@ -3478,8 +3523,8 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         const PopupMenuItem(
           value: 'update',
           child: ListTile(
-            leading: Icon(Icons.person_search_outlined),
-            title: Text('Update existing character'),
+            leading: Icon(Icons.edit_outlined),
+            title: Text('Update workshop cast'),
             contentPadding: EdgeInsets.zero,
           ),
         ),
@@ -3530,7 +3575,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       case 'characters':
         _createCharacters();
       case 'update':
-        _updateExistingCharacter();
+        _updateWorkshopCast();
       case 'persona':
         _createPersona();
       case 'toggle_lore_prompt':

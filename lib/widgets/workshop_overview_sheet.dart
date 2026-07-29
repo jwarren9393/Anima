@@ -33,6 +33,7 @@ class WorkshopOverviewSheet extends StatelessWidget {
     this.onGlossary,
     this.onDuplicate,
     this.onMerge,
+    this.onUpdateCharacter,
   });
 
   final WorldWorkshop workshop;
@@ -56,6 +57,7 @@ class WorkshopOverviewSheet extends StatelessWidget {
   final VoidCallback? onGlossary;
   final VoidCallback? onDuplicate;
   final VoidCallback? onMerge;
+  final ValueChanged<Character>? onUpdateCharacter;
 
   String _lorebookLabel() {
     return switch (status.lorebookState) {
@@ -230,6 +232,12 @@ class WorkshopOverviewSheet extends StatelessWidget {
                             radius: 18,
                           ),
                           title: Text(c.name),
+                          trailing: onUpdateCharacter != null
+                              ? const Icon(Icons.edit_outlined, size: 20)
+                              : null,
+                          onTap: onUpdateCharacter == null
+                              ? null
+                              : () => onUpdateCharacter!(c),
                         ),
                     ],
                     if (linkedPersona != null) ...[

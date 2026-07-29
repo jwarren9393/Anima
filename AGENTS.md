@@ -60,7 +60,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-29  
-**Last agent action:** Published **v1.0.0 build 32** — Creation Center hub, minimal UI pass, workshop folding/Fix last, comprehensive README.
+**Last agent action:** Published **v1.0.0 build 33** — Update workshop cast + Creation Center collaborator prompt.
 
 ### What works today
 
