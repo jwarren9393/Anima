@@ -1012,5 +1012,39 @@ Here is the card you asked for:
       );
       expect(cast.map((c) => c.id).toList(), ['l1', 's1']);
     });
+
+    test('buildPersonaUpdateMessages includes current persona', () {
+      const persona = Persona(
+        id: 'p1',
+        name: 'Trey',
+        description: 'Billionaire',
+        appearance: 'Scarred eye',
+      );
+      final messages = builder.buildPersonaUpdateMessages(
+        conversation: sampleConversation(),
+        existing: persona,
+      );
+      expect(messages.first['content'], contains('Preserve-and-merge'));
+      expect(messages.last['content'], contains('Trey'));
+      expect(messages.last['content'], contains('Billionaire'));
+    });
+
+    test('parsePersonaUpdateJson keeps id and avatar', () {
+      const original = Persona(
+        id: 'p1',
+        name: 'Trey',
+        description: 'Old role',
+        avatarFileName: 'a.png',
+        sourceWorkshopId: 'w1',
+      );
+      final raw = '''
+{"name": "Trey", "description": "New role", "appearance": "", "personality": "", "background": "", "goals": ""}
+''';
+      final updated = builder.parsePersonaUpdateJson(raw, original: original);
+      expect(updated.id, 'p1');
+      expect(updated.description, 'New role');
+      expect(updated.avatarFileName, 'a.png');
+      expect(updated.sourceWorkshopId, 'w1');
+    });
   });
 }

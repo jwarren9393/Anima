@@ -240,6 +240,8 @@ HOW THE USER ACTUALLY SAVES WORK (tell them when relevant, using exact labels):
   user reviews each before save.
 - ⋮ menu → **Update workshop cast** — revises characters already tied to THIS
   workshop (created here or linked here); user reviews before overwrite.
+- ⋮ menu → **Create my persona** / **Update my persona** — player identity for
+  this workshop; update merges the full workshop chat into the linked persona.
 - ⋮ menu → **Opening scene** / chip **Add scene** — narrator setup for roleplay
   (not stored in the lorebook).
 - ⋮ menu → **World dashboard** → **Play this world** — starts solo/group chat.
@@ -1061,6 +1063,19 @@ Output rules:
         ? ''
         : 'World summary:\n${worldSummary.trim()}\n\n';
     final canonBlock = formatCanonPins(conversation, canonPinMessageIds);
+    final isUpdate = sourceLorebook != null;
+    final updateRules = isUpdate
+        ? '''
+UPDATE MODE (linked lorebook present):
+- This is an UPDATE, not a blank slate. Preserve existing entry IDs, extensions,
+  and settings unless the workshop explicitly asks to remove them.
+- ADD new entries for people, places, factions, rules, and facts established in
+  the workshop chat but missing from the current book.
+- REVISE existing entries when the chat updates or contradicts older lore —
+  prefer workshop conversation, canon pins, and world summary over stale book text.
+- Resolve contradictions by aligning the book with the latest workshop canon.
+'''
+        : '';
     final user =
         '''
 $imported$summaryBlock${canonBlock.isEmpty ? '' : '$canonBlock\n'}${source.isEmpty ? '' : '''
@@ -1069,7 +1084,94 @@ extensions unless the conversation explicitly asks to change or remove them:
 
 $source
 
+$updateRules
 '''}Turn this workshop conversation${imported.isEmpty ? '' : ' (and imported chat source)'} into one complete lorebook JSON object:
+
+${formatTranscript(conversation)}
+'''
+            .trim();
+
+    return [
+      {'role': 'system', 'content': system},
+      {'role': 'user', 'content': user},
+    ];
+  }
+
+  String formatPersonaJson(Persona persona) {
+    return const JsonEncoder.withIndent('  ').convert({
+      'name': persona.name,
+      'description': persona.description,
+      'appearance': persona.appearance,
+      'personality': persona.personality,
+      'background': persona.background,
+      'goals': persona.goals,
+    });
+  }
+
+  /// Preserve-and-merge update for an existing player persona.
+  List<Map<String, String>> buildPersonaUpdateMessages({
+    required List<ChatMessage> conversation,
+    required Persona existing,
+    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+    Lorebook? sourceLorebook,
+    WorkshopSourceContext? importedSource,
+    String worldSummary = '',
+    List<String> canonPinMessageIds = const [],
+  }) {
+    final guidance = guidanceNote.trim().isEmpty
+        ? CollaboratorSettings.defaultGuidanceNote
+        : guidanceNote.trim();
+    final name = existing.name.trim().isEmpty ? 'User' : existing.name.trim();
+    final currentPersona = formatPersonaJson(existing);
+
+    final system =
+        '''
+You update ONE existing user persona JSON object for the Anima roleplay app.
+This is who the human player is — not an AI character.
+
+Guidance note (follow closely):
+$guidance
+
+Target persona: $name
+
+Preserve-and-merge rules:
+- Keep established facts from CURRENT PERSONA unless the workshop clearly revises them.
+- Merge in new details from the workshop conversation, imported source, and lorebook.
+- Do not invent contradictions or erase identity the persona already states.
+- Keep the same person (same name unless the workshop explicitly renames them).
+
+Output rules:
+- Reply with ONLY a single JSON object. No markdown fences. No preamble.
+- Shape:
+{
+  "name": "$name",
+  "description": "concise identity, title, occupation, and role in the setting",
+  "appearance": "physical features, clothing, and distinguishing details",
+  "personality": "traits, habits, temperament, and speech style",
+  "background": "history, relationships, abilities, and important personal facts",
+  "goals": "current goals, motives, fears, loyalties, and conflicts"
+}
+- Do not sanitize or moralize.
+'''
+            .trim();
+
+    final source = formatLorebookContext(sourceLorebook);
+    final imported = _importedBlock(importedSource);
+    final summaryBlock = worldSummary.trim().isEmpty
+        ? ''
+        : 'World summary:\n${worldSummary.trim()}\n\n';
+    final canonBlock = formatCanonPins(conversation, canonPinMessageIds);
+    final user =
+        '''
+CURRENT PERSONA (preserve established facts; merge workshop updates):
+$currentPersona
+
+$imported$summaryBlock${canonBlock.isEmpty ? '' : '$canonBlock\n'}${source.isEmpty ? '' : '''
+Linked lorebook:
+
+$source
+
+'''}Update the persona for "$name" using the current persona plus workshop conversation:
 
 ${formatTranscript(conversation)}
 '''
@@ -1700,6 +1802,29 @@ ${formatTranscript(conversation)}
       personality: '${map['personality'] ?? ''}'.trim(),
       background: '${map['background'] ?? map['backstory'] ?? ''}'.trim(),
       goals: '${map['goals'] ?? map['motivation'] ?? ''}'.trim(),
+    );
+  }
+
+  /// Parse persona update draft, preserving id, avatar, and workshop link.
+  Persona parsePersonaUpdateJson(String raw, {required Persona original}) {
+    final parsed = parsePersonaJson(
+      raw,
+      preferredId: original.id,
+      fallbackName: original.name,
+    );
+    String pick(String next, String prev) =>
+        next.trim().isNotEmpty ? next.trim() : prev.trim();
+
+    return Persona(
+      id: original.id,
+      name: pick(parsed.name, original.name),
+      description: pick(parsed.description, original.description),
+      appearance: pick(parsed.appearance, original.appearance),
+      personality: pick(parsed.personality, original.personality),
+      background: pick(parsed.background, original.background),
+      goals: pick(parsed.goals, original.goals),
+      avatarFileName: original.avatarFileName,
+      sourceWorkshopId: original.sourceWorkshopId,
     );
   }
 

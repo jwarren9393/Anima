@@ -1361,50 +1361,61 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       return;
     }
 
-    final localChecks = _hubController.hub.localExportChecklist(_workshop);
-    final aiChecks = await _hubController.aiChecklist(
-      workshop: _workshop,
-      nanoGpt: widget.nanoGptService,
-      settings: widget.settingsService,
-      sourceLorebook: _linkedLorebook?.book,
-    );
-    if (!mounted) return;
-    final allChecks = [...localChecks, ...aiChecks];
-    if (allChecks.isNotEmpty) {
-      final proceed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Before lorebook export'),
-          content: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (final item in allChecks)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Text('• $item'),
-                  ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Export anyway'),
-            ),
-          ],
-        ),
+    final isUpdate = _workshop.exportedLorebookId != null;
+
+    // Updates merge chat into the linked book automatically — no pre-flight audit.
+    if (!isUpdate) {
+      final localChecks = _hubController.hub.localExportChecklist(_workshop);
+      final aiChecks = await _hubController.aiChecklist(
+        workshop: _workshop,
+        nanoGpt: widget.nanoGptService,
+        settings: widget.settingsService,
+        sourceLorebook: _linkedLorebook?.book,
       );
-      if (proceed != true) return;
+      if (!mounted) return;
+      final allChecks = [...localChecks, ...aiChecks];
+      if (allChecks.isNotEmpty) {
+        final proceed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Before lorebook export'),
+            content: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Next step: AI builds a lorebook from this workshop chat. '
+                    'These notes are a preview — the export will try to cover them.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 12),
+                  for (final item in allChecks)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Text('• $item'),
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Create lorebook'),
+              ),
+            ],
+          ),
+        );
+        if (proceed != true) return;
+      }
     }
 
     setState(() {
       _exporting = true;
-      _exportStatus = 'Creating lorebook…';
+      _exportStatus = isUpdate ? 'Updating lorebook…' : 'Creating lorebook…';
     });
     try {
       final collaborator = await widget.settingsService
@@ -1482,8 +1493,11 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Saved “${global.displayName}” (${book.entries.length} entries) '
-            'to World Info.',
+            isUpdate
+                ? 'Updated “${global.displayName}” (${book.entries.length} entries) '
+                    'in World Info.'
+                : 'Saved “${global.displayName}” (${book.entries.length} entries) '
+                    'to World Info.',
           ),
         ),
       );
@@ -1500,7 +1514,13 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not create lorebook: $error')),
+        SnackBar(
+          content: Text(
+            isUpdate
+                ? 'Could not update lorebook: $error'
+                : 'Could not create lorebook: $error',
+          ),
+        ),
       );
     } finally {
       if (mounted) {
@@ -2478,6 +2498,151 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     }
   }
 
+  Future<void> _updateWorkshopPersona() async {
+    if (_sending || _exporting || _loadingLinkedLorebook) return;
+    if (_workshop.exportedLorebookId != null && _linkedLorebook == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'The linked World Info lorebook is missing. Import or link it again.',
+          ),
+        ),
+      );
+      return;
+    }
+    if (!_hasSourceMaterial) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Chat a bit first (or import a roleplay chat), then update your persona.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final personaId = _workshop.linkedPersonaId;
+    if (personaId == null || personaId.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No workshop persona yet. Use ⋮ → Create my persona first.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final existing = await widget.personaService.getById(personaId);
+    if (!mounted) return;
+    if (existing == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Linked persona is missing. Create my persona again from this workshop.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    await _runPersonaUpdate(existing);
+  }
+
+  Future<void> _runPersonaUpdate(Persona existing) async {
+    if (_sending || _exporting || _loadingLinkedLorebook) return;
+
+    setState(() {
+      _exporting = true;
+      _exportStatus = 'Updating ${existing.name}…';
+    });
+
+    try {
+      final collaborator = await widget.settingsService
+          .getCollaboratorSettings();
+      final model = await widget.settingsService.getModel();
+      final sampling = WorldWorkshopBuilder.workshopExportSampling(
+        await widget.settingsService.getSampling(),
+      );
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+
+      final personaRaw = await widget.nanoGptService.complete(
+        model: model,
+        messages: _builder.buildPersonaUpdateMessages(
+          conversation: _workshop.messages,
+          existing: existing,
+          guidanceNote: collaborator.guidanceNote,
+          sourceLorebook: _lorebookForPrompt,
+          importedSource: _workshop.importedSource,
+          worldSummary: _workshop.worldSummary,
+          canonPinMessageIds: _workshop.canonPinMessageIds,
+        ),
+        baseUrl: baseUrl,
+        sampling: sampling,
+      );
+
+      final draft = _builder.parsePersonaUpdateJson(
+        personaRaw,
+        original: existing,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _exporting = false;
+        _exportStatus = null;
+      });
+
+      final saved = await Navigator.of(context).push<Persona>(
+        MaterialPageRoute(
+          builder: (_) => PersonaEditScreen(
+            personaService: widget.personaService,
+            settingsService: widget.settingsService,
+            nanoGptService: widget.nanoGptService,
+            existing: draft,
+            generatedDraft: true,
+          ),
+        ),
+      );
+
+      if (!mounted || saved == null) return;
+      final tagged = saved.sourceWorkshopId == _workshop.id
+          ? saved
+          : (await widget.personaService.upsert(
+              saved.copyWith(sourceWorkshopId: _workshop.id),
+            ))
+              .where((p) => p.id == saved.id)
+              .first;
+      await _persist(
+        _workshop.copyWith(linkedPersonaId: tagged.id),
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Updated persona “${tagged.name}”.')),
+      );
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update persona: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _exporting = false;
+          _exportStatus = null;
+        });
+      }
+    }
+  }
+
   Future<WorkshopCharacterCandidate?> _pickPersonaCandidate({
     required List<WorkshopCharacterCandidate> candidates,
     required Set<String> existingNames,
@@ -2957,6 +3122,12 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
             : (character) {
                 Navigator.pop(context);
                 _updateWorkshopCast(preselected: character);
+              },
+        onUpdatePersona: _busy || persona == null
+            ? null
+            : () {
+                Navigator.pop(context);
+                _updateWorkshopPersona();
               },
       ),
     );
@@ -3536,6 +3707,15 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
             contentPadding: EdgeInsets.zero,
           ),
         ),
+        if (_workshop.linkedPersonaId != null)
+          const PopupMenuItem(
+            value: 'update_persona',
+            child: ListTile(
+              leading: Icon(Icons.badge_outlined),
+              title: Text('Update my persona'),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
         if (_linkedLorebook != null) ...[
           const PopupMenuDivider(),
           PopupMenuItem(
@@ -3578,6 +3758,8 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         _updateWorkshopCast();
       case 'persona':
         _createPersona();
+      case 'update_persona':
+        _updateWorkshopPersona();
       case 'toggle_lore_prompt':
         _toggleLinkedLorebookInPrompt();
     }
