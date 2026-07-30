@@ -12,6 +12,17 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **Repo** | https://github.com/jwarren9393/Anima (private) |
 | **Version** | **1.0.0** build **35** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
 
+### What’s new in recent builds (1.0.0)
+
+| Build | Highlights |
+|-------|------------|
+| **35** | API **Category** filter (incl. **Uncensored & derestricted (broad)**); **Browse models** sheet + **selected model card** — context, max output, parameter size, TPS, TTFT, uptime %, description, capabilities, pricing/Included (from NanoGPT catalog + routing API) |
+| **34** | **Update lorebook** merges workshop chat immediately (no misleading pre-flight on update); **Update my persona** in workshop ⋮ + World dashboard |
+| **33** | **Update workshop cast** (workshop-tied characters only, not whole library); Creation Center collaborator prompt — brainstorm-only, points to real ⋮ menu actions |
+| **32** | Creation Center **World dashboard** hub; **Fix last** chip; minimal UI pass (chat/home/group/settings); workshop **world summary** folding; full feature README |
+
+Earlier 1.0.0 builds added Storybook layout, opening scenes library, backup/sync, group chat polish, and the core SillyTavern-style toolkit. **203 tests** at build 35.
+
 API base (pay-as-you-go): `https://nano-gpt.com/api/v1/chat/completions`  
 Auth: `Authorization: Bearer <API_KEY>`  
 Optional subscription base: `https://nano-gpt.com/api/subscription/v1`
@@ -22,16 +33,17 @@ Optional subscription base: `https://nano-gpt.com/api/subscription/v1`
 
 1. [Installation and updates](#installation-and-updates)
 2. [Who this README is for](#who-this-readme-is-for)
-3. [Home screen](#1-home-screen)
-4. [Starting a new chat](#2-starting-a-new-chat)
-5. [Chat screen](#3-chat-screen)
-6. [Settings hub](#4-settings-hub)
-7. [Macros](#5-macros)
-8. [What gets sent to NanoGPT](#6-what-gets-sent-to-nanogpt-typical-turn)
-9. [Local data](#7-local-data--background-services)
-10. [Current limits](#8-current-limits)
-11. [Security](#9-security)
-12. [For coding agents](#10-for-coding-agents)
+3. [Feature summary (at a glance)](#feature-summary-at-a-glance)
+4. [Home screen](#1-home-screen)
+5. [Starting a new chat](#2-starting-a-new-chat)
+6. [Chat screen](#3-chat-screen)
+7. [Settings hub](#4-settings-hub)
+8. [Macros](#5-macros)
+9. [What gets sent to NanoGPT](#6-what-gets-sent-to-nanogpt-typical-turn)
+10. [Local data](#7-local-data--background-services)
+11. [Current limits](#8-current-limits)
+12. [Security](#9-security)
+13. [For coding agents](#10-for-coding-agents)
 
 ---
 
@@ -76,7 +88,8 @@ flutter build windows --release
 # Run: build\windows\x64\runner\Release\anima.exe (keep the whole Release folder)
 ```
 
-Or: `.\scripts\update_windows.ps1 -Zip` for a zip package.
+Or: `.\scripts\update_windows.ps1 -Zip` for a zip package.  
+Upload to GitHub Releases: `.\scripts\update_windows.ps1 -Zip -Release` (needs `gh auth login`).
 
 ### Moving data between devices
 
@@ -95,6 +108,22 @@ Living build notes for coding agents: [`AGENTS.md`](AGENTS.md) (status, roadmap,
 
 ---
 
+## Feature summary (at a glance)
+
+**Chat & roleplay** — Solo and group chats; streaming; swipes; edit / delete / rewind / branch; Continue, Impersonate, Regenerate, **Rewrite reply…**; Paths (Roadway); auto-reply (default off); OOC + ✨ Format; memory summary + auto-summarize; Author’s Note; per-chat persona and World Info; opening scene narrator; context estimate; export/import chat; manage cast mid-chat; fullscreen avatars.
+
+**Characters & personas** — ST V1/V2/V3 JSON + PNG import/export; categories; AI wand; consistency check; embedded lorebooks; alternate greetings; **Generate avatar**; group speaker chips.
+
+**World & lore** — Global lorebooks + scan depth/budget + recursive scan; keyword triggers + toast; entry AI wand + keyword suggest; per-chat lore picks.
+
+**Creation Center** — World workshops; import chat/lore/bundle; world dashboard (play, summarize, glossary, scene ideas, export); Fix last; canon pins; create/update lorebook, opening scene, characters, persona; **Update workshop cast** / **Update my persona**; roleplay chats on Home; linked lore off in prompts by default.
+
+**API & models** — NanoGPT key + subscription toggle; **category + provider filters**; **Browse models** with ctx/output/params/TPS/TTFT/uptime; image model picker; credits usage.
+
+**Look & data** — Theme Studio (8 presets, Storybook layout, chat backgrounds, RP colors); backup `.anima-backup` + phone ↔ PC sync (no API key in file).
+
+---
+
 # Complete feature guide
 
 ## 1. Home screen
@@ -103,7 +132,7 @@ Landing page after launch.
 
 ### What you see
 
-- **Chat history** — solo chats show the character name; group chats show your custom name or a short default like “Group chat (3)”.
+- **Chat history** — all saved roleplay chats (solo + group), including chats started from Creation Center; solo = character name; groups = custom name or short default like “Group chat (3)”.
 - Each row: avatar, title, last-message preview, message count, last updated time, **Note** badge when Author’s Note is set.
 - **Creation Center** horizontal row — world tiles; the most recent workshop is marked **continue**; tap a tile to open that workshop; **+** opens the workshop list.
 - App bar: **Settings** (gear).
@@ -281,7 +310,26 @@ Scrollable sheet (~55% screen height on wide displays).
 
 ## 4. Settings hub
 
-Opened from Home or Chat ⋮ → **Settings**. Grouped sections: **World**, **AI**, **App**. Top banner: **API & connection** status (model name or “No API key”).
+Opened from Home or Chat ⋮ → **Settings**. Top banner: **API & connection** (tap for key, model, catalogs).
+
+### Menu (quick reference)
+
+| Section | Screen | What it covers |
+|---------|--------|----------------|
+| *(banner)* | **API & connection** | API key, credits, chat model browser, image model, subscription toggle |
+| **World** | **Personas** | Multiple {{user}} identities, avatars, default persona |
+| **World** | **Characters** | ST-style cards, categories, import/export, AI wand, consistency check |
+| **World** | **Opening scenes** | Saved narrator setups for new chats |
+| **World** | **World Info & lore** | Global scan settings + global lorebook list |
+| **World** | **Creation Center** | World workshops, import chat/lore/bundle, hub dashboard |
+| **AI** | **Generation parameters** | Sampling, context size, auto-summarize |
+| **AI** | **Global chat prompts** | App-wide system + post-history |
+| **AI** | **AI collaborator** | Wand, Format, Paths notes; Enter-to-send (desktop) |
+| **AI** | **Character builds** | Model + sampling for slim card JSON generation |
+| **App** | **Appearance** | Theme Studio — presets, layout, colors, fonts, chat experience, avatars |
+| **App** | **Backup, restore & sync** | `.anima-backup` export + cross-device sync file |
+
+Detailed sections below follow this order where possible.
 
 ### 4.1 API & connection
 
@@ -297,12 +345,15 @@ Opened from Home or Chat ⋮ → **Settings**. Grouped sections: **World**, **AI
 
 **AI model (chat)**
 
-- Live NanoGPT **model catalog**.
+- Live NanoGPT **model catalog** (`detailed=true`).
 - **Category** filter first: **All**, **Uncensored & derestricted (broad)** (NanoGPT’s Uncensored category plus any model whose id/name/description contains uncensored, abliterated, derestricted, unfiltered, or unrestricted), then each NanoGPT category (Roleplay, Coding, etc.).
 - **Provider** filter second: **Auto** first (`auto-model`, `auto-model-basic`, `auto-model-standard`, `auto-model-premium`), then A–Z — scoped to the category filter.
-- Status line shows filtered count (e.g. `54 of 200 models`).
-- **Browse models** opens a searchable sheet: context, max output, parameter size (e.g. 70B), TPS, TTFT, uptime %, NanoGPT description, capability chips, Included/pricing — loaded from the live catalog + routing stats API (no browser needed).
-- Refresh catalog; optional **custom model id**.
+- Status line shows filtered count (e.g. `54 of 200 models · 12 providers`).
+- **Selected model card** — summary for your current pick: stat chips, description, capability chips, pricing/Included; loads **TPS / TTFT / uptime %** from NanoGPT’s providers API when available.
+- **Browse models** — searchable sheet for the current provider filter: same stats per row (context, max output, parameter size e.g. 70B, TPS, TTFT, uptime %, description, Included/category); tap to select.
+- **Note:** NanoGPT’s website “Intelligence” benchmark (Artificial Analysis) is **not** in the public API — Anima shows what NanoGPT returns on models + providers endpoints.
+- Refresh catalog; **custom model id** field still works for ids not in the list.
+- Save model separately from API key.
 
 **Image model (avatars)**
 
@@ -490,14 +541,15 @@ Hub on **Home** (world tiles) and **Settings → Creation Center**.
 | **World dashboard** | Hub overview sheet (see below) |
 | **Context estimate** | Detailed breakdown |
 | **Start roleplay (pick cast)** | Shortcut to solo/group with workshop opening prefilled |
-| **Create/Update lorebook** | NanoGPT → keyword entries → one global lorebook (one workshop ↔ one book) |
+| **Create/Update lorebook** | NanoGPT → keyword entries → one global lorebook (one workshop ↔ one book). **First create:** optional preview → **Create lorebook**. **Update:** merges immediately from workshop chat (no fake “export anyway” audit). |
 | **Create/Update opening scene** | Saves narrator prose; syncs to Opening scenes library |
 | **Create AI characters** | Multi-select people from chat + lore → generate cards → review before save |
-| **Update workshop cast** | Pick a character tied to this workshop → merge latest chat → review → save |
-| **Update my persona** | When a persona is linked to this workshop → merge workshop chat into your persona card → review → save |
-| **Create my persona** | Generate player persona from workshop (links to workshop on save) |
+| **Update workshop cast** | Characters tied to this workshop (`linkedCharacterIds` or created here) → merge chat → review → save (does not scan whole Characters library) |
+| **Update my persona** | When a persona is linked → merge workshop chat into persona fields → review → save (⋮ menu + dashboard persona row) |
 | **Create my persona** | Pick one person from workshop + lore → player-focused fields → review before save |
-| **Include linked lorebook in prompts** | Toggle — **off by default** after create; saves tokens; **Update lorebook** export still uses the book |
+| **Include linked lorebook in prompts** | Toggle — **off by default** after create; saves tokens; **Update lorebook** still uses the book |
+
+**Workshop AI behavior** — the chat bot is **brainstorm-only**; it cannot save lore, cards, or scenes. It tells you to use the exact ⋮ menu labels above (no fake “pick A or B” action menus).
 
 **Long-press message menu (workshop)**
 
@@ -527,7 +579,7 @@ Hub on **Home** (world tiles) and **Settings → Creation Center**.
 
 **Status chips:** lorebook state (linked/stale/draft/missing), opening scene, character count, persona linked, canon pins, scene ideas.
 
-**Sections:** source chat (if imported), world summary, world overview, linked characters, persona, roleplay chats (tap to open).
+**Sections:** source chat (if imported), world summary, world overview, linked characters (tap → **Update workshop cast**), persona (tap → **Update my persona** when linked), **Roleplay chats** started from this workshop (tap opens normal chat on Home list too).
 
 **Actions**
 
@@ -717,6 +769,7 @@ Data under app documents directory. **Nothing uploaded to GitHub.**
 - Paths only on long-press menu (not permanent composer button).
 - Backup/sync plain JSON, not encrypted; API key excluded on purpose.
 - PNG card export: JPEG/WebP avatars may use placeholder; PNG avatars embed correctly.
+- NanoGPT website **Intelligence** scores not available via API (Anima shows catalog + routing stats instead).
 - Not yet: undo send, last-chat resume, pinned Author’s Note / mood chips, memory preview panel.
 - Private personal app — not for Play Store / App Store.
 
