@@ -24,6 +24,7 @@ $versionName = $version.Split('+')[0]
 
 Write-Host "Building Anima $versionName for Windows..."
 flutter pub get
+dart run flutter_launcher_icons
 flutter build windows --release
 
 $releaseDir = Join-Path $RootDir "build\windows\x64\runner\Release"

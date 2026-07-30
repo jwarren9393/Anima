@@ -10,12 +10,13 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **Also builds** | Linux desktop (works); Windows desktop (needs a Windows host) |
 | **Distribution** | Personal use only — **not** published to app stores |
 | **Repo** | https://github.com/jwarren9393/Anima (private) |
-| **Version** | **1.0.0** build **35** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
+| **Version** | **1.0.0** build **36** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
 
 ### What’s new in recent builds (1.0.0)
 
 | Build | Highlights |
 |-------|------------|
+| **36** | Desktop **Anima icon** on Windows (embedded in `anima.exe`) and Linux (window + app menu); same asset as Android |
 | **35** | API **Category** filter (incl. **Uncensored & derestricted (broad)**); **Browse models** sheet + **selected model card** — context, max output, parameter size, TPS, TTFT, uptime %, description, capabilities, pricing/Included (from NanoGPT catalog + routing API) |
 | **34** | **Update lorebook** merges workshop chat immediately (no misleading pre-flight on update); **Update my persona** in workshop ⋮ + World dashboard |
 | **33** | **Update workshop cast** (workshop-tied characters only, not whole library); Creation Center collaborator prompt — brainstorm-only, points to real ⋮ menu actions |
@@ -88,7 +89,7 @@ flutter build windows --release
 # Run: build\windows\x64\runner\Release\anima.exe (keep the whole Release folder)
 ```
 
-Or: `.\scripts\update_windows.ps1 -Zip` for a zip package.  
+Or: `.\scripts\update_windows.ps1 -Zip` for a zip package (build embeds the Anima icon in `anima.exe`).  
 Upload to GitHub Releases: `.\scripts\update_windows.ps1 -Zip -Release` (needs `gh auth login`).
 
 ### Moving data between devices

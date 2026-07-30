@@ -334,7 +334,7 @@ scripts/
 ```
 
 **Dependencies in use:** `flutter_secure_storage`, `http`, `path_provider`, `file_picker`, `share_plus`, `path`, `google_fonts`, `saf` (Android sync file access)  
-**Dev / branding:** `flutter_launcher_icons`; master icon at `assets/branding/anima_icon.png`
+**Dev / branding:** `flutter_launcher_icons` (Android + Windows from `assets/branding/anima_icon.png`; Linux bundles the same PNG beside `data/`); master icon at `assets/branding/anima_icon.png`. Release scripts run icon generation before desktop builds.
 
 ---
 

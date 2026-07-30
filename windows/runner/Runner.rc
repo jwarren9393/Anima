@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.anima" "\0"
-            VALUE "FileDescription", "anima" "\0"
+            VALUE "FileDescription", "Anima" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "anima" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.anima. All rights reserved." "\0"
             VALUE "OriginalFilename", "anima.exe" "\0"
-            VALUE "ProductName", "anima" "\0"
+            VALUE "ProductName", "Anima" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

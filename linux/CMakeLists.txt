@@ -120,6 +120,12 @@ install(CODE "
 install(DIRECTORY "${PROJECT_BUILD_DIR}/${FLUTTER_ASSET_DIR_NAME}"
   DESTINATION "${INSTALL_BUNDLE_DATA_DIR}" COMPONENT Runtime)
 
+# App window / launcher icon (same asset as Android).
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../assets/branding/anima_icon.png"
+  DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
+  RENAME "anima_icon.png"
+  COMPONENT Runtime)
+
 # Install the AOT library on non-Debug builds only.
 if(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
   install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"

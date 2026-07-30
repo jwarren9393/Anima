@@ -7,6 +7,20 @@
 
 #include "flutter/generated_plugin_registrant.h"
 
+static void my_application_set_window_icon(GtkWindow* window) {
+  g_autofree gchar* exe_path = g_file_read_link("/proc/self/exe", NULL);
+  if (exe_path == NULL) {
+    return;
+  }
+  g_autofree gchar* exe_dir = g_path_get_dirname(exe_path);
+  g_autofree gchar* icon_path =
+      g_build_filename(exe_dir, "data", "anima_icon.png", NULL);
+  if (!g_file_test(icon_path, G_FILE_TEST_EXISTS)) {
+    return;
+  }
+  gtk_window_set_icon_from_file(window, icon_path, NULL);
+}
+
 struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
@@ -45,12 +59,14 @@ static void my_application_activate(GApplication* application) {
   if (use_header_bar) {
     GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
     gtk_widget_show(GTK_WIDGET(header_bar));
-    gtk_header_bar_set_title(header_bar, "anima");
+    gtk_header_bar_set_title(header_bar, "Anima");
     gtk_header_bar_set_show_close_button(header_bar, TRUE);
     gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
   } else {
-    gtk_window_set_title(window, "anima");
+    gtk_window_set_title(window, "Anima");
   }
+
+  my_application_set_window_icon(window);
 
   gtk_window_set_default_size(window, 1280, 720);
 

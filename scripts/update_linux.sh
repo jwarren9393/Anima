@@ -47,6 +47,7 @@ fi
 echo "Building the latest Anima Linux release..."
 cd "$ROOT_DIR"
 flutter pub get
+dart run flutter_launcher_icons
 flutter build linux --release
 
 echo "Installing Anima for the current user..."
