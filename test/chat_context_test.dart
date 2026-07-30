@@ -164,16 +164,34 @@ void main() {
       expect(ContextEstimate.formatTokenCount(16000), '16K');
     });
 
-    test('summarizeSampling caps output and lowers temperature', () {
-      const base = SamplingSettings(
+    test('summarizeSampling uses generous defaults and caps at 2048', () {
+      const unset = SamplingSettings(
+        maxTokens: null,
+        temperature: 0.9,
+        topP: 1.0,
+      );
+      final fromUnset = ChatContextService.summarizeSampling(unset);
+      expect(
+        fromUnset.maxTokens,
+        ChatContextService.summarizeDefaultMaxTokens,
+      );
+
+      const low = SamplingSettings(
         maxTokens: 512,
         temperature: 0.9,
         topP: 1.0,
       );
-      final tuned = ChatContextService.summarizeSampling(base);
-      expect(tuned.maxTokens, lessThanOrEqualTo(1200));
-      expect(tuned.maxTokens, greaterThanOrEqualTo(512));
-      expect(tuned.temperature, lessThanOrEqualTo(0.3));
+      final fromLow = ChatContextService.summarizeSampling(low);
+      expect(fromLow.maxTokens, ChatContextService.summarizeDefaultMaxTokens);
+
+      const high = SamplingSettings(
+        maxTokens: 4096,
+        temperature: 0.9,
+        topP: 1.0,
+      );
+      final fromHigh = ChatContextService.summarizeSampling(high);
+      expect(fromHigh.maxTokens, ChatContextService.summarizeMaxCap);
+      expect(fromHigh.temperature, lessThanOrEqualTo(0.3));
     });
 
     test('buildSummarizeMessages uses clinical bullet system prompt', () {

@@ -3974,7 +3974,9 @@ class _PathsSheetState extends State<_PathsSheet> {
       final collaborator = await widget.settingsService
           .getCollaboratorSettings();
       final model = await widget.settingsService.getModel();
-      final sampling = await widget.settingsService.getSampling();
+      final sampling = RoadwayService.generateSampling(
+        await widget.settingsService.getSampling(),
+      );
       final baseUrl = await widget.settingsService.getApiBaseUrl();
       final messages = _roadway.buildMessages(
         userName: widget.userName,
@@ -3989,7 +3991,10 @@ class _PathsSheetState extends State<_PathsSheet> {
         sampling: sampling,
       );
       if (!mounted) return;
-      final options = _roadway.parseOptions(raw);
+      final options = _roadway.parseOptions(
+        raw,
+        userName: widget.userName,
+      );
       if (options.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Paths came back empty — try again.')),
@@ -4038,7 +4043,9 @@ class _PathsSheetState extends State<_PathsSheet> {
       final collaborator = await widget.settingsService
           .getCollaboratorSettings();
       final model = await widget.settingsService.getModel();
-      final sampling = await widget.settingsService.getSampling();
+      final sampling = RoadwayService.generateSampling(
+        await widget.settingsService.getSampling(),
+      );
       final baseUrl = await widget.settingsService.getApiBaseUrl();
       final messages = _roadway.buildCombineMessages(
         userName: widget.userName,
@@ -4061,7 +4068,10 @@ class _PathsSheetState extends State<_PathsSheet> {
         sampling: sampling,
       );
       if (!mounted) return;
-      final combined = _roadway.parseCombinedMessage(raw);
+      final combined = _roadway.parseCombinedMessage(
+        raw,
+        userName: widget.userName,
+      );
       if (combined.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Combine came back empty — try again.')),

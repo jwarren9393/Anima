@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:anima/models/chat_message.dart';
 import 'package:anima/services/roadway_service.dart';
+import 'package:anima/services/settings_service.dart';
 
 void main() {
   const service = RoadwayService();
@@ -69,8 +70,8 @@ Here are ideas:
     final system = prompt[0]['content']!;
     final user = prompt[1]['content']!;
     expect(system, contains('Keep it intimate and short.'));
-    expect(system, contains('ONE cohesive message'));
-    expect(system, contains('Do NOT add titles, numbering'));
+    expect(system, contains('first-person'));
+    expect(system, contains('Output only the final message text'));
     expect(user, contains('Mira steps closer'));
     expect(user, contains('*Take her hand* carefully.'));
     expect(user, contains('"What happens next?"'));
@@ -90,5 +91,69 @@ Here are ideas:
       service.parseCombinedMessage('1. First beat\n2. Second beat'),
       'First beat Second beat',
     );
+  });
+
+  test('parseOptions dedupes identical lines', () {
+    const raw = '''
+1. *I smile* "Hello."
+2. *I smile* "Hello."
+3. *I wave* "Hi there."
+''';
+    final options = service.parseOptions(raw);
+    expect(options, hasLength(2));
+  });
+
+  test('normalizeUserPerspective fixes third-person action leaks', () {
+    expect(
+      service.normalizeUserPerspective(
+        '"I love you." *Trey looks down at her*',
+        userName: 'Trey',
+      ),
+      '"I love you." *I looks down at her*',
+    );
+    expect(
+      service.normalizeUserPerspective(
+        '*Trey\'s hands tremble*',
+        userName: 'Trey',
+      ),
+      '*my hands tremble*',
+    );
+  });
+
+  test('buildMessages requires first person in system prompt', () {
+    final messages = service.buildMessages(
+      userName: 'Trey',
+      characterName: 'Angela',
+      recentMessages: const [],
+    );
+    final system = messages.first['content']!;
+    expect(system, contains('FIRST PERSON'));
+    expect(system, isNot(contains('Hard rules')));
+    expect(system, contains('Never use the'));
+  });
+
+  test('recent context labels player as You not persona name', () {
+    final messages = service.buildMessages(
+      userName: 'Trey',
+      characterName: 'Angela',
+      recentMessages: [
+        ChatMessage(id: '1', role: ChatRole.user, text: 'Hey.'),
+      ],
+    );
+    final user = messages.last['content']!;
+    expect(user, contains('You (player):'));
+    expect(user, isNot(contains('Trey (user):')));
+  });
+
+  test('generateSampling caps tokens and raises repeat penalties', () {
+    const base = SamplingSettings(
+      maxTokens: 4096,
+      temperature: 0.9,
+      topP: 1.0,
+    );
+    final tuned = RoadwayService.generateSampling(base);
+    expect(tuned.maxTokens, lessThanOrEqualTo(RoadwayService.generateMaxTokens));
+    expect(tuned.frequencyPenalty, greaterThanOrEqualTo(0.45));
+    expect(tuned.temperature, lessThanOrEqualTo(0.72));
   });
 }

@@ -119,18 +119,30 @@ CONTENT RULES:
 - Merge duplicate bullets. Delete obsolete bullets entirely.
 
 LENGTH:
-- Stay concise. Target 15–35 bullets unless the story is extremely complex.
+- Stay concise. Target 15–35 bullets for typical arcs; up to ~45 only if the story
+  is very complex.
 - If the existing summary is bloated, compress while preserving facts.
+- Always finish the last bullet — never truncate mid-line or mid-sentence.
 - Output ONLY the bullet list — no title, preamble, markdown fences, or commentary.
 ''';
 
+  /// Default output budget when chat max_tokens is unset or very low.
+  static const summarizeDefaultMaxTokens = 1536;
+
+  /// Floor so short user max_tokens settings do not truncate memory rewrites.
+  static const summarizeMinTokens = 768;
+
+  /// Cap — clinical bullets stay shorter than old prose summaries; this only
+  /// prevents mid-line cutoffs on dense chats.
+  static const summarizeMaxCap = 2048;
+
   static SamplingSettings summarizeSampling(SamplingSettings base) {
-    const minTokens = 512;
-    const maxCap = 1200;
     final user = base.maxTokens;
-    final effective = user == null || user < minTokens ? minTokens : user;
+    final effective = user == null || user < summarizeMinTokens
+        ? summarizeDefaultMaxTokens
+        : user;
     return base.copyWith(
-      maxTokens: effective.clamp(minTokens, maxCap),
+      maxTokens: effective.clamp(summarizeMinTokens, summarizeMaxCap),
       temperature: base.temperature <= 0.3 ? base.temperature : 0.25,
     );
   }

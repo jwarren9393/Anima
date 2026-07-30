@@ -62,7 +62,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-29  
-**Last agent action:** Published **v1.0.0 build 40** — clinical memory summarizer (bullet-only facts, shorter cap, reference-only injection).
+**Last agent action:** Published **v1.0.0 build 41** — Paths first-person fix; memory summarize token balance; release upload script removes duplicate APKs.
 
 ### What works today
 
@@ -95,7 +95,7 @@ High-value SillyTavern concepts to aim for over time:
 - **Composer shortcuts** — **Narrator** (theater icon), **OOC**, **Format** (✨), **Continue** (▶), Send/Stop; Narrator / Format / Paths have collaborator notes; **desktop:** Enter sends (Shift+Enter = new line; toggle in **Settings → AI collaborator**)
 - **Draft autosave** — composer text saved per chat (survives leaving chat/app); cleared on send
 - **Character categories** — Anima-only lists (not ST card tags); **All characters** master view + custom categories; filter in Characters (manage/pick) and Group setup; membership via row menu → Categories
-- **Paths (Roadway)** — long-press a message → **Paths** (sheet + ✨ generate); tap a tile → composer; check **two or more** + **Combine selected** to AI-merge them into one composer draft; options **stay cached** until the chat moves on, or you clear / refresh; note under AI collaborator
+- **Paths (Roadway)** — long-press → **Paths**; first-person options (`*I…*` not persona name); dedupe + tuned sampling; tap → composer; **Combine selected**; cached until chat moves on or refresh; note under AI collaborator
 - **Auto-reply** — long-press → toggle; **new chats default to off** (send alone; Continue or tap a name for a reply)
 - **RP message look** — bubbles style `*narration*` in soft italic gold and `"spoken lines"` in bolder text
 - **Message actions** — **tap** a bubble to edit; **long-press** for Delete, Rewind, Branch, Continue, Impersonate, Paths, Auto-reply, **Rewrite reply…** (shorten / expand / mood / custom — replace or new swipe), Regenerate / New swipe on **any** AI bubble (Delete / Rewind save immediately; branch still runs immediately)
@@ -335,6 +335,7 @@ lib/
 scripts/
   update_linux.sh                 One-command Linux build/install + launcher; optional Git pull
   update_windows.ps1              Windows build + optional zip / GitHub Release upload (`-Zip`, `-Release`)
+  upload_github_release.ps1       Upload APK + Windows zip; deletes stale .apk assets first
 ```
 
 **Dependencies in use:** `flutter_secure_storage`, `http`, `path_provider`, `file_picker`, `share_plus`, `path`, `google_fonts`, `saf` (Android sync file access)  

@@ -448,6 +448,14 @@ Special tuned sampling for: memory summarize, narrator generate, composer format
 - Default **off**. Off = send only; use Continue or (group) tap name chip.
 - On = send (and narrator post) also queue AI reply.
 
+### Paths (Roadway)
+
+- Long-press → **Paths** sheet (`_PathsSheet` in `chat_screen.dart`).
+- `RoadwayService.buildMessages()` — first-person options only; recent chat labels player as **You (player):** not persona name.
+- `RoadwayService.generateSampling()` — capped tokens + repeat penalties; `parseOptions()` dedupes; `normalizeUserPerspective()` fixes `*Name*` leaks.
+- Cached per chat in `anima_roadway_cache.json` until anchor message changes or refresh.
+- **Combine selected** — `buildCombineMessages()` merges 2+ picks into one composer draft.
+
 ### Auto memory summarize
 
 - Runs in **background** (`_summarizing` flag) — UI stays usable.
@@ -494,8 +502,8 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 - **Manual:** ⋮ → Memory summary (edit) or Summarize now.
 - **Auto:** Settings → summarize every N messages.
 - **Injection:** `formatMemoryForPrompt()` wraps stored bullets as a **reference-only** system block before history — explicitly tells the model not to mimic summary tone/style.
-- **Summarize prompt:** hard-coded `memorySummarizeSystemPrompt` — clinical objective bullets only (Location:, Event:, etc.); no metaphors, RP voice, or narrative prose; target 15–35 bullets; revises stale facts instead of appending fluff.
-- **Summarize sampling:** `summarizeSampling()` — max output capped at **1200** tokens (floor 512), temperature ≤ **0.25**.
+- **Summarize prompt:** hard-coded `memorySummarizeSystemPrompt` — clinical objective bullets only; target 15–35 bullets; must finish last bullet (no mid-line cutoffs).
+- **Summarize sampling:** `summarizeSampling()` — **768–2048** token budget (defaults **1536** when chat max_tokens unset/low); temperature ≤ **0.25**.
 - **Fold:** older messages (keep recent N raw) via `buildSummarizeMessages()`.
 - **First summarize:** also folds opening scene into memory when set (converted to clinical bullets).
 - **Background:** does not block chat UI (`_summarizing` vs `_busy`).

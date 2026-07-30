@@ -10,13 +10,14 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **Also builds** | Linux desktop (works); Windows desktop (needs a Windows host) |
 | **Distribution** | Personal use only — **not** published to app stores |
 | **Repo** | https://github.com/jwarren9393/Anima (private) |
-| **Version** | **1.0.0** build **40** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
+| **Version** | **1.0.0** build **41** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
 
 ### What’s new in recent builds (1.0.0)
 
 | Build | Highlights |
 |-------|------------|
-| **40** | **Clinical memory summarize** — hard-coded bullet-only facts (no RP voice/metaphors); shorter output cap; memory injected as reference-only so it does not steer character style |
+| **41** | **Paths fix** — first-person options (`*I…*` not persona name); dedupe + tuned sampling; **memory summarize balance** — clinical bullets finish without mid-line cutoffs (1536 default / 2048 cap) |
+| **40** | **Clinical memory summarize** — hard-coded bullet-only facts (no RP voice/metaphors); reference-only injection so memory does not steer character style |
 | **39** | **Narrator generate fix** — capped tokens, tighter sampling, cleaner prompt; strips instruction leaks and repetition loops from generated lines |
 | **38** | Universal **Narrator** in chat — nudge + edit sheet, AI **Generate**, centered timeline cards, dedicated prompt injection; **Narrator note** in Settings → AI collaborator; solo/group only (not Creation Center) |
 | **37** | Auto memory summarize runs **in the background** — chat UI stays usable (menu, composer, messages); progress banner; no back-to-back summarize chains |
@@ -26,7 +27,7 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **33** | **Update workshop cast** (workshop-tied characters only, not whole library); Creation Center collaborator prompt — brainstorm-only, points to real ⋮ menu actions |
 | **32** | Creation Center **World dashboard** hub; **Fix last** chip; minimal UI pass (chat/home/group/settings); workshop **world summary** folding; full feature README |
 
-Earlier 1.0.0 builds added Storybook layout, opening scenes library, backup/sync, group chat polish, and the core SillyTavern-style toolkit. **213 tests** at build 40.
+Earlier 1.0.0 builds added Storybook layout, opening scenes library, backup/sync, group chat polish, and the core SillyTavern-style toolkit. **218 tests** at build 41.
 
 API base (pay-as-you-go): `https://nano-gpt.com/api/v1/chat/completions`  
 Auth: `Authorization: Bearer <API_KEY>`  
@@ -94,7 +95,7 @@ flutter build windows --release
 ```
 
 Or: `.\scripts\update_windows.ps1 -Zip` for a zip package (build embeds the Anima icon in `anima.exe`).  
-Upload to GitHub Releases: `.\scripts\update_windows.ps1 -Zip -Release` (needs `gh auth login`).
+**GitHub Releases (APK + Windows):** `flutter build apk --release` then `.\scripts\update_windows.ps1 -Zip -Release` — uploads one `Anima-1.0.0.apk` (removes stale APK assets first). Or `.\scripts\upload_github_release.ps1` after both builds.
 
 ### Moving data between devices
 
@@ -304,11 +305,11 @@ Scrollable sheet (~55% screen height on wide displays).
 ### Paths (Roadway)
 
 - Long-press → **Paths**.
-- ✨ generates ~6 next-move options for {{user}}.
+- ✨ generates ~6 **first-person** next-move options for {{user}} (`*I…*` actions, not persona name in `*asterisks*`).
 - Tap a path → composer; edit before send.
 - Check **two or more** → **Combine selected** → AI merges into one composer draft.
-- Options **stay cached** until the chat’s last message changes, you clear/refresh, or the chat is deleted.
-- Uses **Roadway / Paths** note under Settings → AI collaborator.
+- Options **stay cached** until the chat’s last message changes, you clear/refresh (↻), or the chat is deleted.
+- Uses tuned sampling + dedupe; **Roadway / Paths** note under Settings → AI collaborator.
 
 ### Toasts / overlays
 
@@ -617,7 +618,7 @@ Deleting a workshop does **not** delete an already-created lorebook.
 - Built-in presets (Balanced, Creative, Focused, Short, Long prose, Anti-repeat, Deterministic, Chaotic, Chatty, Mystery, Cozy, …).
 - **Context size** in tokens (presets 1K–24K; range ~512–32K) — recent history packed per prompt; full history stays on device.
 - **Auto-summarize long chats** — every N messages, keep N recent raw messages.
-- Memory summarize uses **clinical bullet facts** (no RP voice/metaphors), lower temperature, **512–1200** token cap; revises stale facts; **first summarize** folds opening scene when set; injection wrapper tells the model not to mimic summary style.
+- Memory summarize uses **clinical bullet facts** (no RP voice/metaphors), lower temperature, **768–2048** token budget (defaults 1536 when chat max is low); revises stale facts; **first summarize** folds opening scene when set; injection wrapper tells the model not to mimic summary style.
 
 ### 4.8 Global chat prompts
 

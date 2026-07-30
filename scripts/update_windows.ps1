@@ -49,14 +49,5 @@ if ($Release) {
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
         Write-Error "GitHub CLI (gh) is required for -Release. Install it, then run: gh auth login"
     }
-    $tag = "v$versionName"
-    $zipName = "Anima-$versionName-windows-x64.zip"
-    $zipPath = Join-Path $RootDir "build\$zipName"
-    gh release view $tag 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        gh release create $tag $zipPath --title "Anima $versionName" --notes "Windows x64 build. Unzip and run anima.exe."
-    } else {
-        gh release upload $tag $zipPath --clobber
-    }
-    Write-Host "Uploaded to GitHub release $tag"
+    & (Join-Path $PSScriptRoot "upload_github_release.ps1") -Tag "v$versionName"
 }

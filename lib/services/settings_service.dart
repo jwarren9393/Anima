@@ -310,8 +310,9 @@ class CollaboratorSettings {
   static const defaultRoadwayNote =
       'You are a brainstorming partner for immersive roleplay. Given the '
       'recent scene, invent unpredictable and engaging options for what '
-      '{{user}} could do or say next. Mix dialogue, action, and curiosity. '
-      'Keep options distinct from each other — no near-duplicates.';
+      '{{user}} could do or say next — always in first person (I/my in '
+      '*actions*, I/you in speech). Mix dialogue, action, and curiosity. '
+      'Keep options distinct — no repeated sentences or near-duplicates.';
 
   /// Default for the universal Narrator in chat (not Creation Center).
   static const defaultNarratorNote =

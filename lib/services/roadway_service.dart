@@ -13,6 +13,23 @@ class RoadwayService {
   /// How many path tiles to aim for on a phone.
   static const defaultOptionCount = 6;
 
+  /// Paths need enough room for ~6 short options without tail repetition.
+  static const generateMaxTokens = 720;
+
+  /// Tighter sampling — variety via prompt, not high temperature loops.
+  static SamplingSettings generateSampling(SamplingSettings base) {
+    final capped = base.maxTokens == null || base.maxTokens! > generateMaxTokens
+        ? generateMaxTokens
+        : base.maxTokens!;
+    return base.copyWith(
+      temperature: base.temperature > 0.72 ? 0.72 : base.temperature,
+      maxTokens: capped,
+      frequencyPenalty: base.frequencyPenalty < 0.35 ? 0.45 : base.frequencyPenalty,
+      presencePenalty: base.presencePenalty < 0.15 ? 0.2 : base.presencePenalty,
+      repetitionPenalty: base.repetitionPenalty ?? 1.1,
+    );
+  }
+
   List<Map<String, String>> buildMessages({
     required String userName,
     required String characterName,
@@ -26,26 +43,29 @@ class RoadwayService {
 
     final system = StringBuffer()
       ..writeln(
-        'You help the player choose their next move in a private roleplay.',
+        'You brainstorm short next-message ideas for the human player in a '
+        'private roleplay chat.',
       )
       ..writeln()
-      ..writeln('Roadway note (follow closely):')
+      ..writeln('Roadway note:')
       ..writeln(guidance)
       ..writeln()
-      ..writeln('Hard rules:')
-      ..writeln('- Write exactly $count options.')
-      ..writeln('- Use a plain numbered list: 1. … 2. … (no markdown fences).')
+      ..writeln('Write exactly $count numbered options (1. 2. 3. …).')
       ..writeln(
-        '- Each option is one or two short sentences the player could send '
-        'as {{user}} (actions in *asterisks*, speech in "quotes" when useful).',
+        'Each option is what the player could paste as their next message — '
+        'FIRST PERSON only: speech in "quotes" with I/you; actions in '
+        '*asterisks* with I/my/me (e.g. *I look at her*). Never use the '
+        "player's name inside an option body.",
       )
-      ..writeln('- Do NOT write as {{char}}. Do NOT continue the AI reply.')
-      ..writeln('- Do NOT add titles, preamble, or commentary outside the list.')
-      ..writeln('- Options must be concrete and different from each other.');
+      ..writeln('Do not write as the character. Do not continue the AI reply.')
+      ..writeln(
+        'Each option must be a different beat — no repeated sentences, '
+        'phrases, or near-duplicates.',
+      )
+      ..writeln('Output only the numbered list — no title or commentary.');
 
     final user = StringBuffer()
-      ..writeln('{{user}} name: $userName')
-      ..writeln('{{char}} name: $characterName')
+      ..writeln('Player ($userName) is {{user}}. Character is {{char}} ($characterName).')
       ..writeln()
       ..writeln('Recent chat (newest last):')
       ..writeln(
@@ -53,7 +73,7 @@ class RoadwayService {
       )
       ..writeln()
       ..writeln(
-        'Generate $count numbered options for {{user}}’s next message.',
+        'Generate $count numbered first-person options for {{user}}’s next message.',
       );
 
     return [
@@ -83,33 +103,26 @@ class RoadwayService {
 
     final system = StringBuffer()
       ..writeln(
-        'You help the player draft their next roleplay message by combining '
-        'ideas they already liked.',
+        'You draft the player’s next roleplay message by combining ideas they '
+        'already liked.',
       )
       ..writeln()
-      ..writeln('Roadway note (follow closely):')
+      ..writeln('Roadway note:')
       ..writeln(guidance)
       ..writeln()
-      ..writeln('Hard rules:')
       ..writeln(
-        '- Write ONE cohesive message the player could send as {{user}}.',
+        'Write ONE cohesive first-person message for {{user}} — speech in '
+        '"quotes" with I/you; actions in *asterisks* with I/my/me. Never use '
+        "the player's name inside *actions*.",
       )
       ..writeln(
-        '- Weave together the selected path ideas; keep the best beats from '
-        'each without listing them separately.',
+        'Weave the selected ideas together; do not list them separately.',
       )
-      ..writeln(
-        '- Use *asterisks* for actions and "quotes" for speech when useful.',
-      )
-      ..writeln('- Do NOT write as {{char}}. Do NOT continue the AI reply.')
-      ..writeln(
-        '- Do NOT add titles, numbering, bullet lists, preamble, or commentary.',
-      )
-      ..writeln('- Output only the final message text.');
+      ..writeln('Do not write as the character. Do not continue the AI reply.')
+      ..writeln('Output only the final message text — no numbering or commentary.');
 
     final user = StringBuffer()
-      ..writeln('{{user}} name: $userName')
-      ..writeln('{{char}} name: $characterName')
+      ..writeln('Player ($userName) is {{user}}. Character is {{char}} ($characterName).')
       ..writeln()
       ..writeln('Recent chat (newest last):')
       ..writeln(
@@ -134,7 +147,7 @@ class RoadwayService {
   }
 
   /// Cleans a combine-mode completion into a single composer-ready string.
-  String parseCombinedMessage(String raw) {
+  String parseCombinedMessage(String raw, {String userName = ''}) {
     var text = raw.replaceAll('\r\n', '\n').trim();
     if (text.isEmpty) return '';
 
@@ -152,11 +165,11 @@ class RoadwayService {
 
     // If the model ignored instructions and returned a numbered list, join
     // the option bodies into one paragraph instead of dumping the numbers.
-    final options = parseOptions(text, max: 12);
+    final options = parseOptions(text, max: 12, userName: userName);
     if (options.length >= 2) {
-      return options.join(' ').trim();
+      return normalizeUserPerspective(options.join(' '), userName: userName);
     }
-    return text;
+    return normalizeUserPerspective(text, userName: userName);
   }
 
   String _formatSelectedOptions(List<String> options) {
@@ -168,7 +181,11 @@ class RoadwayService {
   }
 
   /// Pulls numbered / bulleted lines into clean option strings.
-  List<String> parseOptions(String raw, {int max = defaultOptionCount}) {
+  List<String> parseOptions(
+    String raw, {
+    int max = defaultOptionCount,
+    String userName = '',
+  }) {
     final lines = raw.replaceAll('\r\n', '\n').split('\n');
     final options = <String>[];
     final bullet = RegExp(
@@ -185,11 +202,12 @@ class RoadwayService {
         text = text.substring(1, text.length - 1).trim();
       }
       if (text.isEmpty) continue;
+      text = normalizeUserPerspective(text, userName: userName);
       options.add(text);
       if (options.length >= max) break;
     }
 
-    if (options.isNotEmpty) return options;
+    if (options.isNotEmpty) return dedupeOptions(options);
 
     // Fallback: split on blank lines if the model ignored numbering.
     final blocks = raw
@@ -198,12 +216,60 @@ class RoadwayService {
         .where((b) => b.isNotEmpty)
         .toList();
     for (final block in blocks) {
-      final cleaned = block.replaceAll(RegExp(r'\s+'), ' ').trim();
+      final cleaned = normalizeUserPerspective(
+        block.replaceAll(RegExp(r'\s+'), ' ').trim(),
+        userName: userName,
+      );
       if (cleaned.isEmpty) continue;
       options.add(cleaned);
       if (options.length >= max) break;
     }
-    return options;
+    return dedupeOptions(options);
+  }
+
+  /// Fixes common third-person leaks (*Trey looks…*) in player path options.
+  String normalizeUserPerspective(String text, {required String userName}) {
+    var out = text.trim();
+    if (out.isEmpty) return out;
+    final name = userName.trim();
+    if (name.isEmpty) return out;
+
+    final escaped = RegExp.escape(name);
+    out = out.replaceAllMapped(
+      RegExp('\\*$escaped\\s+', caseSensitive: false),
+      (_) => '*I ',
+    );
+    out = out.replaceAllMapped(
+      RegExp('\\*$escaped\'s\\s+', caseSensitive: false),
+      (_) => '*my ',
+    );
+    out = out.replaceAllMapped(
+      RegExp('\\*$escaped\\b', caseSensitive: false),
+      (_) => '*I',
+    );
+    return out.trim();
+  }
+
+  /// Drops exact and near-duplicate path lines from model output.
+  List<String> dedupeOptions(List<String> options) {
+    final seen = <String>{};
+    final out = <String>[];
+    for (final option in options) {
+      final key = _normalizeForDedupe(option);
+      if (key.isEmpty) continue;
+      if (seen.contains(key)) continue;
+      seen.add(key);
+      out.add(option);
+    }
+    return out;
+  }
+
+  String _normalizeForDedupe(String text) {
+    return text
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^\w\s]'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
   }
 
   String _recentContext(
@@ -221,11 +287,11 @@ class RoadwayService {
       final text = m.text.trim();
       if (text.isEmpty) continue;
       final name = m.isUser
-          ? userName
+          ? 'You'
           : (m.speakerName?.trim().isNotEmpty == true
               ? m.speakerName!.trim()
               : characterName);
-      final role = m.isUser ? 'user' : 'assistant';
+      final role = m.isUser ? 'player' : 'assistant';
       buf.writeln('$name ($role): $text');
     }
     final out = buf.toString().trim();
