@@ -10,12 +10,13 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **Also builds** | Linux desktop (works); Windows desktop (needs a Windows host) |
 | **Distribution** | Personal use only — **not** published to app stores |
 | **Repo** | https://github.com/jwarren9393/Anima (private) |
-| **Version** | **1.0.0** build **39** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
+| **Version** | **1.0.0** build **40** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
 
 ### What’s new in recent builds (1.0.0)
 
 | Build | Highlights |
 |-------|------------|
+| **40** | **Clinical memory summarize** — hard-coded bullet-only facts (no RP voice/metaphors); shorter output cap; memory injected as reference-only so it does not steer character style |
 | **39** | **Narrator generate fix** — capped tokens, tighter sampling, cleaner prompt; strips instruction leaks and repetition loops from generated lines |
 | **38** | Universal **Narrator** in chat — nudge + edit sheet, AI **Generate**, centered timeline cards, dedicated prompt injection; **Narrator note** in Settings → AI collaborator; solo/group only (not Creation Center) |
 | **37** | Auto memory summarize runs **in the background** — chat UI stays usable (menu, composer, messages); progress banner; no back-to-back summarize chains |
@@ -25,7 +26,7 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **33** | **Update workshop cast** (workshop-tied characters only, not whole library); Creation Center collaborator prompt — brainstorm-only, points to real ⋮ menu actions |
 | **32** | Creation Center **World dashboard** hub; **Fix last** chip; minimal UI pass (chat/home/group/settings); workshop **world summary** folding; full feature README |
 
-Earlier 1.0.0 builds added Storybook layout, opening scenes library, backup/sync, group chat polish, and the core SillyTavern-style toolkit. **207 tests** at build 38.
+Earlier 1.0.0 builds added Storybook layout, opening scenes library, backup/sync, group chat polish, and the core SillyTavern-style toolkit. **213 tests** at build 40.
 
 API base (pay-as-you-go): `https://nano-gpt.com/api/v1/chat/completions`  
 Auth: `Authorization: Bearer <API_KEY>`  
@@ -110,11 +111,13 @@ This document is a **complete product catalog**: every screen, menu, chip, sheet
 
 Living build notes for coding agents: [`AGENTS.md`](AGENTS.md) (status, roadmap, code map).
 
+**Full project encyclopedia for external AI (Gemini, etc.):** [`PROJECT_REFERENCE.md`](PROJECT_REFERENCE.md) — architecture, data, every screen, prompt assembly, mechanics, limits (paste or attach the whole file).
+
 ---
 
 ## Feature summary (at a glance)
 
-**Chat & roleplay** — Solo and group chats; streaming; swipes; edit / delete / rewind / branch; Continue, Impersonate, Regenerate, **Rewrite reply…**; Paths (Roadway); auto-reply (default off); OOC + ✨ Format; memory summary + auto-summarize; Author’s Note; per-chat persona and World Info; opening scene narrator; context estimate; export/import chat; manage cast mid-chat; fullscreen avatars.
+**Chat & roleplay** — Solo and group chats; streaming; swipes; edit / delete / rewind / branch; Continue, Impersonate, Regenerate, **Rewrite reply…**; **Narrator** (nudge + Generate + post); Paths (Roadway); auto-reply (default off); OOC + ✨ Format; memory summary + auto-summarize (background); Author’s Note; per-chat persona and World Info; opening scene; context estimate; export/import chat; manage cast mid-chat; fullscreen avatars.
 
 **Characters & personas** — ST V1/V2/V3 JSON + PNG import/export; categories; AI wand; consistency check; embedded lorebooks; alternate greetings; **Generate avatar**; group speaker chips.
 
@@ -207,7 +210,7 @@ Then: greeting picker for the first character → opens the chat.
 
 ## 3. Chat screen
 
-Minimal chrome: **Close** · title · **⋮** menu. Composer icon row: **OOC** · text field · **✨ Format** · **▶ Continue** · **Send** / **Stop**.
+Minimal chrome: **Close** · title · **⋮** menu. Composer icon row: **Narrator** (theater) · **OOC** · text field · **✨ Format** · **▶ Continue** · **Send** / **Stop**.
 
 ### App bar ⋮ menu
 
@@ -238,6 +241,7 @@ Minimal chrome: **Close** · title · **⋮** menu. Composer icon row: **OOC** �
 
 | Control | Behavior |
 |---------|----------|
+| **Narrator** (theater) | Sheet: optional **nudge**, editable line, **Generate** or type, **Post** — omniscient timeline card; injected as system (not OOC); solo/group only |
 | **OOC** | Wraps send as `(OOC: …)` unless already tagged |
 | **Format (✨)** | AI cleanup + `*action*` / `"dialogue"` markup per **Composer Format** note (Settings → AI collaborator) |
 | **Continue (▶)** | Next AI reply without a new user message |
@@ -281,6 +285,7 @@ Scrollable sheet (~55% screen height on wide displays).
 | **Delete** | Removes that message only; **4s Undo** SnackBar before disk write |
 | **Rewind to here** | Deletes everything after; **4s Undo** SnackBar before disk write |
 | **Branch from here** | New chat with history through here (keeps persona, auto-reply, note, lore picks); runs immediately |
+| **Narrator** | Same sheet as composer theater icon — nudge, Generate, Post |
 | **Continue** | Generate next reply |
 | **Impersonate** | AI drafts the next **user** message as the persona |
 | **Paths** | Roadway brainstorm sheet |
@@ -328,7 +333,7 @@ Opened from Home or Chat ⋮ → **Settings**. Top banner: **API & connection** 
 | **World** | **Creation Center** | World workshops, import chat/lore/bundle, hub dashboard |
 | **AI** | **Generation parameters** | Sampling, context size, auto-summarize |
 | **AI** | **Global chat prompts** | App-wide system + post-history |
-| **AI** | **AI collaborator** | Wand, Format, Paths notes; Enter-to-send (desktop) |
+| **AI** | **AI collaborator** | Wand, Format, Paths, **Narrator** notes; Enter-to-send (desktop) |
 | **AI** | **Character builds** | Model + sampling for slim card JSON generation |
 | **App** | **Appearance** | Theme Studio — presets, layout, colors, fonts, chat experience, avatars |
 | **App** | **Backup, restore & sync** | `.anima-backup` export + cross-device sync file |
@@ -612,7 +617,7 @@ Deleting a workshop does **not** delete an already-created lorebook.
 - Built-in presets (Balanced, Creative, Focused, Short, Long prose, Anti-repeat, Deterministic, Chaotic, Chatty, Mystery, Cozy, …).
 - **Context size** in tokens (presets 1K–24K; range ~512–32K) — recent history packed per prompt; full history stays on device.
 - **Auto-summarize long chats** — every N messages, keep N recent raw messages.
-- Memory summarize uses lower temperature + **2048-token floor**; smarter folding (revises stale facts); **first summarize** folds opening scene when set.
+- Memory summarize uses **clinical bullet facts** (no RP voice/metaphors), lower temperature, **512–1200** token cap; revises stale facts; **first summarize** folds opening scene when set; injection wrapper tells the model not to mimic summary style.
 
 ### 4.8 Global chat prompts
 
@@ -623,11 +628,12 @@ App-wide prompts merged into **every** chat (on top of each card; per-chat Autho
 
 ### 4.9 AI collaborator
 
-Three editable guidance notes (presets / reset):
+Four editable guidance notes (presets / reset):
 
 1. **Wand guidance note** — character wands, lore wands, Creation Center.
 2. **Composer Format** — chat ✨ Format button.
 3. **Roadway / Paths** — Paths brainstorming.
+4. **Narrator** — chat **Narrator → Generate** (capped tokens; output cleanup).
 
 **Enter to send** (desktop) — Enter sends, Shift+Enter newline; off = Enter always newline.
 
@@ -733,7 +739,7 @@ Rough assembly order:
 6. Persona name + structured persona text.
 7. Opening scene (if injected).
 8. Memory summary (if any).
-9. Recent history packed to **context size** budget.
+9. Recent history packed to **context size** budget (includes **Narrator** timeline messages as system blocks).
 10. Global post-history + per-card post-history + Author’s Note.
 
 Streaming SSE; Stop cancels but keeps partial. Sampling from Generation parameters.
@@ -787,9 +793,14 @@ Data under app documents directory. **Nothing uploaded to GitHub.**
 
 ---
 
-## 10. For coding agents
+## 10. For coding agents and external AI
 
-Read and update **[`AGENTS.md`](AGENTS.md)** every session — phase status, code map, next actions.
+| Document | Use when |
+|----------|----------|
+| **[`PROJECT_REFERENCE.md`](PROJECT_REFERENCE.md)** | **Full encyclopedia** — paste/attach for Gemini or any external AI; architecture, models, persistence, every screen, prompt assembly, mechanics |
+| **[`AGENTS.md`](AGENTS.md)** | Cursor agents — current build status, roadmap, code map, machine notes, next actions |
+
+Read and update **`AGENTS.md`** after meaningful code changes.
 
 ---
 

@@ -164,15 +164,30 @@ void main() {
       expect(ContextEstimate.formatTokenCount(16000), '16K');
     });
 
-    test('summarizeSampling raises token floor and lowers temperature', () {
+    test('summarizeSampling caps output and lowers temperature', () {
       const base = SamplingSettings(
         maxTokens: 512,
         temperature: 0.9,
         topP: 1.0,
       );
       final tuned = ChatContextService.summarizeSampling(base);
-      expect(tuned.maxTokens, greaterThanOrEqualTo(2048));
-      expect(tuned.temperature, lessThanOrEqualTo(0.5));
+      expect(tuned.maxTokens, lessThanOrEqualTo(1200));
+      expect(tuned.maxTokens, greaterThanOrEqualTo(512));
+      expect(tuned.temperature, lessThanOrEqualTo(0.3));
+    });
+
+    test('buildSummarizeMessages uses clinical bullet system prompt', () {
+      final messages = service.buildSummarizeMessages(
+        chunk: [msg('1', 'We enter the throne room.')],
+        existingSummary: '',
+        userName: 'Jay',
+        charName: 'Edric',
+      );
+      final system = messages.first['content'] ?? '';
+      expect(system, contains('FACT INDEX only'));
+      expect(system, contains('bullet list only'));
+      expect(system, contains('NO metaphors'));
+      expect(system, isNot(contains('emotional tone and character voice')));
     });
 
     test('buildSummarizeMessages seeds opening scene on first fold', () {
@@ -188,9 +203,17 @@ void main() {
       final user = messages.last['content'] ?? '';
       final system = messages.first['content'] ?? '';
       expect(user, contains('Rain lashes the castle walls.'));
-      expect(user, contains('fold into memory'));
-      expect(system, contains('revise'));
-      expect(user, contains('throne room'));
+      expect(user, contains('clinical bullets'));
+      expect(system, contains('Revise the existing memory'));
+    });
+
+    test('formatMemoryForPrompt discourages style mimicry', () {
+      final block = ChatContextService.formatMemoryForPrompt(
+        '- Location: Tower\n- Event: They met.',
+      );
+      expect(block, contains('reference only'));
+      expect(block, contains('Do NOT mimic'));
+      expect(block, contains('Tower'));
     });
   });
 }

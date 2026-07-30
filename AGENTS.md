@@ -3,6 +3,8 @@
 > **Mandatory for every agent session:** Read this file fully at the start.
 > Update it before you finish any meaningful phase of work.
 > Keep language clear enough that a coding beginner (the project owner) can follow it.
+>
+> **Full project encyclopedia (external AI / deep onboarding):** [`PROJECT_REFERENCE.md`](PROJECT_REFERENCE.md)
 
 ---
 
@@ -60,7 +62,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-29  
-**Last agent action:** Published **v1.0.0 build 39** — Narrator generate fix (token cap, cleaner prompt, leak/repetition cleanup).
+**Last agent action:** Published **v1.0.0 build 40** — clinical memory summarizer (bullet-only facts, shorter cap, reference-only injection).
 
 ### What works today
 
@@ -76,7 +78,7 @@ High-value SillyTavern concepts to aim for over time:
   - **World Info & lore** — **global lorebooks** (create / import ST JSON / export / on-off) + scan depth/budget + link to per-character books; **entry AI wand** + **Suggest keywords from content**
   - **Opening scenes** — saved narrator setups for new chats (manual + synced from Creation Center workshops)
   - **Creation Center** — hub on Home + Settings; minimal workshop chrome; world summary folding; **Fix last** chip applies a correction to the previous AI reply in place (no new AI bubble); long-press → Apply correction; delta-style revision prompts
-  - **AI collaborator** — wand guidance note + **Composer Format** note + **Roadway / Paths** note
+  - **AI collaborator** — wand guidance note + **Composer Format** + **Roadway / Paths** + **Narrator** notes
   - **Character builds** — model, max tokens, temperature, top P, and prompt for **slim card JSON** generation (description, personality, mes_example, tags only — no scenario, greetings, or per-card system/post-history; Creation Center + New character from chat); separate from main chat model
   - **Global chat prompts** — app-wide **system prompt** + **post-history** merged into every chat (on top of each card; per-chat Author's Note still applies); preset pickers; `{{user}}` / `{{char}}`
   - **Appearance (Theme Studio)** — live preview + **category chips** (Presets / Layout / Colors / Fonts / Chat / Avatars); one section visible at a time
@@ -84,7 +86,7 @@ High-value SillyTavern concepts to aim for over time:
   - API, Generation parameters
 - **Look** — Theme Studio with glass and solid presets (default Obsidian Gold soft-glow, no sparkle texture); Ivory Ink light preset + full color/font customization
 - **Generation parameters** — detailed help + many sampling presets; **context size in tokens** + presets (1K–24K); **auto-summarize** every N messages
-- **Memory summary** — per chat (⋮ → Memory summary to edit; Summarize now); injected into prompts; auto-updates when enabled; runs **in the background** (chat stays usable — menu, composer, messages); slim progress banner while optimizing; **smarter folding** — revises stale facts, tracks key changes, uses a lower temperature + **2048-token floor** for summarize calls; **first summarize** also folds the opening scene into memory when one is set
+- **Memory summary** — per chat (⋮ → Memory summary to edit; Summarize now); **clinical bullet facts only** (no RP voice/metaphors); injected as reference-only system block so it does not steer character style; auto-updates in background when enabled
 - **Text presets** — expanded Author’s Note / System prompt / Post-history / collaborator guidance sheets
 - **Character AI wand** — sparkle icon on creative card fields; sends all filled fields as context; appends NanoGPT text below what’s already there (uses chat model + sampling)
 - **World Info entry AI wand** — sparkle on Label / Keywords / Lore content (and Secondary keywords when Selective); uses book + sibling entry context; appends (keywords merge comma-separated); same model + collaborator guidance
@@ -110,7 +112,7 @@ High-value SillyTavern concepts to aim for over time:
 - **Context estimate** — chat ⋮ → **Context estimate** shows ~message/token gauges vs history budget and model window; Creation Center shows a live banner estimate
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar
 - **Linux install/update** — `./scripts/update_linux.sh` builds and installs the desktop app; add `--pull` to download GitHub changes first
-- **Smoke:** `flutter test` (203) + `flutter analyze` pass; Android + Linux desktop debug work
+- **Smoke:** `flutter test` (211) + `flutter analyze` pass; Android + Linux desktop debug work
 
 ### What does NOT work yet / limits
 
@@ -414,6 +416,16 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 1. Spot-check **Browse models** sheet: Settings → API → Category **Uncensored & derestricted** → Browse — confirm ctx/out/params/TPS/uptime/description on rows without opening the browser.
 2. Spot-check **Creation Center hub** on device: World dashboard, Play this world, canon pins, glossary → lorebook, world bundle import/export.
 3. Spot-check **workshop Fix last** and **Fold older chat into summary** on a long workshop thread.
+
+---
+
+## Related documents
+
+| File | Purpose |
+|------|---------|
+| [`PROJECT_REFERENCE.md`](PROJECT_REFERENCE.md) | Complete encyclopedia for external AI — architecture, data, UI, prompts, mechanics |
+| [`README.md`](README.md) | User-facing feature catalog and install guide |
+| [`AGENTS.md`](AGENTS.md) | This file — agent status, roadmap, code map |
 
 ---
 

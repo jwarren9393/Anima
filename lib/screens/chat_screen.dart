@@ -2249,10 +2249,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     final memory = (_session?.memorySummary ?? '').trim();
     if (memory.isNotEmpty) {
-      msgs.add({
-        'role': 'system',
-        'content': 'Memory summary (older story):\n$memory',
-      });
+      final block = ChatContextService.formatMemoryForPrompt(memory);
+      if (block.isNotEmpty) {
+        msgs.add({'role': 'system', 'content': block});
+      }
     }
 
     final contextSettings = await widget.settingsService.getContextSettings();

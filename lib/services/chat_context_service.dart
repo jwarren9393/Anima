@@ -93,15 +93,45 @@ class ChatContextService {
   }
 
   /// Summarize calls need enough room for a careful memory rewrite.
+  static const memorySummarizeSystemPrompt = '''
+You maintain the MEMORY SUMMARY for a private roleplay chat app (Anima).
+This text is injected into live character prompts as a FACT INDEX only — not as
+writing samples. Your output must NEVER influence how characters speak.
+
+TASK: UPDATE the running memory so older chat turns can leave the live prompt.
+
+OUTPUT FORMAT (mandatory):
+- Plain bullet list only. One fact per line. Start each line with "- ".
+- Optional short labels: Location:, Present:, Relationship:, Event:, Secret:,
+  Item:, Goal:, Thread:, Injury:, Promise:, Change:
+- Clinical, objective, telegraphic facts. Past tense for completed events.
+- NO metaphors, poetry, atmosphere, sensory prose, dialogue quotes, or RP voice.
+- NO narrative paragraphs. NO reenacting scenes. NO character speech patterns.
+- State what happened in plain terms (e.g. "Event: Jay and Edric entered the
+  tower" not "*they slipped into the tower like shadows*").
+
+CONTENT RULES:
+- Revise the existing memory — remove facts contradicted or superseded by newer chat.
+- Prefer the NEWEST information. Do not keep stale facts beside updated ones.
+- Track only what matters later: who is present, locations, relationships, secrets
+  revealed, injuries, inventory, promises, goals, and open plot threads.
+- Do not sanitize, moralize, or omit uncomfortable facts.
+- Merge duplicate bullets. Delete obsolete bullets entirely.
+
+LENGTH:
+- Stay concise. Target 15–35 bullets unless the story is extremely complex.
+- If the existing summary is bloated, compress while preserving facts.
+- Output ONLY the bullet list — no title, preamble, markdown fences, or commentary.
+''';
+
   static SamplingSettings summarizeSampling(SamplingSettings base) {
-    const minTokens = 2048;
+    const minTokens = 512;
+    const maxCap = 1200;
     final user = base.maxTokens;
     final effective = user == null || user < minTokens ? minTokens : user;
     return base.copyWith(
-      maxTokens: effective.clamp(512, 8192),
-      temperature: base.temperature.clamp(0.1, 1.0) <= 0.5
-          ? base.temperature
-          : 0.35,
+      maxTokens: effective.clamp(minTokens, maxCap),
+      temperature: base.temperature <= 0.3 ? base.temperature : 0.25,
     );
   }
 
@@ -130,24 +160,7 @@ class ChatContextService {
       transcript.writeln();
     }
 
-    final system =
-        '''
-You maintain an accurate story memory for a private roleplay chat app (Anima).
-Your job is to UPDATE the running memory so older turns can leave the live prompt.
-
-Critical rules:
-- Treat the existing memory as a living document — revise or remove facts that the
-  new chat segment contradicts or supersedes. Prefer the NEWEST information.
-- Track: who is present, relationships, locations, goals, secrets revealed,
-  promises, injuries, inventory, and open plot threads.
-- When something changes (alliance, location, mood, a character's goal), update
-  the summary to reflect the change; do not keep stale facts alongside new ones.
-- Keep important emotional tone and character voice notes when they matter later.
-- Use clear prose or labeled short bullets. Be specific (names, places, facts).
-- Do not sanitize, moralize, or omit uncomfortable story facts.
-- Output ONLY the updated memory summary — no preamble, no markdown fences.
-'''
-            .trim();
+    final system = memorySummarizeSystemPrompt.trim();
 
     final user = StringBuffer();
     if (existingSummary.trim().isNotEmpty) {
@@ -160,8 +173,8 @@ Critical rules:
     }
     if (seedOpeningScene && openingScene.trim().isNotEmpty) {
       user.writeln(
-        'Story opening (narrator setup at chat start — fold into memory as '
-        'established background; update later if the story contradicts it):',
+        'Story opening (fold into memory as established background facts only; '
+        'strip any prose style — convert to clinical bullets):',
       );
       user.writeln(openingScene.trim());
       user.writeln();
@@ -170,14 +183,28 @@ Critical rules:
     user.writeln(transcript.toString().trim());
     user.writeln();
     user.writeln(
-      'Write the full updated memory summary now. Merge the opening (if any) '
-      'and new segment into one coherent memory; correct any outdated facts.',
+      'Write the full updated memory summary now as a clinical bullet list only. '
+      'Merge opening facts (if any) and the new segment; remove outdated facts.',
     );
 
     return [
       {'role': 'system', 'content': system},
       {'role': 'user', 'content': user.toString().trim()},
     ];
+  }
+
+  /// Wraps stored memory for injection into live chat prompts.
+  static String formatMemoryForPrompt(String memory) {
+    final body = memory.trim();
+    if (body.isEmpty) return '';
+    return '''
+Memory summary (canonical facts from older story — reference only):
+$body
+
+Use only for continuity of facts, locations, relationships, and plot state.
+Do NOT mimic this summary's tone, wording, or style in character replies.
+Character voice comes from the character card and live chat only.
+'''.trim();
   }
 
   /// Rough size of a full message list (saved transcript on device).

@@ -130,8 +130,8 @@ class AnimaPresets {
 
   static const autoSummarizeHelp =
       'When on, after enough new messages Anima asks NanoGPT to update this '
-      'chat’s Memory summary (like SillyTavern memory). Older turns can then '
-      'be skipped in the live prompt while the summary keeps the story.';
+      'chat’s Memory summary (clinical bullet facts — not RP prose). Older '
+      'turns can then be skipped in the live prompt while the summary keeps facts.';
 
   static const summarizeEveryHelp =
       'Auto-summarize runs when this many new messages have piled up since '
