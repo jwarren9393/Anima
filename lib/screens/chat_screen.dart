@@ -109,6 +109,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   bool _hasApiKey = false;
   bool _loading = true;
   bool _busy = false;
+  bool _summarizing = false;
   bool _formatting = false;
   bool _enterToSend = false;
 
@@ -1618,7 +1619,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Future<void> _summarizeNow({bool quiet = false}) async {
     final session = _session;
     if (session == null || _character == null) return;
-    if (_busy) return;
+    if (_summarizing) return;
+    if (_busy && !quiet) return;
     if (!_hasApiKey) {
       setState(() {
         _error = 'Add your NanoGPT API key in Settings before summarizing.';
@@ -1650,7 +1652,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final seedOpening = !session.openingSceneInMemory &&
         session.openingScene.trim().isNotEmpty;
     setState(() {
-      _busy = true;
+      _summarizing = true;
       _error = null;
     });
 
@@ -1679,7 +1681,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           openingSceneInMemory:
               seedOpening || session.openingSceneInMemory,
         );
-        _busy = false;
+        _summarizing = false;
       });
       await _persist();
       if (quiet && mounted) {
@@ -1696,13 +1698,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     } on NanoGptException catch (error) {
       if (!mounted) return;
       setState(() {
-        _busy = false;
+        _summarizing = false;
         _error = error.message;
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _busy = false;
+        _summarizing = false;
         _error = 'Summarize failed: $error';
       });
     }
@@ -1710,7 +1712,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   Future<void> _maybeAutoSummarize() async {
     final session = _session;
-    if (session == null || _busy) return;
+    if (session == null || _summarizing) return;
     final contextSettings = await widget.settingsService.getContextSettings();
     if (!_contextService.shouldAutoSummarize(
       messageCount: _messages.length,
@@ -2899,6 +2901,32 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 ],
               ),
             ),
+            if (_summarizing)
+              Material(
+                color: colorScheme.surfaceContainerHigh,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Optimizing memory summary in the background…',
+                          style: TextStyle(color: colorScheme.onSurface),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             if (_error != null)
               Material(
                 color: colorScheme.errorContainer,

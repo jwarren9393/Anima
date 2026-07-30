@@ -60,7 +60,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-29  
-**Last agent action:** Published **v1.0.0 build 35** — API model category filter + Browse models sheet with at-a-glance stats (context, output, params, TPS, TTFT, uptime, description).
+**Last agent action:** Published **v1.0.0 build 37** — background auto memory summarize (UI no longer locks; threshold-based re-run only).
 
 ### What works today
 
@@ -84,7 +84,7 @@ High-value SillyTavern concepts to aim for over time:
   - API, Generation parameters
 - **Look** — Theme Studio with glass and solid presets (default Obsidian Gold soft-glow, no sparkle texture); Ivory Ink light preset + full color/font customization
 - **Generation parameters** — detailed help + many sampling presets; **context size in tokens** + presets (1K–24K); **auto-summarize** every N messages
-- **Memory summary** — per chat (⋮ → Memory summary to edit; Summarize now); injected into prompts; auto-updates when enabled; **smarter folding** — revises stale facts, tracks key changes, uses a lower temperature + **2048-token floor** for summarize calls; **first summarize** also folds the opening scene into memory when one is set
+- **Memory summary** — per chat (⋮ → Memory summary to edit; Summarize now); injected into prompts; auto-updates when enabled; runs **in the background** (chat stays usable — menu, composer, messages); slim progress banner while optimizing; **smarter folding** — revises stale facts, tracks key changes, uses a lower temperature + **2048-token floor** for summarize calls; **first summarize** also folds the opening scene into memory when one is set
 - **Text presets** — expanded Author’s Note / System prompt / Post-history / collaborator guidance sheets
 - **Character AI wand** — sparkle icon on creative card fields; sends all filled fields as context; appends NanoGPT text below what’s already there (uses chat model + sampling)
 - **World Info entry AI wand** — sparkle on Label / Keywords / Lore content (and Secondary keywords when Selective); uses book + sibling entry context; appends (keywords merge comma-separated); same model + collaborator guidance
