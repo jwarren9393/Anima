@@ -60,7 +60,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-29  
-**Last agent action:** Published **v1.0.0 build 38** — universal chat Narrator (nudge + generate + post; dedicated prompt injection).
+**Last agent action:** Published **v1.0.0 build 39** — Narrator generate fix (token cap, cleaner prompt, leak/repetition cleanup).
 
 ### What works today
 

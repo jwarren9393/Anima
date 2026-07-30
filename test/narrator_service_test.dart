@@ -1,5 +1,6 @@
 import 'package:anima/models/chat_message.dart';
 import 'package:anima/services/narrator_service.dart';
+import 'package:anima/services/settings_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -49,6 +50,7 @@ void main() {
     expect(user, contains('Make it stormy'));
     expect(user, contains('Wind howls.'));
     expect(user, contains('Jay: Hello?'));
+    expect(messages.first['content'], isNot(contains('Hard rules')));
   });
 
   test('buildGenerateMessages includes prior narrator lines in context', () {
@@ -64,5 +66,45 @@ void main() {
       ],
     );
     expect(messages.last['content'], contains('Narrator: Candles flicker.'));
+  });
+
+  test('generateSampling caps max tokens and raises repeat penalties', () {
+    final tuned = NarratorService.generateSampling(
+      const SamplingSettings(maxTokens: 2000, temperature: 0.9),
+    );
+    expect(tuned.maxTokens, NarratorService.generateMaxTokens);
+    expect(tuned.temperature, lessThanOrEqualTo(0.62));
+    expect(tuned.frequencyPenalty, greaterThanOrEqualTo(0.35));
+    expect(tuned.repetitionPenalty, isNotNull);
+  });
+
+  test('cleanGeneratedOutput strips instruction leaks', () {
+    final raw = '''
+*The room is quiet.* Tension coils in the air.
+
+Narrator note (follow closely):
+You are the omniscient narrator of an immersive private roleplay.
+Hard rules:
+- Output ONE narrator passage only.
+''';
+    final cleaned = service.cleanGeneratedOutput(raw);
+    expect(cleaned, contains('Tension coils'));
+    expect(cleaned, isNot(contains('Hard rules')));
+    expect(cleaned, isNot(contains('Narrator note')));
+  });
+
+  test('cleanGeneratedOutput trims and-building loops', () {
+    final raw =
+        '*She trembles.* The moment stretches. building and building and building and building.';
+    final cleaned = service.cleanGeneratedOutput(raw);
+    expect(cleaned, contains('moment stretches'));
+    expect(cleaned, isNot(contains('building and building')));
+  });
+
+  test('cleanGeneratedOutput cuts inline leak after sentence', () {
+    final raw =
+        '*Rain falls.* You write narrator lines for a private roleplay chat app.';
+    final cleaned = service.cleanGeneratedOutput(raw);
+    expect(cleaned.trim(), '*Rain falls.*');
   });
 }

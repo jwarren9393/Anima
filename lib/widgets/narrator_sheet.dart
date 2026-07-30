@@ -108,12 +108,11 @@ class _NarratorSheetState extends State<_NarratorSheet> {
         model: model,
         messages: messages,
         baseUrl: baseUrl,
-        sampling: sampling.copyWith(
-          temperature: sampling.temperature > 0.75 ? 0.75 : sampling.temperature,
-        ),
+        sampling: NarratorService.generateSampling(sampling),
       );
       if (!mounted) return;
-      _draftController.text = generated.trim();
+      _draftController.text =
+          _narrator.cleanGeneratedOutput(generated);
       _draftController.selection = TextSelection.collapsed(
         offset: _draftController.text.length,
       );

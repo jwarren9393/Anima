@@ -991,7 +991,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       initialText: initialText,
     );
     if (result == null || !mounted) return;
-    await _postNarratorText(result.text);
+    await _postNarratorText(_narrator.cleanGeneratedOutput(result.text));
   }
 
   Future<void> _editNarratorAt(int index) async {
@@ -1020,7 +1020,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       initialText: message.text,
     );
     if (result == null || !mounted) return;
-    final trimmed = result.text.trim();
+    final trimmed = _narrator.cleanGeneratedOutput(result.text);
     if (trimmed.isEmpty) return;
     setState(() {
       _session!.messages[index] = message.withEditedText(trimmed);
