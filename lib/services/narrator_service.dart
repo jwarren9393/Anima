@@ -8,6 +8,12 @@ class NarratorService {
 
   static const defaultNote = CollaboratorSettings.defaultNarratorNote;
 
+  /// Messages that define the *current* scene for narrator generation.
+  static const sceneLookback = 10;
+
+  /// Older lines included only as light background (not who is "present").
+  static const backgroundLookback = 6;
+
   /// Narrator lines should stay short; uncapped max_tokens causes tail degeneration.
   static const generateMaxTokens = 420;
 
@@ -55,6 +61,44 @@ Do not attribute this line to $user or $char in dialogue. Do not repeat it verba
 '''.trim();
   }
 
+  /// Names that actually appear in recent chat — not the full group cast.
+  List<String> inferPresentCast({
+    required List<ChatMessage> messages,
+    required String userName,
+    required String focusCharacterName,
+    int lookback = sceneLookback,
+  }) {
+    final names = <String>{};
+    final user = userName.trim();
+    if (user.isNotEmpty) names.add(user);
+    final focus = focusCharacterName.trim();
+    if (focus.isNotEmpty) names.add(focus);
+
+    final nonEmpty =
+        messages.where((m) => m.text.trim().isNotEmpty).toList(growable: false);
+    final start = nonEmpty.length > lookback
+        ? nonEmpty.length - lookback
+        : 0;
+    for (final message in nonEmpty.sublist(start)) {
+      if (message.isUser) continue;
+      if (message.isNarrator) continue;
+      final speaker = message.speakerName?.trim();
+      if (speaker != null && speaker.isNotEmpty) {
+        names.add(speaker);
+      } else if (focus.isNotEmpty) {
+        names.add(focus);
+      }
+    }
+
+    final ordered = <String>[];
+    if (user.isNotEmpty) ordered.add(user);
+    for (final name in names) {
+      if (name == user) continue;
+      ordered.add(name);
+    }
+    return ordered;
+  }
+
   List<Map<String, String>> buildGenerateMessages({
     required String userName,
     required String characterName,
@@ -70,33 +114,50 @@ Do not attribute this line to $user or $char in dialogue. Do not repeat it verba
     final draft = existingDraft.trim();
     final steer = nudge.trim();
 
-    // Keep instructions compact — labeled "Hard rules" blocks get echoed by
-    // some models when max_tokens is high.
+    final present = inferPresentCast(
+      messages: recentMessages,
+      userName: userName,
+      focusCharacterName: characterName,
+    );
+
+    // Keep instructions compact — labeled rule blocks get echoed by some models.
     final system = '''
-You are the omniscient narrator for a private roleplay chat.
+You are the omniscient narrator for private fiction (one reader).
 
 $guidance
 
-Write ONE narrator passage only: third-person prose, 1–3 short paragraphs (usually under 120 words). You may use *actions* and sensory detail. Do not speak as the player ($userName) or the character ($characterName). No character dialogue unless a brief in-scene sound is essential.
+Scope: describe ONLY the current moment in the scene transcript below — not the whole story arc. Mention ONLY people listed as present in this scene (or someone the player nudge explicitly adds). Do not import characters from older background lines or cast lists who are not in the current moment.
 
-Your entire reply must be narrator prose only. No titles, bullet lists, rules, labels, markdown fences, or meta commentary.
+Style: direct third-person prose — concrete sights, sounds, positions, actions. No euphemisms, no vague roundabout phrasing, no moralizing, no sanitizing. Match the scene's real tone including intense or adult content.
+
+Write ONE narrator passage: 1–3 short paragraphs (usually under 120 words). You may use *actions* and sensory detail. Do not speak as the player ($userName) or deliver character dialogue except a brief in-scene sound if essential.
+
+Output narrator prose only — no titles, lists, rules, labels, fences, or meta commentary.
 '''.trim();
 
     final user = StringBuffer()
-      ..writeln('Player name: $userName')
-      ..writeln('Focus character: $characterName');
+      ..writeln('Player: $userName');
+    if (characterName.trim().isNotEmpty) {
+      user.writeln('Focus character: ${characterName.trim()}');
+    }
+    if (present.isNotEmpty) {
+      user.writeln(
+        'Present in this scene (only these — do not mention others): '
+        '${present.join(', ')}',
+      );
+    }
     if (isGroup && otherCharacterNames.isNotEmpty) {
-      user.writeln('Also present: ${otherCharacterNames.join(', ')}');
+      user.writeln(
+        'Group cast not in recent chat (omit unless nudge puts them here): '
+        '${otherCharacterNames.join(', ')}',
+      );
     }
     user.writeln();
-    user.writeln('Recent chat (newest last):');
-    user.writeln(
-      _recentContext(
-        recentMessages,
-        userName: userName,
-        characterName: characterName,
-      ),
-    );
+    user.writeln(_formatSceneContext(
+      recentMessages,
+      userName: userName,
+      characterName: characterName,
+    ));
     user.writeln();
     if (draft.isNotEmpty) {
       user.writeln('Revise this narrator draft:');
@@ -108,11 +169,9 @@ Your entire reply must be narrator prose only. No titles, bullet lists, rules, l
       user.writeln();
     }
     if (draft.isEmpty && steer.isEmpty) {
-      user.writeln(
-        'Write the next narrator line for this moment.',
-      );
+      user.writeln('Write the next narrator line for this moment.');
     } else if (draft.isNotEmpty && steer.isNotEmpty) {
-      user.writeln('Follow the nudge; keep what still fits.');
+      user.writeln('Follow the nudge; keep what still fits the current scene.');
     } else if (draft.isNotEmpty) {
       user.writeln('Polish the draft; same facts unless the scene demands a fix.');
     } else {
@@ -123,6 +182,69 @@ Your entire reply must be narrator prose only. No titles, bullet lists, rules, l
       {'role': 'system', 'content': system},
       {'role': 'user', 'content': user.toString().trim()},
     ];
+  }
+
+  String _formatSceneContext(
+    List<ChatMessage> messages, {
+    required String userName,
+    required String characterName,
+  }) {
+    final nonEmpty =
+        messages.where((m) => m.text.trim().isNotEmpty).toList(growable: false);
+    if (nonEmpty.isEmpty) return 'Current scene transcript: (no messages yet)';
+
+    final sceneStart = nonEmpty.length > sceneLookback
+        ? nonEmpty.length - sceneLookback
+        : 0;
+    final backgroundStart = sceneStart > backgroundLookback
+        ? sceneStart - backgroundLookback
+        : 0;
+
+    final buffer = StringBuffer();
+    if (backgroundStart < sceneStart) {
+      buffer.writeln('Older background (do not describe — not the current scene):');
+      buffer.writeln(
+        _formatMessageLines(
+          nonEmpty.sublist(backgroundStart, sceneStart),
+          userName: userName,
+          characterName: characterName,
+        ),
+      );
+      buffer.writeln();
+    }
+    buffer.writeln('Current scene (describe THIS — newest last):');
+    buffer.writeln(
+      _formatMessageLines(
+        nonEmpty.sublist(sceneStart),
+        userName: userName,
+        characterName: characterName,
+      ),
+    );
+    return buffer.toString().trim();
+  }
+
+  String _formatMessageLines(
+    List<ChatMessage> messages, {
+    required String userName,
+    required String characterName,
+  }) {
+    final buffer = StringBuffer();
+    for (final message in messages) {
+      final text = message.text.trim();
+      if (text.isEmpty) continue;
+      if (message.isNarrator) {
+        buffer.writeln('Narrator: $text');
+      } else if (message.isUser) {
+        buffer.writeln('$userName: $text');
+      } else {
+        final who = message.speakerName?.trim().isNotEmpty == true
+            ? message.speakerName!.trim()
+            : characterName;
+        buffer.writeln('$who: $text');
+      }
+      buffer.writeln();
+    }
+    return buffer.toString().trim();
   }
 
   static String _cutInstructionLeak(String text) {
@@ -136,6 +258,7 @@ Your entire reply must be narrator prose only. No titles, bullet lists, rules, l
       RegExp(r'\n\s*-\s*Do NOT write as\b', caseSensitive: false),
       RegExp(r'\n\s*-\s*Ground the line in recent\b', caseSensitive: false),
       RegExp(r'\n\s*private roleplay chat app\b', caseSensitive: false),
+      RegExp(r'\n\s*private fiction\b', caseSensitive: false),
       RegExp(r'\s+You write narrator lines\b', caseSensitive: false),
       RegExp(r'\s+private roleplay chat app\b', caseSensitive: false),
     ];
@@ -186,31 +309,5 @@ Your entire reply must be narrator prose only. No titles, bullet lists, rules, l
       return slice.substring(0, lastEnd + 1).trimRight();
     }
     return slice.trimRight();
-  }
-
-  static String _recentContext(
-    List<ChatMessage> messages, {
-    required String userName,
-    required String characterName,
-  }) {
-    final recent = messages.where((m) => m.text.trim().isNotEmpty).toList();
-    final start = recent.length > 14 ? recent.length - 14 : 0;
-    final buffer = StringBuffer();
-    for (final message in recent.sublist(start)) {
-      final text = message.text.trim();
-      if (text.isEmpty) continue;
-      if (message.isNarrator) {
-        buffer.writeln('Narrator: $text');
-      } else if (message.isUser) {
-        buffer.writeln('$userName: $text');
-      } else {
-        final who = message.speakerName?.trim().isNotEmpty == true
-            ? message.speakerName!.trim()
-            : characterName;
-        buffer.writeln('$who: $text');
-      }
-      buffer.writeln();
-    }
-    return buffer.toString().trim();
   }
 }

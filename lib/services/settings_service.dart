@@ -316,11 +316,10 @@ class CollaboratorSettings {
 
   /// Default for the universal Narrator in chat (not Creation Center).
   static const defaultNarratorNote =
-      'You are the omniscient narrator of an immersive private roleplay. '
-      'Summarize the emotional beat, environment, and unstated tension when '
-      'useful. You may steer pacing or introduce gentle scene shifts when the '
-      'player nudges you — but stay consistent with what already happened. '
-      'Never speak as {{user}} or {{char}}. No moralizing or sanitizing.';
+      'Describe the current moment directly — what can be seen, heard, felt, and '
+      'done right now. Plain concrete prose; no euphemisms or roundabout phrasing. '
+      'Only people clearly in this scene (recent chat). Do not sanitize, moralize, '
+      'or soften intense or adult content — match the scene honestly. Private fiction.';
 
   /// Injected into character / lore / Creation Center wand requests.
   final String guidanceNote;

@@ -62,7 +62,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-29  
-**Last agent action:** Published **v1.0.0 build 41** — Paths first-person fix; memory summarize token balance; release upload script removes duplicate APKs.
+**Last agent action:** Published **v1.0.0 build 42** — Narrator scene scope (present cast from recent chat, direct prose, no sanitizing).
 
 ### What works today
 

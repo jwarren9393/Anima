@@ -420,7 +420,7 @@ Special tuned sampling for: memory summarize, narrator generate, composer format
 | **Paths** | Composer only | Not sent until user sends | Brainstorm {{user}} options |
 | **Global prompts** | Settings | System + post-history | App-wide steer |
 
-**Narrator sheet flow** (`narrator_sheet.dart`): optional **nudge** → editable **Narrator line** → **Generate** (AI) or type manually → **Post**. Generate uses capped ~420 max tokens + output cleanup (`cleanGeneratedOutput`) to avoid prompt leaks and repetition tails.
+**Narrator sheet flow** (`narrator_sheet.dart`): optional **nudge** → editable **Narrator line** → **Generate** (AI) or type manually → **Post**. `NarratorService.buildGenerateMessages()` infers **present cast** from the last 10 chat lines (not full group roster); splits **current scene** vs **older background** transcript; direct prose, no sanitizing. Generate uses capped ~420 max tokens + `cleanGeneratedOutput()`.
 
 **Not in Creation Center:** Narrator theater button is solo/group chat only.
 

@@ -30,6 +30,55 @@ void main() {
     expect(block, contains('not Jay or Luna speaking'));
   });
 
+  test('inferPresentCast uses recent speakers not full group cast', () {
+    final present = service.inferPresentCast(
+      userName: 'Trey',
+      focusCharacterName: 'Angela',
+      messages: [
+        ChatMessage(id: 'u1', role: ChatRole.user, text: 'Hey.'),
+        ChatMessage(
+          id: 'a1',
+          role: ChatRole.assistant,
+          speakerName: 'Angela',
+          text: '*She smiles.*',
+        ),
+      ],
+    );
+    expect(present, contains('Trey'));
+    expect(present, contains('Angela'));
+    expect(present, isNot(contains('Marcus')));
+  });
+
+  test('buildGenerateMessages scopes present cast and current scene', () {
+    final messages = service.buildGenerateMessages(
+      userName: 'Trey',
+      characterName: 'Angela',
+      recentMessages: [
+        ChatMessage(id: 'u1', role: ChatRole.user, text: 'Hello?'),
+        ChatMessage(
+          id: 'a1',
+          role: ChatRole.assistant,
+          speakerName: 'Angela',
+          text: '*She looks up.* "Hi."',
+        ),
+      ],
+      isGroup: true,
+      otherCharacterNames: const ['Marcus', 'Edric'],
+      nudge: 'Describe the current scene',
+    );
+    final system = messages.first['content']!;
+    final user = messages.last['content']!;
+    expect(system, contains('ONLY the current moment'));
+    expect(system, contains('Do not sanitize'));
+    expect(user, contains('Present in this scene'));
+    expect(user, contains('Trey'));
+    expect(user, contains('Angela'));
+    expect(user, contains('Marcus'));
+    expect(user, contains('omit unless nudge'));
+    expect(user, contains('Current scene'));
+    expect(messages.first['content'], isNot(contains('Hard rules')));
+  });
+
   test('buildGenerateMessages includes nudge and draft', () {
     final messages = service.buildGenerateMessages(
       userName: 'Jay',
