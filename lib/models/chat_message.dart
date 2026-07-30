@@ -36,6 +36,10 @@ class ChatMessage {
 
   bool get isUser => role == ChatRole.user;
 
+  bool get isNarrator => role == ChatRole.narrator;
+
+  bool get isAssistant => role == ChatRole.assistant;
+
   bool get canSwipe => !isUser && swipes.length > 1;
 
   ChatMessage copyWith({
@@ -65,7 +69,7 @@ class ChatMessage {
   /// Replace the visible swipe text (used when you edit a message).
   ChatMessage withEditedText(String newText) {
     final trimmed = newText.trim();
-    if (isUser || swipes.isEmpty) {
+    if (isUser || isNarrator || swipes.isEmpty) {
       return copyWith(text: trimmed, swipes: [trimmed], swipeIndex: 0);
     }
     final updated = List<String>.from(swipes);
@@ -112,13 +116,30 @@ class ChatMessage {
   }
 
   Map<String, String> toApiMap() => {
-        'role': role == ChatRole.user ? 'user' : 'assistant',
+        'role': isUser ? 'user' : 'assistant',
         'content': text,
       };
 
+  static String roleToJson(ChatRole role) => switch (role) {
+        ChatRole.user => 'user',
+        ChatRole.narrator => 'narrator',
+        ChatRole.assistant => 'assistant',
+      };
+
+  static ChatRole roleFromJson(String? raw) {
+    switch (raw) {
+      case 'user':
+        return ChatRole.user;
+      case 'narrator':
+        return ChatRole.narrator;
+      default:
+        return ChatRole.assistant;
+    }
+  }
+
   Map<String, dynamic> toJson() => {
         'id': id,
-        'role': role == ChatRole.user ? 'user' : 'assistant',
+        'role': roleToJson(role),
         'text': text,
         'swipes': swipes,
         'swipeIndex': swipeIndex,
@@ -136,7 +157,7 @@ class ChatMessage {
         : <String>[];
     return ChatMessage(
       id: json['id'] as String? ?? 'msg_${DateTime.now().millisecondsSinceEpoch}',
-      role: roleRaw == 'user' ? ChatRole.user : ChatRole.assistant,
+      role: roleFromJson(roleRaw),
       text: text,
       swipes: swipes.isEmpty && text.isNotEmpty ? [text] : swipes,
       swipeIndex: json['swipeIndex'] as int? ?? 0,
@@ -164,4 +185,5 @@ class ChatMessage {
   }
 }
 
-enum ChatRole { user, assistant }
+enum ChatRole { user, assistant, narrator }
+

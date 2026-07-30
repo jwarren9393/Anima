@@ -60,12 +60,12 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-29  
-**Last agent action:** Published **v1.0.0 build 37** — background auto memory summarize (UI no longer locks; threshold-based re-run only).
+**Last agent action:** Published **v1.0.0 build 38** — universal chat Narrator (nudge + generate + post; dedicated prompt injection).
 
 ### What works today
 
 - **Home screen** — chat history; **Creation Center** row (continue tile merged into horizontal world tiles); **New** FAB opens sheet (solo / group / workshop); chat rows show preview + date when available
-- **Chat screen** — **minimal chrome**: Close · title · ⋮ (saved chats + new chat in menu); composer icon row (OOC · field · ✨ · ▶ · send/stop); Memory/Note chips when set; group speaker chips hide when keyboard open
+- **Chat screen** — **minimal chrome**: Close · title · ⋮; composer row (**Narrator** · OOC · field · ✨ · ▶ · send/stop); **Narrator** — omniscient scene voice in chat timeline (centered card); sheet with optional **nudge** + editable line + **Generate** / **Post**; injected as dedicated system blocks in prompts (not OOC, not {{user}}); long-press menu + tap to edit; Settings → AI collaborator **Narrator note**; solo/group chats only (not Creation Center)
 - **Group chat setup** — cast + order on main form; **Lore / Scene / Note / Auto-reply** chips open sheets (no inline lore checkboxes or long prose fields)
 - **New chat** — choose **Solo** or **Group**; if the character has several greetings, a **Choose opening** sheet picks which one starts (others stay as swipes); then an optional **Opening scene** sheet — pick a saved scene, browse **Opening scene library**, type fresh prose, or skip
 - **Opening scene (narrator)** — per-chat optional prose in a centered narrator card above messages (not a character bubble); **always injected into prompts by default** (turn off via ⋮ → **Stop injecting opening scene** to save tokens); on the **first memory summarize**, the scene is folded into the memory summary so it stays in long-term context; edit via ⋮ → **Opening scene**; works in solo and group; separate from card **Scenario** (still injects every turn)
@@ -90,7 +90,7 @@ High-value SillyTavern concepts to aim for over time:
 - **World Info entry AI wand** — sparkle on Label / Keywords / Lore content (and Secondary keywords when Selective); uses book + sibling entry context; appends (keywords merge comma-separated); same model + collaborator guidance
 - **API & connection** — live NanoGPT model catalog: **Category** filter (All · **Uncensored & derestricted (broad)** · Roleplay · …) then **provider**; **Browse models** sheet shows context, max output, parameter size, TPS, TTFT, uptime %, description, capabilities, and pricing/Included — stats from `detailed=true` catalog + providers API; filtered count in status line; refresh; custom model id; subscription toggle reloads catalog; **image model** picker; **See remaining credits**
 - **Chat stop** — while a reply streams, the send button becomes **Stop** (keeps any partial text); the list does **not** auto-scroll during streaming — scroll freely while a reply types in (regular chat + Creation Center)
-- **Composer shortcuts** — **OOC**, **Format** (✨), **Continue** (▶), Send/Stop; Format has its own collaborator note; **desktop:** Enter sends (Shift+Enter = new line; toggle in **Settings → AI collaborator**)
+- **Composer shortcuts** — **Narrator** (theater icon), **OOC**, **Format** (✨), **Continue** (▶), Send/Stop; Narrator / Format / Paths have collaborator notes; **desktop:** Enter sends (Shift+Enter = new line; toggle in **Settings → AI collaborator**)
 - **Draft autosave** — composer text saved per chat (survives leaving chat/app); cleared on send
 - **Character categories** — Anima-only lists (not ST card tags); **All characters** master view + custom categories; filter in Characters (manage/pick) and Group setup; membership via row menu → Categories
 - **Paths (Roadway)** — long-press a message → **Paths** (sheet + ✨ generate); tap a tile → composer; check **two or more** + **Combine selected** to AI-merge them into one composer draft; options **stay cached** until the chat moves on, or you clear / refresh; note under AI collaborator
@@ -280,7 +280,8 @@ lib/
     rp_rich_text.dart             *action* / "dialogue" styled message text
     greeting_picker.dart          Multi-greeting sheet when starting a chat
     opening_scene_picker.dart     Optional opening-scene sheet when starting a chat (+ library browse)
-    narrator_bubble.dart          Centered narrator card for per-chat opening scene
+    narrator_bubble.dart          Centered narrator card (opening scene + chat Narrator lines)
+    narrator_sheet.dart           Narrator sheet — nudge, edit, Generate, Post
     workshop_overview_sheet.dart  Workshop dashboard bottom sheet
     minimal_chip_button.dart        Shared MinimalChipButton + MinimalChipRow
     workshop_compact_toolbar.dart   Workshop chip row (mode, length, scene, import, ideas)
@@ -311,6 +312,7 @@ lib/
     message_formatter.dart        Composer AI format (*actions* / "dialogue")
     reply_rewrite_service.dart    Rewrite-reply prompts for regen / new swipe
     roadway_service.dart          Paths / Roadway brainstorm + combine prompts + parse
+    narrator_service.dart       Universal chat Narrator — generate + prompt injection
   roadway_cache_service.dart    Per-chat cached Path options (survive sheet close)
   composer_draft_service.dart   Per-chat composer draft autosave
   speaker_prefix.dart           Strip leading "Name:" from AI replies (group immersion)

@@ -25,6 +25,7 @@ class _CollaboratorSettingsScreenState
   final _guidanceController = TextEditingController();
   final _composerFormatController = TextEditingController();
   final _roadwayController = TextEditingController();
+  final _narratorController = TextEditingController();
   bool _loading = true;
   bool _saving = false;
   bool _enterToSend = true;
@@ -43,6 +44,7 @@ class _CollaboratorSettingsScreenState
       _guidanceController.text = settings.guidanceNote;
       _composerFormatController.text = settings.composerFormatNote;
       _roadwayController.text = settings.roadwayNote;
+      _narratorController.text = settings.narratorNote;
       _enterToSend = enterToSend;
       _loading = false;
     });
@@ -55,6 +57,7 @@ class _CollaboratorSettingsScreenState
         guidanceNote: _guidanceController.text,
         composerFormatNote: _composerFormatController.text,
         roadwayNote: _roadwayController.text,
+        narratorNote: _narratorController.text,
       ),
     );
     await widget.settingsService.saveEnterToSendComposer(_enterToSend);
@@ -84,6 +87,12 @@ class _CollaboratorSettingsScreenState
     });
   }
 
+  Future<void> _resetNarratorDefault() async {
+    setState(() {
+      _narratorController.text = CollaboratorSettings.defaultNarratorNote;
+    });
+  }
+
   Future<void> _pickPreset() async {
     final preset = await pickTextPreset(
       context: context,
@@ -99,6 +108,7 @@ class _CollaboratorSettingsScreenState
     _guidanceController.dispose();
     _composerFormatController.dispose();
     _roadwayController.dispose();
+    _narratorController.dispose();
     super.dispose();
   }
 
@@ -209,11 +219,35 @@ class _CollaboratorSettingsScreenState
                   onPressed: _saving ? null : _resetRoadwayDefault,
                   child: const Text('Reset Roadway note to default'),
                 ),
+                const SizedBox(height: 32),
+                SettingsUi.sectionTitle(context, 'Narrator'),
+                const SizedBox(height: 8),
+                SettingsUi.sectionHint(
+                  context,
+                  'Used when you tap the Narrator button in chat (not Creation '
+                  'Center). Steers AI-generated omniscient scene lines.',
+                ),
+                TextField(
+                  controller: _narratorController,
+                  minLines: 4,
+                  maxLines: 10,
+                  scrollPadding: SettingsUi.keyboardScrollPadding,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: SettingsUi.fieldDecoration(
+                    label: 'Narrator note',
+                    hintText: 'How the Narrator should write…',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton(
+                  onPressed: _saving ? null : _resetNarratorDefault,
+                  child: const Text('Reset Narrator note to default'),
+                ),
                 const SizedBox(height: 8),
                 Text(
-                  'Wand, Format, and Paths use your normal NanoGPT model and '
-                  'generation parameters from Settings. Format also cools '
-                  'temperature slightly so it stays closer to your words.',
+                  'Wand, Format, Paths, and Narrator use your normal NanoGPT '
+                  'model and generation parameters from Settings. Format also '
+                  'cools temperature slightly so it stays closer to your words.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 24),

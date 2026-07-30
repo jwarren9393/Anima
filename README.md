@@ -10,12 +10,13 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **Also builds** | Linux desktop (works); Windows desktop (needs a Windows host) |
 | **Distribution** | Personal use only — **not** published to app stores |
 | **Repo** | https://github.com/jwarren9393/Anima (private) |
-| **Version** | **1.0.0** build **37** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
+| **Version** | **1.0.0** build **38** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
 
 ### What’s new in recent builds (1.0.0)
 
 | Build | Highlights |
 |-------|------------|
+| **38** | Universal **Narrator** in chat — nudge + edit sheet, AI **Generate**, centered timeline cards, dedicated prompt injection; **Narrator note** in Settings → AI collaborator; solo/group only (not Creation Center) |
 | **37** | Auto memory summarize runs **in the background** — chat UI stays usable (menu, composer, messages); progress banner; no back-to-back summarize chains |
 | **36** | Desktop **Anima icon** on Windows (embedded in `anima.exe`) and Linux (window + app menu); same asset as Android |
 | **35** | API **Category** filter (incl. **Uncensored & derestricted (broad)**); **Browse models** sheet + **selected model card** — context, max output, parameter size, TPS, TTFT, uptime %, description, capabilities, pricing/Included (from NanoGPT catalog + routing API) |
@@ -23,7 +24,7 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **33** | **Update workshop cast** (workshop-tied characters only, not whole library); Creation Center collaborator prompt — brainstorm-only, points to real ⋮ menu actions |
 | **32** | Creation Center **World dashboard** hub; **Fix last** chip; minimal UI pass (chat/home/group/settings); workshop **world summary** folding; full feature README |
 
-Earlier 1.0.0 builds added Storybook layout, opening scenes library, backup/sync, group chat polish, and the core SillyTavern-style toolkit. **203 tests** at build 35.
+Earlier 1.0.0 builds added Storybook layout, opening scenes library, backup/sync, group chat polish, and the core SillyTavern-style toolkit. **207 tests** at build 38.
 
 API base (pay-as-you-go): `https://nano-gpt.com/api/v1/chat/completions`  
 Auth: `Authorization: Bearer <API_KEY>`  

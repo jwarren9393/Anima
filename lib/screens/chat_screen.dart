@@ -23,6 +23,7 @@ import '../services/chat_transcript_codec.dart';
 import '../services/composer_draft_service.dart';
 import '../services/lorebook_service.dart';
 import '../services/message_formatter.dart';
+import '../services/narrator_service.dart';
 import '../services/nanogpt_service.dart';
 import '../services/persona_service.dart';
 import '../services/prompt_builder.dart';
@@ -48,6 +49,7 @@ import '../widgets/greeting_picker.dart';
 import '../widgets/keyboard_inset.dart';
 import '../widgets/minimal_chip_button.dart';
 import '../widgets/narrator_bubble.dart';
+import '../widgets/narrator_sheet.dart';
 import '../widgets/preset_picker.dart';
 import '../widgets/reply_rewrite_sheet.dart';
 import '../widgets/rp_rich_text.dart';
@@ -105,6 +107,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final _draftService = ComposerDraftService();
   static const _formatter = MessageFormatter();
   static const _replyRewrite = ReplyRewriteService();
+  static const _narrator = NarratorService();
 
   bool _hasApiKey = false;
   bool _loading = true;
@@ -931,6 +934,116 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _error = null;
       var session = _session!;
       session.messages.add(userMessage);
+      _session = session;
+      if (autoReply) {
+        _busy = true;
+        _session!.messages.add(
+          ChatMessage(
+            id: ChatMessage.newId(),
+            role: ChatRole.assistant,
+            text: '',
+            swipes: const [''],
+            swipeIndex: 0,
+            speakerId: speaker.id,
+            speakerName: speaker.name,
+          ),
+        );
+      }
+    });
+    _scrollToBottom(jump: true);
+    await _persist();
+    if (!autoReply) return;
+
+    await _streamIntoLastAssistant(
+      excludeLastAssistant: true,
+      speakingAs: speaker,
+      advanceGroupSpeaker: _isGroup,
+    );
+  }
+
+  Future<void> _openNarratorSheet({String initialText = ''}) async {
+    if (_busy || _formatting || _session == null || _character == null) return;
+    if (!_hasApiKey) {
+      setState(() {
+        _error = 'Add your NanoGPT API key in Settings before using Narrator.';
+      });
+      return;
+    }
+    final charName = _character!.name.trim().isNotEmpty
+        ? _character!.name.trim()
+        : 'Character';
+    final otherNames = _isGroup
+        ? _participants
+            .where((c) => c.id != _character!.id)
+            .map((c) => c.name.trim())
+            .where((n) => n.isNotEmpty)
+            .toList()
+        : const <String>[];
+    final result = await showNarratorSheet(
+      context: context,
+      nanoGptService: widget.nanoGptService,
+      settingsService: widget.settingsService,
+      recentMessages: List<ChatMessage>.from(_messages),
+      userName: _userName,
+      characterName: charName,
+      isGroup: _isGroup,
+      otherCharacterNames: otherNames,
+      initialText: initialText,
+    );
+    if (result == null || !mounted) return;
+    await _postNarratorText(result.text);
+  }
+
+  Future<void> _editNarratorAt(int index) async {
+    if (_busy || _session == null) return;
+    final message = _messages[index];
+    if (!message.isNarrator) return;
+    final charName = _character?.name.trim().isNotEmpty == true
+        ? _character!.name.trim()
+        : 'Character';
+    final otherNames = _isGroup
+        ? _participants
+            .where((c) => c.id != _character?.id)
+            .map((c) => c.name.trim())
+            .where((n) => n.isNotEmpty)
+            .toList()
+        : const <String>[];
+    final result = await showNarratorSheet(
+      context: context,
+      nanoGptService: widget.nanoGptService,
+      settingsService: widget.settingsService,
+      recentMessages: _messages.sublist(0, index),
+      userName: _userName,
+      characterName: charName,
+      isGroup: _isGroup,
+      otherCharacterNames: otherNames,
+      initialText: message.text,
+    );
+    if (result == null || !mounted) return;
+    final trimmed = result.text.trim();
+    if (trimmed.isEmpty) return;
+    setState(() {
+      _session!.messages[index] = message.withEditedText(trimmed);
+    });
+    await _persist();
+  }
+
+  Future<void> _postNarratorText(String text) async {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty || _session == null || _character == null) return;
+
+    final autoReply = _session!.autoReply;
+    final speaker = _speakerForTurn();
+    final narratorMessage = ChatMessage(
+      id: ChatMessage.newId(),
+      role: ChatRole.narrator,
+      text: trimmed,
+    );
+
+    setState(() {
+      _error = null;
+      var session = _session!;
+      session.messages.add(narratorMessage);
       _session = session;
       if (autoReply) {
         _busy = true;
@@ -2152,6 +2265,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
 
     for (final message in history) {
+      if (message.isNarrator) {
+        final block = _narrator.formatForPrompt(
+          text: message.text,
+          userName: userName,
+          charName: character.name,
+        );
+        if (block.isNotEmpty) {
+          msgs.add({'role': 'system', 'content': block});
+        }
+        continue;
+      }
       // Prefixed speaker names help group chats stay clear in the history.
       // Strip any name the model already put in the body so we don't send
       // "Name: Name: …" and teach the habit again.
@@ -2826,6 +2950,22 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                             delegate: SliverChildBuilderDelegate(
                               (context, index) {
                         final message = _messages[index];
+                        if (message.isNarrator) {
+                          return Padding(
+                            padding: EdgeInsets.symmetric(
+                              vertical:
+                                  AnimaUiTheme.of(context).messageSpacing / 2,
+                            ),
+                            child: NarratorBubble(
+                              label: 'Narrator',
+                              icon: Icons.theater_comedy_outlined,
+                              text: message.text,
+                              onTap: _busy
+                                  ? null
+                                  : () => _editNarratorAt(index),
+                            ),
+                          );
+                        }
                         final isLast = index == _messages.length - 1;
                         final thinking =
                             _busy && isLast && message.text.isEmpty;
@@ -3036,6 +3176,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         IconButton(
+                          tooltip: 'Narrator — scene voice & direction',
+                          onPressed: _busy || _formatting
+                              ? null
+                              : _openNarratorSheet,
+                          visualDensity: VisualDensity.compact,
+                          color: colorScheme.tertiary,
+                          icon: const Icon(Icons.theater_comedy_outlined),
+                        ),
+                        IconButton(
                           tooltip: _oocMode
                               ? 'OOC on — sends as (OOC: …)'
                               : 'OOC off',
@@ -3171,6 +3320,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 ),
                 const Divider(),
                 ListTile(
+                  leading: const Icon(Icons.theater_comedy_outlined),
+                  title: const Text('Narrator'),
+                  subtitle: const Text(
+                    'Omniscient scene voice — edit or nudge before posting',
+                  ),
+                  onTap: () => Navigator.pop(context, 'narrator'),
+                ),
+                ListTile(
                   leading: const Icon(Icons.play_arrow),
                   title: const Text('Continue'),
                   subtitle: const Text('Generate the next reply'),
@@ -3208,7 +3365,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   ),
                   onTap: () => Navigator.pop(context, 'auto_reply'),
                 ),
-                if (!message.isUser) ...[
+                if (!message.isUser && !message.isNarrator) ...[
                   ListTile(
                     leading: const Icon(Icons.tune),
                     title: const Text('Rewrite reply…'),
@@ -3265,6 +3422,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (action == 'delete') await _deleteMessage(index);
     if (action == 'rewind') await _rewindToMessage(index);
     if (action == 'branch') await _branchFromMessage(index);
+    if (action == 'narrator') await _openNarratorSheet();
     if (action == 'continue') await _continueScene();
     if (action == 'impersonate') await _impersonate();
     if (action == 'paths') await _showPathsSheet();

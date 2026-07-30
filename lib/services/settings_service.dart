@@ -288,6 +288,7 @@ class CollaboratorSettings {
     this.guidanceNote = defaultGuidanceNote,
     this.composerFormatNote = defaultComposerFormatNote,
     this.roadwayNote = defaultRoadwayNote,
+    this.narratorNote = defaultNarratorNote,
   });
 
   /// Default “Author’s Note” for the wand — keep replies raw, don’t sanitize.
@@ -312,6 +313,14 @@ class CollaboratorSettings {
       '{{user}} could do or say next. Mix dialogue, action, and curiosity. '
       'Keep options distinct from each other — no near-duplicates.';
 
+  /// Default for the universal Narrator in chat (not Creation Center).
+  static const defaultNarratorNote =
+      'You are the omniscient narrator of an immersive private roleplay. '
+      'Summarize the emotional beat, environment, and unstated tension when '
+      'useful. You may steer pacing or introduce gentle scene shifts when the '
+      'player nudges you — but stay consistent with what already happened. '
+      'Never speak as {{user}} or {{char}}. No moralizing or sanitizing.';
+
   /// Injected into character / lore / Creation Center wand requests.
   final String guidanceNote;
 
@@ -321,15 +330,20 @@ class CollaboratorSettings {
   /// Injected into Roadway path-suggestion requests.
   final String roadwayNote;
 
+  /// Injected into Narrator generate requests in chat.
+  final String narratorNote;
+
   CollaboratorSettings copyWith({
     String? guidanceNote,
     String? composerFormatNote,
     String? roadwayNote,
+    String? narratorNote,
   }) {
     return CollaboratorSettings(
       guidanceNote: guidanceNote ?? this.guidanceNote,
       composerFormatNote: composerFormatNote ?? this.composerFormatNote,
       roadwayNote: roadwayNote ?? this.roadwayNote,
+      narratorNote: narratorNote ?? this.narratorNote,
     );
   }
 }
@@ -387,6 +401,7 @@ class SettingsService {
   static const _collaboratorGuidanceKey = 'collaborator_guidance_note';
   static const _composerFormatNoteKey = 'composer_format_guidance_note';
   static const _roadwayNoteKey = 'roadway_guidance_note';
+  static const _narratorNoteKey = 'narrator_guidance_note';
   static const _enterToSendComposerKey = 'composer_enter_to_send';
   static const _characterBuildUseMainModelKey = 'character_build_use_main_model';
   static const _characterBuildModelKey = 'character_build_model_id';
@@ -432,6 +447,7 @@ class SettingsService {
     _collaboratorGuidanceKey,
     _composerFormatNoteKey,
     _roadwayNoteKey,
+    _narratorNoteKey,
     _enterToSendComposerKey,
     _characterBuildUseMainModelKey,
     _characterBuildModelKey,
@@ -703,6 +719,7 @@ class SettingsService {
     final wandRaw = await _storage.read(key: _collaboratorGuidanceKey);
     final formatRaw = await _storage.read(key: _composerFormatNoteKey);
     final roadwayRaw = await _storage.read(key: _roadwayNoteKey);
+    final narratorRaw = await _storage.read(key: _narratorNoteKey);
     return CollaboratorSettings(
       guidanceNote: (wandRaw == null || wandRaw.trim().isEmpty)
           ? CollaboratorSettings.defaultGuidanceNote
@@ -713,6 +730,9 @@ class SettingsService {
       roadwayNote: (roadwayRaw == null || roadwayRaw.trim().isEmpty)
           ? CollaboratorSettings.defaultRoadwayNote
           : roadwayRaw,
+      narratorNote: (narratorRaw == null || narratorRaw.trim().isEmpty)
+          ? CollaboratorSettings.defaultNarratorNote
+          : narratorRaw,
     );
   }
 
@@ -752,6 +772,14 @@ class SettingsService {
       await _storage.delete(key: _roadwayNoteKey);
     } else {
       await _storage.write(key: _roadwayNoteKey, value: roadway);
+    }
+
+    final narrator = settings.narratorNote.trim();
+    if (narrator.isEmpty ||
+        narrator == CollaboratorSettings.defaultNarratorNote) {
+      await _storage.delete(key: _narratorNoteKey);
+    } else {
+      await _storage.write(key: _narratorNoteKey, value: narrator);
     }
   }
 

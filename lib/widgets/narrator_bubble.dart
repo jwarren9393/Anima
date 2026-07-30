@@ -8,11 +8,15 @@ class NarratorBubble extends StatelessWidget {
   const NarratorBubble({
     super.key,
     required this.text,
+    this.label = 'Opening scene',
+    this.icon = Icons.auto_stories_outlined,
     this.onTap,
     this.injecting = false,
   });
 
   final String text;
+  final String label;
+  final IconData icon;
   final VoidCallback? onTap;
   final bool injecting;
 
@@ -40,13 +44,13 @@ class NarratorBubble extends StatelessWidget {
               Row(
                 children: [
                   Icon(
-                    Icons.auto_stories_outlined,
+                    icon,
                     size: 16,
                     color: theme.colorScheme.tertiary,
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    'Opening scene',
+                    label,
                     style: theme.textTheme.labelLarge?.copyWith(
                       color: theme.colorScheme.tertiary,
                       fontWeight: FontWeight.w600,

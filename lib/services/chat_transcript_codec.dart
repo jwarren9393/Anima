@@ -52,7 +52,11 @@ class ChatTranscriptCodec {
     for (final message in session.messages) {
       final text = message.text.trim();
       if (text.isEmpty) continue;
-      final speaker = message.isUser ? userName : charName;
+      final speaker = message.isNarrator
+          ? 'Narrator'
+          : message.isUser
+          ? userName
+          : charName;
       buffer.writeln('$speaker: $text');
       buffer.writeln();
     }

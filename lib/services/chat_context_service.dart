@@ -117,12 +117,16 @@ class ChatContextService {
     for (final message in chunk) {
       final text = message.text.trim();
       if (text.isEmpty) continue;
-      final who = message.isUser
-          ? userName
-          : (message.speakerName?.trim().isNotEmpty == true
-              ? message.speakerName!.trim()
-              : charName);
-      transcript.writeln('$who: $text');
+      if (message.isNarrator) {
+        transcript.writeln('Narrator: $text');
+      } else {
+        final who = message.isUser
+            ? userName
+            : (message.speakerName?.trim().isNotEmpty == true
+                ? message.speakerName!.trim()
+                : charName);
+        transcript.writeln('$who: $text');
+      }
       transcript.writeln();
     }
 
