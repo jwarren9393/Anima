@@ -213,6 +213,9 @@ class PromptBuilder {
     return applyMacros(greeting, charName: charName, userName: safeUser);
   }
 
+  /// Short description + personality snippet for group prompts.
+  String characterSummary(Character character) => _shortCard(character);
+
   String _shortCard(Character character) {
     final bits = <String>[
       if (character.description.trim().isNotEmpty) character.description.trim(),

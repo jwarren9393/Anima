@@ -157,6 +157,18 @@ LENGTH:
   }) {
     final transcript = StringBuffer();
     for (final message in chunk) {
+      if (message.isGroupBeat && message.beatLines != null) {
+        for (final line in message.beatLines!) {
+          final who = line.speakerName.trim().isNotEmpty
+              ? line.speakerName.trim()
+              : charName;
+          final lineText = line.text.trim();
+          if (lineText.isEmpty) continue;
+          transcript.writeln('$who: $lineText');
+        }
+        transcript.writeln();
+        continue;
+      }
       final text = message.text.trim();
       if (text.isEmpty) continue;
       if (message.isNarrator) {

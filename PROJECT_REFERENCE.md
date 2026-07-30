@@ -476,6 +476,7 @@ Special tuned sampling for: memory summarize, narrator generate, composer format
 
 - Storage bucket id separate from solo (`ChatService.groupsKey`).
 - **Speaker chips:** pick next speaker; when auto-reply off, tap chip **always generates** that character's reply.
+- **Group react** (`GroupReplyService` + sheet): one `complete()` call → parse `Name: reaction` lines → multiple assistant bubbles; capped sampling for brief beats; cast not in recent chat listed as silent.
 - Prompt includes short summaries for other members.
 - `speaker_prefix.dart` strips leading `Name:` from AI output to avoid duplicate headers.
 - Optional custom **Chat name** on Home.

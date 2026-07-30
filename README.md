@@ -10,12 +10,13 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **Also builds** | Linux desktop (works); Windows desktop (needs a Windows host) |
 | **Distribution** | Personal use only — **not** published to app stores |
 | **Repo** | https://github.com/jwarren9393/Anima (private) |
-| **Version** | **1.0.0** build **42** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
+| **Version** | **1.0.0** build **43** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
 
 ### What’s new in recent builds (1.0.0)
 
 | Build | Highlights |
 |-------|------------|
+| **43** | **Group react** — one timeline card for multi-character reactions (not separate bubbles); swipes = alternate full beats. **Creation Center** — red **Stop** while streaming (keeps partial text); **▶ Continue** when your message has no AI reply yet |
 | **42** | **Narrator scene scope** — present cast from recent chat only (not full group); current vs background transcript; direct prose; no sanitizing |
 | **41** | **Paths fix** — first-person options (`*I…*` not persona name); dedupe + tuned sampling; **memory summarize balance** — clinical bullets finish without mid-line cutoffs (1536 default / 2048 cap) |
 | **40** | **Clinical memory summarize** — hard-coded bullet-only facts (no RP voice/metaphors); reference-only injection so memory does not steer character style |
@@ -28,7 +29,7 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **33** | **Update workshop cast** (workshop-tied characters only, not whole library); Creation Center collaborator prompt — brainstorm-only, points to real ⋮ menu actions |
 | **32** | Creation Center **World dashboard** hub; **Fix last** chip; minimal UI pass (chat/home/group/settings); workshop **world summary** folding; full feature README |
 
-Earlier 1.0.0 builds added Storybook layout, opening scenes library, backup/sync, group chat polish, and the core SillyTavern-style toolkit. **220 tests** at build 42.
+Earlier 1.0.0 builds added Storybook layout, opening scenes library, backup/sync, group chat polish, and the core SillyTavern-style toolkit. **230 tests** at build 43.
 
 API base (pay-as-you-go): `https://nano-gpt.com/api/v1/chat/completions`  
 Auth: `Authorization: Bearer <API_KEY>`  
@@ -265,6 +266,7 @@ Minimal chrome: **Close** · title · **⋮** menu. Composer icon row: **Narrato
 
 - Name chips above composer = who speaks next.
 - **Auto-reply off:** tap a chip to select next speaker and **always generate** that character’s reply (even re-tapping the same chip).
+- **Group react** chip (or ⋮ / long-press → **Group react…**) — pick who reacts; one AI call writes **brief simultaneous reactions** for the same moment (avoids long back-to-back solo replies that shift tone).
 - Bubbles store speaker name/id; other members get short summaries in the active speaker’s prompt.
 - Chips **hide when the keyboard is open** (more room for typing).
 

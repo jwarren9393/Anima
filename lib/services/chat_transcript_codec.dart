@@ -50,6 +50,18 @@ class ChatTranscriptCodec {
       ..writeln();
 
     for (final message in session.messages) {
+      if (message.isGroupBeat && message.beatLines != null) {
+        for (final line in message.beatLines!) {
+          final lineText = line.text.trim();
+          if (lineText.isEmpty) continue;
+          final who = line.speakerName.trim().isNotEmpty
+              ? line.speakerName.trim()
+              : charName;
+          buffer.writeln('$who: $lineText');
+        }
+        buffer.writeln();
+        continue;
+      }
       final text = message.text.trim();
       if (text.isEmpty) continue;
       final speaker = message.isNarrator

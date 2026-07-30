@@ -21,6 +21,9 @@ import '../services/chat_context_service.dart';
 import '../services/chat_service.dart';
 import '../services/chat_transcript_codec.dart';
 import '../services/composer_draft_service.dart';
+import '../models/group_beat_part.dart';
+import '../services/group_beat_codec.dart';
+import '../services/group_reply_service.dart';
 import '../services/lorebook_service.dart';
 import '../services/message_formatter.dart';
 import '../services/narrator_service.dart';
@@ -46,6 +49,9 @@ import '../widgets/create_character_from_chat_sheet.dart';
 import '../widgets/update_character_from_chat_sheet.dart';
 import '../widgets/anima_avatar.dart';
 import '../widgets/greeting_picker.dart';
+import '../widgets/group_beat_bubble.dart';
+import '../widgets/group_beat_edit_sheet.dart';
+import '../widgets/group_reply_sheet.dart';
 import '../widgets/keyboard_inset.dart';
 import '../widgets/minimal_chip_button.dart';
 import '../widgets/narrator_bubble.dart';
@@ -108,6 +114,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   static const _formatter = MessageFormatter();
   static const _replyRewrite = ReplyRewriteService();
   static const _narrator = NarratorService();
+  static const _groupReply = GroupReplyService();
 
   bool _hasApiKey = false;
   bool _loading = true;
@@ -309,6 +316,59 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       }
     }
     return _character?.avatarFileName;
+  }
+
+  String? _avatarForParticipantId(String speakerId) {
+    if (speakerId.isEmpty) return null;
+    for (final c in _participants) {
+      if (c.id == speakerId) return c.avatarFileName;
+    }
+    return null;
+  }
+
+  List<GroupBeatPart> _partsFromBeatLines(List<GroupBeatLine> beats) {
+    return beats
+        .map((beat) {
+          final name = beat.character.name.trim();
+          return GroupBeatPart(
+            speakerId: beat.character.id,
+            speakerName: name,
+            text: stripLeadingSpeakerPrefix(beat.text, name),
+          );
+        })
+        .toList(growable: false);
+  }
+
+  List<Character> _speakersFromBeatLines(List<GroupBeatPart> lines) {
+    final out = <Character>[];
+    for (final line in lines) {
+      Character? match;
+      for (final c in _participants) {
+        if (c.id == line.speakerId) {
+          match = c;
+          break;
+        }
+      }
+      if (match != null) {
+        out.add(match);
+      } else if (line.speakerName.trim().isNotEmpty) {
+        out.add(Character(id: line.speakerId, name: line.speakerName.trim()));
+      }
+    }
+    return out;
+  }
+
+  ChatMessage _applyGroupBeatParts(ChatMessage message, List<GroupBeatPart> parts) {
+    if (parts.isEmpty || message.beatSwipes == null) return message;
+    final variants = List<List<GroupBeatPart>>.from(message.beatSwipes!);
+    final idx = message.swipeIndex.clamp(0, variants.length - 1);
+    variants[idx] = parts;
+    return ChatMessage.groupBeat(
+      id: message.id,
+      lines: parts,
+      beatSwipes: variants,
+      swipeIndex: idx,
+    );
   }
 
   Future<void> _persist() async {
@@ -1148,6 +1208,352 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       excludeLastAssistant: true,
       speakingAs: speaker,
       advanceGroupSpeaker: true,
+    );
+  }
+
+  Future<void> _openGroupReplySheet() async {
+    if (_busy || _formatting || _session == null || !_isGroup) return;
+    if (_participants.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Need at least two characters in the cast.')),
+      );
+      return;
+    }
+    if (!_hasApiKey) {
+      setState(() {
+        _error = 'Add your NanoGPT API key in Settings before you can chat.';
+      });
+      return;
+    }
+    final result = await showGroupReplySheet(
+      context: context,
+      participants: _participants,
+    );
+    if (result == null || !mounted) return;
+    await _generateGroupBeat(
+      speakers: result.speakers,
+      nudge: result.nudge,
+    );
+  }
+
+  Future<void> _generateGroupBeat({
+    required List<Character> speakers,
+    String nudge = '',
+  }) async {
+    if (_busy || _formatting || _session == null) return;
+    if (speakers.length < 2) return;
+    if (!_hasApiKey) return;
+
+    setState(() {
+      _error = null;
+      _busy = true;
+    });
+
+    try {
+      final model = await widget.settingsService.getModel();
+      final sampling = await widget.settingsService.getSampling();
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+      final apiMessages = await _buildGroupBeatApiMessages(
+        speakers: speakers,
+        nudge: nudge,
+      );
+      if (apiMessages.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not build group beat prompt.')),
+        );
+        return;
+      }
+
+      final raw = await widget.nanoGptService.complete(
+        model: model,
+        messages: apiMessages,
+        baseUrl: baseUrl,
+        sampling: GroupReplyService.beatSampling(sampling, speakers.length),
+      );
+
+      final beats = _groupReply.parseBeatReply(raw, speakers);
+      if (!mounted) return;
+
+      if (beats.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Group beat came back empty — try again or pick fewer characters.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      setState(() {
+        final parts = _partsFromBeatLines(beats);
+        _session!.messages.add(
+          ChatMessage.groupBeat(
+            id: ChatMessage.newId(),
+            lines: parts,
+          ),
+        );
+      });
+      await _persist();
+      _scrollToBottom(jump: true);
+
+      if (beats.length < speakers.length) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Got ${beats.length} of ${speakers.length} reactions — '
+              'tap a name to fill in anyone missing.',
+            ),
+          ),
+        );
+      }
+
+      await _maybeAutoSummarize();
+    } on NanoGptCancelledException {
+      // Ignore.
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Group react failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _regenerateGroupBeatAt(
+    int index, {
+    required bool asNewSwipe,
+    String nudge = '',
+  }) async {
+    if (_busy || _session == null) return;
+    if (index < 0 || index >= _messages.length) return;
+    final message = _messages[index];
+    if (!message.isGroupBeat || message.beatLines == null) return;
+    if (!_hasApiKey) {
+      setState(() {
+        _error = 'Add your NanoGPT API key in Settings before you can chat.';
+      });
+      return;
+    }
+    if (!await _confirmRegenerateTruncating(index)) return;
+
+    final speakers = _speakersFromBeatLines(message.beatLines!);
+    if (speakers.length < 2) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not resolve characters for this group react.'),
+        ),
+      );
+      return;
+    }
+
+    var messages = List<ChatMessage>.from(_session!.messages);
+    if (index < messages.length - 1) {
+      messages = messages.sublist(0, index + 1);
+    }
+    messages[index] = messages[index].prepareEmptySwipe(asNewSwipe: asNewSwipe);
+
+    setState(() {
+      _error = null;
+      _busy = true;
+      _session = _session!.copyWith(messages: messages);
+    });
+    await _persist();
+
+    try {
+      final model = await widget.settingsService.getModel();
+      final sampling = await widget.settingsService.getSampling();
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+      final apiMessages = await _buildGroupBeatApiMessages(
+        speakers: speakers,
+        nudge: nudge,
+        historyEndExclusive: index,
+      );
+      if (apiMessages.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not build group beat prompt.')),
+        );
+        return;
+      }
+
+      final raw = await widget.nanoGptService.complete(
+        model: model,
+        messages: apiMessages,
+        baseUrl: baseUrl,
+        sampling: GroupReplyService.beatSampling(sampling, speakers.length),
+      );
+
+      final beats = _groupReply.parseBeatReply(raw, speakers);
+      if (!mounted) return;
+
+      if (beats.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Group beat came back empty — try again or pick fewer characters.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      final parts = _partsFromBeatLines(beats);
+      setState(() {
+        final working = _session!.messages[index];
+        _session!.messages[index] = _applyGroupBeatParts(working, parts);
+      });
+      await _persist();
+      _scrollToBottom(jump: true);
+      await _maybeAutoSummarize();
+    } on NanoGptCancelledException {
+      // Ignore.
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Group react failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<List<Map<String, String>>> _buildGroupBeatApiMessages({
+    required List<Character> speakers,
+    String nudge = '',
+    int? historyEndExclusive,
+  }) async {
+    if (speakers.length < 2) return const [];
+
+    final userName = _userName;
+    final persona = _persona?.promptText ?? '';
+    final loreSettings = await widget.settingsService.getLoreSettings();
+    final extraBooks = await widget.worldInfoService.booksForChat(
+      chatLorebookIds: _session?.lorebookIds,
+    );
+
+    final loreBefore = StringBuffer();
+    final loreAfter = StringBuffer();
+    for (final character in speakers) {
+      final injection = _lorebookService.buildInjection(
+        character: character,
+        messages: _messages,
+        extraBooks: extraBooks,
+        scanDepthOverride: loreSettings.scanDepth,
+        tokenBudgetOverride: loreSettings.tokenBudget,
+        recursiveScanningOverride: loreSettings.recursiveScanning,
+        onTriggered: (labels) {
+          if (labels.isEmpty) return;
+          _showLocalToast('Lore Triggered: ${labels.join(', ')}');
+        },
+      );
+      if (injection.beforeChar.trim().isNotEmpty) {
+        loreBefore.writeln(injection.beforeChar.trim());
+      }
+      if (injection.afterChar.trim().isNotEmpty) {
+        loreAfter.writeln(injection.afterChar.trim());
+      }
+    }
+
+    final historyApi = <Map<String, String>>[];
+    final contextSettings = await widget.settingsService.getContextSettings();
+    final history = _contextService.selectHistory(
+      messages: _messages,
+      endExclusive: historyEndExclusive ?? _messages.length,
+      memoryCoveredCount: _session?.memoryCoveredCount ?? 0,
+      historyTokenBudget: contextSettings.historyTokenBudget,
+      isGroup: true,
+    );
+
+    for (final message in history) {
+      if (message.isNarrator) {
+        final block = _narrator.formatForPrompt(
+          text: message.text,
+          userName: userName,
+          charName: speakers.first.name,
+        );
+        if (block.isNotEmpty) {
+          historyApi.add({'role': 'system', 'content': block});
+        }
+        continue;
+      }
+      if (message.isGroupBeat && message.beatLines != null) {
+        final block = GroupBeatCodec.formatForPrompt(message.beatLines!);
+        if (block.isNotEmpty) {
+          historyApi.add({'role': 'system', 'content': block});
+        }
+        continue;
+      }
+      if (!message.isUser &&
+          message.speakerName != null &&
+          message.speakerName!.trim().isNotEmpty) {
+        final body = stripLeadingSpeakerPrefix(
+          message.text,
+          message.speakerName,
+        );
+        historyApi.add({
+          'role': 'assistant',
+          'content': '${message.speakerName}: $body',
+        });
+      } else {
+        historyApi.add(message.toApiMap());
+      }
+    }
+
+    final globalPrompts =
+        await widget.settingsService.getGlobalChatPromptSettings();
+    final primary = speakers.first;
+
+    var openingBlock = '';
+    final openingScene = (_session?.openingScene ?? '').trim();
+    if (openingScene.isNotEmpty && (_session?.openingSceneInPrompt ?? false)) {
+      openingBlock = _promptBuilder.buildOpeningSceneBlock(
+        openingScene: openingScene,
+        charName: primary.name,
+        userName: userName,
+      );
+    }
+
+    var memoryBlock = '';
+    final memory = (_session?.memorySummary ?? '').trim();
+    if (memory.isNotEmpty) {
+      memoryBlock = ChatContextService.formatMemoryForPrompt(memory);
+    }
+
+    final postHistory = _promptBuilder.buildPostHistory(
+      character: primary,
+      userName: userName,
+      authorsNote: _session?.authorsNote ?? '',
+      globalPostHistory: globalPrompts.postHistoryInstructions,
+    );
+
+    return _groupReply.buildBeatMessages(
+      speakers: speakers,
+      allInChat: _participants,
+      historyApiMessages: historyApi,
+      userName: userName,
+      userPersona: persona,
+      loreBefore: loreBefore.toString(),
+      loreAfter: loreAfter.toString(),
+      memoryBlock: memoryBlock,
+      openingBlock: openingBlock,
+      nudge: nudge,
+      globalSystemPrompt: globalPrompts.systemPrompt,
+      postHistory: postHistory,
     );
   }
 
@@ -2107,6 +2513,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (_busy || _session == null || _character == null) return;
     final message = _messages[index];
     if (message.isUser) return;
+    if (message.isGroupBeat) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Rewrite is not available for group react — edit lines or regenerate.'),
+        ),
+      );
+      return;
+    }
     final choice = await showReplyRewriteSheet(context);
     if (!mounted || choice == null) return;
     await _regenerateMessageAt(
@@ -2128,6 +2543,19 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       setState(() {
         _error = 'Send a message first so there is an AI reply to regenerate.';
       });
+      return;
+    }
+    if (message.isGroupBeat) {
+      if (rewrite != null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Rewrite is not available for group react.'),
+          ),
+        );
+        return;
+      }
+      await _regenerateGroupBeatAt(index, asNewSwipe: asNewSwipe);
       return;
     }
     if (!_hasApiKey) {
@@ -2271,6 +2699,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           userName: userName,
           charName: character.name,
         );
+        if (block.isNotEmpty) {
+          msgs.add({'role': 'system', 'content': block});
+        }
+        continue;
+      }
+      if (message.isGroupBeat && message.beatLines != null) {
+        final block = GroupBeatCodec.formatForPrompt(message.beatLines!);
         if (block.isNotEmpty) {
           msgs.add({'role': 'system', 'content': block});
         }
@@ -2560,6 +2995,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Future<void> _editMessage(int index) async {
     if (_busy || _session == null) return;
     final message = _messages[index];
+    if (message.isGroupBeat) {
+      await _editGroupBeatAt(index);
+      return;
+    }
     final controller = TextEditingController(text: message.text);
     final result = await showDialog<String>(
       context: context,
@@ -2590,6 +3029,22 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (trimmed.isEmpty) return;
     setState(() {
       _session!.messages[index] = message.withEditedText(trimmed);
+    });
+    await _persist();
+  }
+
+  Future<void> _editGroupBeatAt(int index) async {
+    if (_busy || _session == null) return;
+    final message = _messages[index];
+    if (!message.isGroupBeat || message.beatLines == null) return;
+    final result = await showGroupBeatEditSheet(
+      context: context,
+      lines: message.beatLines!,
+      participants: _participants,
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _session!.messages[index] = message.withEditedBeatLines(result);
     });
     await _persist();
   }
@@ -2772,6 +3227,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               if (value == 'memory') _editMemorySummary();
               if (value == 'summarize') _summarizeNow();
               if (value == 'context') _showContextEstimate();
+              if (value == 'group_react') _openGroupReplySheet();
               if (value == 'characters') _openCharacters();
               if (value == 'manage_cast') _manageCast();
               if (value == 'rename') _renameGroupChat();
@@ -2844,6 +3300,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 value: 'characters',
                 child: Text('Characters'),
               ),
+              if (_isGroup)
+                const PopupMenuItem(
+                  value: 'group_react',
+                  child: Text('Group react…'),
+                ),
               if (_isGroup)
                 const PopupMenuItem(
                   value: 'rename',
@@ -2963,6 +3424,97 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                               onTap: _busy
                                   ? null
                                   : () => _editNarratorAt(index),
+                            ),
+                          );
+                        }
+                        if (message.isGroupBeat) {
+                          final isLast = index == _messages.length - 1;
+                          final lines = message.beatLines ?? const [];
+                          final thinking = _busy &&
+                              isLast &&
+                              lines.every((l) => l.text.trim().isEmpty);
+                          final isLastAi = isLast;
+                          final canGoPrev =
+                              message.swipes.length > 1 &&
+                              message.swipeIndex > 0;
+                          final canGoNextExisting =
+                              message.swipes.length > 1 &&
+                              message.swipeIndex < message.swipes.length - 1;
+                          final canQuickSwipe =
+                              isLastAi &&
+                              !thinking &&
+                              !_busy &&
+                              message.swipeIndex >= message.swipes.length - 1;
+                          return Padding(
+                            padding: EdgeInsets.symmetric(
+                              vertical:
+                                  AnimaUiTheme.of(context).messageSpacing / 2,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                if (thinking)
+                                  Material(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .surfaceContainerHighest
+                                        .withValues(alpha: 0.72),
+                                    borderRadius: BorderRadius.circular(
+                                      AnimaUiTheme.of(context).chatBubbleRadius,
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(16),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .primary,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Text(
+                                            'Group react…',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodyMedium,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  GroupBeatBubble(
+                                    lines: lines,
+                                    avatarForSpeakerId: _avatarForParticipantId,
+                                    avatarStyle: _avatarStyle,
+                                    onTap: (_busy || thinking)
+                                        ? null
+                                        : () => _editGroupBeatAt(index),
+                                  ),
+                                if (!thinking &&
+                                    (message.canSwipe || isLastAi))
+                                  _SwipePager(
+                                    index: message.swipeIndex,
+                                    total: message.swipes.length,
+                                    onPrev: (!_busy && canGoPrev)
+                                        ? () => _shiftSwipe(index, -1)
+                                        : null,
+                                    onNext: (!_busy && canGoNextExisting)
+                                        ? () => _shiftSwipe(index, 1)
+                                        : (canQuickSwipe
+                                              ? () => _regenerateOrSwipe(
+                                                    asNewSwipe: true,
+                                                  )
+                                            : null),
+                                    nextGeneratesSwipe: canQuickSwipe,
+                                  ),
+                              ],
                             ),
                           );
                         }
@@ -3168,6 +3720,25 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                   ),
                                 ),
                               ],
+                              if (_participants.length >= 2) ...[
+                                const SizedBox(width: 6),
+                                InputChip(
+                                  avatar: const Icon(
+                                    Icons.groups_outlined,
+                                    size: 18,
+                                  ),
+                                  label: const Text('Group react'),
+                                  onPressed: _busy || _formatting
+                                      ? null
+                                      : _openGroupReplySheet,
+                                  visualDensity: VisualDensity.compact,
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  labelPadding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -3347,6 +3918,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   ),
                   onTap: () => Navigator.pop(context, 'paths'),
                 ),
+                if (_isGroup && _participants.length >= 2)
+                  ListTile(
+                    leading: const Icon(Icons.groups_outlined),
+                    title: const Text('Group react…'),
+                    subtitle: const Text(
+                      'Brief simultaneous reactions from several characters',
+                    ),
+                    onTap: () => Navigator.pop(context, 'group_react'),
+                  ),
                 ListTile(
                   leading: Icon(
                     (_session?.autoReply ?? false)
@@ -3366,28 +3946,39 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   onTap: () => Navigator.pop(context, 'auto_reply'),
                 ),
                 if (!message.isUser && !message.isNarrator) ...[
-                  ListTile(
-                    leading: const Icon(Icons.tune),
-                    title: const Text('Rewrite reply…'),
-                    subtitle: const Text(
-                      'Shorten, expand, change mood, or custom',
+                  if (!message.isGroupBeat)
+                    ListTile(
+                      leading: const Icon(Icons.tune),
+                      title: const Text('Rewrite reply…'),
+                      subtitle: const Text(
+                        'Shorten, expand, change mood, or custom',
+                      ),
+                      onTap: () => Navigator.pop(context, 'rewrite'),
                     ),
-                    onTap: () => Navigator.pop(context, 'rewrite'),
-                  ),
                   ListTile(
                     leading: const Icon(Icons.refresh),
-                    title: const Text('Regenerate'),
+                    title: Text(
+                      message.isGroupBeat ? 'Regenerate group react' : 'Regenerate',
+                    ),
                     subtitle: Text(
                       isLast
-                          ? 'Generate this reply again'
+                          ? message.isGroupBeat
+                              ? 'Generate this group react again'
+                              : 'Generate this reply again'
                           : 'Removes later messages, then regenerates',
                     ),
                     onTap: () => Navigator.pop(context, 'regen'),
                   ),
                   ListTile(
                     leading: const Icon(Icons.auto_awesome),
-                    title: const Text('New swipe'),
-                    subtitle: const Text('Generate another alternate reply'),
+                    title: Text(
+                      message.isGroupBeat ? 'New group react swipe' : 'New swipe',
+                    ),
+                    subtitle: Text(
+                      message.isGroupBeat
+                          ? 'Generate another alternate group react'
+                          : 'Generate another alternate reply',
+                    ),
                     onTap: () => Navigator.pop(context, 'swipe'),
                   ),
                 ],
@@ -3426,6 +4017,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (action == 'continue') await _continueScene();
     if (action == 'impersonate') await _impersonate();
     if (action == 'paths') await _showPathsSheet();
+    if (action == 'group_react') await _openGroupReplySheet();
     if (action == 'auto_reply') await _toggleAutoReply();
     if (action == 'regen') {
       await _regenerateMessageAt(index, asNewSwipe: false);

@@ -61,8 +61,8 @@ High-value SillyTavern concepts to aim for over time:
 
 **Phase:** Post-roadmap tweaks
 
-**Last updated:** 2026-07-29  
-**Last agent action:** Published **v1.0.0 build 42** — Narrator scene scope (present cast from recent chat, direct prose, no sanitizing).
+**Last updated:** 2026-07-30  
+**Last agent action:** Published **v1.0.0 build 43** — group react single card, Creation Center Stop + Continue.
 
 ### What works today
 
@@ -77,7 +77,7 @@ High-value SillyTavern concepts to aim for over time:
   - **Characters** — character cards + **categories**; filter; consistency check; AI card builder; **section chips** (Identity / Story / Chat / Lore / Advanced); avatar + consistency in ⋮ menu
   - **World Info & lore** — **global lorebooks** (create / import ST JSON / export / on-off) + scan depth/budget + link to per-character books; **entry AI wand** + **Suggest keywords from content**
   - **Opening scenes** — saved narrator setups for new chats (manual + synced from Creation Center workshops)
-  - **Creation Center** — hub on Home + Settings; minimal workshop chrome; world summary folding; **Fix last** chip applies a correction to the previous AI reply in place (no new AI bubble); long-press → Apply correction; delta-style revision prompts
+  - **Creation Center** — hub on Home + Settings; minimal workshop chrome; composer **▶ Continue** (like main chat) when your last message needs a reply; world summary folding; **Fix last** chip applies a correction to the previous AI reply in place (no new AI bubble); long-press → Apply correction; delta-style revision prompts
   - **AI collaborator** — wand guidance note + **Composer Format** + **Roadway / Paths** + **Narrator** notes
   - **Character builds** — model, max tokens, temperature, top P, and prompt for **slim card JSON** generation (description, personality, mes_example, tags only — no scenario, greetings, or per-card system/post-history; Creation Center + New character from chat); separate from main chat model
   - **Global chat prompts** — app-wide **system prompt** + **post-history** merged into every chat (on top of each card; per-chat Author's Note still applies); preset pickers; `{{user}}` / `{{char}}`
@@ -91,7 +91,7 @@ High-value SillyTavern concepts to aim for over time:
 - **Character AI wand** — sparkle icon on creative card fields; sends all filled fields as context; appends NanoGPT text below what’s already there (uses chat model + sampling)
 - **World Info entry AI wand** — sparkle on Label / Keywords / Lore content (and Secondary keywords when Selective); uses book + sibling entry context; appends (keywords merge comma-separated); same model + collaborator guidance
 - **API & connection** — live NanoGPT model catalog: **Category** filter (All · **Uncensored & derestricted (broad)** · Roleplay · …) then **provider**; **Browse models** sheet shows context, max output, parameter size, TPS, TTFT, uptime %, description, capabilities, and pricing/Included — stats from `detailed=true` catalog + providers API; filtered count in status line; refresh; custom model id; subscription toggle reloads catalog; **image model** picker; **See remaining credits**
-- **Chat stop** — while a reply streams, the send button becomes **Stop** (keeps any partial text); the list does **not** auto-scroll during streaming — scroll freely while a reply types in (regular chat + Creation Center)
+- **Chat stop** — while a reply streams, the send button becomes a red **Stop** button (keeps any partial text); status banner shows “Generating… tap Stop to cancel” in Creation Center; the list does **not** auto-scroll during streaming — scroll freely while a reply types in (regular chat + Creation Center)
 - **Composer shortcuts** — **Narrator** (theater icon), **OOC**, **Format** (✨), **Continue** (▶), Send/Stop; Narrator / Format / Paths have collaborator notes; **desktop:** Enter sends (Shift+Enter = new line; toggle in **Settings → AI collaborator**)
 - **Draft autosave** — composer text saved per chat (survives leaving chat/app); cleared on send
 - **Character categories** — Anima-only lists (not ST card tags); **All characters** master view + custom categories; filter in Characters (manage/pick) and Group setup; membership via row menu → Categories
@@ -106,13 +106,13 @@ High-value SillyTavern concepts to aim for over time:
 - **Clean chat chrome** — no Swipe/Regen/Continue bar under messages (those live in the long-press menu; compact swipe arrows under bubbles)
 - **Per-chat persona** — in a chat, ⋮ menu → **Persona: …** to switch who you are for that thread (saved on the chat)
 - **Per-chat World Info** — ⋮ menu → **World Info: …** to use Settings default, pick specific global lorebooks, or turn global lore off for this thread (character card lore still applies)
-- **Group chat controls** — tap a character name chip to choose who speaks next and **always generate their reply** when auto-reply is off (even re-tapping the same chip); auto-reply off by default (send only; tap a name or Continue for a reply; toggle via long-press); leading `Name:` is stripped from replies so the bubble header isn’t duplicated
+- **Group chat controls** — tap a character name chip to choose who speaks next and **always generate their reply** when auto-reply is off (even re-tapping the same chip); **Group react** chip / ⋮ menu / long-press — one AI call → **one centered group-react card** with each character’s line + avatar (not separate bubbles); tap to edit lines; regenerate / new swipe replaces the whole beat; auto-reply off by default (send only; tap a name or Continue for a reply; toggle via long-press); leading `Name:` is stripped from solo replies so the bubble header isn’t duplicated
 - **Manage cast (mid-chat)** — ⋮ → **Rename chat** (groups) or **Manage cast** adds/removes characters in the **current** chat (solo or group) without starting over; group setup includes an optional **Chat name** field; ⋮ → **New character** opens a sheet to **type a name + generate from chat** or start blank; ⋮ → **Update character from chat** revises one saved card from the thread (cast listed first; optional change notes); manage screen **+** uses the same flow when editing cast
 - **Avatars** — persona + character photos; **Generate avatar** on character and persona create/edit (and Creation Center character review) uses NanoGPT image models + an **auto prompt** that keeps the portrait framing but pulls only appearance-relevant lines from the card (skips scenario, backstory, and long personality blocks; stays under ~1,150 chars); prompt is still editable in the sheet; **tap any avatar** (chat, character list, editor, home) for a **full-screen portrait** — tap again (or ✕) to close; in chat, **long-press** an avatar to edit persona / character card; PNG card import still grabs the card image; chat bubble shape/size via Appearance
 - **Context estimate** — chat ⋮ → **Context estimate** shows ~message/token gauges vs history budget and model window; Creation Center shows a live banner estimate
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar
 - **Linux install/update** — `./scripts/update_linux.sh` builds and installs the desktop app; add `--pull` to download GitHub changes first
-- **Smoke:** `flutter test` (211) + `flutter analyze` pass; Android + Linux desktop debug work
+- **Smoke:** `flutter test` (230) + `flutter analyze` pass; Android + Linux desktop debug work
 
 ### What does NOT work yet / limits
 
@@ -230,7 +230,8 @@ lib/
     anima_theme.dart              Settings-driven ThemeData factory
     glass_backdrop.dart           Configurable solid/gradient/soft-glow backdrop
   models/
-    chat_message.dart             Bubble + swipes + optional speaker
+    chat_message.dart             Bubble + swipes + optional speaker + groupBeat lines
+    group_beat_part.dart          One character line inside a group-react card
     chat_session.dart             Thread + authorsNote + group + lorebookIds + autoReply + memorySummary + openingScene + openingSceneInMemory
     character.dart                ST-compatible card fields (+ Anima id)
     character_category.dart       Anima-only category lists + memberships
@@ -283,6 +284,9 @@ lib/
     greeting_picker.dart          Multi-greeting sheet when starting a chat
     opening_scene_picker.dart     Optional opening-scene sheet when starting a chat (+ library browse)
     narrator_bubble.dart          Centered narrator card (opening scene + chat Narrator lines)
+    group_reply_sheet.dart          Group react — multi-select cast + nudge sheet
+    group_beat_bubble.dart          Centered multi-character group-react card
+    group_beat_edit_sheet.dart      Per-character edit sheet for group-react lines
     narrator_sheet.dart           Narrator sheet — nudge, edit, Generate, Post
     workshop_overview_sheet.dart  Workshop dashboard bottom sheet
     minimal_chip_button.dart        Shared MinimalChipButton + MinimalChipRow
@@ -314,6 +318,8 @@ lib/
     message_formatter.dart        Composer AI format (*actions* / "dialogue")
     reply_rewrite_service.dart    Rewrite-reply prompts for regen / new swipe
     roadway_service.dart          Paths / Roadway brainstorm + combine prompts + parse
+    group_reply_service.dart      Group react — coordinated multi-character beat prompts + parse
+    group_beat_codec.dart         Flatten / prompt format / swipe JSON for group-react messages
     narrator_service.dart       Universal chat Narrator — generate + prompt injection
   roadway_cache_service.dart    Per-chat cached Path options (survive sheet close)
   composer_draft_service.dart   Per-chat composer draft autosave
@@ -414,9 +420,9 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. Spot-check **Browse models** sheet: Settings → API → Category **Uncensored & derestricted** → Browse — confirm ctx/out/params/TPS/uptime/description on rows without opening the browser.
-2. Spot-check **Creation Center hub** on device: World dashboard, Play this world, canon pins, glossary → lorebook, world bundle import/export.
-3. Spot-check **workshop Fix last** and **Fold older chat into summary** on a long workshop thread.
+1. Spot-check **group react single card** in a group chat: ⋮ or chip → Group react → confirm one card with all lines; tap to edit; regenerate / new swipe; ◀ ▶ browse swipes.
+2. Spot-check **Browse models** sheet: Settings → API → Category **Uncensored & derestricted** → Browse — confirm ctx/out/params/TPS/uptime/description on rows without opening the browser.
+3. Spot-check **Creation Center hub** on device: World dashboard, Play this world, canon pins, glossary → lorebook, world bundle import/export.
 
 ---
 

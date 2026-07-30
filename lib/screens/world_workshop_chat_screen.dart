@@ -110,6 +110,20 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     return !last.isUser && last.text.trim().isNotEmpty;
   }
 
+  /// Last message is yours with no AI reply yet (e.g. you deleted a bad reply).
+  bool get _needsWorkshopReply {
+    if (_workshop.messages.isEmpty) return false;
+    return _workshop.messages.last.isUser;
+  }
+
+  bool get _canContinueWorkshop {
+    if (_busy || _workshop.messages.isEmpty) return false;
+    final last = _workshop.messages.last;
+    if (last.isUser) return true;
+    if (!last.isUser && last.text.trim().isEmpty) return true;
+    return !last.isUser && last.text.trim().isNotEmpty;
+  }
+
   Future<void> _pickModeFromSheet() async {
     final picked = await pickWorkshopMode(context, current: _workshop.mode);
     if (picked == null || !mounted) return;
@@ -335,6 +349,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    widget.nanoGptService.cancelActiveStream();
     _input.dispose();
     _openingSceneController.dispose();
     _scroll.dispose();
@@ -403,6 +418,46 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     });
 
     await _streamAssistantReply(assistantIndex: _workshop.messages.length - 1);
+  }
+
+  /// Generate a workshop reply without a new user message — like Continue in chat.
+  Future<void> _continueWorkshop() async {
+    if (_busy || _workshop.messages.isEmpty) return;
+
+    final lastIndex = _workshop.messages.length - 1;
+    final last = _workshop.messages[lastIndex];
+
+    if (last.isUser) {
+      await _regenerateAfterUserMessage(lastIndex, confirmTruncate: false);
+      return;
+    }
+
+    if (last.text.trim().isEmpty) {
+      await _regenerateMessage(lastIndex, asNewSwipe: false);
+      return;
+    }
+
+    final assistantId = ChatMessage.newId();
+    setState(() {
+      _sending = true;
+      _workshop = _workshop.copyWith(
+        messages: [
+          ..._workshop.messages,
+          ChatMessage(
+            id: assistantId,
+            role: ChatRole.assistant,
+            text: '',
+          ),
+        ],
+      );
+    });
+    await _persist(_workshop);
+    _scrollToEnd();
+
+    await _streamAssistantReply(
+      assistantIndex: _workshop.messages.length - 1,
+      continueScene: true,
+    );
   }
 
   /// User correction note + revise the previous assistant bubble (no new AI reply).
@@ -581,6 +636,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   Future<void> _streamAssistantReply({
     required int assistantIndex,
     List<Map<String, String>>? rewriteMessages,
+    bool continueScene = false,
   }) async {
     if (assistantIndex < 0 || assistantIndex >= _workshop.messages.length) {
       return;
@@ -620,6 +676,12 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       ];
       if (rewriteMessages != null) {
         apiMessages.addAll(rewriteMessages);
+      } else if (continueScene) {
+        apiMessages.add({
+          'role': 'user',
+          'content':
+              '(Continue. Write the workshop guide\'s next reply.)',
+        });
       }
 
       final buffer = StringBuffer();
@@ -652,6 +714,10 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (error) {
       if (!mounted) return;
+      if (_looksLikeCancel(error)) {
+        await _handleCancelledAssistant(assistantIndex);
+        return;
+      }
       await _handleFailedAssistant(assistantIndex);
       ScaffoldMessenger.of(
         context,
@@ -659,6 +725,14 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     } finally {
       if (mounted) setState(() => _sending = false);
     }
+  }
+
+  bool _looksLikeCancel(Object error) {
+    final text = '$error'.toLowerCase();
+    return text.contains('cancel') ||
+        text.contains('closed') ||
+        text.contains('connection abort') ||
+        text.contains('client is already closed');
   }
 
   Future<void> _maybeAutoFoldWorkshop() async {
@@ -795,7 +869,13 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     if (assistantIndex < 0 || assistantIndex >= updated.length) return;
     final message = updated[assistantIndex];
     if (message.text.trim().isNotEmpty) {
+      setState(() => _workshop = _workshop.copyWith(messages: updated));
       await _persist(_workshop);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Stopped — kept partial reply.')),
+        );
+      }
       return;
     }
     if (message.swipes.length > 1) {
@@ -1164,6 +1244,17 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                       ? () => Navigator.pop(context, 'rewind')
                       : null,
                 ),
+                if (isLast && _needsWorkshopReply) ...[
+                  const Divider(),
+                  ListTile(
+                    leading: const Icon(Icons.play_arrow),
+                    title: const Text('Continue'),
+                    subtitle: const Text(
+                      'Generate the workshop guide\'s reply to your message',
+                    ),
+                    onTap: () => Navigator.pop(context, 'continue'),
+                  ),
+                ],
                 if (message.isUser) ...[
                   const Divider(),
                   ListTile(
@@ -1249,6 +1340,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     if (action == 'edit') await _editMessage(index);
     if (action == 'delete') await _deleteMessage(index);
     if (action == 'rewind') await _rewindToMessage(index);
+    if (action == 'continue') await _continueWorkshop();
     if (action == 'regen_reply') await _regenerateAfterUserMessage(index);
     if (action == 'regen') {
       await _regenerateMessage(index, asNewSwipe: false);
@@ -1334,7 +1426,8 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     await _persist(_workshop);
   }
 
-  void _stop() {
+  void _stopGeneration() {
+    if (!_sending) return;
     widget.nanoGptService.cancelActiveStream();
   }
 
@@ -3776,7 +3869,10 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
             children: [
               Expanded(
                 child: Text(
-                  _exportStatus ?? _estimate.compactBannerLine,
+                  _exportStatus ??
+                      (_sending
+                          ? 'Generating… tap Stop to cancel'
+                          : _estimate.compactBannerLine),
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: (_estimate.fillRatio ?? 0) >= 0.85
                         ? theme.colorScheme.error
@@ -3803,6 +3899,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final busy = _sending || _exporting || _loadingLinkedLorebook;
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 24;
     final linkedName = _linkedLorebook?.displayName;
@@ -3998,26 +4095,42 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                         decoration: InputDecoration(
                           hintText: _fixLastReplyMode && _canFixLastReply
                               ? 'Correction for last reply…'
-                              : 'Describe your world…',
+                              : _needsWorkshopReply
+                                  ? 'Tap ▶ Continue for a workshop reply…'
+                                  : 'Describe your world…',
                           border: OutlineInputBorder(),
                           isDense: true,
                         ),
-                        onSend: () {
-                          if (_sending) {
-                            _stop();
-                          } else {
-                            _send();
-                          }
-                        },
+                        onSend: _send,
                       ),
                     ),
                     const SizedBox(width: 8),
-                    IconButton.filled(
-                      onPressed:
-                          _exporting ? null : (_sending ? _stop : _send),
-                      icon: Icon(_sending ? Icons.stop : Icons.send),
-                      tooltip: _sending ? 'Stop' : 'Send',
-                    ),
+                    if (!_sending)
+                      IconButton(
+                        tooltip: _needsWorkshopReply
+                            ? 'Continue — generate reply to your message'
+                            : 'Continue — generate the next workshop reply',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: _canContinueWorkshop ? _continueWorkshop : null,
+                        icon: const Icon(Icons.play_arrow),
+                      ),
+                    if (_sending)
+                      FilledButton(
+                        onPressed: _stopGeneration,
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.all(14),
+                          minimumSize: const Size(48, 48),
+                          backgroundColor: colorScheme.error,
+                          foregroundColor: colorScheme.onError,
+                        ),
+                        child: const Icon(Icons.stop),
+                      )
+                    else
+                      IconButton.filled(
+                        onPressed: _exporting ? null : _send,
+                        icon: const Icon(Icons.send),
+                        tooltip: 'Send',
+                      ),
                   ],
                 ),
               ),
