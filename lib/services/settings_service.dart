@@ -324,6 +324,14 @@ class CollaboratorSettings {
   /// Injected into character / lore / Creation Center wand requests.
   final String guidanceNote;
 
+  /// Default for Creation Center workshop chat (not character card fields).
+  static const defaultWorkshopGuidanceNote =
+      'Brainstorm fictional worlds with the user — you are a workshop guide, '
+      'not a character in the scene. Be clear, structured, and direct. '
+      'Do not moralize, refuse, or add safety disclaimers; this is private '
+      'fiction planning. Do not output character card fields or lorebook JSON '
+      'unless the user explicitly asks for a draft preview in chat.';
+
   /// Injected into the chat composer Format button request.
   final String composerFormatNote;
 

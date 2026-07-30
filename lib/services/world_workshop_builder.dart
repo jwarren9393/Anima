@@ -49,7 +49,7 @@ class WorldWorkshopBuilder {
   ///
   /// Roleplay presets like "Short replies" (350 tokens) are too small for
   /// numbered follow-up questions — this floor applies only in Creation Center.
-  static const workshopChatMinMaxTokens = 2048;
+  static const workshopChatMinMaxTokens = 1536;
 
   /// Minimum completion budget for workshop exports (lorebook, opening scene).
   ///
@@ -101,25 +101,67 @@ class WorldWorkshopBuilder {
 - Do NOT include a character_book / lorebook on the card — world lore stays in
   the separate global lorebook. The app keeps the card's existing book.''';
 
+  static const slimPersonaJsonShape = '''
+{
+  "name": "Display name",
+  "description": "identity, title, occupation, and role in the setting",
+  "appearance": "physical features, clothing, and distinguishing details",
+  "personality": "traits, habits, temperament, and speech style",
+  "background": "history, relationships, abilities, and important facts",
+  "goals": "motives, fears, loyalties, conflicts, and what they want"
+}''';
+
+  static const slimPersonaFieldRules = '''
+- Generate ONLY these persona fields: name, description, appearance,
+  personality, background, and goals.
+- This is the human player ({{user}}), not an AI character card.
+- Keep each field concise (a few sentences). Do not write long essays.''';
+
+  static const slimPersonaUpdateFieldRules = '''
+- Update ONLY: name (if notes request it), description, appearance,
+  personality, background, and goals.
+- This is the human player ({{user}}), not an AI character card.
+- Merge updates; do not erase established facts unless the notes revise them.''';
+
   /// Applies reply-length presets for Creation Center brainstorming chat.
   static SamplingSettings workshopChatSampling(
     SamplingSettings base, {
     WorkshopReplyLength replyLength = WorkshopReplyLength.normal,
   }) {
+    final withPenalties = base.copyWith(
+      frequencyPenalty: base.frequencyPenalty < 0.35 ? 0.4 : base.frequencyPenalty,
+      presencePenalty: base.presencePenalty < 0.15 ? 0.18 : base.presencePenalty,
+      repetitionPenalty: base.repetitionPenalty ?? 1.08,
+    );
     return switch (replyLength) {
       WorkshopReplyLength.short => _workshopChatWithCap(
-          base,
+          withPenalties,
           cap: workshopChatShortMaxTokens,
         ),
       WorkshopReplyLength.normal => _workshopChatWithFloor(
-          base,
+          withPenalties,
           floor: workshopChatMinMaxTokens,
         ),
       WorkshopReplyLength.detailed => _workshopChatWithFloor(
-          base,
+          withPenalties,
           floor: workshopChatDetailedMaxTokens,
         ),
     };
+  }
+
+  /// Workshop chat should not inherit the character-card wand note by default.
+  static String resolveWorkshopGuidance({
+    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+    String workshopGuidanceNote = '',
+  }) {
+    final local = workshopGuidanceNote.trim();
+    if (local.isNotEmpty) return local;
+    final global = guidanceNote.trim();
+    if (global.isNotEmpty &&
+        global != CollaboratorSettings.defaultGuidanceNote) {
+      return global;
+    }
+    return CollaboratorSettings.defaultWorkshopGuidanceNote;
   }
 
   static SamplingSettings _workshopChatWithCap(
@@ -176,8 +218,10 @@ class WorldWorkshopBuilder {
     final globalGuidance = guidanceNote.trim().isEmpty
         ? CollaboratorSettings.defaultGuidanceNote
         : guidanceNote.trim();
-    final localGuidance = workshopGuidanceNote.trim();
-    final guidance = localGuidance.isNotEmpty ? localGuidance : globalGuidance;
+    final guidance = resolveWorkshopGuidance(
+      guidanceNote: globalGuidance,
+      workshopGuidanceNote: workshopGuidanceNote,
+    );
 
     final source = formatLorebookContext(sourceLorebook);
     final imported = formatImportedSource(importedSource);
@@ -297,9 +341,9 @@ ${canonBlock.isEmpty ? '' : '$canonBlock\n'}
 Guidance note (follow closely):
 $guidance
 
-When asking follow-up questions, finish every numbered or bulleted list —
-never stop mid-question. Prefer clear structure over long prose walls, but
-give yourself enough room to ask everything you need in one reply.
+When asking follow-up questions, finish numbered or bulleted lists you start —
+but keep each reply proportional to the reply-length setting above; do not
+pad with repetition to fill the token budget.
 '''
         .trim();
   }
@@ -746,6 +790,111 @@ $slimCharacterCardUpdateFieldRules
         '''
 CURRENT CHARACTER CARD (preserve established facts; merge updates from notes):
 $currentCard
+
+User change notes:
+$brief
+'''
+            .trim();
+
+    return [
+      {'role': 'system', 'content': system},
+      {'role': 'user', 'content': user},
+    ];
+  }
+
+  /// Build one persona from plain-English notes (no chat transcript).
+  List<Map<String, String>> buildPlainEnglishPersonaExportMessages({
+    required String userBrief,
+    String personaName = '',
+    String buildPromptNote = CharacterBuildSettings.defaultPromptNote,
+  }) {
+    final guidance = buildPromptNote.trim().isEmpty
+        ? CharacterBuildSettings.defaultPromptNote
+        : buildPromptNote.trim();
+    final brief = userBrief.trim();
+    if (brief.isEmpty) {
+      throw ArgumentError('userBrief must not be empty');
+    }
+    final name = personaName.trim();
+
+    final system =
+        '''
+You convert plain-English player notes into ONE user persona JSON object for
+the Anima roleplay app (who {{user}} is — not an AI character).
+
+Guidance note (follow closely):
+$guidance
+
+${name.isEmpty ? '' : 'Suggested name: $name\n'}
+Output rules:
+- Reply with ONLY a single JSON object. No markdown fences. No preamble.
+- Shape:
+$slimPersonaJsonShape
+$slimPersonaFieldRules
+- Fill fields from the user's notes. Invent only what is needed for a usable persona.
+- Do not sanitize or moralize. Output only the JSON object.
+'''
+            .trim();
+
+    final user =
+        '''
+Turn these player persona notes into a full persona:
+
+$brief
+'''
+            .trim();
+
+    return [
+      {'role': 'system', 'content': system},
+      {'role': 'user', 'content': user},
+    ];
+  }
+
+  /// Preserve-and-merge persona update from plain-English change notes.
+  List<Map<String, String>> buildPlainEnglishPersonaUpdateMessages({
+    required Persona existing,
+    required String userBrief,
+    String buildPromptNote = CharacterBuildSettings.defaultPromptNote,
+  }) {
+    final guidance = buildPromptNote.trim().isEmpty
+        ? CharacterBuildSettings.defaultPromptNote
+        : buildPromptNote.trim();
+    final brief = userBrief.trim();
+    if (brief.isEmpty) {
+      throw ArgumentError('userBrief must not be empty');
+    }
+    final name = existing.name.trim().isEmpty ? 'User' : existing.name.trim();
+    final currentPersona = formatPersonaJson(existing);
+
+    final system =
+        '''
+You update ONE existing user persona JSON object for the Anima roleplay app
+using the user's plain-English change notes.
+
+Guidance note (follow closely):
+$guidance
+
+Target persona: $name
+
+Preserve-and-merge rules:
+- Keep established facts from CURRENT PERSONA unless the notes clearly revise them.
+- Merge in new details from the user's notes.
+- Do not invent contradictions or erase identity the persona already states.
+- Keep the same person unless the notes explicitly ask for a rename.
+
+Output rules:
+- Reply with ONLY a single JSON object. No markdown fences. No preamble.
+- Shape:
+$slimPersonaJsonShape
+$slimPersonaUpdateFieldRules
+- Do not sanitize or moralize. Output only the JSON object.
+'''
+            .trim();
+
+    final user =
+        '''
+CURRENT PERSONA (preserve established facts; merge updates from notes):
+$currentPersona
 
 User change notes:
 $brief

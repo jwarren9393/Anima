@@ -62,7 +62,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-30  
-**Last agent action:** Published **v1.0.0 build 43** — group react single card, Creation Center Stop + Continue.
+**Last agent action:** Published **v1.0.0 build 44** — persona AI builder; Creation Center workshop guidance + sampling tweaks.
 
 ### What works today
 
@@ -73,11 +73,11 @@ High-value SillyTavern concepts to aim for over time:
 - **Opening scene (narrator)** — per-chat optional prose in a centered narrator card above messages (not a character bubble); **always injected into prompts by default** (turn off via ⋮ → **Stop injecting opening scene** to save tokens); on the **first memory summarize**, the scene is folded into the memory summary so it stays in long-term context; edit via ⋮ → **Opening scene**; works in solo and group; separate from card **Scenario** (still injects every turn)
 - **Opening scenes library** — **Settings → Opening scenes** lists saved narrator setups (create / edit / delete); scenes from Creation Center **auto-sync** when you save or AI-generate an opening scene there; also imported when starting a new chat or opening the library; included in backup
 - **Settings hub** — separate menus:
-  - **Personas** — create multiple {{user}} identities with separate identity/role, appearance, personality, background, goals, and photo fields; **AI wand** on creative fields (appends text like Characters); **Generate avatar** from persona details; set a default for new chats; all filled fields are labeled and sent on every chat generation
+  - **Personas** — create multiple {{user}} identities with separate identity/role, appearance, personality, background, goals, and photo fields; **AI persona builder** (plain English → fill/replace/update fields — same Character builds settings as character card builder); **AI wand** on creative fields (appends text like Characters); **Generate avatar** from persona details; set a default for new chats; all filled fields are labeled and sent on every chat generation
   - **Characters** — character cards + **categories**; filter; consistency check; AI card builder; **section chips** (Identity / Story / Chat / Lore / Advanced); avatar + consistency in ⋮ menu
   - **World Info & lore** — **global lorebooks** (create / import ST JSON / export / on-off) + scan depth/budget + link to per-character books; **entry AI wand** + **Suggest keywords from content**
   - **Opening scenes** — saved narrator setups for new chats (manual + synced from Creation Center workshops)
-  - **Creation Center** — hub on Home + Settings; minimal workshop chrome; composer **▶ Continue** (like main chat) when your last message needs a reply; world summary folding; **Fix last** chip applies a correction to the previous AI reply in place (no new AI bubble); long-press → Apply correction; delta-style revision prompts
+  - **Creation Center** — hub on Home + Settings; minimal workshop chrome; composer **▶ Continue** (like main chat) when your last message needs a reply; **Stop** while streaming (keeps partial text); world summary folding; **Fix last** chip applies a correction to the previous AI reply in place (no new AI bubble); long-press → Apply correction; delta-style revision prompts; workshop chat uses dedicated guidance (not character-card wand text) + tuned sampling to reduce repetition loops
   - **AI collaborator** — wand guidance note + **Composer Format** + **Roadway / Paths** + **Narrator** notes
   - **Character builds** — model, max tokens, temperature, top P, and prompt for **slim card JSON** generation (description, personality, mes_example, tags only — no scenario, greetings, or per-card system/post-history; Creation Center + New character from chat); separate from main chat model
   - **Global chat prompts** — app-wide **system prompt** + **post-history** merged into every chat (on top of each card; per-chat Author's Note still applies); preset pickers; `{{user}}` / `{{char}}`
@@ -112,7 +112,7 @@ High-value SillyTavern concepts to aim for over time:
 - **Context estimate** — chat ⋮ → **Context estimate** shows ~message/token gauges vs history budget and model window; Creation Center shows a live banner estimate
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar
 - **Linux install/update** — `./scripts/update_linux.sh` builds and installs the desktop app; add `--pull` to download GitHub changes first
-- **Smoke:** `flutter test` (230) + `flutter analyze` pass; Android + Linux desktop debug work
+- **Smoke:** `flutter test` (234) + `flutter analyze` pass; Android + Linux desktop debug work
 
 ### What does NOT work yet / limits
 
@@ -420,9 +420,8 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. Spot-check **group react single card** in a group chat: ⋮ or chip → Group react → confirm one card with all lines; tap to edit; regenerate / new swipe; ◀ ▶ browse swipes.
-2. Spot-check **Browse models** sheet: Settings → API → Category **Uncensored & derestricted** → Browse — confirm ctx/out/params/TPS/uptime/description on rows without opening the browser.
-3. Spot-check **Creation Center hub** on device: World dashboard, Play this world, canon pins, glossary → lorebook, world bundle import/export.
+1. Spot-check **persona AI builder**: Settings → Personas → edit → plain English → Generate / Update; confirm fields fill like character card builder.
+2. Spot-check **Creation Center** with a locked model (not Auto): confirm replies stay on workshop role and don’t loop long lists.
 
 ---
 

@@ -76,6 +76,19 @@ void main() {
       final adjusted = WorldWorkshopBuilder.workshopChatSampling(longRp);
       expect(adjusted.maxTokens, 4096);
     });
+
+    test('resolveWorkshopGuidance ignores card wand default', () {
+      expect(
+        WorldWorkshopBuilder.resolveWorkshopGuidance(),
+        CollaboratorSettings.defaultWorkshopGuidanceNote,
+      );
+      expect(
+        WorldWorkshopBuilder.resolveWorkshopGuidance(
+          workshopGuidanceNote: 'Local workshop note',
+        ),
+        'Local workshop note',
+      );
+    });
   });
 
   group('WorldWorkshopBuilder workshop export sampling', () {
@@ -943,6 +956,52 @@ Here is the card you asked for:
       final user = messages.last['content'] ?? '';
       expect(user, contains('Silver hair'));
       expect(user, contains('more secretive'));
+    });
+  });
+
+  group('plain English persona cards', () {
+    test('buildPlainEnglishPersonaExportMessages includes brief', () {
+      final messages = builder.buildPlainEnglishPersonaExportMessages(
+        userBrief: 'Veteran scout with dry humor.',
+        personaName: 'Jay',
+      );
+      final user = messages.last['content'] ?? '';
+      expect(user, contains('Veteran scout'));
+      expect(messages.first['content'], contains('plain-English'));
+    });
+
+    test('buildPlainEnglishPersonaUpdateMessages includes current persona', () {
+      const existing = Persona(
+        id: 'p1',
+        name: 'Jay',
+        description: 'Field medic.',
+        appearance: 'Scarred hands.',
+      );
+      final messages = builder.buildPlainEnglishPersonaUpdateMessages(
+        existing: existing,
+        userBrief: 'Make me more cynical.',
+      );
+      final user = messages.last['content'] ?? '';
+      expect(user, contains('Field medic'));
+      expect(user, contains('more cynical'));
+    });
+
+    test('parsePersonaJson fills slim persona fields', () {
+      final persona = builder.parsePersonaJson(
+        '''
+        {"name":"Scout","description":"Veteran tracker","appearance":"Lean build",
+        "personality":"Dry wit","background":"Border wars","goals":"Protect the crew"}
+        ''',
+        preferredId: 'p-new',
+        fallbackName: 'Fallback',
+      );
+      expect(persona.id, 'p-new');
+      expect(persona.name, 'Scout');
+      expect(persona.description, 'Veteran tracker');
+      expect(persona.appearance, 'Lean build');
+      expect(persona.personality, 'Dry wit');
+      expect(persona.background, 'Border wars');
+      expect(persona.goals, 'Protect the crew');
     });
   });
 

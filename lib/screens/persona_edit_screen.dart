@@ -11,6 +11,7 @@ import '../services/nanogpt_service.dart';
 import '../services/persona_collaborator.dart';
 import '../services/persona_service.dart';
 import '../services/settings_service.dart';
+import '../services/world_workshop_builder.dart';
 import '../widgets/anima_avatar.dart';
 import '../widgets/generate_avatar_sheet.dart';
 import '../widgets/keyboard_inset.dart';
@@ -40,8 +41,10 @@ class PersonaEditScreen extends StatefulWidget {
 class _PersonaEditScreenState extends State<PersonaEditScreen> {
   static const _avatarPromptBuilder = AvatarPromptBuilder();
   static const _collaborator = PersonaCollaborator();
+  final _workshopBuilder = WorldWorkshopBuilder();
 
   final _avatarService = AvatarService();
+  final _aiBrief = TextEditingController();
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _appearanceController = TextEditingController();
@@ -50,12 +53,195 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
   final _goalsController = TextEditingController();
   bool _saving = false;
   bool _avatarBusy = false;
+  bool _aiCardBusy = false;
   PersonaCollaboratorField? _wandBusy;
   String? _avatarFileName;
   late final String _personaId;
 
   bool get _isEditing => widget.existing != null;
-  bool get _busy => _saving || _avatarBusy || _wandBusy != null;
+  bool get _busy => _saving || _avatarBusy || _wandBusy != null || _aiCardBusy;
+
+  bool get _hasPersonaContent =>
+      _descriptionController.text.trim().isNotEmpty ||
+      _appearanceController.text.trim().isNotEmpty ||
+      _personalityController.text.trim().isNotEmpty ||
+      _backgroundController.text.trim().isNotEmpty ||
+      _goalsController.text.trim().isNotEmpty;
+
+  Persona _personaFromDraft() {
+    return Persona(
+      id: _personaId,
+      name: _nameController.text.trim(),
+      description: _descriptionController.text.trim(),
+      appearance: _appearanceController.text.trim(),
+      personality: _personalityController.text.trim(),
+      background: _backgroundController.text.trim(),
+      goals: _goalsController.text.trim(),
+      avatarFileName: _avatarFileName,
+      sourceWorkshopId: widget.existing?.sourceWorkshopId,
+    );
+  }
+
+  void _applyPersonaFields(Persona persona) {
+    if (persona.name.trim().isNotEmpty) {
+      _nameController.text = persona.name.trim();
+    }
+    _descriptionController.text = persona.description.trim();
+    _appearanceController.text = persona.appearance.trim();
+    _personalityController.text = persona.personality.trim();
+    _backgroundController.text = persona.background.trim();
+    _goalsController.text = persona.goals.trim();
+  }
+
+  Future<void> _runAiPersonaGenerate() async {
+    if (_aiCardBusy || _wandBusy != null) return;
+    final brief = _aiBrief.text.trim();
+    if (brief.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Describe your persona in plain English first.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _aiCardBusy = true);
+    try {
+      final build = await widget.settingsService.resolveCharacterBuild();
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+      final messages = _workshopBuilder.buildPlainEnglishPersonaExportMessages(
+        userBrief: brief,
+        personaName: _nameController.text.trim(),
+        buildPromptNote: build.promptNote,
+      );
+
+      Persona? draft;
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final raw = await widget.nanoGptService.complete(
+          model: build.model,
+          messages: messages,
+          baseUrl: baseUrl,
+          sampling: WorldWorkshopBuilder.workshopExportSampling(build.sampling),
+        );
+        try {
+          draft = _workshopBuilder.parsePersonaJson(
+            raw,
+            preferredId: _personaId,
+            fallbackName: _nameController.text.trim(),
+          );
+          break;
+        } on FormatException {
+          if (attempt == 1) rethrow;
+        }
+      }
+      if (draft == null) {
+        throw const FormatException(
+          'Could not find persona JSON in the AI reply. Try again.',
+        );
+      }
+
+      if (!mounted) return;
+      setState(() => _applyPersonaFields(draft!));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Filled identity, appearance, personality, background, and goals.',
+          ),
+        ),
+      );
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('AI persona builder failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _aiCardBusy = false);
+    }
+  }
+
+  Future<void> _runAiPersonaUpdate() async {
+    if (_aiCardBusy || _wandBusy != null) return;
+    final brief = _aiBrief.text.trim();
+    if (brief.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Say what you want to change in plain English first.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _aiCardBusy = true);
+    try {
+      final build = await widget.settingsService.resolveCharacterBuild();
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+      final existing = _personaFromDraft();
+      final messages = _workshopBuilder.buildPlainEnglishPersonaUpdateMessages(
+        existing: existing,
+        userBrief: brief,
+        buildPromptNote: build.promptNote,
+      );
+
+      Persona? draft;
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final raw = await widget.nanoGptService.complete(
+          model: build.model,
+          messages: messages,
+          baseUrl: baseUrl,
+          sampling: WorldWorkshopBuilder.workshopExportSampling(build.sampling),
+        );
+        try {
+          draft = _workshopBuilder.parsePersonaUpdateJson(
+            raw,
+            original: existing,
+          );
+          break;
+        } on FormatException {
+          if (attempt == 1) rethrow;
+        }
+      }
+      if (draft == null) {
+        throw const FormatException(
+          'Could not find persona JSON in the AI reply. Try again.',
+        );
+      }
+
+      if (!mounted) return;
+      setState(() => _applyPersonaFields(draft!));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Merged your notes into the persona fields.'),
+        ),
+      );
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('AI persona update failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _aiCardBusy = false);
+    }
+  }
 
   @override
   void initState() {
@@ -100,7 +286,7 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
   }
 
   Future<void> _runWand(PersonaCollaboratorField field) async {
-    if (_wandBusy != null || _saving || _avatarBusy) return;
+    if (_wandBusy != null || _saving || _avatarBusy || _aiCardBusy) return;
 
     setState(() => _wandBusy = field);
     try {
@@ -274,6 +460,7 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
       background: _backgroundController.text.trim(),
       goals: _goalsController.text.trim(),
       avatarFileName: _avatarFileName,
+      sourceWorkshopId: widget.existing?.sourceWorkshopId,
     );
     await widget.personaService.upsert(persona);
     if (!mounted) return;
@@ -282,6 +469,7 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
 
   @override
   void dispose() {
+    _aiBrief.dispose();
     _nameController.dispose();
     _descriptionController.dispose();
     _appearanceController.dispose();
@@ -354,6 +542,70 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
             'This is who you are in chat ({{user}}). You can switch personas '
             'per chat session. Tap the wand on a creative field to append AI '
             'text (uses your NanoGPT model + Settings → AI collaborator).',
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'AI persona builder',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Describe yourself in plain English. Fills identity, appearance, '
+                    'personality, background, and goals. Uses Settings → Character builds.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _aiBrief,
+                    enabled: !_aiCardBusy && !_saving,
+                    minLines: 3,
+                    maxLines: 8,
+                    scrollPadding: kAnimaKeyboardScrollPadding,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: const InputDecoration(
+                      hintText:
+                          'Veteran scout, scarred hands, dry humor, loyal to the crew…',
+                      border: OutlineInputBorder(),
+                      alignLabelWithHint: true,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: (_aiCardBusy || _saving || _wandBusy != null)
+                        ? null
+                        : _runAiPersonaGenerate,
+                    icon: _aiCardBusy
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.auto_awesome),
+                    label: Text(
+                      _hasPersonaContent
+                          ? 'Replace persona fields from description'
+                          : 'Generate from description',
+                    ),
+                  ),
+                  if (_isEditing || _hasPersonaContent) ...[
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: (_aiCardBusy || _saving || _wandBusy != null)
+                          ? null
+                          : _runAiPersonaUpdate,
+                      icon: const Icon(Icons.edit_note),
+                      label: const Text('Update from description'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: 20),
           Center(
