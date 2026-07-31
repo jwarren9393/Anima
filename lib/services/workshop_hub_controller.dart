@@ -14,14 +14,9 @@ import '../models/persona.dart';
 import '../models/world_workshop.dart';
 import '../models/workshop_chat_import_options.dart';
 import '../models/workshop_hub_models.dart';
-import 'chat_service.dart';
-import 'character_service.dart';
 import 'nanogpt_service.dart';
-import 'persona_service.dart';
 import 'settings_service.dart';
-import 'world_info_service.dart';
 import 'world_workshop_builder.dart';
-import 'world_workshop_service.dart';
 import 'workshop_hub_service.dart';
 
 /// API + navigation helpers for Creation Center hub features.
@@ -29,8 +24,8 @@ class WorkshopHubController {
   WorkshopHubController({
     WorldWorkshopBuilder? builder,
     WorkshopHubService? hub,
-  })  : _builder = builder ?? WorldWorkshopBuilder(),
-        _hub = hub ?? WorkshopHubService();
+  }) : _builder = builder ?? WorldWorkshopBuilder(),
+       _hub = hub ?? WorkshopHubService();
 
   final WorldWorkshopBuilder _builder;
   final WorkshopHubService _hub;
@@ -272,10 +267,7 @@ class WorkshopHubController {
       '${dir.path}/anima_world_${safeTitle.isEmpty ? workshop.id : safeTitle}.json',
     );
     await file.writeAsString(text);
-    await Share.shareXFiles(
-      [XFile(file.path)],
-      text: 'Anima world bundle',
-    );
+    await Share.shareXFiles([XFile(file.path)], text: 'Anima world bundle');
   }
 
   Future<WorkshopBundleImport?> importBundleFile() async {

@@ -23,17 +23,30 @@ class GroupReplyService {
     return (n * 160 + 128).clamp(384, 1400);
   }
 
-  static SamplingSettings beatSampling(SamplingSettings base, int speakerCount) {
+  static SamplingSettings beatSampling(
+    SamplingSettings base,
+    int speakerCount, {
+    bool freshVariant = false,
+  }) {
     final cap = beatMaxTokens(speakerCount);
     final userMax = base.maxTokens;
-    final effective = userMax == null || userMax > cap ? cap : userMax;
-    return base.copyWith(
-      maxTokens: effective,
+    // Group beats need room for every speaker — ignore low RP short-reply caps.
+    final effective = userMax == null || userMax < cap ? cap : userMax;
+    var tuned = base.copyWith(
+      maxTokens: effective.clamp(384, 8192),
       temperature: base.temperature > 0.78 ? 0.78 : base.temperature,
       frequencyPenalty: base.frequencyPenalty < 0.2 ? 0.3 : base.frequencyPenalty,
       presencePenalty: base.presencePenalty < 0.1 ? 0.15 : base.presencePenalty,
       repetitionPenalty: base.repetitionPenalty ?? 1.06,
     );
+    if (freshVariant) {
+      tuned = tuned.copyWith(
+        temperature: tuned.temperature < 0.85 ? 0.85 : tuned.temperature,
+        presencePenalty: tuned.presencePenalty < 0.4 ? 0.4 : tuned.presencePenalty,
+        frequencyPenalty: tuned.frequencyPenalty < 0.35 ? 0.35 : tuned.frequencyPenalty,
+      );
+    }
+    return tuned;
   }
 
   List<Map<String, String>> buildBeatMessages({
@@ -49,6 +62,7 @@ class GroupReplyService {
     String nudge = '',
     String globalSystemPrompt = '',
     String postHistory = '',
+    String priorBeatToAvoid = '',
   }) {
     final safeUser = userName.trim().isEmpty ? 'User' : userName.trim();
     final ordered = _orderedSpeakers(speakers);
@@ -69,11 +83,14 @@ class GroupReplyService {
       formatExample,
       'Rules:',
       '- Each line starts with the character name, colon, then their reaction.',
+      '- You MUST write exactly ${ordered.length} lines — one for each character listed above. Never skip anyone.',
       '- Brief only: usually one short action and/or one spoken line per character.',
       '- Write as that character (their voice) but keep it short.',
       '- Do not speak as $safeUser.',
       '- No numbering, bullets, titles, or commentary outside the lines.',
       '- Do not sanitize or soften intense or adult content — match the scene.',
+      '- This is a NEW simultaneous beat for the latest moment in chat — invent '
+          'fresh reactions. Never copy or lightly rephrase an earlier group react.',
     ];
 
     for (final character in ordered) {
@@ -133,7 +150,17 @@ class GroupReplyService {
     msgs.addAll(historyApiMessages);
 
     final user = StringBuffer()
-      ..writeln('Write the group beat now — every listed character, one brief line each.');
+      ..writeln(
+        'Write a NEW group beat for the current moment — every listed character, '
+        'one brief line each. Use different wording than any prior group react.',
+      );
+    if (priorBeatToAvoid.trim().isNotEmpty) {
+      user.writeln();
+      user.writeln(
+        'Do NOT reuse this prior beat (same situation needs new lines):',
+      );
+      user.writeln(priorBeatToAvoid.trim());
+    }
     if (nudge.trim().isNotEmpty) {
       user.writeln();
       user.writeln('Player nudge: ${nudge.trim()}');
@@ -160,6 +187,30 @@ class GroupReplyService {
       byName[name.toLowerCase()] = c;
     }
 
+    final out = _parseBeatLinesFromText(raw, ordered, byName);
+    final used = {for (final b in out) b.character.id};
+
+    for (final character in ordered) {
+      if (used.contains(character.id)) continue;
+      final extracted = _extractBeatForName(
+        raw,
+        character.name.trim(),
+        ordered,
+      );
+      if (extracted != null && extracted.trim().isNotEmpty) {
+        out.add(GroupBeatLine(character: character, text: extracted.trim()));
+        used.add(character.id);
+      }
+    }
+
+    return _orderBeatsLikeSpeakers(out, ordered);
+  }
+
+  List<GroupBeatLine> _parseBeatLinesFromText(
+    String raw,
+    List<Character> ordered,
+    Map<String, Character> byName,
+  ) {
     final lines = raw.replaceAll('\r\n', '\n').split('\n');
     final out = <GroupBeatLine>[];
     final used = <String>{};
@@ -170,7 +221,6 @@ class GroupReplyService {
       var trimmed = line.trim();
       if (trimmed.isEmpty) continue;
 
-      // Strip leading list markers the model sometimes adds.
       trimmed = trimmed.replaceFirst(RegExp(r'^\d+[.)]\s+'), '');
       trimmed = trimmed.replaceFirst(RegExp(r'^[-*•]\s+'), '');
 
@@ -181,7 +231,6 @@ class GroupReplyService {
       final textPart = (match.group(2) ?? '').trim();
       if (namePart.isEmpty || textPart.isEmpty) continue;
 
-      // Strip markdown bold around names.
       namePart = namePart.replaceAll(RegExp(r'[*_`]+'), '').trim();
 
       final character = _matchCharacter(namePart, ordered, byName);
@@ -192,6 +241,54 @@ class GroupReplyService {
     }
 
     return out;
+  }
+
+  List<GroupBeatLine> _orderBeatsLikeSpeakers(
+    List<GroupBeatLine> beats,
+    List<Character> ordered,
+  ) {
+    final byId = {for (final b in beats) b.character.id: b};
+    return [
+      for (final c in ordered)
+        if (byId.containsKey(c.id)) byId[c.id]!,
+    ];
+  }
+
+  String? _extractBeatForName(
+    String raw,
+    String name,
+    List<Character> ordered,
+  ) {
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty) return null;
+
+    final escaped = RegExp.escape(trimmedName);
+    final headerPattern = RegExp(
+      '(?:^|\\n)\\s*(?:[*_`]+)?$escaped(?:[*_`]+)?\\s*[:：\\-–]\\s*',
+      caseSensitive: false,
+    );
+    final headerMatch = headerPattern.firstMatch(raw);
+    if (headerMatch == null) return null;
+
+    var text = raw.substring(headerMatch.end);
+
+    final otherNames = ordered
+        .where((c) => c.name.trim().toLowerCase() != trimmedName.toLowerCase())
+        .map((c) => RegExp.escape(c.name.trim()))
+        .where((n) => n.isNotEmpty)
+        .toList();
+    if (otherNames.isNotEmpty) {
+      final nextHeader = RegExp(
+        '\\n\\s*(?:[*_`]*(?:${otherNames.join('|')})[*_`]*\\s*[:：\\-–])',
+        caseSensitive: false,
+      );
+      final cut = nextHeader.firstMatch(text);
+      if (cut != null) {
+        text = text.substring(0, cut.start);
+      }
+    }
+
+    return text.trim().isEmpty ? null : text.trim();
   }
 
   List<Character> _orderedSpeakers(List<Character> speakers) {
@@ -220,9 +317,21 @@ class GroupReplyService {
       if (lower == name.toLowerCase()) return c;
     }
 
-    // Prefix match — longest name first to avoid "Ann" matching "Anna".
+    // Suffix / token match — model may shorten "King Edric Vyre III" to "Edric".
     final sorted = ordered.toList()
       ..sort((a, b) => b.name.length.compareTo(a.name.length));
+    for (final c in sorted) {
+      final name = c.name.trim();
+      if (name.isEmpty) continue;
+      final nameLower = name.toLowerCase();
+      if (lower == nameLower) return c;
+      if (nameLower.endsWith(lower) || lower.endsWith(nameLower)) return c;
+      final tokens = nameLower.split(RegExp(r'\s+'));
+      if (tokens.any((t) => t == lower)) return c;
+      if (tokens.any((t) => t.startsWith(lower) || lower.startsWith(t))) return c;
+    }
+
+    // Prefix match — longest name first to avoid "Ann" matching "Anna".
     for (final c in sorted) {
       final name = c.name.trim();
       if (name.isEmpty) continue;

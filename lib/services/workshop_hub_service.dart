@@ -7,18 +7,12 @@ import '../models/persona.dart';
 import '../models/world_workshop.dart';
 import '../models/workshop_chat_import_options.dart';
 import '../models/workshop_hub_models.dart';
-import 'chat_service.dart';
-import 'character_service.dart';
-import 'persona_service.dart';
-import 'world_info_service.dart';
 import 'world_workshop_builder.dart';
-import 'world_workshop_service.dart';
 
 /// Creation Center hub operations — play world, status, bundle export, merge.
 class WorkshopHubService {
-  WorkshopHubService({
-    WorldWorkshopBuilder? builder,
-  }) : _builder = builder ?? WorldWorkshopBuilder();
+  WorkshopHubService({WorldWorkshopBuilder? builder})
+    : _builder = builder ?? WorldWorkshopBuilder();
 
   final WorldWorkshopBuilder _builder;
 
@@ -31,9 +25,7 @@ class WorkshopHubService {
     final linkedIds = workshop.linkedCharacterIds;
     final fromWorkshopChars = allCharacters
         .where(
-          (c) =>
-              linkedIds.contains(c.id) ||
-              c.sourceWorkshopId == workshop.id,
+          (c) => linkedIds.contains(c.id) || c.sourceWorkshopId == workshop.id,
         )
         .length;
 
@@ -226,18 +218,9 @@ class WorkshopHubService {
       }
     }
     for (final c in allCharacters) {
-      if (c.sourceWorkshopId == workshop.id &&
-          !cast.any((x) => x.id == c.id)) {
+      if (c.sourceWorkshopId == workshop.id && !cast.any((x) => x.id == c.id)) {
         cast.add(c);
       }
-    }
-
-    Persona? persona = defaultPersona;
-    if (kit.defaultPersonaId != null) {
-      // caller resolves persona by id
-    }
-    if (workshop.linkedPersonaId != null) {
-      // caller resolves
     }
 
     List<String>? lorebookIds;
@@ -307,13 +290,12 @@ class WorkshopHubService {
     if (workshopRaw is! Map) {
       throw const FormatException('Bundle missing workshop data.');
     }
-    final workshop = WorldWorkshop.fromJson(
-      Map<String, dynamic>.from(workshopRaw),
-    ).copyWith(
-      id: WorldWorkshop.newId(),
-      exportedLorebookId: null,
-      clearExportedLorebookId: true,
-    );
+    final workshop =
+        WorldWorkshop.fromJson(Map<String, dynamic>.from(workshopRaw)).copyWith(
+          id: WorldWorkshop.newId(),
+          exportedLorebookId: null,
+          clearExportedLorebookId: true,
+        );
 
     GlobalLorebook? lorebook;
     final loreRaw = map['lorebook'];
@@ -388,7 +370,7 @@ class PlayWorldPlan {
   final String? sourceWorkshopId;
 
   bool get canPlayGroup => characters.length >= 2;
-  bool get canPlaySolo => characters.length >= 1;
+  bool get canPlaySolo => characters.isNotEmpty;
 }
 
 class WorkshopBundleImport {

@@ -1,6 +1,6 @@
 import 'package:anima/widgets/chat_composer_field.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('shouldSendComposerOnEnter', () {
@@ -77,6 +77,47 @@ void main() {
         ),
         isTrue,
       );
+    });
+  });
+
+  group('handleComposerEnterAction', () {
+    test('non-empty text calls onSend', () {
+      var sent = false;
+      var continued = false;
+      final controller = TextEditingController(text: 'hello');
+      handleComposerEnterAction(
+        controller: controller,
+        onSend: () => sent = true,
+        onContinue: () => continued = true,
+      );
+      expect(sent, isTrue);
+      expect(continued, isFalse);
+      controller.dispose();
+    });
+
+    test('empty text calls onContinue when set', () {
+      var sent = false;
+      var continued = false;
+      final controller = TextEditingController();
+      handleComposerEnterAction(
+        controller: controller,
+        onSend: () => sent = true,
+        onContinue: () => continued = true,
+      );
+      expect(sent, isFalse);
+      expect(continued, isTrue);
+      controller.dispose();
+    });
+
+    test('empty text does nothing without onContinue', () {
+      var sent = false;
+      final controller = TextEditingController();
+      handleComposerEnterAction(
+        controller: controller,
+        onSend: () => sent = true,
+      );
+      expect(sent, isFalse);
+      controller.dispose();
     });
   });
 }

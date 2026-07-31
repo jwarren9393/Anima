@@ -226,7 +226,7 @@ Here you go:
     test('buildCharacterDetectMessages includes transcript and guidance', () {
       final messages = builder.buildCharacterDetectMessages(
         conversation: sampleConversation(),
-        guidanceNote: 'Keep it raw.',
+        buildPromptNote: 'Keep it raw.',
       );
       expect(messages.length, 2);
       expect(messages[0]['content'], contains('Keep it raw.'));
@@ -280,6 +280,22 @@ Here you go:
       expect(
         () => builder.parseCharacterCandidatesJson('{"characters":"nope"}'),
         throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('parseCharacterCandidatesJson rejects schema placeholder text', () {
+      expect(
+        () => builder.parseCharacterCandidatesJson(
+          '{"characters":[{"name":"Exact character name","summary":"one short sentence: who they are / role"}]}',
+        ),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        WorldWorkshopBuilder.isTemplateCharacterCandidate(
+          'Exact character name',
+          'one short sentence: who they are / role',
+        ),
+        isTrue,
       );
     });
 

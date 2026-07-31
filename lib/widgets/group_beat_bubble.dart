@@ -13,12 +13,14 @@ class GroupBeatBubble extends StatelessWidget {
     this.avatarForSpeakerId,
     this.avatarStyle,
     this.onTap,
+    this.onLongPress,
   });
 
   final List<GroupBeatPart> lines;
   final String? Function(String speakerId)? avatarForSpeakerId;
   final AvatarStyleSettings? avatarStyle;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -35,6 +37,7 @@ class GroupBeatBubble extends StatelessWidget {
       borderRadius: BorderRadius.circular(ui.chatBubbleRadius),
       child: InkWell(
         onTap: onTap,
+        onLongPress: onLongPress,
         borderRadius: BorderRadius.circular(ui.chatBubbleRadius),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),

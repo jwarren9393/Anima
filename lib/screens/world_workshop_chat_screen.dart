@@ -91,6 +91,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   static const _replyRewrite = ReplyRewriteService();
 
   final _input = TextEditingController();
+  final _composerFocusNode = FocusNode();
   final _openingSceneController = TextEditingController();
   final _scroll = ScrollController();
   late WorldWorkshop _workshop;
@@ -122,6 +123,22 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     if (last.isUser) return true;
     if (!last.isUser && last.text.trim().isEmpty) return true;
     return !last.isUser && last.text.trim().isNotEmpty;
+  }
+
+  void _refocusComposer() {
+    if (!mounted || _busy) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _busy) return;
+      if (_composerFocusNode.hasFocus || !_composerFocusNode.canRequestFocus) {
+        return;
+      }
+      _composerFocusNode.requestFocus();
+    });
+  }
+
+  void _onComposerContinue() {
+    if (_busy) return;
+    unawaited(_continueWorkshop());
   }
 
   Future<void> _pickModeFromSheet() async {
@@ -218,10 +235,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       linkedLorebookJson: loreJson,
       importedSourceText: imported,
       worldSummary: _workshop.worldSummary,
-      worldSummaryCoveredCount:
-          _workshop.worldSummary.trim().isEmpty
-              ? 0
-              : _workshop.worldSummaryCoveredCount,
+      worldSummaryCoveredCount: _workshop.worldSummary.trim().isEmpty
+          ? 0
+          : _workshop.worldSummaryCoveredCount,
       historyTokenBudget: _historyTokenBudget,
       modelContextLength: _modelContextLength,
     );
@@ -270,8 +286,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                 Text(
                   'Messages sent on next turn: ${estimate.messagesInPrompt}',
                 ),
-              if (estimate.messagesTrimmedAway != null &&
-                  estimate.messagesTrimmedAway! > 0)
+              if (estimate.messagesTrimmedAway > 0)
                 Text(
                   'Folded / trimmed from send: ${estimate.messagesTrimmedAway}',
                 ),
@@ -351,6 +366,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     WidgetsBinding.instance.removeObserver(this);
     widget.nanoGptService.cancelActiveStream();
     _input.dispose();
+    _composerFocusNode.dispose();
     _openingSceneController.dispose();
     _scroll.dispose();
     super.dispose();
@@ -443,11 +459,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       _workshop = _workshop.copyWith(
         messages: [
           ..._workshop.messages,
-          ChatMessage(
-            id: assistantId,
-            role: ChatRole.assistant,
-            text: '',
-          ),
+          ChatMessage(id: assistantId, role: ChatRole.assistant, text: ''),
         ],
       );
     });
@@ -501,7 +513,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       );
       final trimmed = revised.trim();
       if (trimmed.isEmpty) {
-        throw NanoGptException('NanoGPT returned an empty revision. Try again.');
+        throw NanoGptException(
+          'NanoGPT returned an empty revision. Try again.',
+        );
       }
       if (!mounted) return;
       final updated = List<ChatMessage>.from(_workshop.messages);
@@ -513,9 +527,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       );
     } on NanoGptException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -583,7 +597,10 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     await _applyCorrectionAtIndex(assistantIndex, note);
   }
 
-  Future<void> _applyCorrectionAtIndex(int assistantIndex, String correction) async {
+  Future<void> _applyCorrectionAtIndex(
+    int assistantIndex,
+    String correction,
+  ) async {
     if (_busy) return;
     final assistant = _workshop.messages[assistantIndex];
     final original = assistant.text.trim();
@@ -608,21 +625,23 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       );
       final trimmed = revised.trim();
       if (trimmed.isEmpty) {
-        throw NanoGptException('NanoGPT returned an empty revision. Try again.');
+        throw NanoGptException(
+          'NanoGPT returned an empty revision. Try again.',
+        );
       }
       if (!mounted) return;
       final updated = List<ChatMessage>.from(_workshop.messages);
       updated[assistantIndex] = assistant.withEditedText(trimmed);
       await _persist(_workshop.copyWith(messages: updated));
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Reply updated in place.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Reply updated in place.')));
     } on NanoGptException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -679,8 +698,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       } else if (continueScene) {
         apiMessages.add({
           'role': 'user',
-          'content':
-              '(Continue. Write the workshop guide\'s next reply.)',
+          'content': '(Continue. Write the workshop guide\'s next reply.)',
         });
       }
 
@@ -723,7 +741,10 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         context,
       ).showSnackBar(SnackBar(content: Text('Something went wrong: $error')));
     } finally {
-      if (mounted) setState(() => _sending = false);
+      if (mounted) {
+        setState(() => _sending = false);
+        _refocusComposer();
+      }
     }
   }
 
@@ -754,7 +775,8 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     bool fullTranscript = false,
   }) async {
     if (_busy && !quiet) return;
-    final ctx = contextSettings ?? await widget.settingsService.getContextSettings();
+    final ctx =
+        contextSettings ?? await widget.settingsService.getContextSettings();
     setState(() => _historyTokenBudget = ctx.historyTokenBudget);
     final cut = _contextService.summarizeCutIndex(
       messageCount: _workshop.messages.length,
@@ -783,7 +805,8 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     }
 
     try {
-      final collaborator = await widget.settingsService.getCollaboratorSettings();
+      final collaborator = await widget.settingsService
+          .getCollaboratorSettings();
       final model = await widget.settingsService.getModel();
       final sampling = ChatContextService.summarizeSampling(
         await widget.settingsService.getSampling(),
@@ -794,10 +817,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           : collaborator.guidanceNote;
       final chunk = fullTranscript
           ? _workshop.messages
-          : _workshop.messages.sublist(
-              _workshop.worldSummaryCoveredCount,
-              cut,
-            );
+          : _workshop.messages.sublist(_workshop.worldSummaryCoveredCount, cut);
       final updatedSummary = await widget.nanoGptService.complete(
         model: model,
         messages: _builder.buildWorldSummaryMessages(
@@ -849,9 +869,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       }
     } catch (error) {
       if (!quiet && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fold failed: $error')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Fold failed: $error')));
       }
     } finally {
       if (!quiet && mounted) {
@@ -1012,11 +1032,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
 
     final messages = _workshop.messages.sublist(0, index + 1);
     messages.add(
-      ChatMessage(
-        id: ChatMessage.newId(),
-        role: ChatRole.assistant,
-        text: '',
-      ),
+      ChatMessage(id: ChatMessage.newId(), role: ChatRole.assistant, text: ''),
     );
 
     setState(() {
@@ -1150,11 +1166,14 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     if (index < 0 || index >= _workshop.messages.length) return;
     final clearFold = index < _workshop.worldSummaryCoveredCount;
     final updated = List<ChatMessage>.from(_workshop.messages)..removeAt(index);
-    setState(() => _workshop = _workshop.copyWith(
-      messages: updated,
-      worldSummaryCoveredCount:
-          clearFold ? 0 : _workshop.worldSummaryCoveredCount,
-    ));
+    setState(
+      () => _workshop = _workshop.copyWith(
+        messages: updated,
+        worldSummaryCoveredCount: clearFold
+            ? 0
+            : _workshop.worldSummaryCoveredCount,
+      ),
+    );
     await _persist(_workshop);
   }
 
@@ -1164,11 +1183,14 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     if (index >= _workshop.messages.length - 1) return;
     final messages = _workshop.messages.sublist(0, index + 1);
     final clearFold = index + 1 < _workshop.worldSummaryCoveredCount;
-    setState(() => _workshop = _workshop.copyWith(
-      messages: messages,
-      worldSummaryCoveredCount:
-          clearFold ? 0 : _workshop.worldSummaryCoveredCount,
-    ));
+    setState(
+      () => _workshop = _workshop.copyWith(
+        messages: messages,
+        worldSummaryCoveredCount: clearFold
+            ? 0
+            : _workshop.worldSummaryCoveredCount,
+      ),
+    );
     await _persist(_workshop);
   }
 
@@ -1299,7 +1321,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                   ListTile(
                     leading: const Icon(Icons.auto_awesome),
                     title: const Text('New swipe'),
-                    subtitle: const Text('Keep this version and generate another'),
+                    subtitle: const Text(
+                      'Keep this version and generate another',
+                    ),
                     onTap: () => Navigator.pop(context, 'swipe'),
                   ),
                 ],
@@ -1357,9 +1381,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   Future<void> _toggleLinkedLorebookInPrompt() async {
     final next = !_workshop.includeLinkedLorebookInPrompt;
     setState(
-      () => _workshop = _workshop.copyWith(
-        includeLinkedLorebookInPrompt: next,
-      ),
+      () => _workshop = _workshop.copyWith(includeLinkedLorebookInPrompt: next),
     );
     await _persist(_workshop);
     if (!mounted) return;
@@ -1588,9 +1610,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           content: Text(
             isUpdate
                 ? 'Updated “${global.displayName}” (${book.entries.length} entries) '
-                    'in World Info.'
+                      'in World Info.'
                 : 'Saved “${global.displayName}” (${book.entries.length} entries) '
-                    'to World Info.',
+                      'to World Info.',
           ),
         ),
       );
@@ -1872,7 +1894,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     }
 
     Persona? persona = defaultPersona;
-  final personaId = plan.personaId;
+    final personaId = plan.personaId;
     if (personaId != null) {
       persona = await widget.personaService.getById(personaId);
     }
@@ -1883,7 +1905,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       final ordered = plan.characters;
       final session = await widget.chatService.startGroupChat(
         ordered,
-        userName: persona!.name,
+        userName: persona.name,
         personaId: persona.id,
         authorsNote: plan.authorsNote,
         autoReply: plan.autoReply,
@@ -1901,7 +1923,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     final greetingIndex = await pickGreetingIndex(
       context,
       character: character,
-      userName: persona!.name,
+      userName: persona.name,
     );
     if (greetingIndex == null || !mounted) return;
 
@@ -1955,11 +1977,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     });
 
     try {
-      final collaborator = await widget.settingsService
-          .getCollaboratorSettings();
-      final model = await widget.settingsService.getModel();
+      final build = await widget.settingsService.resolveCharacterBuild();
       final sampling = WorldWorkshopBuilder.workshopExportSampling(
-        await widget.settingsService.getSampling(),
+        build.sampling,
       );
       final baseUrl = await widget.settingsService.getApiBaseUrl();
       final existingChars = await widget.characterService.loadCharacters();
@@ -1968,10 +1988,10 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       };
 
       var detectRaw = await widget.nanoGptService.complete(
-        model: model,
+        model: build.model,
         messages: _builder.buildCharacterDetectMessages(
           conversation: _workshop.messages,
-          guidanceNote: collaborator.guidanceNote,
+          buildPromptNote: build.promptNote,
           sourceLorebook: _lorebookForPrompt,
           importedSource: _workshop.importedSource,
         ),
@@ -1984,11 +2004,11 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         candidates = _builder.parseCharacterCandidatesJson(detectRaw);
       } on FormatException {
         detectRaw = await widget.nanoGptService.complete(
-          model: model,
+          model: build.model,
           messages: [
             ..._builder.buildCharacterDetectMessages(
               conversation: _workshop.messages,
-              guidanceNote: collaborator.guidanceNote,
+              buildPromptNote: build.promptNote,
               sourceLorebook: _lorebookForPrompt,
               importedSource: _workshop.importedSource,
             ),
@@ -2035,7 +2055,6 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
 
       var savedCount = 0;
       var skippedCount = 0;
-      final build = await widget.settingsService.resolveCharacterBuild();
 
       for (var i = 0; i < selected.length; i++) {
         if (!mounted) return;
@@ -2057,7 +2076,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
               importedSource: _workshop.importedSource,
             ),
             baseUrl: baseUrl,
-            sampling: WorldWorkshopBuilder.workshopExportSampling(build.sampling),
+            sampling: WorldWorkshopBuilder.workshopExportSampling(
+              build.sampling,
+            ),
           );
 
           final draft = _builder.parseCharacterJson(
@@ -2089,11 +2110,11 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                 ? saved
                 : (await widget.characterService.upsert(
                     saved.copyWith(sourceWorkshopId: _workshop.id),
-                  ))
-                    .where((c) => c.id == saved.id)
-                    .first;
-            final nextWorkshop =
-                _hubController.hub.linkCharacter(_workshop, tagged.id);
+                  )).where((c) => c.id == saved.id).first;
+            final nextWorkshop = _hubController.hub.linkCharacter(
+              _workshop,
+              tagged.id,
+            );
             await _persist(nextWorkshop);
             savedCount++;
           } else {
@@ -2236,9 +2257,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       await _runCharacterUpdate(selected);
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not load cast: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not load cast: $error')));
     } finally {
       if (mounted) {
         setState(() {
@@ -2304,17 +2325,15 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
             ? saved
             : (await widget.characterService.upsert(
                 saved.copyWith(sourceWorkshopId: _workshop.id),
-              ))
-                .where((c) => c.id == saved.id)
-                .first;
+              )).where((c) => c.id == saved.id).first;
         final nextWorkshop = _hubController.hub.linkCharacter(
           _workshop,
           tagged.id,
         );
         await _persist(nextWorkshop);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Updated “${tagged.name}”.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Updated “${tagged.name}”.')));
       }
     } on FormatException catch (error) {
       if (!mounted) return;
@@ -2443,11 +2462,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     });
 
     try {
-      final collaborator = await widget.settingsService
-          .getCollaboratorSettings();
-      final model = await widget.settingsService.getModel();
+      final build = await widget.settingsService.resolveCharacterBuild();
       final sampling = WorldWorkshopBuilder.workshopExportSampling(
-        await widget.settingsService.getSampling(),
+        build.sampling,
       );
       final baseUrl = await widget.settingsService.getApiBaseUrl();
       final existingPersonas = await widget.personaService.loadPersonas();
@@ -2456,10 +2473,10 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       };
 
       var detectRaw = await widget.nanoGptService.complete(
-        model: model,
+        model: build.model,
         messages: _builder.buildCharacterDetectMessages(
           conversation: _workshop.messages,
-          guidanceNote: collaborator.guidanceNote,
+          buildPromptNote: build.promptNote,
           sourceLorebook: _lorebookForPrompt,
           importedSource: _workshop.importedSource,
         ),
@@ -2471,11 +2488,11 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         candidates = _builder.parseCharacterCandidatesJson(detectRaw);
       } on FormatException {
         detectRaw = await widget.nanoGptService.complete(
-          model: model,
+          model: build.model,
           messages: [
             ..._builder.buildCharacterDetectMessages(
               conversation: _workshop.messages,
-              guidanceNote: collaborator.guidanceNote,
+              buildPromptNote: build.promptNote,
               sourceLorebook: _lorebookForPrompt,
               importedSource: _workshop.importedSource,
             ),
@@ -2517,8 +2534,10 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         _exporting = true;
         _exportStatus = 'Generating persona: ${selected.name}…';
       });
+      final collaborator = await widget.settingsService
+          .getCollaboratorSettings();
       final personaRaw = await widget.nanoGptService.complete(
-        model: model,
+        model: build.model,
         messages: _builder.buildPersonaExportMessages(
           conversation: _workshop.messages,
           personaName: selected.name,
@@ -2557,12 +2576,8 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           ? saved
           : (await widget.personaService.upsert(
               saved.copyWith(sourceWorkshopId: _workshop.id),
-            ))
-              .where((p) => p.id == saved.id)
-              .first;
-      await _persist(
-        _workshop.copyWith(linkedPersonaId: tagged.id),
-      );
+            )).where((p) => p.id == saved.id).first;
+      await _persist(_workshop.copyWith(linkedPersonaId: tagged.id));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Saved ${tagged.name} to Personas.')),
       );
@@ -2702,12 +2717,8 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           ? saved
           : (await widget.personaService.upsert(
               saved.copyWith(sourceWorkshopId: _workshop.id),
-            ))
-              .where((p) => p.id == saved.id)
-              .first;
-      await _persist(
-        _workshop.copyWith(linkedPersonaId: tagged.id),
-      );
+            )).where((p) => p.id == saved.id).first;
+      await _persist(_workshop.copyWith(linkedPersonaId: tagged.id));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Updated persona “${tagged.name}”.')),
       );
@@ -3000,10 +3011,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    'Opening scene',
-                    style: theme.textTheme.titleLarge,
-                  ),
+                  Text('Opening scene', style: theme.textTheme.titleLarge),
                   const SizedBox(height: 8),
                   Text(
                     'Narrator setup for roleplay chats — separate from lore entries '
@@ -3014,10 +3022,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                   const SizedBox(height: 12),
                   _openingSceneLengthPicker(theme),
                   if (_workshop.openingScene.trim().isNotEmpty) ...[
-                    NarratorBubble(
-                      text: _workshop.openingScene,
-                      onTap: null,
-                    ),
+                    NarratorBubble(text: _workshop.openingScene, onTap: null),
                     const SizedBox(height: 8),
                     Text(
                       'An opening scene is already saved for this workshop. '
@@ -3045,7 +3050,8 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                   const SizedBox(height: 12),
                   if (_workshop.openingScene.trim().isEmpty)
                     FilledButton.icon(
-                      onPressed: (_sending || _exporting || _loadingLinkedLorebook)
+                      onPressed:
+                          (_sending || _exporting || _loadingLinkedLorebook)
                           ? null
                           : () async {
                               await _createOpeningScene(reviseExisting: false);
@@ -3058,7 +3064,8 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                     )
                   else ...[
                     FilledButton.icon(
-                      onPressed: (_sending || _exporting || _loadingLinkedLorebook)
+                      onPressed:
+                          (_sending || _exporting || _loadingLinkedLorebook)
                           ? null
                           : () async {
                               await _createOpeningScene(reviseExisting: false);
@@ -3071,7 +3078,8 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                     ),
                     const SizedBox(height: 8),
                     OutlinedButton.icon(
-                      onPressed: (_sending || _exporting || _loadingLinkedLorebook)
+                      onPressed:
+                          (_sending || _exporting || _loadingLinkedLorebook)
                           ? null
                           : () async {
                               await _createOpeningScene(reviseExisting: true);
@@ -3101,7 +3109,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   Future<void> _showOverview() async {
     final allChars = await widget.characterService.loadCharacters();
     final chats = await widget.chatService.listChatsForWorkshop(_workshop.id);
-    Persona? persona = null;
+    Persona? persona;
     if (_workshop.linkedPersonaId != null) {
       persona = await widget.personaService.getById(_workshop.linkedPersonaId!);
     }
@@ -3130,10 +3138,12 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         linkedCharacters: linkedChars,
         linkedPersona: persona,
         workshopChats: chats,
-        onPlayWorld: _busy ? null : () {
-          Navigator.pop(context);
-          _playThisWorld();
-        },
+        onPlayWorld: _busy
+            ? null
+            : () {
+                Navigator.pop(context);
+                _playThisWorld();
+              },
         onOpenLorebook: _linkedLorebook == null
             ? null
             : () {
@@ -3245,14 +3255,14 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       if (overview == null || overview.trim().isEmpty) return;
       await _persist(_workshop.copyWith(worldOverview: overview.trim()));
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('World overview saved.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('World overview saved.')));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Overview failed: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Overview failed: $error')));
     } finally {
       if (mounted) {
         setState(() {
@@ -3298,14 +3308,16 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Added ${entries.length} glossary entries to lorebook.'),
+          content: Text(
+            'Added ${entries.length} glossary entries to lorebook.',
+          ),
         ),
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Glossary failed: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Glossary failed: $error')));
     } finally {
       if (mounted) {
         setState(() {
@@ -3329,9 +3341,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       );
       if (ideas.isEmpty) return;
       await _persist(
-        _workshop.copyWith(
-          sceneIdeas: [..._workshop.sceneIdeas, ...ideas],
-        ),
+        _workshop.copyWith(sceneIdeas: [..._workshop.sceneIdeas, ...ideas]),
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -3339,9 +3349,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Scene ideas failed: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Scene ideas failed: $error')));
     } finally {
       if (mounted) {
         setState(() {
@@ -3377,8 +3387,10 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Locations & relationships',
-                    style: Theme.of(context).textTheme.titleLarge),
+                Text(
+                  'Locations & relationships',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: locController,
@@ -3409,12 +3421,12 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                             _exportStatus = 'Extracting sheets…';
                           });
                           try {
-                            final (locs, rels) =
-                                await _hubController.extractSheets(
-                              workshop: _workshop,
-                              nanoGpt: widget.nanoGptService,
-                              settings: widget.settingsService,
-                            );
+                            final (locs, rels) = await _hubController
+                                .extractSheets(
+                                  workshop: _workshop,
+                                  nanoGpt: widget.nanoGptService,
+                                  settings: widget.settingsService,
+                                );
                             locController.text = locs
                                 .map((l) => '${l.name}: ${l.description}')
                                 .join('\n');
@@ -3461,8 +3473,8 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                       final relDynamic = parts.length > 2
                           ? parts.sublist(2).join(sep).trim()
                           : parts[1].contains(':')
-                              ? parts[1].split(':').skip(1).join(':').trim()
-                              : '';
+                          ? parts[1].split(':').skip(1).join(':').trim()
+                          : '';
                       rels.add(
                         WorkshopRelationship(
                           fromName: parts[0].trim(),
@@ -3471,12 +3483,14 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                         ),
                       );
                     }
-                    unawaited(_persist(
-                      _workshop.copyWith(
-                        locations: locs,
-                        relationships: rels,
+                    unawaited(
+                      _persist(
+                        _workshop.copyWith(
+                          locations: locs,
+                          relationships: rels,
+                        ),
                       ),
-                    ));
+                    );
                     Navigator.pop(context);
                   },
                   child: const Text('Save'),
@@ -3539,8 +3553,10 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Default chat kit',
-                    style: Theme.of(context).textTheme.titleLarge),
+                Text(
+                  'Default chat kit',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
                 SwitchListTile(
                   title: const Text('Enable linked lorebook on new chats'),
                   value: loreEnabled,
@@ -3612,7 +3628,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       if (next == null) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No new source material from that chat.')),
+          const SnackBar(
+            content: Text('No new source material from that chat.'),
+          ),
         );
         return;
       }
@@ -3623,9 +3641,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Refresh failed: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Refresh failed: $error')));
     } finally {
       if (mounted) {
         setState(() {
@@ -3650,9 +3668,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Export failed: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Export failed: $error')));
     }
   }
 
@@ -3660,9 +3678,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     final copy = _hubController.hub.duplicate(_workshop);
     await widget.workshopService.upsert(copy);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Duplicated as “${copy.title}”.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Duplicated as “${copy.title}”.')));
   }
 
   Future<void> _mergeWorkshop() async {
@@ -3693,9 +3711,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     await widget.workshopService.delete(pick.id);
     if (!mounted) return;
     setState(() => _workshop = merged);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Workshops merged.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Workshops merged.')));
   }
 
   Future<void> _setMode(WorkshopMode mode) async {
@@ -3763,8 +3781,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         PopupMenuItem(
           value: 'opening',
           child: ListTile(
-            leading:
-                _exporting && (_exportStatus?.contains('opening') == true)
+            leading: _exporting && (_exportStatus?.contains('opening') == true)
                 ? const SizedBox(
                     width: 24,
                     height: 24,
@@ -3917,10 +3934,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       appBar: AppBar(
         title: GestureDetector(
           onTap: _showOverview,
-          child: Text(
-            _workshop.title,
-            overflow: TextOverflow.ellipsis,
-          ),
+          child: Text(_workshop.title, overflow: TextOverflow.ellipsis),
         ),
         actions: [
           IconButton(
@@ -3947,8 +3961,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                 onPickMode: _pickModeFromSheet,
                 onPickReplyLength: _pickReplyLengthFromSheet,
                 onOpeningScene: _showOpeningSceneEditor,
-                onImportedSource:
-                    hasImported ? _showImportedSourceDetails : null,
+                onImportedSource: hasImported
+                    ? _showImportedSourceDetails
+                    : null,
                 onPromptIdeas: _pickPromptIdeaFromSheet,
                 showPromptIdeas: _workshop.messages.isEmpty,
               ),
@@ -3960,13 +3975,13 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                         child: Text(
                           linkedName != null
                               ? 'This workshop is ready to use “$linkedName”.\n\n'
-                                  'Ask the AI to explain, expand, rewrite, or reorganize '
-                                  'the lorebook—or create characters directly.'
+                                    'Ask the AI to explain, expand, rewrite, or reorganize '
+                                    'the lorebook—or create characters directly.'
                               : hasImported
-                                  ? 'Your imported chat is ready as source material.\n\n'
-                                      'Ask the AI what to extract, then use ⋮ for lorebook or opening scene.'
-                                  : 'Example: “I want a rainy coastal city with rival '
-                                      'guilds and a buried god under the harbor…”',
+                              ? 'Your imported chat is ready as source material.\n\n'
+                                    'Ask the AI what to extract, then use ⋮ for lorebook or opening scene.'
+                              : 'Example: “I want a rainy coastal city with rival '
+                                    'guilds and a buried god under the harbor…”',
                           textAlign: TextAlign.center,
                           style: theme.textTheme.bodyMedium,
                         ),
@@ -3981,7 +3996,10 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                         final isUser = message.isUser;
                         final isLast = index == _workshop.messages.length - 1;
                         final thinking =
-                            _sending && isLast && !isUser && message.text.isEmpty;
+                            _sending &&
+                            isLast &&
+                            !isUser &&
+                            message.text.isEmpty;
                         final isLastAi = isLast && !message.isUser;
                         final canGoPrev =
                             !message.isUser &&
@@ -4009,8 +4027,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                           child: InkWell(
                             borderRadius: BorderRadius.circular(14),
                             onTap: _busy ? null : () => _editMessage(index),
-                            onLongPress:
-                                _busy ? null : () => _showMessageMenu(index),
+                            onLongPress: _busy
+                                ? null
+                                : () => _showMessageMenu(index),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 14,
@@ -4042,9 +4061,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                                     ? () => _shiftSwipe(index, 1)
                                     : (canQuickSwipe
                                           ? () => _regenerateMessage(
-                                                index,
-                                                asNewSwipe: true,
-                                              )
+                                              index,
+                                              asNewSwipe: true,
+                                            )
                                           : null),
                                 nextGeneratesSwipe: canQuickSwipe,
                               ),
@@ -4090,18 +4109,20 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                       child: ChatComposerField(
                         key: const ValueKey('workshop_composer'),
                         controller: _input,
+                        focusNode: _composerFocusNode,
                         enabled: !busy,
                         enterToSend: _enterToSend,
                         decoration: InputDecoration(
                           hintText: _fixLastReplyMode && _canFixLastReply
                               ? 'Correction for last reply…'
                               : _needsWorkshopReply
-                                  ? 'Tap ▶ Continue for a workshop reply…'
-                                  : 'Describe your world…',
+                              ? 'Tap ▶ Continue for a workshop reply…'
+                              : 'Describe your world…',
                           border: OutlineInputBorder(),
                           isDense: true,
                         ),
                         onSend: _send,
+                        onContinue: _enterToSend ? _onComposerContinue : null,
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -4111,7 +4132,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                             ? 'Continue — generate reply to your message'
                             : 'Continue — generate the next workshop reply',
                         visualDensity: VisualDensity.compact,
-                        onPressed: _canContinueWorkshop ? _continueWorkshop : null,
+                        onPressed: _canContinueWorkshop
+                            ? _continueWorkshop
+                            : null,
                         icon: const Icon(Icons.play_arrow),
                       ),
                     if (_sending)

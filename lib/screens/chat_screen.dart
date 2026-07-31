@@ -24,6 +24,7 @@ import '../services/composer_draft_service.dart';
 import '../models/group_beat_part.dart';
 import '../services/group_beat_codec.dart';
 import '../services/group_reply_service.dart';
+import '../services/group_speaker_inference.dart';
 import '../services/lorebook_service.dart';
 import '../services/message_formatter.dart';
 import '../services/narrator_service.dart';
@@ -105,6 +106,7 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final _inputController = TextEditingController();
+  final _composerFocusNode = FocusNode();
   final _scrollController = ScrollController();
   final _promptBuilder = const PromptBuilder();
   final _lorebookService = const LorebookService();
@@ -115,6 +117,39 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   static const _replyRewrite = ReplyRewriteService();
   static const _narrator = NarratorService();
   static const _groupReply = GroupReplyService();
+  static const _groupSpeakerInference = GroupSpeakerInference();
+
+  Character _resolvedGroupSpeaker({Character? explicit}) {
+    if (explicit != null) return explicit;
+    if (!_isGroup || _participants.isEmpty) return _character!;
+    if (!(_session?.autoReply ?? false)) {
+      return _groupSpeakerInference.resolve(
+        participants: _participants,
+        messages: _messages,
+        primaryCharacter: _character,
+      );
+    }
+    return _speakerForTurn();
+  }
+
+  bool get _shouldAdvanceGroupSpeaker =>
+      _isGroup && (_session?.autoReply ?? false);
+
+  void _refocusComposer() {
+    if (!mounted || _formatting || _busy) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _busy || _formatting) return;
+      if (_composerFocusNode.hasFocus || !_composerFocusNode.canRequestFocus) {
+        return;
+      }
+      _composerFocusNode.requestFocus();
+    });
+  }
+
+  void _onComposerContinue() {
+    if (_busy || _formatting) return;
+    unawaited(_continueScene());
+  }
 
   bool _hasApiKey = false;
   bool _loading = true;
@@ -339,24 +374,64 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         .toList(growable: false);
   }
 
-  List<Character> _speakersFromBeatLines(List<GroupBeatPart> lines) {
+  List<Character> _resolveGroupBeatSpeakers(List<GroupBeatPart> lines) {
     final out = <Character>[];
+    final seen = <String>{};
+
+    void add(Character character) {
+      if (seen.contains(character.id)) return;
+      seen.add(character.id);
+      out.add(character);
+    }
+
     for (final line in lines) {
+      final name = line.speakerName.trim();
+      final speakerId = line.speakerId.trim();
       Character? match;
-      for (final c in _participants) {
-        if (c.id == line.speakerId) {
-          match = c;
-          break;
+
+      if (speakerId.isNotEmpty) {
+        for (final c in _participants) {
+          if (c.id == speakerId) {
+            match = c;
+            break;
+          }
         }
       }
+
+      if (match == null && name.isNotEmpty) {
+        final lower = name.toLowerCase();
+        for (final c in _participants) {
+          if (c.name.trim().toLowerCase() == lower) {
+            match = c;
+            break;
+          }
+        }
+      }
+
       if (match != null) {
-        out.add(match);
-      } else if (line.speakerName.trim().isNotEmpty) {
-        out.add(Character(id: line.speakerId, name: line.speakerName.trim()));
+        add(match);
+      } else if (name.isNotEmpty) {
+        add(
+          Character(
+            id: speakerId.isNotEmpty ? speakerId : 'beat_${_lowerName(name)}',
+            name: name,
+          ),
+        );
       }
     }
+
+    if (out.length >= 2) return out;
+
+    // Beat lines may be stale after cast edits — fall back to the live group cast.
+    if (_participants.length >= 2) {
+      return List<Character>.from(_participants);
+    }
+
     return out;
   }
+
+  String _lowerName(String name) =>
+      name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_');
 
   ChatMessage _applyGroupBeatParts(ChatMessage message, List<GroupBeatPart> parts) {
     if (parts.isEmpty || message.beatSwipes == null) return message;
@@ -978,12 +1053,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       text = _wrapOoc(text);
     }
 
-    FocusScope.of(context).unfocus();
     _inputController.clear();
     await _clearSavedDraft();
 
     final autoReply = _session!.autoReply;
-    final speaker = _speakerForTurn();
+    final speaker = _resolvedGroupSpeaker();
     final userMessage = ChatMessage(
       id: ChatMessage.newId(),
       role: ChatRole.user,
@@ -1012,12 +1086,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     });
     _scrollToBottom(jump: true);
     await _persist();
-    if (!autoReply) return;
+    if (!autoReply) {
+      _refocusComposer();
+      return;
+    }
 
     await _streamIntoLastAssistant(
       excludeLastAssistant: true,
       speakingAs: speaker,
-      advanceGroupSpeaker: _isGroup,
+      advanceGroupSpeaker: _shouldAdvanceGroupSpeaker,
     );
   }
 
@@ -1093,7 +1170,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (trimmed.isEmpty || _session == null || _character == null) return;
 
     final autoReply = _session!.autoReply;
-    final speaker = _speakerForTurn();
+    final speaker = _resolvedGroupSpeaker();
     final narratorMessage = ChatMessage(
       id: ChatMessage.newId(),
       role: ChatRole.narrator,
@@ -1122,12 +1199,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     });
     _scrollToBottom(jump: true);
     await _persist();
-    if (!autoReply) return;
+    if (!autoReply) {
+      _refocusComposer();
+      return;
+    }
 
     await _streamIntoLastAssistant(
       excludeLastAssistant: true,
       speakingAs: speaker,
-      advanceGroupSpeaker: _isGroup,
+      advanceGroupSpeaker: _shouldAdvanceGroupSpeaker,
     );
   }
 
@@ -1160,7 +1240,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         content: Text(
           next
               ? 'Auto-reply on — characters answer when you send.'
-              : 'Auto-reply off — send only; tap a name or Continue for a reply.',
+              : 'Manual mode — tap a character or Continue for their reply.',
         ),
         duration: const Duration(seconds: 2),
       ),
@@ -1207,7 +1287,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     await _streamIntoLastAssistant(
       excludeLastAssistant: true,
       speakingAs: speaker,
-      advanceGroupSpeaker: true,
+      advanceGroupSpeaker: _shouldAdvanceGroupSpeaker,
     );
   }
 
@@ -1236,6 +1316,73 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
+  String _latestPriorGroupBeatText({required int beforeIndex}) {
+    for (var i = beforeIndex - 1; i >= 0; i--) {
+      final message = _messages[i];
+      if (message.isGroupBeat && message.beatLines != null) {
+        return GroupBeatCodec.flatten(message.beatLines!);
+      }
+    }
+    return '';
+  }
+
+  Future<List<GroupBeatLine>> _completeGroupBeatLines({
+    required List<Character> speakers,
+    required List<Map<String, String>> apiMessages,
+    required String model,
+    required String baseUrl,
+    required SamplingSettings sampling,
+    bool freshVariant = false,
+  }) async {
+    final beatSampling = GroupReplyService.beatSampling(
+      sampling,
+      speakers.length,
+      freshVariant: freshVariant,
+    );
+    final raw = await widget.nanoGptService.complete(
+      model: model,
+      messages: apiMessages,
+      baseUrl: baseUrl,
+      sampling: beatSampling,
+    );
+
+    var beats = _groupReply.parseBeatReply(raw, speakers);
+    if (beats.length >= speakers.length) return beats;
+
+    final missing = speakers
+        .where((s) => !beats.any((b) => b.character.id == s.id))
+        .map((c) => c.name.trim())
+        .where((n) => n.isNotEmpty)
+        .join(', ');
+    if (missing.isEmpty) return beats;
+
+    final retryRaw = await widget.nanoGptService.complete(
+      model: model,
+      messages: [
+        ...apiMessages,
+        {'role': 'assistant', 'content': raw},
+        {
+          'role': 'user',
+          'content':
+              'You skipped some characters. Reply again with ONLY the missing '
+              'lines in the same Name: reaction format — one brief line each '
+              'for: $missing. No preamble.',
+        },
+      ],
+      baseUrl: baseUrl,
+      sampling: beatSampling,
+    );
+    final retryBeats = _groupReply.parseBeatReply(retryRaw, speakers);
+    final byId = {for (final b in beats) b.character.id: b};
+    for (final beat in retryBeats) {
+      byId.putIfAbsent(beat.character.id, () => beat);
+    }
+    return speakers
+        .map((s) => byId[s.id])
+        .whereType<GroupBeatLine>()
+        .toList(growable: false);
+  }
+
   Future<void> _generateGroupBeat({
     required List<Character> speakers,
     String nudge = '',
@@ -1253,9 +1400,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       final model = await widget.settingsService.getModel();
       final sampling = await widget.settingsService.getSampling();
       final baseUrl = await widget.settingsService.getApiBaseUrl();
+      final priorBeat = _latestPriorGroupBeatText(
+        beforeIndex: _messages.length,
+      );
       final apiMessages = await _buildGroupBeatApiMessages(
         speakers: speakers,
         nudge: nudge,
+        priorBeatToAvoid: priorBeat,
       );
       if (apiMessages.isEmpty) {
         if (!mounted) return;
@@ -1265,14 +1416,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         return;
       }
 
-      final raw = await widget.nanoGptService.complete(
+      final beats = await _completeGroupBeatLines(
+        speakers: speakers,
+        apiMessages: apiMessages,
         model: model,
-        messages: apiMessages,
         baseUrl: baseUrl,
-        sampling: GroupReplyService.beatSampling(sampling, speakers.length),
+        sampling: sampling,
+        freshVariant: priorBeat.trim().isNotEmpty,
       );
-
-      final beats = _groupReply.parseBeatReply(raw, speakers);
       if (!mounted) return;
 
       if (beats.isEmpty) {
@@ -1345,12 +1496,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
     if (!await _confirmRegenerateTruncating(index)) return;
 
-    final speakers = _speakersFromBeatLines(message.beatLines!);
+    final priorBeat = GroupBeatCodec.flatten(message.beatLines!);
+    final speakers = _resolveGroupBeatSpeakers(message.beatLines!);
     if (speakers.length < 2) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Could not resolve characters for this group react.'),
+          content: Text(
+            'Need at least two characters in this group chat to regenerate a group react.',
+          ),
         ),
       );
       return;
@@ -1377,6 +1531,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         speakers: speakers,
         nudge: nudge,
         historyEndExclusive: index,
+        priorBeatToAvoid: priorBeat,
       );
       if (apiMessages.isEmpty) {
         if (!mounted) return;
@@ -1386,14 +1541,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         return;
       }
 
-      final raw = await widget.nanoGptService.complete(
+      final beats = await _completeGroupBeatLines(
+        speakers: speakers,
+        apiMessages: apiMessages,
         model: model,
-        messages: apiMessages,
         baseUrl: baseUrl,
-        sampling: GroupReplyService.beatSampling(sampling, speakers.length),
+        sampling: sampling,
+        freshVariant: true,
       );
-
-      final beats = _groupReply.parseBeatReply(raw, speakers);
       if (!mounted) return;
 
       if (beats.isEmpty) {
@@ -1436,6 +1591,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     required List<Character> speakers,
     String nudge = '',
     int? historyEndExclusive,
+    String priorBeatToAvoid = '',
   }) async {
     if (speakers.length < 2) return const [];
 
@@ -1491,11 +1647,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         }
         continue;
       }
-      if (message.isGroupBeat && message.beatLines != null) {
-        final block = GroupBeatCodec.formatForPrompt(message.beatLines!);
-        if (block.isNotEmpty) {
-          historyApi.add({'role': 'system', 'content': block});
-        }
+      if (message.isGroupBeat) {
+        // Prior group reacts are omitted — they tempt verbatim copy-paste.
         continue;
       }
       if (!message.isUser &&
@@ -1554,6 +1707,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       nudge: nudge,
       globalSystemPrompt: globalPrompts.systemPrompt,
       postHistory: postHistory,
+      priorBeatToAvoid: priorBeatToAvoid,
     );
   }
 
@@ -1565,7 +1719,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       });
       return;
     }
-    final speaker = _speakerForTurn();
+    final speaker = _resolvedGroupSpeaker();
     setState(() {
       _error = null;
       _busy = true;
@@ -1586,7 +1740,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       excludeLastAssistant: true,
       mode: PromptMode.continueScene,
       speakingAs: speaker,
-      advanceGroupSpeaker: _isGroup,
+      advanceGroupSpeaker: _shouldAdvanceGroupSpeaker,
     );
   }
 
@@ -2536,7 +2690,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     required bool asNewSwipe,
     ReplyRewriteChoice? rewrite,
   }) async {
-    if (_busy || _session == null || _character == null) return;
+    if (_busy || _session == null) return;
     if (index < 0 || index >= _messages.length) return;
     final message = _messages[index];
     if (message.isUser) {
@@ -2558,6 +2712,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       await _regenerateGroupBeatAt(index, asNewSwipe: asNewSwipe);
       return;
     }
+    if (_character == null) return;
     if (!_hasApiKey) {
       setState(() {
         _error = 'Add your NanoGPT API key in Settings before you can chat.';
@@ -2616,7 +2771,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     int? historyEndExclusive,
     List<Map<String, String>>? rewriteMessages,
   }) async {
-    final character = speakingAs ?? _speakerForTurn();
+    final character = speakingAs ?? _resolvedGroupSpeaker();
     final userName = _userName;
     final persona = _persona?.promptText ?? '';
 
@@ -2796,7 +2951,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       final model = await widget.settingsService.getModel();
       final sampling = await widget.settingsService.getSampling();
       final baseUrl = await widget.settingsService.getApiBaseUrl();
-      final speaker = speakingAs ?? _speakerForTurn();
+      final speaker = speakingAs ?? _resolvedGroupSpeaker();
       final assistantId = _messages[assistantIndex].id;
       final messages = await _buildApiMessages(
         excludeLastAssistant: excludeLastAssistant,
@@ -2889,6 +3044,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       setState(() => _busy = false);
       await _persist();
       await _maybeAutoSummarize();
+      _refocusComposer();
     } on NanoGptCancelledException {
       if (!mounted) return;
       await _finishStoppedGeneration(advanceGroupSpeaker: advanceGroupSpeaker);
@@ -2900,6 +3056,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         _clearEmptyAssistantAt(assistantIndex);
       });
       await _persist();
+      _refocusComposer();
     } catch (error) {
       if (!mounted) return;
       if (_looksLikeCancel(error)) {
@@ -2913,6 +3070,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         _error = 'Something unexpected went wrong: $error';
       });
       await _persist();
+      _refocusComposer();
     }
   }
 
@@ -2985,6 +3143,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       }
     });
     await _persist();
+    _refocusComposer();
   }
 
   void _stopGeneration() {
@@ -3159,6 +3318,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
     _inputController.removeListener(_onComposerChanged);
     _inputController.dispose();
+    _composerFocusNode.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -3496,6 +3656,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                     onTap: (_busy || thinking)
                                         ? null
                                         : () => _editGroupBeatAt(index),
+                                    onLongPress: (_busy || thinking)
+                                        ? null
+                                        : () => _showMessageMenu(index),
                                   ),
                                 if (!thinking &&
                                     (message.canSwipe || isLastAi))
@@ -3703,12 +3866,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                  selected:
-                                      (_session?.nextSpeakerIndex ?? 0).clamp(
-                                        0,
-                                        _participants.length - 1,
-                                      ) ==
-                                      i,
                                   onPressed: _busy
                                       ? null
                                       : () => _selectSpeaker(i),
@@ -3772,15 +3929,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                           child: ChatComposerField(
                             key: const ValueKey('chat_composer'),
                             controller: _inputController,
+                            focusNode: _composerFocusNode,
                             enabled: !_busy && !_formatting,
                             enterToSend: _enterToSend,
                             decoration: InputDecoration(
                               hintText: _oocMode
                                   ? 'Out-of-character note…'
                                   : _isGroup
-                                  ? ((_session?.autoReply ?? false)
-                                        ? 'Message the group…'
-                                        : 'Send only — tap a name to reply…')
+                                  ? 'Message the group…'
                                   : ((_session?.autoReply ?? false)
                                         ? 'Message $characterName…'
                                         : 'Send only — Continue or long-press…'),
@@ -3789,6 +3945,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                               isDense: true,
                             ),
                             onSend: _send,
+                            onContinue: _enterToSend ? _onComposerContinue : null,
                           ),
                         ),
                         const SizedBox(width: 2),

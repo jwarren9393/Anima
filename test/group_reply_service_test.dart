@@ -73,10 +73,62 @@ Angela: Third should be skipped.
   });
 
   test('beatSampling caps tokens by speaker count', () {
-    const base = SamplingSettings(maxTokens: 4096, temperature: 0.9);
+    const base = SamplingSettings(maxTokens: 500, temperature: 0.9);
     final two = GroupReplyService.beatSampling(base, 2);
     final six = GroupReplyService.beatSampling(base, 6);
+    expect(two.maxTokens, 500);
+    expect(six.maxTokens, 1088);
     expect(two.maxTokens, lessThan(six.maxTokens!));
     expect(six.maxTokens, lessThanOrEqualTo(1400));
+  });
+
+  test('beatSampling ignores low user max_tokens below beat budget', () {
+    const short = SamplingSettings(maxTokens: 350, temperature: 0.7);
+    final tuned = GroupReplyService.beatSampling(short, 3);
+    expect(tuned.maxTokens, greaterThanOrEqualTo(608));
+  });
+
+  test('parseBeatReply fills missing speakers from multiline block', () {
+    final angela = char('a', 'Angela');
+    final marcus = char('m', 'Marcus');
+    final edric = char('e', 'King Edric Vyre III');
+    const raw = '''
+Angela: *gasps* "No way."
+
+King Edric Vyre III: *his jaw tightens* "We move at dawn."
+Marcus: *steps between them* "Enough."
+''';
+    final beats = service.parseBeatReply(raw, [angela, marcus, edric]);
+    expect(beats, hasLength(3));
+    expect(beats.map((b) => b.character.id), ['a', 'm', 'e']);
+  });
+
+  test('buildBeatMessages warns against copying prior beat text', () {
+    final angela = char('a', 'Angela');
+    final marcus = char('m', 'Marcus');
+    final msgs = service.buildBeatMessages(
+      speakers: [angela, marcus],
+      allInChat: [angela, marcus],
+      historyApiMessages: const [],
+      userName: 'Jay',
+      priorBeatToAvoid: 'Angela: *old line* "Same words."',
+    );
+    final user = msgs.lastWhere((m) => m['role'] == 'user');
+    expect(user['content'], contains('Do NOT reuse'));
+    expect(user['content'], contains('old line'));
+    final system = msgs.first['content']!;
+    expect(system, contains('Never copy'));
+  });
+
+  test('parseBeatReply matches shortened names to full card names', () {
+    final edric = char('e', 'King Edric Vyre III');
+    final marcus = char('m', 'Marcus');
+    const raw = '''
+Edric: *nods slowly* "Understood."
+Marcus: *scoffs* "As if."
+''';
+    final beats = service.parseBeatReply(raw, [edric, marcus]);
+    expect(beats, hasLength(2));
+    expect(beats.first.character.id, 'e');
   });
 }

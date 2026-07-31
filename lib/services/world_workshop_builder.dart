@@ -57,6 +57,16 @@ class WorldWorkshopBuilder {
   /// for many lore entries in one object.
   static const workshopExportMinMaxTokens = 8192;
 
+  /// Example for character-list detection — concrete names so models don't echo
+  /// instructional placeholder text from the schema.
+  static const characterListJsonExample = '''
+{
+  "characters": [
+    {"name": "Mira Vale", "summary": "Dock smuggler who owes the Tide Guild"},
+    {"name": "Captain Vex", "summary": "Hard-eyed night watch commander"}
+  ]
+}''';
+
   /// Short Creation Center chat replies (~quick ideas).
   static const workshopChatShortMaxTokens = 600;
 
@@ -574,15 +584,9 @@ Skip:
 
 Output rules:
 - Reply with ONLY a single JSON object. No markdown fences. No preamble.
-- Shape:
-{
-  "characters": [
-    {
-      "name": "Exact character name",
-      "summary": "one short sentence: who they are / role"
-    }
-  ]
-}
+- Use REAL names from the transcript below — never copy schema placeholder text.
+- Example shape (fill with actual people from the chat; names are illustrative only):
+$characterListJsonExample
 - Use distinct names; do not duplicate the same person under aliases.
 - If none qualify, return {"characters":[]}.
 '''
@@ -1335,13 +1339,13 @@ ${formatTranscript(conversation)}
   /// Lightweight pass: list distinct characters developed in the workshop.
   List<Map<String, String>> buildCharacterDetectMessages({
     required List<ChatMessage> conversation,
-    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+    String buildPromptNote = CharacterBuildSettings.defaultPromptNote,
     Lorebook? sourceLorebook,
     WorkshopSourceContext? importedSource,
   }) {
-    final guidance = guidanceNote.trim().isEmpty
-        ? CollaboratorSettings.defaultGuidanceNote
-        : guidanceNote.trim();
+    final guidance = buildPromptNote.trim().isEmpty
+        ? CharacterBuildSettings.defaultPromptNote
+        : buildPromptNote.trim();
 
     final system =
         '''
@@ -1362,15 +1366,9 @@ Skip:
 Output rules:
 - Reply with ONLY a single JSON object. No markdown fences. No preamble.
 - Do NOT ask questions or offer to draft later — output the character list now.
-- Shape:
-{
-  "characters": [
-    {
-      "name": "Exact character name",
-      "summary": "one short sentence: who they are / role"
-    }
-  ]
-}
+- Use REAL names from the conversation below — never copy schema placeholder text.
+- Example shape (fill with actual people from the transcript; names are illustrative only):
+$characterListJsonExample
 - Use distinct names; do not duplicate the same person under aliases.
 - If none qualify, return {"characters":[]}.
 '''
@@ -1832,9 +1830,29 @@ ${formatTranscript(conversation)}
 
   /// Follow-up when character detection did not return JSON.
   static const characterDetectExportRetryUserMessage =
-      'Your previous reply was not valid character-list JSON. '
-      'Reply with ONLY one JSON object: {"characters":[{"name":"...","summary":"..."}]} '
+      'Your previous reply was not valid character-list JSON, or it used '
+      'placeholder schema text instead of real names from the conversation. '
+      'Reply with ONLY one JSON object listing actual characters: '
+      '{"characters":[{"name":"Real Name","summary":"short role sentence"}]} '
       'No markdown fences, no preamble, no questions.';
+
+  static bool isTemplateCharacterCandidate(String name, String summary) {
+    final n = name.trim().toLowerCase();
+    final s = summary.trim().toLowerCase();
+    if (n.isEmpty) return true;
+    if (n == 'exact character name' ||
+        n == 'character name' ||
+        n == 'name' ||
+        n == 'example name') {
+      return true;
+    }
+    if (s.contains('one short sentence') ||
+        s.contains('who they are / role') ||
+        s == 'short role sentence') {
+      return true;
+    }
+    return false;
+  }
 
   /// Parse the detection pass into candidates (may be empty).
   List<WorkshopCharacterCandidate> parseCharacterCandidatesJson(String raw) {
@@ -1860,19 +1878,30 @@ ${formatTranscript(conversation)}
 
     final seen = <String>{};
     final out = <WorkshopCharacterCandidate>[];
+  var rawCount = 0;
     for (final item in listRaw) {
       if (item is! Map) continue;
+      rawCount++;
       final data = Map<String, dynamic>.from(item);
       final name = '${data['name'] ?? ''}'.trim();
       if (name.isEmpty) continue;
+      final summary =
+          '${data['summary'] ?? data['description'] ?? ''}'.trim();
+      if (isTemplateCharacterCandidate(name, summary)) continue;
       final key = name.toLowerCase();
       if (seen.contains(key)) continue;
       seen.add(key);
       out.add(
         WorkshopCharacterCandidate(
           name: name,
-          summary: '${data['summary'] ?? data['description'] ?? ''}'.trim(),
+          summary: summary,
         ),
+      );
+    }
+    if (out.isEmpty && rawCount > 0) {
+      throw const FormatException(
+        'The AI returned placeholder text instead of real character names. '
+        'Try Create characters again.',
       );
     }
     return out;

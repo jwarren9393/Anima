@@ -155,8 +155,8 @@ class _CollaboratorSettingsScreenState
                 SettingsUi.sectionHint(
                   context,
                   isDesktopPlatform
-                      ? 'On desktop, Enter sends your message and Shift+Enter '
-                          'starts a new line — like Discord or Slack.'
+                      ? 'On desktop, Enter sends your message (or Continue when '
+                          'the field is empty). Shift+Enter starts a new line.'
                       : 'When you use a hardware keyboard on a phone or tablet, '
                           'Enter can send instead of starting a new line.',
                 ),
@@ -164,7 +164,8 @@ class _CollaboratorSettingsScreenState
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Enter to send'),
                   subtitle: const Text(
-                    'Off = Enter always starts a new line in the composer',
+                    'Off = Enter always starts a new line. On = Enter sends when '
+                    'typed, or Continue when empty.',
                   ),
                   value: _enterToSend,
                   onChanged: (value) => setState(() => _enterToSend = value),

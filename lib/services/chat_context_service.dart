@@ -177,8 +177,8 @@ LENGTH:
         final who = message.isUser
             ? userName
             : (message.speakerName?.trim().isNotEmpty == true
-                ? message.speakerName!.trim()
-                : charName);
+                  ? message.speakerName!.trim()
+                  : charName);
         transcript.writeln('$who: $text');
       }
       transcript.writeln();
@@ -228,7 +228,8 @@ $body
 Use only for continuity of facts, locations, relationships, and plot state.
 Do NOT mimic this summary's tone, wording, or style in character replies.
 Character voice comes from the character card and live chat only.
-'''.trim();
+'''
+        .trim();
   }
 
   /// Rough size of a full message list (saved transcript on device).
@@ -265,15 +266,19 @@ Character voice comes from the character card and live chat only.
     final historyTokens = estimateConversationTokens(history);
     final loreTokens = estimateTokens(linkedLorebookJson);
     final importedTokens = estimateTokens(importedSourceText);
-    final estimatedSent = historyTokens +
+    final estimatedSent =
+        historyTokens +
         summaryTokens +
         loreTokens +
         importedTokens +
         systemOverheadTokens.clamp(0, 5000);
-    final trimmedAway = (messages.length - history.length).clamp(0, messages.length);
+    final trimmedAway = (messages.length - history.length).clamp(
+      0,
+      messages.length,
+    );
     final notes = <String>[
       if (trimmedAway > 0 || worldSummaryCoveredCount > 0)
-        'Older workshop lines stay on device; only ~${historyTokenBudget} tokens of '
+        'Older workshop lines stay on device; only ~$historyTokenBudget tokens of '
             'recent chat are sent (plus world summary).'
       else
         'Sends recent workshop chat within your history budget (plus world summary).',
@@ -322,14 +327,17 @@ Character voice comes from the character card and live chat only.
       historyTokenBudget: historyTokenBudget,
       isGroup: isGroup,
     );
-    final historyTokens =
-        estimateConversationTokens(history, isGroup: isGroup);
+    final historyTokens = estimateConversationTokens(history, isGroup: isGroup);
     final memoryTokens = estimateTokens(memorySummary);
-    final extras = estimateTokens(systemPrompt) +
+    final extras =
+        estimateTokens(systemPrompt) +
         estimateTokens(postHistory) +
         memoryTokens;
     final estimatedSent = historyTokens + extras;
-    final trimmedAway = (messages.length - history.length).clamp(0, messages.length);
+    final trimmedAway = (messages.length - history.length).clamp(
+      0,
+      messages.length,
+    );
 
     return ContextEstimate(
       messageCount: messages.where((m) => m.text.trim().isNotEmpty).length,
@@ -343,7 +351,7 @@ Character voice comes from the character card and live chat only.
       messagesTrimmedAway: trimmedAway,
       notes: trimmedAway > 0
           ? 'Anima will only send the newest ~$historyTokenBudget tokens of '
-              'history (plus memory/system). Older raw lines stay on device.'
+                'history (plus memory/system). Older raw lines stay on device.'
           : 'Anima can currently send this whole chat within your history budget.',
     );
   }
@@ -408,9 +416,7 @@ class ContextEstimate {
     }
     if (n < 1000000) return '${(n / 1000).round()}K';
     final m = n / 1000000;
-    final text = m == m.roundToDouble()
-        ? '${m.round()}'
-        : m.toStringAsFixed(1);
+    final text = m == m.roundToDouble() ? '${m.round()}' : m.toStringAsFixed(1);
     return '${text}M';
   }
 }

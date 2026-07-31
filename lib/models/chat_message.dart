@@ -41,7 +41,7 @@ class ChatMessage {
         ) {
     assert(
       role != ChatRole.groupBeat ||
-          (beatLines != null && beatLines!.isNotEmpty),
+          (this.beatLines != null && this.beatLines!.isNotEmpty),
       'groupBeat messages require beatLines',
     );
   }
@@ -375,18 +375,20 @@ class ChatMessage {
       if (beatSwipes == null && swipes.isNotEmpty) {
         beatSwipes = GroupBeatCodec.decodeAllSwipes(swipes);
       }
-      if (beatLines == null &&
-          beatSwipes != null &&
-          beatSwipes!.isNotEmpty) {
-        final idx = (json['swipeIndex'] as int? ?? 0)
-            .clamp(0, beatSwipes!.length - 1);
-        beatLines = beatSwipes![idx];
+      if (beatLines == null && beatSwipes != null) {
+        final variants = beatSwipes;
+        if (variants.isNotEmpty) {
+          final idx = (json['swipeIndex'] as int? ?? 0)
+              .clamp(0, variants.length - 1);
+          beatLines = variants[idx];
+        }
       }
-      if (beatLines != null && beatLines!.isNotEmpty) {
+      final resolvedBeatLines = beatLines;
+      if (resolvedBeatLines != null && resolvedBeatLines.isNotEmpty) {
         return ChatMessage.groupBeat(
           id: json['id'] as String? ??
               'msg_${DateTime.now().millisecondsSinceEpoch}',
-          lines: beatLines!,
+          lines: resolvedBeatLines,
           beatSwipes: beatSwipes,
           swipeIndex: json['swipeIndex'] as int? ?? 0,
         );
