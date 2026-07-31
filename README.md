@@ -10,13 +10,14 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **Also builds** | Linux desktop (works); Windows desktop (needs a Windows host) |
 | **Distribution** | Personal use only — **not** published to app stores |
 | **Repo** | https://github.com/jwarren9393/Anima (private) |
-| **Version** | **1.0.0** build **45** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
+| **Version** | **1.0.0** build **46** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
 
 ### What’s new in recent builds (1.0.0)
 
 | Build | Highlights |
 |-------|------------|
-| **45** | **Manual group chat** — Continue uses scene context (last speaker / name mentions), not round-robin chip order; no “next speaker” chip highlight. **Group react** — long-press menu; regenerate avoids copying prior beats verbatim; retries missing cast lines. **Keyboard flow** — Enter sends, empty Enter continues; composer stays focused after send (Settings → Enter to send). **Creation Center** — character detect rejects JSON template placeholders |
+| **46** | **Android keyboard fix** — send dismisses on-screen keyboard so replies stay readable; composer refocus / empty-Enter-continue stay **desktop-only** |
+| **45** | **Manual group chat** — Continue uses scene context (last speaker / name mentions), not round-robin chip order; no “next speaker” chip highlight. **Group react** — long-press menu; regenerate avoids copying prior beats verbatim; retries missing cast lines. **Keyboard flow (desktop)** — Enter sends, empty Enter continues; composer stays focused after send. **Creation Center** — character detect rejects JSON template placeholders |
 | **44** | **Persona AI builder** — plain English → fill/replace/update persona fields (like character card builder; Settings → Character builds). **Creation Center** — workshop-specific guidance (not card-wand text), lower chat token floor, repeat penalties to reduce long repetition loops |
 | **43** | **Group react** — one timeline card for multi-character reactions (not separate bubbles); swipes = alternate full beats. **Creation Center** — red **Stop** while streaming (keeps partial text); **▶ Continue** when your message has no AI reply yet |
 | **42** | **Narrator scene scope** — present cast from recent chat only (not full group); current vs background transcript; direct prose; no sanitizing |
@@ -31,7 +32,7 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **33** | **Update workshop cast** (workshop-tied characters only, not whole library); Creation Center collaborator prompt — brainstorm-only, points to real ⋮ menu actions |
 | **32** | Creation Center **World dashboard** hub; **Fix last** chip; minimal UI pass (chat/home/group/settings); workshop **world summary** folding; full feature README |
 
-Earlier 1.0.0 builds added Storybook layout, opening scenes library, backup/sync, group chat polish, and the core SillyTavern-style toolkit. **245 tests** at build 45.
+Earlier 1.0.0 builds added Storybook layout, opening scenes library, backup/sync, group chat polish, and the core SillyTavern-style toolkit. **245 tests** at build 46.
 
 API base (pay-as-you-go): `https://nano-gpt.com/api/v1/chat/completions`  
 Auth: `Authorization: Bearer <API_KEY>`  

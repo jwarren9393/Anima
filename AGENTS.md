@@ -62,7 +62,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-07-31  
-**Last agent action:** Published **v1.0.0 build 45** — manual group chat, group react polish, keyboard Enter flow, workshop character detect fix.
+**Last agent action:** Published **v1.0.0 build 46** — desktop-only composer focus flow; Android dismisses keyboard on send.
 
 ### What works today
 
@@ -92,7 +92,7 @@ High-value SillyTavern concepts to aim for over time:
 - **World Info entry AI wand** — sparkle on Label / Keywords / Lore content (and Secondary keywords when Selective); uses book + sibling entry context; appends (keywords merge comma-separated); same model + collaborator guidance
 - **API & connection** — live NanoGPT model catalog: **Category** filter (All · **Uncensored & derestricted (broad)** · Roleplay · …) then **provider**; **Browse models** sheet shows context, max output, parameter size, TPS, TTFT, uptime %, description, capabilities, and pricing/Included — stats from `detailed=true` catalog + providers API; filtered count in status line; refresh; custom model id; subscription toggle reloads catalog; **image model** picker; **See remaining credits**
 - **Chat stop** — while a reply streams, the send button becomes a red **Stop** button (keeps any partial text); status banner shows “Generating… tap Stop to cancel” in Creation Center; the list does **not** auto-scroll during streaming — scroll freely while a reply types in (regular chat + Creation Center)
-- **Composer shortcuts** — **Narrator** (theater icon), **OOC**, **Format** (✨), **Continue** (▶), Send/Stop; Narrator / Format / Paths have collaborator notes; **desktop:** Enter sends when typed (empty field + Enter = Continue); Shift+Enter = new line; composer stays focused after send; toggle in **Settings → AI collaborator**
+- **Composer shortcuts** — **Narrator** (theater icon), **OOC**, **Format** (✨), **Continue** (▶), Send/Stop; Narrator / Format / Paths have collaborator notes; **desktop only:** Enter sends when typed (empty field + Enter = Continue); Shift+Enter = new line; composer stays focused after send (phone dismisses keyboard on send); toggle in **Settings → AI collaborator**
 - **Draft autosave** — composer text saved per chat (survives leaving chat/app); cleared on send
 - **Character categories** — Anima-only lists (not ST card tags); **All characters** master view + custom categories; filter in Characters (manage/pick) and Group setup; membership via row menu → Categories
 - **Paths (Roadway)** — long-press → **Paths**; first-person options (`*I…*` not persona name); dedupe + tuned sampling; tap → composer; **Combine selected**; cached until chat moves on or refresh; note under AI collaborator
@@ -421,8 +421,8 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. Spot-check **keyboard flow**: type → Enter → Enter without touching the mouse.
-2. Spot-check **manual group chat** + **group react** on device after installing build 45.
+1. Spot-check **Android**: send a message — keyboard should dismiss; reply visible without half-screen keyboard stuck open.
+2. Spot-check **desktop**: type → Enter → Enter flow still works with composer focused.
 
 ---
 

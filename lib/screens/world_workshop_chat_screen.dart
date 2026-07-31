@@ -30,6 +30,7 @@ import '../services/workshop_hub_controller.dart';
 import '../widgets/workshop_compact_toolbar.dart';
 import '../widgets/workshop_overview_sheet.dart';
 import 'lorebooks_screen.dart';
+import '../utils/platform_utils.dart';
 import '../utils/scroll_to_end.dart';
 import '../widgets/anima_avatar.dart';
 import '../widgets/chat_composer_field.dart';
@@ -91,7 +92,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   static const _replyRewrite = ReplyRewriteService();
 
   final _input = TextEditingController();
-  final _composerFocusNode = FocusNode();
+  FocusNode? _composerFocusNode;
   final _openingSceneController = TextEditingController();
   final _scroll = ScrollController();
   late WorldWorkshop _workshop;
@@ -126,14 +127,19 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   }
 
   void _refocusComposer() {
+    if (!isDesktopPlatform || _composerFocusNode == null) return;
     if (!mounted || _busy) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _busy) return;
-      if (_composerFocusNode.hasFocus || !_composerFocusNode.canRequestFocus) {
-        return;
-      }
-      _composerFocusNode.requestFocus();
+      final node = _composerFocusNode;
+      if (node == null || node.hasFocus || !node.canRequestFocus) return;
+      node.requestFocus();
     });
+  }
+
+  void _dismissComposerKeyboard() {
+    if (isDesktopPlatform) return;
+    FocusManager.instance.primaryFocus?.unfocus();
   }
 
   void _onComposerContinue() {
@@ -165,6 +171,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   @override
   void initState() {
     super.initState();
+    if (isDesktopPlatform) _composerFocusNode = FocusNode();
     WidgetsBinding.instance.addObserver(this);
     _workshop = widget.workshop;
     _openingSceneController.text = _workshop.openingScene;
@@ -366,7 +373,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     WidgetsBinding.instance.removeObserver(this);
     widget.nanoGptService.cancelActiveStream();
     _input.dispose();
-    _composerFocusNode.dispose();
+    _composerFocusNode?.dispose();
     _openingSceneController.dispose();
     _scroll.dispose();
     super.dispose();
@@ -414,6 +421,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     }
 
     _input.clear();
+    _dismissComposerKeyboard();
     setState(() {
       _sending = true;
       _workshop = _workshop.copyWith(messages: messages, title: title);
@@ -4122,7 +4130,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                           isDense: true,
                         ),
                         onSend: _send,
-                        onContinue: _enterToSend ? _onComposerContinue : null,
+                        onContinue: isDesktopPlatform && _enterToSend
+                            ? _onComposerContinue
+                            : null,
                       ),
                     ),
                     const SizedBox(width: 8),

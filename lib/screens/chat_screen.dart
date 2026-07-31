@@ -41,6 +41,7 @@ import '../models/world_workshop.dart';
 import '../models/workshop_chat_import_options.dart';
 import '../services/world_workshop_service.dart';
 import '../services/opening_scene_service.dart';
+import '../utils/platform_utils.dart';
 import '../utils/scroll_to_end.dart';
 import '../widgets/chat_composer_field.dart';
 import '../widgets/chat_lorebook_picker.dart';
@@ -106,7 +107,7 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final _inputController = TextEditingController();
-  final _composerFocusNode = FocusNode();
+  FocusNode? _composerFocusNode;
   final _scrollController = ScrollController();
   final _promptBuilder = const PromptBuilder();
   final _lorebookService = const LorebookService();
@@ -136,14 +137,19 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _isGroup && (_session?.autoReply ?? false);
 
   void _refocusComposer() {
+    if (!isDesktopPlatform || _composerFocusNode == null) return;
     if (!mounted || _formatting || _busy) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _busy || _formatting) return;
-      if (_composerFocusNode.hasFocus || !_composerFocusNode.canRequestFocus) {
-        return;
-      }
-      _composerFocusNode.requestFocus();
+      final node = _composerFocusNode;
+      if (node == null || node.hasFocus || !node.canRequestFocus) return;
+      node.requestFocus();
     });
+  }
+
+  void _dismissComposerKeyboard() {
+    if (isDesktopPlatform) return;
+    FocusManager.instance.primaryFocus?.unfocus();
   }
 
   void _onComposerContinue() {
@@ -186,6 +192,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    if (isDesktopPlatform) _composerFocusNode = FocusNode();
     WidgetsBinding.instance.addObserver(this);
     _inputController.addListener(_onComposerChanged);
     _bootstrap();
@@ -1055,6 +1062,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     _inputController.clear();
     await _clearSavedDraft();
+    _dismissComposerKeyboard();
 
     final autoReply = _session!.autoReply;
     final speaker = _resolvedGroupSpeaker();
@@ -3318,7 +3326,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
     _inputController.removeListener(_onComposerChanged);
     _inputController.dispose();
-    _composerFocusNode.dispose();
+    _composerFocusNode?.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -3945,7 +3953,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                               isDense: true,
                             ),
                             onSend: _send,
-                            onContinue: _enterToSend ? _onComposerContinue : null,
+                            onContinue: isDesktopPlatform && _enterToSend
+                                ? _onComposerContinue
+                                : null,
                           ),
                         ),
                         const SizedBox(width: 2),
