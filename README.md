@@ -10,12 +10,13 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **Also builds** | Linux desktop (works); Windows desktop (needs a Windows host) |
 | **Distribution** | Personal use only — **not** published to app stores |
 | **Repo** | https://github.com/jwarren9393/Anima (private) |
-| **Version** | **1.0.0** build **46** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
+| **Version** | **1.0.0** build **47** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
 
 ### What’s new in recent builds (1.0.0)
 
 | Build | Highlights |
 |-------|------------|
+| **47** | **Presence / scene law** — always-on knowledge boundaries: narrator resets who’s present; opening scene seeds initial cast; unnamed messages only reach **present** characters (not whole cast); memory **witness tags**; per-character history/lore filtering. **Director mode** — replaces OOC; mandatory command for the **next** AI reply (centered card; tap edit, long-press delete). **Temporary characters** — quick NPC (name + note) from chat ⋮ or Manage cast; **Temporary** badge; promote to full card; **Full cards only** filter in Characters and group setup. **Consistency fix** — after AI consistency check on character cards or lorebooks, review changed fields and apply in one tap |
 | **46** | **Android keyboard fix** — send dismisses on-screen keyboard so replies stay readable; composer refocus / empty-Enter-continue stay **desktop-only** |
 | **45** | **Manual group chat** — Continue uses scene context (last speaker / name mentions), not round-robin chip order; no “next speaker” chip highlight. **Group react** — long-press menu; regenerate avoids copying prior beats verbatim; retries missing cast lines. **Keyboard flow (desktop)** — Enter sends, empty Enter continues; composer stays focused after send. **Creation Center** — character detect rejects JSON template placeholders |
 | **44** | **Persona AI builder** — plain English → fill/replace/update persona fields (like character card builder; Settings → Character builds). **Creation Center** — workshop-specific guidance (not card-wand text), lower chat token floor, repeat penalties to reduce long repetition loops |
@@ -32,7 +33,7 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **33** | **Update workshop cast** (workshop-tied characters only, not whole library); Creation Center collaborator prompt — brainstorm-only, points to real ⋮ menu actions |
 | **32** | Creation Center **World dashboard** hub; **Fix last** chip; minimal UI pass (chat/home/group/settings); workshop **world summary** folding; full feature README |
 
-Earlier 1.0.0 builds added Storybook layout, opening scenes library, backup/sync, group chat polish, and the core SillyTavern-style toolkit. **245 tests** at build 46.
+Earlier 1.0.0 builds added Storybook layout, opening scenes library, backup/sync, group chat polish, and the core SillyTavern-style toolkit. **267 tests** at build 47.
 
 API base (pay-as-you-go): `https://nano-gpt.com/api/v1/chat/completions`  
 Auth: `Authorization: Bearer <API_KEY>`  
@@ -123,11 +124,11 @@ Living build notes for coding agents: [`AGENTS.md`](AGENTS.md) (status, roadmap,
 
 ## Feature summary (at a glance)
 
-**Chat & roleplay** — Solo and group chats; streaming; swipes; edit / delete / rewind / branch; Continue, Impersonate, Regenerate, **Rewrite reply…**; **Narrator** (nudge + Generate + post); Paths (Roadway); auto-reply (default off); OOC + ✨ Format; memory summary + auto-summarize (background); Author’s Note; per-chat persona and World Info; opening scene; context estimate; export/import chat; manage cast mid-chat; fullscreen avatars.
+**Chat & roleplay** — Solo and group chats; streaming; swipes; edit / delete / rewind / branch; Continue, Impersonate, Regenerate, **Rewrite reply…**; **Narrator** (nudge + Generate + post); **Director** (commands next reply); **presence / scene law** (always on — who’s present, witness-tagged memory, per-character filtering); Paths (Roadway); auto-reply (default off); ✨ Format; memory summary + auto-summarize (background); Author’s Note; per-chat persona and World Info; opening scene; context estimate; export/import chat; manage cast mid-chat (+ temporary NPCs); fullscreen avatars.
 
-**Characters & personas** — ST V1/V2/V3 JSON + PNG import/export; categories; AI wand; consistency check; embedded lorebooks; alternate greetings; **Generate avatar**; group speaker chips.
+**Characters & personas** — ST V1/V2/V3 JSON + PNG import/export; categories; AI wand; consistency check **+ one-tap fix**; **temporary characters** (quick NPC, promote to full card); **Full cards only** filter; embedded lorebooks; alternate greetings; **Generate avatar**; group speaker chips.
 
-**World & lore** — Global lorebooks + scan depth/budget + recursive scan; keyword triggers + toast; entry AI wand + keyword suggest; per-chat lore picks.
+**World & lore** — Global lorebooks + scan depth/budget + recursive scan; keyword triggers + toast; entry AI wand + keyword suggest; **consistency check + fix**; per-chat lore picks.
 
 **Creation Center** — World workshops; import chat/lore/bundle; world dashboard (play, summarize, glossary, scene ideas, export); Fix last; canon pins; create/update lorebook, opening scene, characters, persona; **Update workshop cast** / **Update my persona**; roleplay chats on Home; linked lore off in prompts by default.
 
@@ -216,7 +217,7 @@ Then: greeting picker for the first character → opens the chat.
 
 ## 3. Chat screen
 
-Minimal chrome: **Close** · title · **⋮** menu. Composer icon row: **Narrator** (theater) · **OOC** · text field · **✨ Format** · **▶ Continue** · **Send** / **Stop**.
+Minimal chrome: **Close** · title · **⋮** menu. Composer icon row: **Narrator** (theater) · **Director** (control-camera) · text field · **✨ Format** · **▶ Continue** · **Send** / **Stop**.
 
 ### App bar ⋮ menu
 
@@ -234,7 +235,7 @@ Minimal chrome: **Close** · title · **⋮** menu. Composer icon row: **Narrato
 | **Context estimate** | Rough token/message gauge vs history budget and model window |
 | **Characters** | Pick/switch character (pick mode) |
 | **Rename chat** | Groups only — custom name on Home |
-| **Manage cast** | Add/remove characters in the **current** chat without starting over |
+| **Manage cast** | Add/remove characters in the **current** chat without starting over; **Add temporary character** (quick NPC) or full character |
 | **New character** | Sheet: type a name + **generate from chat** or start blank |
 | **Update character from chat** | Revise one saved card from thread context (cast listed first; optional change notes) |
 | **Start new group chat** | New group setup from here |
@@ -247,8 +248,8 @@ Minimal chrome: **Close** · title · **⋮** menu. Composer icon row: **Narrato
 
 | Control | Behavior |
 |---------|----------|
-| **Narrator** (theater) | Sheet: optional **nudge**, editable line, **Generate** or type, **Post** — omniscient timeline card; injected as system (not OOC); solo/group only |
-| **OOC** | Wraps send as `(OOC: …)` unless already tagged |
+| **Narrator** (theater) | Sheet: optional **nudge**, editable line, **Generate** or type, **Post** — omniscient timeline card; resets who’s **present** in the scene; injected as system; solo/group only |
+| **Director** (control-camera) | Posts a centered **Director** card that **commands the next AI reply** (mandatory system injection for that generation); tap to edit; long-press to delete; solo/group only |
 | **Format (✨)** | AI cleanup + `*action*` / `"dialogue"` markup per **Composer Format** note (Settings → AI collaborator) |
 | **Continue (▶)** | Next AI reply without a new user message |
 | **Send** | Posts user message; generates reply only if **Auto-reply** is on |
@@ -293,6 +294,7 @@ Scrollable sheet (~55% screen height on wide displays).
 | **Rewind to here** | Deletes everything after; **4s Undo** SnackBar before disk write |
 | **Branch from here** | New chat with history through here (keeps persona, auto-reply, note, lore picks); runs immediately |
 | **Narrator** | Same sheet as composer theater icon — nudge, Generate, Post |
+| **Director** | Same as composer Director chip — command the next AI reply |
 | **Continue** | Generate next reply |
 | **Impersonate** | AI drafts the next **user** message as the persona |
 | **Paths** | Roadway brainstorm sheet |
@@ -414,8 +416,9 @@ Multiple **{{user}}** identities.
 **List actions**
 
 - Import card (JSON / PNG), **New**, export, delete.
+- **Full cards only** filter chip — hides temporary NPCs (quick characters not promoted to full cards).
 - Starter character **Anima** if library is empty.
-- Avatar, description preview, lorebook count, category names on rows.
+- Avatar, description preview, lorebook count, category names on rows; **Temporary** badge on quick NPCs.
 
 **Character categories (Anima-only)**
 
@@ -440,6 +443,7 @@ One section visible at a time: **Identity** · **Story** · **Chat** · **Lore**
 **⋮ menu**
 
 - **Consistency check** — AI read-only report; does not change the card.
+- **Fix inconsistencies** — after a check, review AI-proposed field changes and **Update card** in one tap (card text fields only; lorebook unchanged).
 - **Generate avatar** — NanoGPT image sheet.
 
 **AI card builder** (plain-English generate/update slim fields: description, personality, mes_example, tags — not scenario, greetings, or per-card system/post-history).
@@ -465,6 +469,12 @@ One section visible at a time: **Identity** · **Story** · **Chat** · **Lore**
 - JPEG/WebP avatars may use placeholder on PNG export.
 
 Imported creator notes, tags, extensions preserved on save/export even if not shown as edit fields.
+
+**Temporary characters**
+
+- Quick NPC: name + short note only (from chat ⋮ → **Add temporary character**, Manage cast **+**, or group setup).
+- **Temporary** badge in Characters list; row ⋮ → **Promote to full character** opens the full editor.
+- Temporary NPCs are hidden when **Full cards only** is on (Characters list and group cast picker).
 
 ### 4.4 Opening scenes
 
@@ -493,6 +503,7 @@ Saved narrator setups for new chats.
 **Lorebook list screen**
 
 - Per-book: edit entries, export, delete, on/off toggle.
+- **Consistency check** + **Fix inconsistencies** (same review-and-apply flow as character cards).
 
 **Entry editor**
 
@@ -624,7 +635,7 @@ Deleting a workshop does **not** delete an already-created lorebook.
 - Built-in presets (Balanced, Creative, Focused, Short, Long prose, Anti-repeat, Deterministic, Chaotic, Chatty, Mystery, Cozy, …).
 - **Context size** in tokens (presets 1K–24K; range ~512–32K) — recent history packed per prompt; full history stays on device.
 - **Auto-summarize long chats** — every N messages, keep N recent raw messages.
-- Memory summarize uses **clinical bullet facts** (no RP voice/metaphors), lower temperature, **768–2048** token budget (defaults 1536 when chat max is low); revises stale facts; **first summarize** folds opening scene when set; injection wrapper tells the model not to mimic summary style.
+- Memory summarize uses **clinical bullet facts** (no RP voice/metaphors), lower temperature, **768–2048** token budget (defaults 1536 when chat max is low); revises stale facts; **first summarize** folds opening scene when set; auto-tags **witnesses** on private facts (`Secret (known by …)`, `Event (witnesses: …)`); injection wrapper tells the model not to mimic summary style.
 
 ### 4.8 Global chat prompts
 
@@ -744,9 +755,9 @@ Rough assembly order:
 4. Description, personality, scenario, example dialogue.
 5. Triggered lore **after** description.
 6. Persona name + structured persona text.
-7. Opening scene (if injected).
-8. Memory summary (if any).
-9. Recent history packed to **context size** budget (includes **Narrator** timeline messages as system blocks).
+7. Opening scene (if injected; only sent to characters who were present at chat start).
+8. Memory summary (if any; filtered per speaking character; private facts need witness tags).
+9. Recent history packed to **context size** budget — **filtered per speaking character** by **presence / scene law** (narrator resets who’s present; named messages target only those characters; unnamed messages go only to present cast; character lines visible only to those present when sent; includes **Narrator** and **Director** timeline messages as system blocks).
 10. Global post-history + per-card post-history + Author’s Note.
 
 Streaming SSE; Stop cancels but keeps partial. Sampling from Generation parameters.
@@ -786,6 +797,7 @@ Data under app documents directory. **Nothing uploaded to GitHub.**
 - Paths only on long-press menu (not permanent composer button).
 - Backup/sync plain JSON, not encrypted; API key excluded on purpose.
 - PNG card export: JPEG/WebP avatars may use placeholder; PNG avatars embed correctly.
+- **Presence / scene law** is always on (no toggle) — uses narrator + opening-scene name mentions; very old memory without witness tags may leak until re-summarized; honorifics don’t match names — use narrator/opening scene to establish who’s present.
 - NanoGPT website **Intelligence** scores not available via API (Anima shows catalog + routing stats instead).
 - Not yet: undo send, last-chat resume, pinned Author’s Note / mood chips, memory preview panel.
 - Private personal app — not for Play Store / App Store.

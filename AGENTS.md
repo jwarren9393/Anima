@@ -62,7 +62,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-08-02  
-**Last agent action:** **Delete Narrator/Director cards** (long-press → Edit/Delete) + **temporary characters** (quick NPC: name + note, Temporary badge, promote to full card from Characters).
+**Last agent action:** Updated README + GitHub **v1.0.0** release notes for build **47**; committed version fix (`1.0.0+47`).
 
 ### What works today
 
@@ -436,10 +436,9 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. **Restart Cursor** (or open a new terminal) so PATH picks up Flutter, JDK, Android tools, and `gh`.
-2. Run the app: `cd F:\AI\Anima` then `flutter run -d windows` (or plug in phone and `flutter run`).
-3. In-app **Settings → API**: re-enter your NanoGPT API key (not stored in git or backups).
-4. Optional: `gh auth login` if you want GitHub CLI for releases/PRs (`git fetch` already works over HTTPS).
+1. On phone: download **Anima-1.0.0.apk** from [v1.0.0 release](https://github.com/jwarren9393/Anima/releases/tag/v1.0.0) — should install over build 46 as an update.
+2. Run the app locally if needed: `cd F:\AI\Anima` then `flutter run -d windows` (or plug in phone and `flutter run`).
+3. **Release rule:** keep `pubspec.yaml` at **`1.0.0+<build>`** — never bump the `1.0.0` name; only increment the number after `+`. Upload to the existing **`v1.0.0`** GitHub release (not a new tag per build).
 
 ---
 
