@@ -20,6 +20,8 @@ class ChatSession {
     this.openingSceneInPrompt = true,
     this.openingSceneInMemory = false,
     this.sourceWorkshopId,
+    this.pendingDirectorMessageId,
+    this.pendingDirectorAssistantId,
   })  : messages = List<ChatMessage>.from(messages ?? const []),
         participantIds = List<String>.from(participantIds ?? const []),
         lorebookIds =
@@ -78,6 +80,12 @@ class ChatSession {
   /// Creation Center workshop this chat was started from (provenance).
   final String? sourceWorkshopId;
 
+  /// Director note id that still commands the next AI generation (regen/swipe too).
+  final String? pendingDirectorMessageId;
+
+  /// Assistant message id this director note is bound to (regen/swipe only).
+  final String? pendingDirectorAssistantId;
+
   bool get isGroup => participantIds.length > 1;
 
   /// Effective cast for prompting (falls back to [characterId] when solo).
@@ -108,6 +116,10 @@ class ChatSession {
     bool? openingSceneInMemory,
     String? sourceWorkshopId,
     bool clearSourceWorkshopId = false,
+    String? pendingDirectorMessageId,
+    bool clearPendingDirector = false,
+    String? pendingDirectorAssistantId,
+    bool clearPendingDirectorAssistant = false,
   }) {
     return ChatSession(
       id: id ?? this.id,
@@ -131,6 +143,13 @@ class ChatSession {
       sourceWorkshopId: clearSourceWorkshopId
           ? null
           : (sourceWorkshopId ?? this.sourceWorkshopId),
+      pendingDirectorMessageId: clearPendingDirector
+          ? null
+          : (pendingDirectorMessageId ?? this.pendingDirectorMessageId),
+      pendingDirectorAssistantId: clearPendingDirector ||
+              clearPendingDirectorAssistant
+          ? null
+          : (pendingDirectorAssistantId ?? this.pendingDirectorAssistantId),
     );
   }
 
@@ -153,6 +172,12 @@ class ChatSession {
         if (openingSceneInMemory) 'openingSceneInMemory': true,
         if (sourceWorkshopId != null && sourceWorkshopId!.isNotEmpty)
           'sourceWorkshopId': sourceWorkshopId,
+        if (pendingDirectorMessageId != null &&
+            pendingDirectorMessageId!.isNotEmpty)
+          'pendingDirectorMessageId': pendingDirectorMessageId,
+        if (pendingDirectorAssistantId != null &&
+            pendingDirectorAssistantId!.isNotEmpty)
+          'pendingDirectorAssistantId': pendingDirectorAssistantId,
       };
 
   factory ChatSession.fromJson(Map<String, dynamic> json) {
@@ -220,6 +245,14 @@ class ChatSession {
       openingSceneInMemory: json['openingSceneInMemory'] == true,
       sourceWorkshopId: () {
         final raw = '${json['sourceWorkshopId'] ?? ''}'.trim();
+        return raw.isEmpty ? null : raw;
+      }(),
+      pendingDirectorMessageId: () {
+        final raw = '${json['pendingDirectorMessageId'] ?? ''}'.trim();
+        return raw.isEmpty ? null : raw;
+      }(),
+      pendingDirectorAssistantId: () {
+        final raw = '${json['pendingDirectorAssistantId'] ?? ''}'.trim();
         return raw.isEmpty ? null : raw;
       }(),
     );

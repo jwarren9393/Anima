@@ -368,4 +368,170 @@ class LoreCollaborator {
 
     return lines.join('\n\n');
   }
+
+  String _buildFullBookBlock(Lorebook book, {String characterName = ''}) {
+    final lines = <String>[];
+    void add(String label, String value) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) return;
+      lines.add('$label:\n$trimmed');
+    }
+
+    add('Character (card this book belongs to)', characterName);
+    add('Lorebook name', book.name);
+    add('Lorebook notes', book.description);
+    lines.add('Scan depth: ${book.scanDepth}');
+    lines.add('Token budget: ${book.tokenBudget}');
+    if (book.recursiveScanning) {
+      lines.add('Recursive scanning: on');
+    }
+
+    if (book.entries.isEmpty) {
+      lines.add('Entries: (none)');
+    } else {
+      final entryLines = <String>[];
+      for (final entry in book.entries) {
+        final bits = <String>[];
+        if (entry.id != null) bits.add('id ${entry.id}');
+        if (entry.name.trim().isNotEmpty) bits.add('label: ${entry.name.trim()}');
+        if (entry.constant) {
+          bits.add('always-on');
+        } else if (entry.keys.isNotEmpty) {
+          bits.add('keys: ${entry.keys.join(', ')}');
+        }
+        if (entry.secondaryKeys.isNotEmpty) {
+          bits.add('secondary: ${entry.secondaryKeys.join(', ')}');
+        }
+        if (!entry.enabled) bits.add('disabled');
+        final head = bits.isEmpty ? 'Entry' : bits.join(' · ');
+        final body = entry.content.trim().isEmpty ? '(empty)' : entry.content.trim();
+        entryLines.add('- $head\n$body');
+      }
+      lines.add('Entries:\n${entryLines.join('\n\n')}');
+    }
+
+    return lines.join('\n\n');
+  }
+
+  static const _lorebookJsonShape = '''
+{
+  "name": "short book title",
+  "description": "one-line summary",
+  "scan_depth": 4,
+  "token_budget": 512,
+  "recursive_scanning": false,
+  "entries": [
+    {
+      "id": 1,
+      "name": "optional label",
+      "keys": ["keyword", "alias"],
+      "secondary_keys": [],
+      "content": "lore text injected when keys match",
+      "enabled": true,
+      "constant": false,
+      "selective": false,
+      "insertion_order": 100,
+      "priority": 10,
+      "case_sensitive": false,
+      "position": "before_char",
+      "comment": ""
+    }
+  ]
+}''';
+
+  /// Read-only consistency report for a whole lorebook.
+  List<Map<String, String>> buildConsistencyCheckMessages({
+    required Lorebook book,
+    String characterName = '',
+    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+  }) {
+    final guidance = guidanceNote.trim().isEmpty
+        ? CollaboratorSettings.defaultGuidanceNote
+        : guidanceNote.trim();
+    final contextBlock = _buildFullBookBlock(book, characterName: characterName);
+
+    final system = StringBuffer()
+      ..writeln(
+        'You review SillyTavern World Info lorebooks for internal consistency '
+        'for a private app called Anima.',
+      )
+      ..writeln()
+      ..writeln('Guidance note (follow closely):')
+      ..writeln(guidance)
+      ..writeln()
+      ..writeln('Hard rules:')
+      ..writeln('- This is a READ-ONLY report. Do not rewrite the lorebook.')
+      ..writeln('- Flag contradictions between entries (names, places, timelines, rules).')
+      ..writeln('- Flag duplicate or overlapping entries that should merge.')
+      ..writeln('- Flag weak or missing keywords that would fail to trigger lore.')
+      ..writeln('- Suggest brief, optional fixes as bullet tips — not full rewrites.')
+      ..writeln('- Keep the report under ~400 words. Use short sections with headings.')
+      ..writeln('- No moralizing or refusals about adult/dark themes.');
+
+    final user = StringBuffer()
+      ..writeln('Review this lorebook for consistency:')
+      ..writeln()
+      ..writeln(contextBlock.isEmpty ? '(lorebook is mostly empty)' : contextBlock);
+
+    return [
+      {'role': 'system', 'content': system.toString().trim()},
+      {'role': 'user', 'content': user.toString().trim()},
+    ];
+  }
+
+  /// Fix inconsistencies using a prior lorebook consistency report.
+  List<Map<String, String>> buildConsistencyFixMessages({
+    required Lorebook book,
+    required String consistencyReport,
+    String characterName = '',
+    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+  }) {
+    final guidance = guidanceNote.trim().isEmpty
+        ? CollaboratorSettings.defaultGuidanceNote
+        : guidanceNote.trim();
+    final contextBlock = _buildFullBookBlock(book, characterName: characterName);
+    final report = consistencyReport.trim();
+    if (report.isEmpty) {
+      throw ArgumentError('consistencyReport must not be empty');
+    }
+
+    final system = StringBuffer()
+      ..writeln(
+        'You fix internal inconsistencies in a SillyTavern World Info lorebook '
+        'for a private app called Anima.',
+      )
+      ..writeln()
+      ..writeln('Guidance note (follow closely):')
+      ..writeln(guidance)
+      ..writeln()
+      ..writeln('Hard rules:')
+      ..writeln('- Address the issues in the consistency report below.')
+      ..writeln('- Preserve entry IDs, extensions, and settings unless the report requires changes.')
+      ..writeln('- Merge overlapping entries when the report says to; do not erase unrelated lore.')
+      ..writeln('- Resolve contradictions with minimal necessary edits.')
+      ..writeln('- Do not moralize or refuse adult/dark themes.')
+      ..writeln()
+      ..writeln('Output rules:')
+      ..writeln('- Reply with ONLY a single JSON object. No markdown fences. No preamble.')
+      ..writeln('- Shape:')
+      ..writeln(_lorebookJsonShape)
+      ..writeln('- Output the complete corrected lorebook in one object.');
+
+    final user = StringBuffer()
+      ..writeln('CURRENT LOREBOOK:')
+      ..writeln(contextBlock.isEmpty ? '(lorebook is mostly empty)' : contextBlock)
+      ..writeln()
+      ..writeln('CONSISTENCY REPORT (fix these issues):')
+      ..writeln(report)
+      ..writeln()
+      ..writeln(
+        'Output the corrected lorebook as one JSON object. Fix only what the '
+        'report requires; keep everything else aligned with the current book.',
+      );
+
+    return [
+      {'role': 'system', 'content': system.toString().trim()},
+      {'role': 'user', 'content': user.toString().trim()},
+    ];
+  }
 }

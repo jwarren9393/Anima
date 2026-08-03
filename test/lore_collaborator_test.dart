@@ -159,5 +159,32 @@ void main() {
         'sword, Vael, blade',
       );
     });
+
+    test('lorebook consistency check is read-only', () {
+      final messages = collaborator.buildConsistencyCheckMessages(
+        book: Lorebook(
+          name: 'Kingdom',
+          entries: [
+            LorebookEntry(
+              id: 1,
+              name: 'Capital',
+              keys: ['capital'],
+              content: 'The old capital.',
+            ),
+          ],
+        ),
+      );
+      expect(messages[0]['content'], contains('READ-ONLY'));
+      expect(messages[1]['content'], contains('Capital'));
+    });
+
+    test('lorebook consistency fix includes report and JSON shape', () {
+      final messages = collaborator.buildConsistencyFixMessages(
+        book: const Lorebook(name: 'Kingdom'),
+        consistencyReport: '- Capital entry contradicts timeline.',
+      );
+      expect(messages[0]['content'], contains('JSON'));
+      expect(messages[1]['content'], contains('timeline'));
+    });
   });
 }

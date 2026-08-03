@@ -73,12 +73,15 @@ class ChatMessage {
 
   bool get isNarrator => role == ChatRole.narrator;
 
+  /// Player scene direction — commands the next AI reply (not in-character speech).
+  bool get isDirector => role == ChatRole.director;
+
   bool get isGroupBeat => role == ChatRole.groupBeat;
 
   bool get isAssistant => role == ChatRole.assistant;
 
   bool get canSwipe {
-    if (isUser || isNarrator) return false;
+    if (isUser || isNarrator || isDirector) return false;
     if (isGroupBeat) {
       return (beatSwipes?.length ?? swipes.length) > 1;
     }
@@ -146,7 +149,7 @@ class ChatMessage {
 
   ChatMessage withEditedText(String newText) {
     final trimmed = newText.trim();
-    if (isUser || isNarrator || isGroupBeat) {
+    if (isUser || isNarrator || isDirector || isGroupBeat) {
       if (isGroupBeat) return this;
       return copyWith(text: trimmed, swipes: [trimmed], swipeIndex: 0);
     }
@@ -299,6 +302,7 @@ class ChatMessage {
   static String roleToJson(ChatRole role) => switch (role) {
         ChatRole.user => 'user',
         ChatRole.narrator => 'narrator',
+        ChatRole.director => 'director',
         ChatRole.groupBeat => 'groupBeat',
         ChatRole.assistant => 'assistant',
       };
@@ -309,6 +313,8 @@ class ChatMessage {
         return ChatRole.user;
       case 'narrator':
         return ChatRole.narrator;
+      case 'director':
+        return ChatRole.director;
       case 'groupBeat':
         return ChatRole.groupBeat;
       default:
@@ -434,4 +440,4 @@ class ChatMessage {
   }
 }
 
-enum ChatRole { user, assistant, narrator, groupBeat }
+enum ChatRole { user, assistant, narrator, director, groupBeat }

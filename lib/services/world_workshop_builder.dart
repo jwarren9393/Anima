@@ -1585,6 +1585,70 @@ ${formatTranscript(conversation)}
     ];
   }
 
+  /// Parse a consistency-fix draft — merges all editable card text fields.
+  Character parseCharacterConsistencyFixJson(
+    String raw, {
+    required Character original,
+  }) {
+    final map = _extractJsonObject(
+      raw,
+      emptyMessage: 'The AI returned an empty character card.',
+      missingMessage:
+          'Could not find character card JSON in the AI reply. Try again.',
+      notObjectMessage: 'Character card JSON must be an object.',
+    );
+    final parsed = _cardCodec.fromCardMap(map, preferredId: original.id);
+
+    String pick(String next, String previous) {
+      final trimmed = next.trim();
+      return trimmed.isEmpty ? previous : trimmed;
+    }
+
+    return Character(
+      id: original.id,
+      name: pick(parsed.name, original.name),
+      description: pick(parsed.description, original.description),
+      personality: pick(parsed.personality, original.personality),
+      scenario: pick(parsed.scenario, original.scenario),
+      firstMes: pick(parsed.firstMes, original.firstMes),
+      mesExample: pick(parsed.mesExample, original.mesExample),
+      systemPrompt: pick(parsed.systemPrompt, original.systemPrompt),
+      postHistoryInstructions: pick(
+        parsed.postHistoryInstructions,
+        original.postHistoryInstructions,
+      ),
+      alternateGreetings: parsed.alternateGreetings.isEmpty
+          ? original.alternateGreetings
+          : parsed.alternateGreetings,
+      tags: parsed.tags.isEmpty ? original.tags : parsed.tags,
+      creatorNotes: original.creatorNotes,
+      creator: original.creator,
+      characterVersion: original.characterVersion,
+      characterBook: original.characterBook,
+      extensions: original.extensions,
+      avatarFileName: original.avatarFileName,
+    );
+  }
+
+  /// Parse a lorebook consistency fix, preserving book settings when omitted.
+  Lorebook parseLorebookConsistencyFixJson(
+    String raw, {
+    required Lorebook original,
+  }) {
+    final fixed = parseLorebookJson(raw);
+    return Lorebook(
+      name: fixed.name.trim().isEmpty ? original.name : fixed.name,
+      description: fixed.description.trim().isEmpty
+          ? original.description
+          : fixed.description,
+      scanDepth: fixed.scanDepth,
+      tokenBudget: fixed.tokenBudget,
+      recursiveScanning: fixed.recursiveScanning,
+      entries: fixed.entries,
+      extensions: fixed.extensions.isEmpty ? original.extensions : fixed.extensions,
+    );
+  }
+
   /// Parse an update draft, keeping [original] id/avatar/book/extensions/metadata
   /// and any core field the model left empty.
   Character parseCharacterUpdateJson(

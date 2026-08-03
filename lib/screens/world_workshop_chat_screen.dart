@@ -21,6 +21,8 @@ import '../services/nanogpt_service.dart';
 import '../services/persona_service.dart';
 import '../services/reply_rewrite_service.dart';
 import '../services/settings_service.dart';
+import '../services/lore_collaborator.dart';
+import '../services/ai_field_changes.dart';
 import '../services/world_info_service.dart';
 import '../services/world_workshop_builder.dart';
 import '../services/opening_scene_service.dart';
@@ -33,6 +35,7 @@ import 'lorebooks_screen.dart';
 import '../utils/platform_utils.dart';
 import '../utils/scroll_to_end.dart';
 import '../widgets/anima_avatar.dart';
+import '../widgets/ai_field_changes_sheet.dart';
 import '../widgets/chat_composer_field.dart';
 import '../widgets/greeting_picker.dart';
 import '../widgets/keyboard_inset.dart';
@@ -86,6 +89,7 @@ class WorldWorkshopChatScreen extends StatefulWidget {
 
 class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     with WidgetsBindingObserver {
+  static const _loreCollaborator = LoreCollaborator();
   final _builder = WorldWorkshopBuilder();
   final _hubController = WorkshopHubController();
   final _contextService = const ChatContextService();
@@ -102,6 +106,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   String _modelId = '';
   bool _sending = false;
   bool _exporting = false;
+  bool _consistencyBusy = false;
   String? _exportStatus;
   bool _enterToSend = false;
   bool _fixLastReplyMode = false;
@@ -397,7 +402,8 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     setState(() => _workshop = saved);
   }
 
-  bool get _busy => _sending || _exporting || _loadingLinkedLorebook;
+  bool get _busy =>
+      _sending || _exporting || _loadingLinkedLorebook || _consistencyBusy;
 
   Future<void> _send() async {
     final text = _input.text.trim();
@@ -1459,6 +1465,168 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   void _stopGeneration() {
     if (!_sending) return;
     widget.nanoGptService.cancelActiveStream();
+  }
+
+  Future<void> _runLinkedLorebookConsistencyCheck() async {
+    final linked = _linkedLorebook;
+    if (linked == null || _busy) return;
+
+    setState(() => _consistencyBusy = true);
+    try {
+      final collaborator =
+          await widget.settingsService.getCollaboratorSettings();
+      final messages = _loreCollaborator.buildConsistencyCheckMessages(
+        book: linked.book,
+        guidanceNote: collaborator.guidanceNote,
+      );
+      final model = await widget.settingsService.getModel();
+      final sampling = await widget.settingsService.getSampling();
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+      final report = await widget.nanoGptService.complete(
+        model: model,
+        messages: messages,
+        baseUrl: baseUrl,
+        sampling: sampling,
+      );
+      if (!mounted) return;
+      final trimmedReport = report.trim();
+      final fixRequested = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Lorebook consistency'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: SelectableText(trimmedReport),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Close'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Fix inconsistencies'),
+            ),
+          ],
+        ),
+      );
+      if (fixRequested == true && mounted) {
+        await _runLinkedLorebookConsistencyFix(trimmedReport);
+      }
+    } on NanoGptCancelledException {
+      // Ignore.
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Consistency check failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _consistencyBusy = false);
+    }
+  }
+
+  Future<void> _runLinkedLorebookConsistencyFix(String consistencyReport) async {
+    final linked = _linkedLorebook;
+    if (linked == null || _busy) return;
+
+    setState(() => _consistencyBusy = true);
+    try {
+      final before = linked.book;
+      final collaborator =
+          await widget.settingsService.getCollaboratorSettings();
+      final messages = _loreCollaborator.buildConsistencyFixMessages(
+        book: before,
+        consistencyReport: consistencyReport,
+        guidanceNote: collaborator.guidanceNote,
+      );
+      final model = await widget.settingsService.getModel();
+      final sampling = await widget.settingsService.getSampling();
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+
+      Lorebook? fixed;
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final raw = await widget.nanoGptService.complete(
+          model: model,
+          messages: messages,
+          baseUrl: baseUrl,
+          sampling: sampling,
+        );
+        try {
+          fixed = _builder.parseLorebookConsistencyFixJson(
+            raw,
+            original: before,
+          );
+          break;
+        } on FormatException {
+          if (attempt == 1) rethrow;
+        }
+      }
+      if (fixed == null) {
+        throw const FormatException(
+          'Could not find lorebook JSON in the AI reply. Try again.',
+        );
+      }
+
+      if (!mounted) return;
+      final changes = compareLorebooks(before, fixed);
+      if (changes.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No changes were suggested. Try editing manually.'),
+          ),
+        );
+        return;
+      }
+
+      final apply = await showAiFieldChangesSheet(
+        context: context,
+        title: 'Review lorebook fixes',
+        subtitle:
+            'Tap an item to see before and after. Apply saves to World Info.',
+        changes: changes,
+        applyLabel: 'Update lorebook',
+      );
+      if (apply != true || !mounted) return;
+
+      final global = linked.copyWith(book: fixed);
+      await widget.worldInfoService.upsert(global);
+      if (!mounted) return;
+      setState(() => _linkedLorebook = global);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Updated linked lorebook (${changes.length} change'
+            '${changes.length == 1 ? '' : 's'}).',
+          ),
+        ),
+      );
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } on NanoGptCancelledException {
+      // Ignore.
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Consistency fix failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _consistencyBusy = false);
+    }
   }
 
   Future<void> _createLorebook() async {
@@ -3837,6 +4005,20 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         if (_linkedLorebook != null) ...[
           const PopupMenuDivider(),
           PopupMenuItem(
+            value: 'lore_consistency',
+            child: ListTile(
+              leading: _consistencyBusy
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.fact_check_outlined),
+              title: const Text('Check lorebook consistency'),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+          PopupMenuItem(
             value: 'toggle_lore_prompt',
             child: ListTile(
               leading: Icon(
@@ -3878,6 +4060,8 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         _createPersona();
       case 'update_persona':
         _updateWorkshopPersona();
+      case 'lore_consistency':
+        _runLinkedLorebookConsistencyCheck();
       case 'toggle_lore_prompt':
         _toggleLinkedLorebookInPrompt();
     }

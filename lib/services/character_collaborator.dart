@@ -233,6 +233,24 @@ class CharacterCollaborator {
     return lines.join('\n\n');
   }
 
+  static const _fullCharacterCardJsonShape = '''
+{
+  "spec": "chara_card_v2",
+  "spec_version": "2.0",
+  "data": {
+    "name": "Character Name",
+    "description": "appearance, background, important facts",
+    "personality": "traits, speech style, motives",
+    "scenario": "current situation / scene context",
+    "first_mes": "opening greeting",
+    "alternate_greetings": ["extra greeting 1", "extra greeting 2"],
+    "mes_example": "<START>\\n{{user}}: ...\\n{{char}}: ...",
+    "system_prompt": "optional custom system instructions",
+    "post_history_instructions": "short nudge after chat history",
+    "tags": ["tag1", "tag2"]
+  }
+}''';
+
   /// Read-only consistency report across card fields (feature #16).
   ///
   /// Does not rewrite the card — the UI shows the reply in a dialog only.
@@ -274,6 +292,73 @@ class CharacterCollaborator {
       ..writeln('Review this character card for consistency:')
       ..writeln()
       ..writeln(contextBlock.isEmpty ? '(card is mostly empty)' : contextBlock);
+
+    return [
+      {'role': 'system', 'content': system.toString().trim()},
+      {'role': 'user', 'content': user.toString().trim()},
+    ];
+  }
+
+  /// Fix inconsistencies using a prior [consistencyReport] from
+  /// [buildConsistencyCheckMessages]. Returns full card JSON for review.
+  List<Map<String, String>> buildConsistencyFixMessages({
+    required CharacterDraftContext draft,
+    required String consistencyReport,
+    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+  }) {
+    final guidance = guidanceNote.trim().isEmpty
+        ? CollaboratorSettings.defaultGuidanceNote
+        : guidanceNote.trim();
+    final contextBlock = _buildFullContextBlock(draft);
+    final report = consistencyReport.trim();
+    if (report.isEmpty) {
+      throw ArgumentError('consistencyReport must not be empty');
+    }
+
+    final system = StringBuffer()
+      ..writeln(
+        'You fix internal inconsistencies in a SillyTavern-style character card '
+        'for a private app called Anima.',
+      )
+      ..writeln()
+      ..writeln('Guidance note (follow closely):')
+      ..writeln(guidance)
+      ..writeln()
+      ..writeln('Hard rules:')
+      ..writeln('- Address the issues in the consistency report below.')
+      ..writeln('- Keep the same character identity unless the report requires a rename.')
+      ..writeln(
+        '- Preserve established facts that are NOT contradicted. Merge fixes '
+        'into the card — do not erase unrelated content.',
+      )
+      ..writeln(
+        '- Resolve contradictions (age, appearance, personality, scenario, '
+        'examples, system prompt, greetings) with minimal necessary edits.',
+      )
+      ..writeln('- Do not invent a new character or add moralizing notes.')
+      ..writeln()
+      ..writeln('Output rules:')
+      ..writeln('- Reply with ONLY a single JSON object. No markdown fences. No preamble.')
+      ..writeln('- Prefer this shape (chara_card_v2):')
+      ..writeln(_fullCharacterCardJsonShape)
+      ..writeln(
+        '- Include every listed field from the current card (use empty string or '
+        '[] when a field is intentionally blank).',
+      )
+      ..writeln('- Do NOT include character_book / lorebook — lore stays separate.')
+      ..writeln('- Do NOT include creator_notes, creator, or character_version.');
+
+    final user = StringBuffer()
+      ..writeln('CURRENT CHARACTER CARD:')
+      ..writeln(contextBlock.isEmpty ? '(card is mostly empty)' : contextBlock)
+      ..writeln()
+      ..writeln('CONSISTENCY REPORT (fix these issues):')
+      ..writeln(report)
+      ..writeln()
+      ..writeln(
+        'Output the corrected character card as one JSON object. Fix only what '
+        'the report requires; keep everything else aligned with the current card.',
+      );
 
     return [
       {'role': 'system', 'content': system.toString().trim()},

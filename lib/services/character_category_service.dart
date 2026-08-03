@@ -178,4 +178,16 @@ class CharacterCategoryService {
         if (state.characterInCategory(character.id, id)) character,
     ];
   }
+
+  /// When [fullCardsOnly] is true, drops temporary scene NPCs.
+  List<Character> filterFullCardsOnly(
+    List<Character> characters, {
+    required bool fullCardsOnly,
+  }) {
+    if (!fullCardsOnly) return List<Character>.from(characters);
+    return [
+      for (final character in characters)
+        if (!character.isTemporary) character,
+    ];
+  }
 }

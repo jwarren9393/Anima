@@ -1,6 +1,7 @@
 import '../models/chat_message.dart';
 import '../models/character.dart';
 import 'prompt_builder.dart';
+import 'presence_service.dart';
 import 'settings_service.dart';
 
 /// One character line parsed from a group-beat generation.
@@ -16,6 +17,7 @@ class GroupReplyService {
   const GroupReplyService();
 
   static const _promptBuilder = PromptBuilder();
+  static const _presence = PresenceService();
 
   /// ~120–180 tokens per speaking character keeps reactions snappy.
   static int beatMaxTokens(int speakerCount) {
@@ -62,6 +64,7 @@ class GroupReplyService {
     String nudge = '',
     String globalSystemPrompt = '',
     String postHistory = '',
+    String directorBlock = '',
     String priorBeatToAvoid = '',
   }) {
     final safeUser = userName.trim().isEmpty ? 'User' : userName.trim();
@@ -91,6 +94,10 @@ class GroupReplyService {
       '- Do not sanitize or soften intense or adult content — match the scene.',
       '- This is a NEW simultaneous beat for the latest moment in chat — invent '
           'fresh reactions. Never copy or lightly rephrase an earlier group react.',
+      _presence.formatKnowledgeBoundary(
+        charName: ordered.first.name,
+        userName: safeUser,
+      ),
     ];
 
     for (final character in ordered) {
@@ -170,6 +177,9 @@ class GroupReplyService {
 
     if (postHistory.trim().isNotEmpty) {
       msgs.add({'role': 'system', 'content': postHistory.trim()});
+    }
+    if (directorBlock.trim().isNotEmpty) {
+      msgs.add({'role': 'system', 'content': directorBlock.trim()});
     }
 
     return msgs;

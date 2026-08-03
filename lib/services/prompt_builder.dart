@@ -1,5 +1,6 @@
 import '../models/character.dart';
 import 'lorebook_service.dart';
+import 'presence_service.dart';
 
 /// How the next generation should behave (SillyTavern-style actions).
 enum PromptMode {
@@ -16,6 +17,8 @@ enum PromptMode {
 /// Builds NanoGPT prompt pieces from a SillyTavern-style card + user persona.
 class PromptBuilder {
   const PromptBuilder();
+
+  static const _presence = PresenceService();
 
   /// Default fallback system line when the card has no `system_prompt`.
   static const defaultSystemSeed =
@@ -90,6 +93,8 @@ class PromptBuilder {
       chunks.add(
         'This is a group chat. Other people present: $names. '
         'Right now you are only writing as $charName. '
+        'Card summaries below are identity reference only — not what you know '
+        'they did in scenes you missed. '
         'Do not start your reply with "$charName:" or your name — '
         'the app already labels who is speaking.',
       );
@@ -140,6 +145,13 @@ class PromptBuilder {
       );
     }
 
+    chunks.add(
+      _presence.formatKnowledgeBoundary(
+        charName: charName,
+        userName: safeUser,
+      ),
+    );
+
     return applyMacros(
       chunks.join('\n\n'),
       charName: charName,
@@ -187,6 +199,7 @@ class PromptBuilder {
     required String openingScene,
     required String charName,
     required String userName,
+    List<String> presentCharacterNames = const [],
   }) {
     final scene = openingScene.trim();
     if (scene.isEmpty) return '';
@@ -197,9 +210,12 @@ class PromptBuilder {
       charName: safeChar,
       userName: safeUser,
     );
-    return 'Opening scene (established at the start of this chat; the story may '
-        'have moved on since — use as background, not as the current moment '
-        'unless recent messages say otherwise):\n$expanded';
+    final presentLine = presentCharacterNames.isEmpty
+        ? ''
+        : '\nCharacters present in this opening: ${presentCharacterNames.join(', ')}. '
+            'Only they witnessed this setup.';
+    return 'Opening scene ($safeChar was present for this setup; use only as background '
+        'you personally witnessed — not omniscient knowledge):$presentLine\n$expanded';
   }
 
   String expandGreeting({

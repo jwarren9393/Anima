@@ -10,14 +10,17 @@ import '../services/avatar_prompt_builder.dart';
 import '../services/avatar_service.dart';
 import '../services/character_collaborator.dart';
 import '../services/character_service.dart';
+import '../services/ai_field_changes.dart';
 import '../services/nanogpt_service.dart';
 import '../services/settings_service.dart';
 import '../services/world_workshop_builder.dart';
 import '../widgets/anima_avatar.dart';
+import '../widgets/ai_field_changes_sheet.dart';
 import '../widgets/generate_avatar_sheet.dart';
 import '../widgets/keyboard_inset.dart';
 import '../widgets/minimal_chip_button.dart';
 import '../widgets/preset_picker.dart';
+import '../widgets/temporary_character_sheet.dart';
 import '../models/anima_presets.dart';
 import 'lorebook_edit_screen.dart';
 
@@ -33,6 +36,7 @@ class CharacterEditScreen extends StatefulWidget {
     this.existing,
     this.generatedDraft = false,
     this.updatingExisting = false,
+    this.promoteAsFull = false,
   });
 
   final CharacterService characterService;
@@ -47,6 +51,9 @@ class CharacterEditScreen extends StatefulWidget {
   /// True when reviewing a Creation Center update to an already-saved card.
   /// Save overwrites that same character id after review.
   final bool updatingExisting;
+
+  /// When true, saving clears [Character.isTemporary] (promote NPC to full card).
+  final bool promoteAsFull;
 
   @override
   State<CharacterEditScreen> createState() => _CharacterEditScreenState();
@@ -85,6 +92,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
   String _preservedCreator = '';
   String _preservedCharacterVersion = '';
   List<String> _preservedTags = const [];
+  bool _isTemporary = false;
 
   _CharacterSection _section = _CharacterSection.identity;
 
@@ -123,6 +131,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
       characterBook: book?.toJson(),
       extensions: _extensions,
       avatarFileName: _avatarFileName,
+      isTemporary: widget.promoteAsFull ? false : _isTemporary,
     );
   }
 
@@ -148,6 +157,21 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
     _personality.text = character.personality.trim();
     _mesExample.text = character.mesExample.trim();
     _preservedTags = List<String>.from(character.tags);
+  }
+
+  void _applyFullCharacter(Character character) {
+    _name.text = character.name.trim();
+    _description.text = character.description.trim();
+    _personality.text = character.personality.trim();
+    _scenario.text = character.scenario.trim();
+    _firstMes.text = character.firstMes.trim();
+    _alternateGreetings.text = character.alternateGreetings.join('\n');
+    _mesExample.text = character.mesExample.trim();
+    _systemPrompt.text = character.systemPrompt.trim();
+    _postHistory.text = character.postHistoryInstructions.trim();
+    if (character.tags.isNotEmpty) {
+      _preservedTags = List<String>.from(character.tags);
+    }
   }
 
   Future<void> _runAiCardGenerate() async {
@@ -326,6 +350,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
       _lorebook = existing.lorebook;
       _extensions = Map<String, dynamic>.from(existing.extensions);
       _avatarFileName = existing.avatarFileName;
+      _isTemporary = existing.isTemporary;
     }
   }
 
@@ -442,24 +467,32 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         sampling: sampling,
       );
       if (!mounted) return;
-      await showDialog<void>(
+      final trimmedReport = report.trim();
+      final fixRequested = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Consistency check'),
           content: SizedBox(
             width: double.maxFinite,
             child: SingleChildScrollView(
-              child: SelectableText(report.trim()),
+              child: SelectableText(trimmedReport),
             ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(context, false),
               child: const Text('Close'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Fix inconsistencies'),
             ),
           ],
         ),
       );
+      if (fixRequested == true && mounted) {
+        await _runConsistencyFix(trimmedReport);
+      }
     } on NanoGptCancelledException {
       // Ignore.
     } on NanoGptException catch (error) {
@@ -471,6 +504,96 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Consistency check failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _consistencyBusy = false);
+    }
+  }
+
+  Future<void> _runConsistencyFix(String consistencyReport) async {
+    if (_wandBusy != null || _consistencyBusy) return;
+    setState(() => _consistencyBusy = true);
+    try {
+      final before = _characterFromDraft();
+      final collaborator =
+          await widget.settingsService.getCollaboratorSettings();
+      final messages = _collaborator.buildConsistencyFixMessages(
+        draft: _draftContext(),
+        consistencyReport: consistencyReport,
+        guidanceNote: collaborator.guidanceNote,
+      );
+      final model = await widget.settingsService.getModel();
+      final sampling = await widget.settingsService.getSampling();
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+
+      Character? fixed;
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final raw = await widget.nanoGptService.complete(
+          model: model,
+          messages: messages,
+          baseUrl: baseUrl,
+          sampling: sampling,
+        );
+        try {
+          fixed = _workshopBuilder.parseCharacterConsistencyFixJson(
+            raw,
+            original: before,
+          );
+          break;
+        } on FormatException {
+          if (attempt == 1) rethrow;
+        }
+      }
+      if (fixed == null) {
+        throw const FormatException(
+          'Could not find character card JSON in the AI reply. Try again.',
+        );
+      }
+
+      if (!mounted) return;
+      final changes = compareCharacterFields(before, fixed);
+      if (changes.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No field changes were suggested. Try editing manually.'),
+          ),
+        );
+        return;
+      }
+
+      final apply = await showAiFieldChangesSheet(
+        context: context,
+        title: 'Review card fixes',
+        subtitle: 'Tap a field to see before and after. Apply updates the card.',
+        changes: changes,
+        applyLabel: 'Update card',
+      );
+      if (apply != true || !mounted) return;
+
+      setState(() => _applyFullCharacter(fixed!));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Updated ${changes.length} field${changes.length == 1 ? '' : 's'} from consistency fix.',
+          ),
+        ),
+      );
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } on NanoGptCancelledException {
+      // Ignore.
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Consistency fix failed: $error')),
       );
     } finally {
       if (mounted) setState(() => _consistencyBusy = false);
@@ -638,6 +761,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
       characterBook: book?.toJson(),
       extensions: _extensions,
       avatarFileName: _avatarFileName,
+      isTemporary: widget.promoteAsFull ? false : _isTemporary,
     );
     await widget.characterService.upsert(character);
     if (!mounted) return;
@@ -737,7 +861,11 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         ? 'Review character update'
         : (_isGeneratedDraft
             ? 'Review generated character'
-            : (_isEditing ? 'Edit character card' : 'New character card'));
+            : (_isEditing
+            ? (_isTemporary && !widget.promoteAsFull
+                ? 'Edit temporary character'
+                : 'Edit character card')
+            : 'New character card'));
     final intro = _isUpdatingExisting || _isGeneratedDraft
         ? 'Review AI draft — edit then Save. Use {{char}} and {{user}}.'
         : '';
@@ -746,7 +874,10 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         title: Text(title),
         actions: [
           PopupMenuButton<String>(
-            enabled: !_saving && _wandBusy == null && !_aiCardBusy,
+            enabled: !_saving &&
+                _wandBusy == null &&
+                !_aiCardBusy &&
+                !_consistencyBusy,
             onSelected: (value) {
               if (value == 'consistency') _runConsistencyCheck();
               if (value == 'avatar_pick') _pickAvatar();
@@ -784,6 +915,39 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
               intro,
               style: Theme.of(context).textTheme.bodySmall,
             ),
+          if (_isTemporary || widget.promoteAsFull) ...[
+            if (intro.isNotEmpty) const SizedBox(height: 12),
+            Material(
+              color: Theme.of(context)
+                  .colorScheme
+                  .tertiaryContainer
+                  .withValues(alpha: 0.45),
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_isTemporary) ...[
+                      const TemporaryCharacterBadge(),
+                      const SizedBox(width: 10),
+                    ],
+                    Expanded(
+                      child: Text(
+                        widget.promoteAsFull
+                            ? 'Saving promotes this NPC to a full character card.'
+                            : 'Temporary NPC — fill in more fields here, or use '
+                                'Characters → Promote to full character when ready.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ] else if (intro.isNotEmpty)
+            const SizedBox(height: 16),
           const SizedBox(height: 12),
           MinimalChipRow(
             children: [

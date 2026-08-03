@@ -16,6 +16,7 @@ import '../services/nanogpt_service.dart';
 import '../services/settings_service.dart';
 import '../widgets/anima_avatar.dart';
 import '../widgets/character_category_controls.dart';
+import '../widgets/temporary_character_sheet.dart';
 import 'character_edit_screen.dart';
 
 /// List of saved characters with SillyTavern card import/export.
@@ -50,15 +51,20 @@ class _CharactersScreenState extends State<CharactersScreen> {
   List<Character> _characters = [];
   CharacterCategoryState _categoryState = CharacterCategoryState.empty;
   String _filterCategoryId = CharacterCategoryService.allFilterId;
+  bool _fullCardsOnly = false;
   String? _selectedId;
   bool _loading = true;
   bool _busy = false;
 
   List<Character> get _visibleCharacters {
-    return widget.categoryService.filterCharacters(
+    final byCategory = widget.categoryService.filterCharacters(
       _characters,
       state: _categoryState,
       categoryId: _filterCategoryId,
+    );
+    return widget.categoryService.filterFullCardsOnly(
+      byCategory,
+      fullCardsOnly: _fullCardsOnly,
     );
   }
 
@@ -100,7 +106,9 @@ class _CharactersScreenState extends State<CharactersScreen> {
         : character.personality.trim().isNotEmpty
             ? character.personality
             : character.creatorNotes;
-    final base = text.trim().isEmpty ? 'No description yet' : text.trim();
+    final base = text.trim().isEmpty
+        ? (character.isTemporary ? 'Temporary NPC' : 'No description yet')
+        : text.trim();
     final lore = character.enabledLoreEntryCount;
     final cats = _categoryState.categoriesForCharacter(character.id);
     final catNames = [
@@ -155,6 +163,26 @@ class _CharactersScreenState extends State<CharactersScreen> {
     if (widget.pickMode) {
       Navigator.of(context).pop(created);
     }
+  }
+
+  Future<void> _promoteToFull(Character character) async {
+    final updated = await Navigator.of(context).push<Character>(
+      MaterialPageRoute(
+        builder: (_) => CharacterEditScreen(
+          characterService: widget.characterService,
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
+          existing: character,
+          promoteAsFull: true,
+        ),
+      ),
+    );
+    if (updated == null) return;
+    await _load();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${updated.name} is now a full character card.')),
+    );
   }
 
   Future<void> _edit(Character character) async {
@@ -432,6 +460,14 @@ class _CharactersScreenState extends State<CharactersScreen> {
                     onManage: _busy ? null : _manageCategories,
                   ),
                 ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                  child: CharacterCardTypeFilterBar(
+                    fullCardsOnly: _fullCardsOnly,
+                    onChanged: (value) =>
+                        setState(() => _fullCardsOnly = value),
+                  ),
+                ),
                 Expanded(
                   child: visible.isEmpty
                       ? Center(
@@ -440,7 +476,9 @@ class _CharactersScreenState extends State<CharactersScreen> {
                             child: Text(
                               _characters.isEmpty
                                   ? 'No characters yet.'
-                                  : 'No characters in this category.',
+                                  : _fullCardsOnly
+                                      ? 'No full character cards match this filter.'
+                                      : 'No characters in this category.',
                               textAlign: TextAlign.center,
                               style: Theme.of(context)
                                   .textTheme
@@ -469,7 +507,15 @@ class _CharactersScreenState extends State<CharactersScreen> {
                                 radius: 22,
                                 avatarService: _avatarService,
                               ),
-                              title: Text(character.name),
+                              title: Row(
+                                children: [
+                                  Expanded(child: Text(character.name)),
+                                  if (character.isTemporary) ...[
+                                    const SizedBox(width: 8),
+                                    const TemporaryCharacterBadge(),
+                                  ],
+                                ],
+                              ),
                               subtitle: Text(
                                 _subtitle(character),
                                 maxLines: 2,
@@ -478,6 +524,9 @@ class _CharactersScreenState extends State<CharactersScreen> {
                               trailing: PopupMenuButton<String>(
                                 onSelected: (value) {
                                   if (value == 'edit') _edit(character);
+                                  if (value == 'promote') {
+                                    _promoteToFull(character);
+                                  }
                                   if (value == 'categories') {
                                     _editCategories(character);
                                   }
@@ -490,6 +539,11 @@ class _CharactersScreenState extends State<CharactersScreen> {
                                     value: 'edit',
                                     child: Text('Edit'),
                                   ),
+                                  if (character.isTemporary)
+                                    const PopupMenuItem(
+                                      value: 'promote',
+                                      child: Text('Promote to full character'),
+                                    ),
                                   const PopupMenuItem(
                                     value: 'categories',
                                     child: Text('Categories'),

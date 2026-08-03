@@ -56,8 +56,9 @@ class NarratorService {
 Narrator (omniscient scene voice — not $user or $char speaking):
 $body
 
-This is established scene truth and direction. Characters and $user react to it.
+This is established scene truth for those who were present. Characters and $user react only if they were in this scene.
 Do not attribute this line to $user or $char in dialogue. Do not repeat it verbatim.
+If you were not present for this beat, ignore it.
 '''.trim();
   }
 

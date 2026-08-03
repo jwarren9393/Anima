@@ -88,5 +88,20 @@ void main() {
       expect(messages[1]['content'], contains('Quiet'));
       expect(messages[1]['content'], contains('waves'));
     });
+
+    test('consistency fix asks for JSON and includes report', () {
+      final messages = collaborator.buildConsistencyFixMessages(
+        draft: const CharacterDraftContext(
+          name: 'Rin',
+          description: 'Tall scout.',
+          personality: 'Quiet.',
+        ),
+        consistencyReport: '- Age contradicts description.',
+      );
+      expect(messages[0]['content'], contains('JSON'));
+      expect(messages[0]['content'], contains('first_mes'));
+      expect(messages[1]['content'], contains('Age contradicts'));
+      expect(messages[1]['content'], contains('Tall scout'));
+    });
   });
 }

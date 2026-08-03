@@ -21,6 +21,7 @@ import '../widgets/greeting_picker.dart';
 import '../widgets/minimal_chip_button.dart';
 import '../widgets/opening_scene_picker.dart';
 import '../widgets/preset_picker.dart';
+import '../widgets/temporary_character_sheet.dart';
 import 'character_edit_screen.dart';
 
 /// Setup screen for starting a multi-character group chat from Home,
@@ -71,6 +72,7 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
   List<Character> _all = const [];
   CharacterCategoryState _categoryState = CharacterCategoryState.empty;
   String _filterCategoryId = CharacterCategoryService.allFilterId;
+  bool _fullCardsOnly = false;
   List<GlobalLorebook> _lorebooks = const [];
   final List<Character> _ordered = [];
   final Set<String> _selectedLoreIds = {};
@@ -90,16 +92,20 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
       state: _categoryState,
       categoryId: _filterCategoryId,
     );
-    if (_filterCategoryId.isEmpty || _ordered.isEmpty) return filtered;
-    final seen = filtered.map((c) => c.id).toSet();
+    final typed = widget.categoryService.filterFullCardsOnly(
+      filtered,
+      fullCardsOnly: _fullCardsOnly,
+    );
+    if (_filterCategoryId.isEmpty || _ordered.isEmpty) return typed;
+    final seen = typed.map((c) => c.id).toSet();
     final extras = <Character>[];
     for (final member in _ordered) {
       if (seen.contains(member.id)) continue;
       extras.add(member);
       seen.add(member.id);
     }
-    if (extras.isEmpty) return filtered;
-    return [...filtered, ...extras];
+    if (extras.isEmpty) return typed;
+    return [...typed, ...extras];
   }
 
   @override
@@ -210,6 +216,24 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
         _ordered.removeWhere((c) => c.id == character.id);
       }
     });
+  }
+
+  Future<void> _createTemporaryCharacter() async {
+    final created = await showTemporaryCharacterSheet(
+      context: context,
+      characterService: widget.characterService,
+    );
+    if (created == null || !mounted) return;
+    await _load();
+    if (!mounted) return;
+    setState(() {
+      if (!_ordered.any((c) => c.id == created.id)) {
+        _ordered.add(created);
+      }
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Added temporary ${created.name}')),
+    );
   }
 
   Future<void> _createCharacter() async {
@@ -588,10 +612,24 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
       appBar: AppBar(
         title: Text(_isEditMode ? 'Manage cast' : 'New group chat'),
         actions: [
-          IconButton(
-            tooltip: 'Create character',
+          PopupMenuButton<String>(
+            tooltip: 'Add character',
+            enabled: !_working,
+            onSelected: (value) {
+              if (value == 'full') _createCharacter();
+              if (value == 'temp') _createTemporaryCharacter();
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: 'full',
+                child: Text('New full character'),
+              ),
+              PopupMenuItem(
+                value: 'temp',
+                child: Text('Add temporary character'),
+              ),
+            ],
             icon: const Icon(Icons.person_add_outlined),
-            onPressed: _working ? null : _createCharacter,
           ),
         ],
       ),
@@ -645,6 +683,11 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
                           setState(() => _filterCategoryId = id),
                       onManage: _manageCategories,
                     ),
+                    CharacterCardTypeFilterBar(
+                      fullCardsOnly: _fullCardsOnly,
+                      onChanged: (value) =>
+                          setState(() => _fullCardsOnly = value),
+                    ),
                     const SizedBox(height: 4),
                     ..._pickerCharacters.map((c) {
                       final on = _ordered.any((m) => m.id == c.id);
@@ -655,7 +698,15 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
                           label: c.name,
                           radius: 18,
                         ),
-                        title: Text(c.name),
+                        title: Row(
+                          children: [
+                            Expanded(child: Text(c.name)),
+                            if (c.isTemporary) ...[
+                              const SizedBox(width: 8),
+                              const TemporaryCharacterBadge(),
+                            ],
+                          ],
+                        ),
                         controlAffinity: ListTileControlAffinity.leading,
                         contentPadding: EdgeInsets.zero,
                         onChanged: (v) => _toggleMember(c, v == true),
@@ -685,7 +736,15 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
                             leading: CircleAvatar(
                               child: Text('${index + 1}'),
                             ),
-                            title: Text(c.name),
+                            title: Row(
+                          children: [
+                            Expanded(child: Text(c.name)),
+                            if (c.isTemporary) ...[
+                              const SizedBox(width: 8),
+                              const TemporaryCharacterBadge(),
+                            ],
+                          ],
+                        ),
                             trailing: const Icon(Icons.drag_handle),
                           );
                         },

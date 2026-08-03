@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/lorebook.dart';
+import '../services/ai_field_changes.dart';
 import '../services/lore_collaborator.dart';
 import '../services/nanogpt_service.dart';
 import '../services/settings_service.dart';
+import '../services/world_workshop_builder.dart';
+import '../widgets/ai_field_changes_sheet.dart';
 import '../widgets/keyboard_inset.dart';
 import '../widgets/minimal_chip_button.dart';
 
@@ -30,6 +33,9 @@ class LorebookEditScreen extends StatefulWidget {
 }
 
 class _LorebookEditScreenState extends State<LorebookEditScreen> {
+  static const _collaborator = LoreCollaborator();
+  final _workshopBuilder = WorldWorkshopBuilder();
+
   late TextEditingController _name;
   late TextEditingController _description;
   late TextEditingController _scanDepth;
@@ -38,6 +44,7 @@ class _LorebookEditScreenState extends State<LorebookEditScreen> {
   late Map<String, dynamic> _extensions;
   String _entrySearch = '';
   _LoreEntryFilter _entryFilter = _LoreEntryFilter.all;
+  bool _consistencyBusy = false;
 
   @override
   void initState() {
@@ -74,6 +81,170 @@ class _LorebookEditScreenState extends State<LorebookEditScreen> {
 
   void _save() {
     Navigator.of(context).pop(_snapshot());
+  }
+
+  void _applyLorebook(Lorebook book) {
+    _name.text = book.name;
+    _description.text = book.description;
+    _scanDepth.text = '${book.scanDepth}';
+    _tokenBudget.text = '${book.tokenBudget}';
+    _entries = List<LorebookEntry>.from(book.entries);
+    _extensions = Map<String, dynamic>.from(book.extensions);
+  }
+
+  Future<void> _runConsistencyCheck() async {
+    if (_consistencyBusy) return;
+    setState(() => _consistencyBusy = true);
+    try {
+      final collaborator =
+          await widget.settingsService.getCollaboratorSettings();
+      final messages = _collaborator.buildConsistencyCheckMessages(
+        book: _snapshot(),
+        characterName: widget.characterName,
+        guidanceNote: collaborator.guidanceNote,
+      );
+      final model = await widget.settingsService.getModel();
+      final sampling = await widget.settingsService.getSampling();
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+      final report = await widget.nanoGptService.complete(
+        model: model,
+        messages: messages,
+        baseUrl: baseUrl,
+        sampling: sampling,
+      );
+      if (!mounted) return;
+      final trimmedReport = report.trim();
+      final fixRequested = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Lorebook consistency'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: SelectableText(trimmedReport),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Close'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Fix inconsistencies'),
+            ),
+          ],
+        ),
+      );
+      if (fixRequested == true && mounted) {
+        await _runConsistencyFix(trimmedReport);
+      }
+    } on NanoGptCancelledException {
+      // Ignore.
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Consistency check failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _consistencyBusy = false);
+    }
+  }
+
+  Future<void> _runConsistencyFix(String consistencyReport) async {
+    if (_consistencyBusy) return;
+    setState(() => _consistencyBusy = true);
+    try {
+      final before = _snapshot();
+      final collaborator =
+          await widget.settingsService.getCollaboratorSettings();
+      final messages = _collaborator.buildConsistencyFixMessages(
+        book: before,
+        consistencyReport: consistencyReport,
+        characterName: widget.characterName,
+        guidanceNote: collaborator.guidanceNote,
+      );
+      final model = await widget.settingsService.getModel();
+      final sampling = await widget.settingsService.getSampling();
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+
+      Lorebook? fixed;
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final raw = await widget.nanoGptService.complete(
+          model: model,
+          messages: messages,
+          baseUrl: baseUrl,
+          sampling: sampling,
+        );
+        try {
+          fixed = _workshopBuilder.parseLorebookConsistencyFixJson(
+            raw,
+            original: before,
+          );
+          break;
+        } on FormatException {
+          if (attempt == 1) rethrow;
+        }
+      }
+      if (fixed == null) {
+        throw const FormatException(
+          'Could not find lorebook JSON in the AI reply. Try again.',
+        );
+      }
+
+      if (!mounted) return;
+      final changes = compareLorebooks(before, fixed);
+      if (changes.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No changes were suggested. Try editing manually.'),
+          ),
+        );
+        return;
+      }
+
+      final apply = await showAiFieldChangesSheet(
+        context: context,
+        title: 'Review lorebook fixes',
+        subtitle: 'Tap an item to see before and after. Apply updates this book.',
+        changes: changes,
+        applyLabel: 'Update lorebook',
+      );
+      if (apply != true || !mounted) return;
+
+      setState(() => _applyLorebook(fixed!));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Updated ${changes.length} item${changes.length == 1 ? '' : 's'} from consistency fix.',
+          ),
+        ),
+      );
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } on NanoGptCancelledException {
+      // Ignore.
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Consistency fix failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _consistencyBusy = false);
+    }
   }
 
   Future<void> _editEntry(int? index) async {
@@ -169,8 +340,34 @@ class _LorebookEditScreenState extends State<LorebookEditScreen> {
       appBar: AppBar(
         title: Text(title),
         actions: [
+          PopupMenuButton<String>(
+            enabled: !_consistencyBusy,
+            onSelected: (value) {
+              if (value == 'consistency') _runConsistencyCheck();
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'consistency',
+                enabled: !_consistencyBusy,
+                child: Row(
+                  children: [
+                    if (_consistencyBusy)
+                      const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    else
+                      const Icon(Icons.fact_check_outlined),
+                    const SizedBox(width: 12),
+                    const Text('Consistency check'),
+                  ],
+                ),
+              ),
+            ],
+          ),
           TextButton(
-            onPressed: _save,
+            onPressed: _consistencyBusy ? null : _save,
             child: const Text('Save'),
           ),
         ],

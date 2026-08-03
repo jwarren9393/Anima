@@ -104,6 +104,14 @@ OUTPUT FORMAT (mandatory):
 - Plain bullet list only. One fact per line. Start each line with "- ".
 - Optional short labels: Location:, Present:, Relationship:, Event:, Secret:,
   Item:, Goal:, Thread:, Injury:, Promise:, Change:
+- For private or scene-specific facts, ALWAYS tag who witnessed or knows them using
+  character names (not "User"):
+  - Secret (known by Mira, Aedric): …
+  - Event (witnesses: Mira, King Aethlor): …
+  - Or (Mira only): … when literally one person knows
+- NEVER write scene-specific Event/Secret/Relationship bullets without a witness tag.
+- If only some cast were present, name ONLY those witnesses — never the whole group.
+- Public world facts (Location, Item, Faction, World, Rule, Lore, Setting) need no witness tag.
 - Clinical, objective, telegraphic facts. Past tense for completed events.
 - NO metaphors, poetry, atmosphere, sensory prose, dialogue quotes, or RP voice.
 - NO narrative paragraphs. NO reenacting scenes. NO character speech patterns.
@@ -115,6 +123,7 @@ CONTENT RULES:
 - Prefer the NEWEST information. Do not keep stale facts beside updated ones.
 - Track only what matters later: who is present, locations, relationships, secrets
   revealed, injuries, inventory, promises, goals, and open plot threads.
+- Tag secrets and private events with who witnessed or knows them (see format above).
 - Do not sanitize, moralize, or omit uncomfortable facts.
 - Merge duplicate bullets. Delete obsolete bullets entirely.
 
@@ -173,6 +182,8 @@ LENGTH:
       if (text.isEmpty) continue;
       if (message.isNarrator) {
         transcript.writeln('Narrator: $text');
+      } else if (message.isDirector) {
+        transcript.writeln('Director: $text');
       } else {
         final who = message.isUser
             ? userName

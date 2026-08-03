@@ -11,6 +11,7 @@ class NarratorBubble extends StatelessWidget {
     this.label = 'Opening scene',
     this.icon = Icons.auto_stories_outlined,
     this.onTap,
+    this.onLongPress,
     this.injecting = false,
   });
 
@@ -18,6 +19,7 @@ class NarratorBubble extends StatelessWidget {
   final String label;
   final IconData icon;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final bool injecting;
 
   @override
@@ -35,6 +37,7 @@ class NarratorBubble extends StatelessWidget {
       borderRadius: BorderRadius.circular(ui.chatBubbleRadius),
       child: InkWell(
         onTap: onTap,
+        onLongPress: onLongPress,
         borderRadius: BorderRadius.circular(ui.chatBubbleRadius),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -59,9 +62,10 @@ class NarratorBubble extends StatelessWidget {
                   if (injecting) ...[
                     const SizedBox(width: 8),
                     Tooltip(
-                      message:
-                          'Still included in AI prompts until you send a message '
-                          'or turn it off in ⋮.',
+                      message: label == 'Director'
+                          ? 'Commands the next AI reply — regen/swipe still obeys until you send a normal message.'
+                          : 'Still included in AI prompts until you send a message '
+                              'or turn it off in ⋮.',
                       child: Icon(
                         Icons.psychology_outlined,
                         size: 15,

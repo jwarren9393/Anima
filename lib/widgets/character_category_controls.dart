@@ -73,6 +73,44 @@ class CharacterCategoryFilterBar extends StatelessWidget {
   }
 }
 
+/// All characters vs full cards only (hides temporary scene NPCs).
+class CharacterCardTypeFilterBar extends StatelessWidget {
+  const CharacterCardTypeFilterBar({
+    super.key,
+    required this.fullCardsOnly,
+    required this.onChanged,
+  });
+
+  final bool fullCardsOnly;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          FilterChip(
+            label: const Text('All'),
+            selected: !fullCardsOnly,
+            onSelected: (selected) {
+              if (selected) onChanged(false);
+            },
+          ),
+          const SizedBox(width: 8),
+          FilterChip(
+            label: const Text('Full cards only'),
+            selected: fullCardsOnly,
+            onSelected: (selected) {
+              if (selected) onChanged(true);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Checkbox sheet to assign a character to zero or more categories.
 Future<Set<String>?> showCharacterCategoryPicker({
   required BuildContext context,

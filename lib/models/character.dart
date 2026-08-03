@@ -26,6 +26,7 @@ class Character {
     this.extensions = const {},
     this.avatarFileName,
     this.sourceWorkshopId,
+    this.isTemporary = false,
   });
 
   /// Anima-only stable id (not part of the ST card spec).
@@ -67,6 +68,9 @@ class Character {
 
   /// Creation Center workshop this character was saved from (provenance).
   final String? sourceWorkshopId;
+
+  /// Lightweight NPC for a scene — name + quick note only until promoted.
+  final bool isTemporary;
 
   /// Typed view of [characterBook], or null if missing/empty.
   Lorebook? get lorebook {
@@ -118,6 +122,7 @@ class Character {
     bool clearAvatar = false,
     String? sourceWorkshopId,
     bool clearSourceWorkshopId = false,
+    bool? isTemporary,
   }) {
     return Character(
       id: id ?? this.id,
@@ -143,6 +148,7 @@ class Character {
       sourceWorkshopId: clearSourceWorkshopId
           ? null
           : (sourceWorkshopId ?? this.sourceWorkshopId),
+      isTemporary: isTemporary ?? this.isTemporary,
     );
   }
 
@@ -168,6 +174,7 @@ class Character {
           'avatar_file': avatarFileName,
         if (sourceWorkshopId != null && sourceWorkshopId!.isNotEmpty)
           'sourceWorkshopId': sourceWorkshopId,
+        if (isTemporary) 'is_temporary': true,
       };
 
   factory Character.fromJson(Map<String, dynamic> json) {
@@ -243,6 +250,7 @@ class Character {
         final raw = _str(json['sourceWorkshopId']);
         return raw.isEmpty ? null : raw;
       }(),
+      isTemporary: json['is_temporary'] == true,
     );
   }
 
