@@ -267,7 +267,12 @@ class WorkshopHubController {
       '${dir.path}/anima_world_${safeTitle.isEmpty ? workshop.id : safeTitle}.json',
     );
     await file.writeAsString(text);
-    await Share.shareXFiles([XFile(file.path)], text: 'Anima world bundle');
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(file.path)],
+        text: 'Anima world bundle',
+      ),
+    );
   }
 
   Future<WorkshopBundleImport?> importBundleFile() async {

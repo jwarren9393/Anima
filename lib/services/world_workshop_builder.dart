@@ -83,8 +83,8 @@ class WorldWorkshopBuilder {
   "spec_version": "2.0",
   "data": {
     "name": "Character Name",
-    "description": "appearance, background, important facts",
-    "personality": "traits, speech style, motives",
+    "description": "appearance, role, and factual backstory only",
+    "personality": "temperament, speech style, and behavior only",
     "mes_example": "<START>\\n{{user}}: ...\\n{{char}}: ...",
     "creator_notes": "brief notes for the card author",
     "tags": ["tag1", "tag2"],
@@ -93,6 +93,18 @@ class WorldWorkshopBuilder {
   }
 }''';
 
+  static const slimCharacterCardFieldSplitRules = '''
+FIELD SPLIT (token efficiency — critical):
+- description = physical appearance, age, role/occupation, and factual backstory
+  (who they are on paper: looks, history, affiliations, concrete skills).
+- personality = temperament, values, habits, speech style, and how they behave
+  in scenes — not a repeat of description.
+- Put each fact in ONE field only. Never copy the same sentence into both fields.
+- If a detail could fit both, choose: facts/history → description; behavior/voice
+  → personality.
+- Keep each field 2–4 sentences unless the source is unusually rich.
+- mes_example = short RP sample only (not a third copy of bio text).''';
+
   static const slimCharacterCardFieldRules = '''
 - Generate ONLY these card fields: name, description, personality, mes_example,
   creator_notes, and tags.
@@ -100,7 +112,8 @@ class WorldWorkshopBuilder {
   post_history_instructions. Anima uses per-chat opening scenes and app-wide
   system/post-history prompts instead of per-character copies of those fields.
 - Do NOT include a character_book / lorebook on the card — world lore stays in
-  the separate global lorebook.''';
+  the separate global lorebook.
+$slimCharacterCardFieldSplitRules''';
 
   static const slimCharacterCardUpdateFieldRules = '''
 - Update ONLY: description, personality, mes_example, creator_notes, and tags
@@ -109,7 +122,23 @@ class WorldWorkshopBuilder {
   system_prompt, or post_history_instructions — the app keeps the existing card's
   values for those fields.
 - Do NOT include a character_book / lorebook on the card — world lore stays in
-  the separate global lorebook. The app keeps the card's existing book.''';
+  the separate global lorebook. The app keeps the card's existing book.
+$slimCharacterCardFieldSplitRules''';
+
+  static const lorebookExportScopeRules = '''
+LOREBOOK SCOPE (critical — Anima uses separate character cards):
+- This lorebook is WORLD INFO only: places, factions, rules, items, history,
+  events, organizations, magic/tech systems, locations, and minor NPCs.
+- Do NOT create lore entries that duplicate full character cards for main cast
+  members who have or will get playable character cards — their description and
+  personality live on the card, not in World Info.
+- For playable cast: at most one short cross-reference entry ONLY when world
+  context must mention them (e.g. keys: faction name; content: 1–2 sentences on
+  the guild, not a character biography). Never use a cast member's name as the
+  only keyword for a full bio entry.
+- NPCs with no character card may get a focused lore entry (role + 2–3 facts).
+- Prefer keyword triggers that will appear naturally in chat (place names,
+  faction names, artifact names) — not character names alone.''';
 
   static const slimPersonaJsonShape = '''
 {
@@ -189,6 +218,34 @@ class WorldWorkshopBuilder {
     final effective = user == null || user < floor ? floor : user;
     return base.copyWith(maxTokens: effective.clamp(256, 8192));
   }
+
+  /// Minimum completion budget for consistency-check prose reports.
+  static const consistencyReportMinMaxTokens = 2048;
+
+  /// Applies [consistencyReportMinMaxTokens] for read-only consistency reports.
+  static SamplingSettings consistencyReportSampling(SamplingSettings base) {
+    const minTokens = consistencyReportMinMaxTokens;
+    final user = base.maxTokens;
+    final effective = user == null || user < minTokens ? minTokens : user;
+    return base.copyWith(maxTokens: effective.clamp(512, 8192));
+  }
+
+  /// Applies [workshopExportMinMaxTokens] for JSON consistency-fix replies.
+  static SamplingSettings consistencyFixSampling(SamplingSettings base) {
+    return workshopExportSampling(base);
+  }
+
+  static const plainEnglishUpdateTargetFieldRules = '''
+TARGET FIELD RULES (read the user's notes carefully):
+- If they ask to change only one area, update ONLY that field:
+  · description / appearance / backstory / role / looks → description only
+  · personality / traits / temperament / how they act / speech → personality only
+  · example dialogue / mes_example / sample lines / chat style → mes_example only
+  · tags only → tags only
+- If they name multiple fields, update only those named fields.
+- If they give a general update with no specific field, merge into the fields
+  their notes clearly affect — do not rewrite unrelated fields.
+- Never duplicate the same facts in both description and personality.''';
 
   /// Applies [workshopExportMinMaxTokens] for lorebook / opening-scene JSON.
   static SamplingSettings workshopExportSampling(SamplingSettings base) {
@@ -288,8 +345,9 @@ WHAT YOU CANNOT DO (never pretend you did these in chat):
   send text; the app saves through separate buttons the user taps.
 
 HOW THE USER ACTUALLY SAVES WORK (tell them when relevant, using exact labels):
-- ⋮ menu → **Create lorebook** / **Update lorebook** — exports keyword lore from
-  this workshop into World Info (separate AI step with JSON; not this chat).
+- ⋮ menu → **Create lorebook** / **Update lorebook** — exports keyword **world** lore
+  (places, factions, rules — not full character bios; use **Create AI characters**
+  for cast cards).
 - ⋮ menu → **Create AI characters** — generates new cards from the workshop;
   user reviews each before save.
 - ⋮ menu → **Update workshop cast** — revises characters already tied to THIS
@@ -781,6 +839,8 @@ Preserve-and-merge rules:
 - Keep the same character identity (same person). Do not rename unless the
   notes explicitly ask for a name change.
 
+$plainEnglishUpdateTargetFieldRules
+
 Output rules:
 - Reply with ONLY a single JSON object. No markdown fences. No preamble.
 - Prefer this shape (chara_card_v2):
@@ -1154,6 +1214,28 @@ $transcriptBlock
     return const JsonEncoder.withIndent('  ').convert(book.toJson());
   }
 
+  /// Names (+ optional one-line role) for lore export — cards already cover bios.
+  String formatWorkshopCastForLoreExport(List<Character> cast) {
+    if (cast.isEmpty) return '';
+    final lines = <String>[
+      'WORKSHOP CAST (already have or will get character cards — do NOT duplicate '
+      'these people as full lorebook bio entries):',
+    ];
+    for (final character in cast) {
+      final name = character.name.trim();
+      if (name.isEmpty) continue;
+      final role = character.description.trim();
+      if (role.isEmpty) {
+        lines.add('- $name');
+      } else {
+        final short = role.length > 120 ? '${role.substring(0, 117).trimRight()}…' : role;
+        lines.add('- $name — $short');
+      }
+    }
+    if (lines.length <= 1) return '';
+    return '${lines.join('\n')}\n';
+  }
+
   /// Messages for the final “turn this chat into a lorebook” NanoGPT call.
   List<Map<String, String>> buildExportMessages({
     required List<ChatMessage> conversation,
@@ -1162,6 +1244,7 @@ $transcriptBlock
     WorkshopSourceContext? importedSource,
     String worldSummary = '',
     List<String> canonPinMessageIds = const [],
+    List<Character> workshopCast = const [],
   }) {
     final guidance = guidanceNote.trim().isEmpty
         ? CollaboratorSettings.defaultGuidanceNote
@@ -1202,16 +1285,19 @@ Output rules:
     }
   ]
 }
-- Create useful keyword entries (places, people, factions, rules, items).
+- Create useful keyword entries (places, factions, rules, items, events).
 - Prefer several focused entries over one giant dump.
 - Use "constant": true only for a short always-on overview if helpful.
 - keys should be words/phrases that would appear in chat to trigger the entry.
 - content should be raw lore text (not JSON). Do not sanitize or moralize.
+
+$lorebookExportScopeRules
 '''
             .trim();
 
     final source = formatLorebookContext(sourceLorebook);
     final imported = _importedBlock(importedSource);
+    final castBlock = formatWorkshopCastForLoreExport(workshopCast);
     final summaryBlock = worldSummary.trim().isEmpty
         ? ''
         : 'World summary:\n${worldSummary.trim()}\n\n';
@@ -1222,8 +1308,10 @@ Output rules:
 UPDATE MODE (linked lorebook present):
 - This is an UPDATE, not a blank slate. Preserve existing entry IDs, extensions,
   and settings unless the workshop explicitly asks to remove them.
-- ADD new entries for people, places, factions, rules, and facts established in
-  the workshop chat but missing from the current book.
+- ADD new world entries (places, factions, rules, items) established in the
+  workshop but missing from the current book — not duplicate character bios.
+- REMOVE or shorten lore entries that only repeat character-card bios for cast
+  members listed below (world context may stay if keyed on factions/places).
 - REVISE existing entries when the chat updates or contradicts older lore —
   prefer workshop conversation, canon pins, and world summary over stale book text.
 - Resolve contradictions by aligning the book with the latest workshop canon.
@@ -1231,7 +1319,7 @@ UPDATE MODE (linked lorebook present):
         : '';
     final user =
         '''
-$imported$summaryBlock${canonBlock.isEmpty ? '' : '$canonBlock\n'}${source.isEmpty ? '' : '''
+$imported$summaryBlock${castBlock.isEmpty ? '' : '$castBlock\n'}${canonBlock.isEmpty ? '' : '$canonBlock\n'}${source.isEmpty ? '' : '''
 This is the current linked lorebook. Preserve its entries, IDs, settings, and
 extensions unless the conversation explicitly asks to change or remove them:
 
@@ -1342,6 +1430,7 @@ ${formatTranscript(conversation)}
     String buildPromptNote = CharacterBuildSettings.defaultPromptNote,
     Lorebook? sourceLorebook,
     WorkshopSourceContext? importedSource,
+    List<Character> existingCast = const [],
   }) {
     final guidance = buildPromptNote.trim().isEmpty
         ? CharacterBuildSettings.defaultPromptNote
@@ -1362,6 +1451,7 @@ Include:
 Skip:
 - Vague crowd mentions with no identity
 - Pure places, factions, or items (unless they are also a person/being)
+- Characters who already have cards in the workshop cast list below
 
 Output rules:
 - Reply with ONLY a single JSON object. No markdown fences. No preamble.
@@ -1376,9 +1466,10 @@ $characterListJsonExample
 
     final source = formatLorebookContext(sourceLorebook);
     final imported = _importedBlock(importedSource);
+    final castBlock = formatWorkshopCastForLoreExport(existingCast);
     final user =
         '''
-$imported${source.isEmpty ? '' : '''
+$imported${castBlock.isEmpty ? '' : '$castBlock\n'}${source.isEmpty ? '' : '''
 Use this linked lorebook as source material:
 
 $source
@@ -1604,29 +1695,31 @@ ${formatTranscript(conversation)}
       return trimmed.isEmpty ? previous : trimmed;
     }
 
-    return Character(
-      id: original.id,
-      name: pick(parsed.name, original.name),
-      description: pick(parsed.description, original.description),
-      personality: pick(parsed.personality, original.personality),
-      scenario: pick(parsed.scenario, original.scenario),
-      firstMes: pick(parsed.firstMes, original.firstMes),
-      mesExample: pick(parsed.mesExample, original.mesExample),
-      systemPrompt: pick(parsed.systemPrompt, original.systemPrompt),
-      postHistoryInstructions: pick(
-        parsed.postHistoryInstructions,
-        original.postHistoryInstructions,
+    return consolidateSlimCharacterFields(
+      Character(
+        id: original.id,
+        name: pick(parsed.name, original.name),
+        description: pick(parsed.description, original.description),
+        personality: pick(parsed.personality, original.personality),
+        scenario: pick(parsed.scenario, original.scenario),
+        firstMes: pick(parsed.firstMes, original.firstMes),
+        mesExample: pick(parsed.mesExample, original.mesExample),
+        systemPrompt: pick(parsed.systemPrompt, original.systemPrompt),
+        postHistoryInstructions: pick(
+          parsed.postHistoryInstructions,
+          original.postHistoryInstructions,
+        ),
+        alternateGreetings: parsed.alternateGreetings.isEmpty
+            ? original.alternateGreetings
+            : parsed.alternateGreetings,
+        tags: parsed.tags.isEmpty ? original.tags : parsed.tags,
+        creatorNotes: original.creatorNotes,
+        creator: original.creator,
+        characterVersion: original.characterVersion,
+        characterBook: original.characterBook,
+        extensions: original.extensions,
+        avatarFileName: original.avatarFileName,
       ),
-      alternateGreetings: parsed.alternateGreetings.isEmpty
-          ? original.alternateGreetings
-          : parsed.alternateGreetings,
-      tags: parsed.tags.isEmpty ? original.tags : parsed.tags,
-      creatorNotes: original.creatorNotes,
-      creator: original.creator,
-      characterVersion: original.characterVersion,
-      characterBook: original.characterBook,
-      extensions: original.extensions,
-      avatarFileName: original.avatarFileName,
     );
   }
 
@@ -1666,30 +1759,32 @@ ${formatTranscript(conversation)}
       return trimmed.isEmpty ? previous : trimmed;
     }
 
-    return Character(
-      id: original.id,
-      name: pick(parsed.name, original.name),
-      description: pick(parsed.description, original.description),
-      personality: pick(parsed.personality, original.personality),
-      scenario: original.scenario,
-      firstMes: original.firstMes,
-      mesExample: pick(parsed.mesExample, original.mesExample),
-      systemPrompt: original.systemPrompt,
-      postHistoryInstructions: original.postHistoryInstructions,
-      alternateGreetings: original.alternateGreetings,
-      creatorNotes: original.creatorNotes.trim().isNotEmpty
-          ? original.creatorNotes
-          : pick(parsed.creatorNotes, original.creatorNotes),
-      creator: original.creator.trim().isNotEmpty
-          ? original.creator
-          : pick(parsed.creator, original.creator),
-      characterVersion: original.characterVersion.trim().isNotEmpty
-          ? original.characterVersion
-          : pick(parsed.characterVersion, original.characterVersion),
-      tags: parsed.tags.isEmpty ? original.tags : parsed.tags,
-      characterBook: original.characterBook,
-      extensions: original.extensions,
-      avatarFileName: original.avatarFileName,
+    return consolidateSlimCharacterFields(
+      Character(
+        id: original.id,
+        name: pick(parsed.name, original.name),
+        description: pick(parsed.description, original.description),
+        personality: pick(parsed.personality, original.personality),
+        scenario: original.scenario,
+        firstMes: original.firstMes,
+        mesExample: pick(parsed.mesExample, original.mesExample),
+        systemPrompt: original.systemPrompt,
+        postHistoryInstructions: original.postHistoryInstructions,
+        alternateGreetings: original.alternateGreetings,
+        creatorNotes: original.creatorNotes.trim().isNotEmpty
+            ? original.creatorNotes
+            : pick(parsed.creatorNotes, original.creatorNotes),
+        creator: original.creator.trim().isNotEmpty
+            ? original.creator
+            : pick(parsed.creator, original.creator),
+        characterVersion: original.characterVersion.trim().isNotEmpty
+            ? original.characterVersion
+            : pick(parsed.characterVersion, original.characterVersion),
+        tags: parsed.tags.isEmpty ? original.tags : parsed.tags,
+        characterBook: original.characterBook,
+        extensions: original.extensions,
+        avatarFileName: original.avatarFileName,
+      ),
     );
   }
 
@@ -1850,19 +1945,23 @@ ${formatTranscript(conversation)}
   }
 
   /// Parse model output into a [Lorebook]. Throws [FormatException] on failure.
-  Lorebook parseLorebookJson(String raw) {
+  Lorebook parseLorebookJson(
+    String raw, {
+    List<Character> workshopCast = const [],
+  }) {
     final map = _extractJsonObject(
       raw,
       emptyMessage: 'The AI returned an empty lorebook.',
       missingMessage: lorebookJsonMissingMessage(raw),
       notObjectMessage: 'Lorebook JSON must be an object.',
     );
-    final book = Lorebook.parseImport(map);
+    var book = Lorebook.parseImport(map);
     if (book.entries.isEmpty) {
       throw const FormatException(
         'The AI returned a lorebook with no entries. Try chatting a bit more, then Create again.',
       );
     }
+    book = filterCastBioDuplicates(book, workshopCast: workshopCast);
     if (book.name.trim().isEmpty) {
       return book.copyWith(name: 'Workshop lorebook');
     }
@@ -2011,7 +2110,98 @@ ${formatTranscript(conversation)}
         'The AI returned a character card without a name.',
       );
     }
-    return cleaned;
+    return consolidateSlimCharacterFields(cleaned);
+  }
+
+  /// Removes sentences from personality that duplicate description (post-parse).
+  Character consolidateSlimCharacterFields(Character character) {
+    final desc = character.description.trim();
+    final pers = character.personality.trim();
+    if (desc.isEmpty || pers.isEmpty) return character;
+
+    final descNorm = _normalizeOverlapText(desc);
+    final kept = <String>[];
+    for (final sentence in _splitIntoSentences(pers)) {
+      final trimmed = sentence.trim();
+      if (trimmed.isEmpty) continue;
+      final sentNorm = _normalizeOverlapText(trimmed);
+      if (sentNorm.length >= 12) {
+        if (descNorm.contains(sentNorm)) continue;
+        if (_wordOverlapRatio(sentNorm, descNorm) >= 0.72) continue;
+      }
+      kept.add(trimmed);
+    }
+
+    if (kept.isEmpty) return character;
+    final merged = kept.join(' ').trim();
+    if (merged == pers) return character;
+    return character.copyWith(personality: merged);
+  }
+
+  /// Drops lore entries that only repeat workshop cast character-card bios.
+  Lorebook filterCastBioDuplicates(
+    Lorebook book, {
+    List<Character> workshopCast = const [],
+  }) {
+    if (workshopCast.isEmpty) return book;
+    final castNames = {
+      for (final c in workshopCast)
+        if (c.name.trim().isNotEmpty) c.name.trim().toLowerCase(),
+    };
+    if (castNames.isEmpty) return book;
+
+    final filtered = [
+      for (final entry in book.entries)
+        if (!_entryDuplicatesCastCard(entry, workshopCast, castNames)) entry,
+    ];
+    if (filtered.isEmpty || filtered.length == book.entries.length) {
+      return book;
+    }
+    return book.copyWith(entries: filtered);
+  }
+
+  bool _entryDuplicatesCastCard(
+    LorebookEntry entry,
+    List<Character> cast,
+    Set<String> castNames,
+  ) {
+    if (entry.constant) return false;
+    final keyList = [
+      ...entry.keys,
+      ...entry.secondaryKeys,
+    ].map((k) => k.trim().toLowerCase()).where((k) => k.isNotEmpty).toList();
+    if (keyList.isEmpty) return false;
+    if (!keyList.every(castNames.contains)) return false;
+
+    final content = entry.content.trim();
+    if (content.length < 80) return false;
+
+    final contentNorm = _normalizeOverlapText(content);
+    for (final character in cast) {
+      final cardText = _normalizeOverlapText(
+        '${character.description} ${character.personality}',
+      );
+      if (cardText.isEmpty) continue;
+      if (_wordOverlapRatio(contentNorm, cardText) > 0.45) return true;
+    }
+    return false;
+  }
+
+  static String _normalizeOverlapText(String text) {
+    return text.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  static List<String> _splitIntoSentences(String text) {
+    return text.split(RegExp(r'(?<=[.!?])\s+|\n+'));
+  }
+
+  static double _wordOverlapRatio(String a, String b) {
+    final wordsA = a.split(RegExp(r'\s+')).where((w) => w.length > 2).toSet();
+    if (wordsA.isEmpty) return 0;
+    final wordsB = b.split(RegExp(r'\s+')).where((w) => w.length > 2).toSet();
+    if (wordsB.isEmpty) return 0;
+    final overlap = wordsA.where(wordsB.contains).length;
+    return overlap / wordsA.length;
   }
 
   /// Parse one generated player persona. Always assigns [preferredId].
@@ -2464,8 +2654,9 @@ Extract locations and relationships from a workshop. Reply with ONLY JSON:
         '''
 Audit a workshop before lorebook export. Reply with ONLY JSON:
 {"items": ["short actionable note", ...]}
-List gaps: missing locations, unnamed factions, characters mentioned but thin,
-contradictions, stale lorebook vs chat. Max 8 items. Empty list if ready.
+List gaps: missing locations, unnamed factions, thin world rules, contradictions,
+stale lorebook vs chat, lore entries that duplicate character-card bios for cast.
+Max 8 items. Empty list if ready.
 '''
             .trim();
     final imported = _importedBlock(importedSource);

@@ -1395,6 +1395,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       }
     }
     if (action == 'delete') {
+      if (!mounted) return;
       final label = isDirector ? 'director note' : 'narrator line';
       final confirmed = await showDialog<bool>(
         context: context,

@@ -92,10 +92,13 @@ class CharacterCollaborator {
   String fieldPurpose(CharacterCollaboratorField field) {
     switch (field) {
       case CharacterCollaboratorField.description:
-        return 'ST Description — appearance, background, important facts. '
-            'Usually included in every chat prompt.';
+        return 'ST Description — physical appearance, age, role/occupation, and '
+            'factual backstory only (who they are on paper). Do NOT put temperament, '
+            'speech style, or behavioral traits here — those belong in Personality.';
       case CharacterCollaboratorField.personality:
-        return 'ST Personality — a concise personality summary.';
+        return 'ST Personality — temperament, values, habits, speech style, and how '
+            'they behave in scenes. Do NOT repeat appearance or backstory facts from '
+            'Description — reference them only if needed for continuity.';
       case CharacterCollaboratorField.scenario:
         return 'ST Scenario — the current situation / scene context.';
       case CharacterCollaboratorField.firstMes:
@@ -106,7 +109,8 @@ class CharacterCollaborator {
             'for swiping. Write one new greeting (or a few lines).';
       case CharacterCollaboratorField.mesExample:
         return 'ST mes_example — example dialogue that teaches tone and style. '
-            'Prefer the <START> / {{user}}: / {{char}}: format.';
+            'Prefer the <START> / {{user}}: / {{char}}: format. Do NOT paste the '
+            'character bio here — write sample lines only.';
       case CharacterCollaboratorField.systemPrompt:
         return 'ST system_prompt — optional custom system instructions. '
             'May use {{original}} to keep Anima’s default.';
@@ -140,9 +144,9 @@ class CharacterCollaborator {
       ..writeln(fieldPurpose(field))
       ..writeln()
       ..writeln(
-        'Write NEW text for that field only. Do not repeat existing field '
-        'text unless briefly needed for continuity. The app will APPEND your '
-        'reply below whatever is already in the field.',
+        'Write NEW text for that field only. Do not repeat facts already in other '
+        'fields (especially between Description and Personality). The app will '
+        'APPEND your reply below whatever is already in the field.',
       )
       ..writeln(
         'Output plain field text only — no quotes around the whole reply, '
@@ -281,10 +285,16 @@ class CharacterCollaborator {
       )
       ..writeln('- Note gaps that hurt roleplay continuity.')
       ..writeln(
+        '- Flag when Description and Personality repeat the same facts (wastes tokens).',
+      )
+      ..writeln(
         '- Suggest brief, optional fixes as bullet tips — not full field rewrites.',
       )
       ..writeln(
-        '- Keep the report under ~400 words. Use short sections with headings.',
+        '- Finish every section you start. End with a complete summary sentence.',
+      )
+      ..writeln(
+        '- Keep the report focused (~600 words max) but always complete the report.',
       )
       ..writeln('- No moralizing or refusals about adult/dark themes.');
 
@@ -334,6 +344,10 @@ class CharacterCollaborator {
       ..writeln(
         '- Resolve contradictions (age, appearance, personality, scenario, '
         'examples, system prompt, greetings) with minimal necessary edits.',
+      )
+      ..writeln(
+        '- Put each fact in one field only: description = looks/role/backstory; '
+        'personality = temperament/behavior/speech; mes_example = sample lines only.',
       )
       ..writeln('- Do not invent a new character or add moralizing notes.')
       ..writeln()

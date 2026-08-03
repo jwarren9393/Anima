@@ -58,6 +58,16 @@ class _LorebookEditScreenState extends State<LorebookEditScreen> {
     _extensions = Map<String, dynamic>.from(book.extensions);
   }
 
+  bool _reportLooksTruncated(String report) {
+    final text = report.trim();
+    if (text.length < 80) return false;
+    return !text.endsWith('.') &&
+        !text.endsWith('!') &&
+        !text.endsWith('?') &&
+        !text.endsWith(':') &&
+        !text.endsWith(')');
+  }
+
   @override
   void dispose() {
     _name.dispose();
@@ -104,7 +114,9 @@ class _LorebookEditScreenState extends State<LorebookEditScreen> {
         guidanceNote: collaborator.guidanceNote,
       );
       final model = await widget.settingsService.getModel();
-      final sampling = await widget.settingsService.getSampling();
+      final sampling = WorldWorkshopBuilder.consistencyReportSampling(
+        await widget.settingsService.getSampling(),
+      );
       final baseUrl = await widget.settingsService.getApiBaseUrl();
       final report = await widget.nanoGptService.complete(
         model: model,
@@ -114,6 +126,7 @@ class _LorebookEditScreenState extends State<LorebookEditScreen> {
       );
       if (!mounted) return;
       final trimmedReport = report.trim();
+      final truncated = _reportLooksTruncated(trimmedReport);
       final fixRequested = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
@@ -121,7 +134,23 @@ class _LorebookEditScreenState extends State<LorebookEditScreen> {
           content: SizedBox(
             width: double.maxFinite,
             child: SingleChildScrollView(
-              child: SelectableText(trimmedReport),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (truncated)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(
+                        'This report may have been cut short. Try again or use '
+                        'a higher max-tokens setting in Generation parameters.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                      ),
+                    ),
+                  SelectableText(trimmedReport),
+                ],
+              ),
             ),
           ),
           actions: [
@@ -157,7 +186,6 @@ class _LorebookEditScreenState extends State<LorebookEditScreen> {
   }
 
   Future<void> _runConsistencyFix(String consistencyReport) async {
-    if (_consistencyBusy) return;
     setState(() => _consistencyBusy = true);
     try {
       final before = _snapshot();
@@ -170,7 +198,9 @@ class _LorebookEditScreenState extends State<LorebookEditScreen> {
         guidanceNote: collaborator.guidanceNote,
       );
       final model = await widget.settingsService.getModel();
-      final sampling = await widget.settingsService.getSampling();
+      final sampling = WorldWorkshopBuilder.consistencyFixSampling(
+        await widget.settingsService.getSampling(),
+      );
       final baseUrl = await widget.settingsService.getApiBaseUrl();
 
       Lorebook? fixed;

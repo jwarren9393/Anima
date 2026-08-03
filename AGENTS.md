@@ -62,7 +62,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-08-02  
-**Last agent action:** Updated README + GitHub **v1.0.0** release notes for build **47**; committed version fix (`1.0.0+47`).
+**Last agent action:** Build **48** — fixed analyzer issues; consistency fix review sheet + token floors; AI card builder review; pushed **v1.0.0** release.
 
 ### What works today
 

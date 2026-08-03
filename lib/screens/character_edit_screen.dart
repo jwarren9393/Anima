@@ -222,12 +222,33 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
       }
 
       if (!mounted) return;
+      final before = _characterFromDraft();
+      final changes = compareCharacterFields(before, draft);
+      if (changes.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No field changes were suggested. Try rephrasing.'),
+          ),
+        );
+        return;
+      }
+
+      final apply = await showAiFieldChangesSheet(
+        context: context,
+        title: 'Review generated card',
+        subtitle:
+            'Tap a field to see before and after. Apply fills the slim fields.',
+        changes: changes,
+        applyLabel: 'Apply to card',
+      );
+      if (apply != true || !mounted) return;
+
       setState(() => _applySlimFields(draft!));
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Filled description, personality, example dialogue, and tags '
-            '(Creation Center slim fields).',
+            'Applied ${changes.length} field${changes.length == 1 ? '' : 's'} '
+            '(description, personality, example dialogue, tags).',
           ),
         ),
       );
@@ -299,12 +320,32 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
       }
 
       if (!mounted) return;
+      final changes = compareCharacterFields(existing, draft);
+      if (changes.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No field changes were suggested. Try rephrasing.'),
+          ),
+        );
+        return;
+      }
+
+      final apply = await showAiFieldChangesSheet(
+        context: context,
+        title: 'Review card updates',
+        subtitle:
+            'Tap a field to see before and after. Scenario, greetings, and '
+            'prompts stay as-is.',
+        changes: changes,
+        applyLabel: 'Apply updates',
+      );
+      if (apply != true || !mounted) return;
+
       setState(() => _applyCharacterUpdate(draft!));
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Merged your notes into the slim card fields. Scenario, greetings, '
-            'and prompts were kept as-is.',
+            'Applied ${changes.length} field update${changes.length == 1 ? '' : 's'}.',
           ),
         ),
       );
@@ -458,7 +499,9 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         guidanceNote: collaborator.guidanceNote,
       );
       final model = await widget.settingsService.getModel();
-      final sampling = await widget.settingsService.getSampling();
+      final sampling = WorldWorkshopBuilder.consistencyReportSampling(
+        await widget.settingsService.getSampling(),
+      );
       final baseUrl = await widget.settingsService.getApiBaseUrl();
       final report = await widget.nanoGptService.complete(
         model: model,
@@ -468,6 +511,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
       );
       if (!mounted) return;
       final trimmedReport = report.trim();
+      final truncated = _reportLooksTruncated(trimmedReport);
       final fixRequested = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
@@ -475,7 +519,23 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
           content: SizedBox(
             width: double.maxFinite,
             child: SingleChildScrollView(
-              child: SelectableText(trimmedReport),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (truncated)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(
+                        'This report may have been cut short. Try again or use '
+                        'a higher max-tokens setting in Generation parameters.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                      ),
+                    ),
+                  SelectableText(trimmedReport),
+                ],
+              ),
             ),
           ),
           actions: [
@@ -511,7 +571,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
   }
 
   Future<void> _runConsistencyFix(String consistencyReport) async {
-    if (_wandBusy != null || _consistencyBusy) return;
+    if (_wandBusy != null) return;
     setState(() => _consistencyBusy = true);
     try {
       final before = _characterFromDraft();
@@ -523,7 +583,9 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         guidanceNote: collaborator.guidanceNote,
       );
       final model = await widget.settingsService.getModel();
-      final sampling = await widget.settingsService.getSampling();
+      final sampling = WorldWorkshopBuilder.consistencyFixSampling(
+        await widget.settingsService.getSampling(),
+      );
       final baseUrl = await widget.settingsService.getApiBaseUrl();
 
       Character? fixed;
@@ -766,6 +828,16 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
     await widget.characterService.upsert(character);
     if (!mounted) return;
     Navigator.of(context).pop(character);
+  }
+
+  bool _reportLooksTruncated(String report) {
+    final text = report.trim();
+    if (text.length < 80) return false;
+    return !text.endsWith('.') &&
+        !text.endsWith('!') &&
+        !text.endsWith('?') &&
+        !text.endsWith(':') &&
+        !text.endsWith(')');
   }
 
   @override
@@ -1030,10 +1102,10 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Describe the character in plain English. Fills the same slim '
-                    'fields as Creation Center (description, personality, example '
-                    'dialogue, tags — not scenario or greetings). Uses Settings → '
-                    'Character builds.',
+                    'Describe the character in plain English. Fills slim fields '
+                    '(description, personality, example dialogue, tags). To change '
+                    'one field only, say so — e.g. "make personality more sarcastic". '
+                    'Uses Settings → Character builds.',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                   const SizedBox(height: 12),

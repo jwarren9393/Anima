@@ -464,8 +464,12 @@ class LoreCollaborator {
       ..writeln('- Flag contradictions between entries (names, places, timelines, rules).')
       ..writeln('- Flag duplicate or overlapping entries that should merge.')
       ..writeln('- Flag weak or missing keywords that would fail to trigger lore.')
+      ..writeln('- Flag entries that duplicate full character-card bios.')
       ..writeln('- Suggest brief, optional fixes as bullet tips — not full rewrites.')
-      ..writeln('- Keep the report under ~400 words. Use short sections with headings.')
+      ..writeln('- Finish every section you start. End with a complete summary sentence.')
+      ..writeln(
+        '- Keep the report focused (~600 words max) but always complete the report.',
+      )
       ..writeln('- No moralizing or refusals about adult/dark themes.');
 
     final user = StringBuffer()

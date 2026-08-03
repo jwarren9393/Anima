@@ -108,6 +108,26 @@ void main() {
     });
   });
 
+  group('WorldWorkshopBuilder consistency sampling', () {
+    test('consistencyReportSampling raises low RP max_tokens floor', () {
+      const shortRp = SamplingSettings(maxTokens: 350);
+      final adjusted = WorldWorkshopBuilder.consistencyReportSampling(shortRp);
+      expect(
+        adjusted.maxTokens,
+        WorldWorkshopBuilder.consistencyReportMinMaxTokens,
+      );
+    });
+
+    test('consistencyFixSampling matches workshop export floor', () {
+      const shortRp = SamplingSettings(maxTokens: 350);
+      final adjusted = WorldWorkshopBuilder.consistencyFixSampling(shortRp);
+      expect(
+        adjusted.maxTokens,
+        WorldWorkshopBuilder.workshopExportMinMaxTokens,
+      );
+    });
+  });
+
   group('WorldWorkshopBuilder lorebook export errors', () {
     test('lorebookJsonMissingMessage detects prose-only replies', () {
       final message = WorldWorkshopBuilder.lorebookJsonMissingMessage(
@@ -185,8 +205,69 @@ Here you go:
       );
       expect(messages.length, 2);
       expect(messages[0]['content'], contains('Do not sanitize.'));
+      expect(messages[0]['content'], contains('WORLD INFO only'));
       expect(messages[1]['content'], contains('Rainy city with guilds'));
       expect(messages[1]['content'], contains('Captain Vex'));
+    });
+
+    test('buildExportMessages includes workshop cast skip list', () {
+      const mira = Character(
+        id: 'char_mira',
+        name: 'Mira',
+        description: 'Dock smuggler in oilskin.',
+      );
+      final messages = builder.buildExportMessages(
+        conversation: sampleConversation(),
+        workshopCast: const [mira],
+      );
+      expect(messages[1]['content'], contains('WORKSHOP CAST'));
+      expect(messages[1]['content'], contains('Mira'));
+      expect(messages[1]['content'], contains('do NOT duplicate'));
+    });
+
+    test('consolidateSlimCharacterFields strips duplicate personality', () {
+      const card = Character(
+        id: 'c1',
+        name: 'Mira',
+        description: 'A dock smuggler in oilskin. Works the night piers.',
+        personality:
+            'A dock smuggler in oilskin. Wry, loyal, and speaks in short sentences.',
+      );
+      final cleaned = builder.consolidateSlimCharacterFields(card);
+      expect(cleaned.personality, contains('Wry'));
+      expect(cleaned.personality, isNot(contains('dock smuggler in oilskin')));
+    });
+
+    test('filterCastBioDuplicates removes name-keyed cast bio entries', () {
+      const mira = Character(
+        id: 'char_mira',
+        name: 'Mira',
+        description: 'Dock smuggler in oilskin who owes the Tide Guild.',
+        personality: 'Wry and loyal.',
+      );
+      final book = Lorebook(
+        name: 'Harbor',
+        entries: [
+          LorebookEntry(
+            name: 'Mira bio',
+            keys: ['Mira'],
+            content:
+                'Mira is a dock smuggler in oilskin who owes the Tide Guild. '
+                'She is wry and loyal and runs contraband on the night piers.',
+          ),
+          LorebookEntry(
+            name: 'Tide Guild',
+            keys: ['Tide Guild', 'guild'],
+            content: 'Smugglers union controlling the harbor after dark.',
+          ),
+        ],
+      );
+      final filtered = builder.filterCastBioDuplicates(
+        book,
+        workshopCast: const [mira],
+      );
+      expect(filtered.entries.length, 1);
+      expect(filtered.entries.first.keys, contains('Tide Guild'));
     });
 
     test('linked lorebook is included in chat and update prompts', () {
@@ -314,6 +395,7 @@ Here you go:
         contains('Do NOT include a character_book'),
       );
       expect(messages[0]['content'], contains('Do NOT output scenario'));
+      expect(messages[0]['content'], contains('FIELD SPLIT'));
       expect(messages[0]['content'], isNot(contains('"first_mes"')));
       expect(messages[1]['content'], contains('Rainy city with guilds'));
     });
@@ -972,6 +1054,8 @@ Here is the card you asked for:
       final user = messages.last['content'] ?? '';
       expect(user, contains('Silver hair'));
       expect(user, contains('more secretive'));
+      expect(messages.first['content'], contains('TARGET FIELD RULES'));
+      expect(messages.first['content'], contains('personality only'));
     });
   });
 

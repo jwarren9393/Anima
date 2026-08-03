@@ -83,7 +83,7 @@ void main() {
         ),
       );
       expect(messages[0]['content'], contains('READ-ONLY'));
-      expect(messages[0]['content'], contains('Do not rewrite'));
+      expect(messages[0]['content'], contains('complete the report'));
       expect(messages[1]['content'], contains('Tall scout'));
       expect(messages[1]['content'], contains('Quiet'));
       expect(messages[1]['content'], contains('waves'));
@@ -99,7 +99,7 @@ void main() {
         consistencyReport: '- Age contradicts description.',
       );
       expect(messages[0]['content'], contains('JSON'));
-      expect(messages[0]['content'], contains('first_mes'));
+      expect(messages[0]['content'], contains('personality = temperament'));
       expect(messages[1]['content'], contains('Age contradicts'));
       expect(messages[1]['content'], contains('Tall scout'));
     });

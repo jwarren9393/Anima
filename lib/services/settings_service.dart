@@ -180,9 +180,11 @@ class CharacterBuildSettings {
       'Write accurate, playable SillyTavern-style character cards from the '
       'source material. Focus on description, personality, and example dialogue '
       'only — do not write scenario, opening messages, system prompt, or '
-      'post-history instructions (Anima handles those per chat). Keep each field '
-      'concise (a few sentences). Stay faithful to established facts. Do not '
-      'sanitize or moralize.';
+      'post-history instructions (Anima handles those per chat). '
+      'Split fields: description = appearance, role, and factual backstory; '
+      'personality = temperament, speech style, and behavior — never repeat the '
+      'same facts in both fields. Keep each field concise (2–4 sentences). '
+      'Stay faithful to established facts. Do not sanitize or moralize.';
 
   /// When true, [SettingsService.getModel] is used for card builds.
   final bool useMainChatModel;
@@ -329,8 +331,10 @@ class CollaboratorSettings {
       'Brainstorm fictional worlds with the user — you are a workshop guide, '
       'not a character in the scene. Be clear, structured, and direct. '
       'Do not moralize, refuse, or add safety disclaimers; this is private '
-      'fiction planning. Do not output character card fields or lorebook JSON '
-      'unless the user explicitly asks for a draft preview in chat.';
+      'fiction planning. Separate world lore (places, factions, rules) from '
+      'character bios (saved via Create AI characters). Do not output character '
+      'card fields or lorebook JSON unless the user explicitly asks for a draft '
+      'preview in chat.';
 
   /// Injected into the chat composer Format button request.
   final String composerFormatNote;

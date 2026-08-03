@@ -10,12 +10,13 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **Also builds** | Linux desktop (works); Windows desktop (needs a Windows host) |
 | **Distribution** | Personal use only — **not** published to app stores |
 | **Repo** | https://github.com/jwarren9393/Anima (private) |
-| **Version** | **1.0.0** build **47** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
+| **Version** | **1.0.0** build **48** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
 
 ### What’s new in recent builds (1.0.0)
 
 | Build | Highlights |
 |-------|------------|
+| **48** | **Consistency check/fix** — higher token floor so reports finish; **Fix inconsistencies** opens a before/after review sheet (characters + lorebooks) — nothing applies until you confirm. **AI card builder** — description/personality split + review sheet on generate/update; plain-English can target one field. **Creation Center** — lorebooks world-only (no cast bio dupes); character export dedupes description/personality |
 | **47** | **Presence / scene law** — always-on knowledge boundaries: narrator resets who’s present; opening scene seeds initial cast; unnamed messages only reach **present** characters (not whole cast); memory **witness tags**; per-character history/lore filtering. **Director mode** — replaces OOC; mandatory command for the **next** AI reply (centered card; tap edit, long-press delete). **Temporary characters** — quick NPC (name + note) from chat ⋮ or Manage cast; **Temporary** badge; promote to full card; **Full cards only** filter in Characters and group setup. **Consistency fix** — after AI consistency check on character cards or lorebooks, review changed fields and apply in one tap |
 | **46** | **Android keyboard fix** — send dismisses on-screen keyboard so replies stay readable; composer refocus / empty-Enter-continue stay **desktop-only** |
 | **45** | **Manual group chat** — Continue uses scene context (last speaker / name mentions), not round-robin chip order; no “next speaker” chip highlight. **Group react** — long-press menu; regenerate avoids copying prior beats verbatim; retries missing cast lines. **Keyboard flow (desktop)** — Enter sends, empty Enter continues; composer stays focused after send. **Creation Center** — character detect rejects JSON template placeholders |
@@ -33,7 +34,7 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **33** | **Update workshop cast** (workshop-tied characters only, not whole library); Creation Center collaborator prompt — brainstorm-only, points to real ⋮ menu actions |
 | **32** | Creation Center **World dashboard** hub; **Fix last** chip; minimal UI pass (chat/home/group/settings); workshop **world summary** folding; full feature README |
 
-Earlier 1.0.0 builds added Storybook layout, opening scenes library, backup/sync, group chat polish, and the core SillyTavern-style toolkit. **267 tests** at build 47.
+Earlier 1.0.0 builds added Storybook layout, opening scenes library, backup/sync, group chat polish, and the core SillyTavern-style toolkit. **272 tests** at build 48.
 
 API base (pay-as-you-go): `https://nano-gpt.com/api/v1/chat/completions`  
 Auth: `Authorization: Bearer <API_KEY>`  
@@ -126,7 +127,7 @@ Living build notes for coding agents: [`AGENTS.md`](AGENTS.md) (status, roadmap,
 
 **Chat & roleplay** — Solo and group chats; streaming; swipes; edit / delete / rewind / branch; Continue, Impersonate, Regenerate, **Rewrite reply…**; **Narrator** (nudge + Generate + post); **Director** (commands next reply); **presence / scene law** (always on — who’s present, witness-tagged memory, per-character filtering); Paths (Roadway); auto-reply (default off); ✨ Format; memory summary + auto-summarize (background); Author’s Note; per-chat persona and World Info; opening scene; context estimate; export/import chat; manage cast mid-chat (+ temporary NPCs); fullscreen avatars.
 
-**Characters & personas** — ST V1/V2/V3 JSON + PNG import/export; categories; AI wand; consistency check **+ one-tap fix**; **temporary characters** (quick NPC, promote to full card); **Full cards only** filter; embedded lorebooks; alternate greetings; **Generate avatar**; group speaker chips.
+**Characters & personas** — ST V1/V2/V3 JSON + PNG import/export; categories; AI wand; consistency check **+ review-before-apply fix**; **AI card builder** with field split + review sheet; **temporary characters** (quick NPC, promote to full card); **Full cards only** filter; embedded lorebooks; alternate greetings; **Generate avatar**; group speaker chips.
 
 **World & lore** — Global lorebooks + scan depth/budget + recursive scan; keyword triggers + toast; entry AI wand + keyword suggest; **consistency check + fix**; per-chat lore picks.
 

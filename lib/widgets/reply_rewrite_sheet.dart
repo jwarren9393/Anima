@@ -83,10 +83,13 @@ class _ReplyRewriteSheetState extends State<_ReplyRewriteSheet> {
                 children: [
                   for (final mode in ReplyRewriteService.modesForMenu)
                     ListTile(
-                      leading: Radio<ReplyRewriteMode>(
-                        value: mode,
-                        groupValue: _selected,
-                        onChanged: (value) => setState(() => _selected = value),
+                      leading: Icon(
+                        _selected == mode
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_off,
+                        color: _selected == mode
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurfaceVariant,
                       ),
                       title: Text(_service.label(mode)),
                       subtitle: Text(_service.subtitle(mode)),

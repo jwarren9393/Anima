@@ -741,6 +741,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     } on NanoGptException catch (error) {
       if (!mounted) return;
       await _handleFailedAssistant(assistantIndex);
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(error.message)));
@@ -751,6 +752,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         return;
       }
       await _handleFailedAssistant(assistantIndex);
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Something went wrong: $error')));
@@ -1462,6 +1464,16 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     await _persist(_workshop);
   }
 
+  bool _reportLooksTruncated(String report) {
+    final text = report.trim();
+    if (text.length < 80) return false;
+    return !text.endsWith('.') &&
+        !text.endsWith('!') &&
+        !text.endsWith('?') &&
+        !text.endsWith(':') &&
+        !text.endsWith(')');
+  }
+
   void _stopGeneration() {
     if (!_sending) return;
     widget.nanoGptService.cancelActiveStream();
@@ -1480,7 +1492,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         guidanceNote: collaborator.guidanceNote,
       );
       final model = await widget.settingsService.getModel();
-      final sampling = await widget.settingsService.getSampling();
+      final sampling = WorldWorkshopBuilder.consistencyReportSampling(
+        await widget.settingsService.getSampling(),
+      );
       final baseUrl = await widget.settingsService.getApiBaseUrl();
       final report = await widget.nanoGptService.complete(
         model: model,
@@ -1490,6 +1504,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       );
       if (!mounted) return;
       final trimmedReport = report.trim();
+      final truncated = _reportLooksTruncated(trimmedReport);
       final fixRequested = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
@@ -1497,7 +1512,23 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           content: SizedBox(
             width: double.maxFinite,
             child: SingleChildScrollView(
-              child: SelectableText(trimmedReport),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (truncated)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(
+                        'This report may have been cut short. Try again or use '
+                        'a higher max-tokens setting in Generation parameters.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                      ),
+                    ),
+                  SelectableText(trimmedReport),
+                ],
+              ),
             ),
           ),
           actions: [
@@ -1534,7 +1565,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
 
   Future<void> _runLinkedLorebookConsistencyFix(String consistencyReport) async {
     final linked = _linkedLorebook;
-    if (linked == null || _busy) return;
+    if (linked == null) return;
 
     setState(() => _consistencyBusy = true);
     try {
@@ -1547,7 +1578,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         guidanceNote: collaborator.guidanceNote,
       );
       final model = await widget.settingsService.getModel();
-      final sampling = await widget.settingsService.getSampling();
+      final sampling = WorldWorkshopBuilder.consistencyFixSampling(
+        await widget.settingsService.getSampling(),
+      );
       final baseUrl = await widget.settingsService.getApiBaseUrl();
 
       Lorebook? fixed;
@@ -1720,6 +1753,11 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       final guidance = _workshop.workshopGuidanceNote.trim().isNotEmpty
           ? _workshop.workshopGuidanceNote
           : collaborator.guidanceNote;
+      final allChars = await widget.characterService.loadCharacters();
+      final workshopCast = _builder.workshopCastCharacters(
+        workshop: _workshop,
+        allCharacters: allChars,
+      );
       final exportMessages = _builder.buildExportMessages(
         conversation: _workshop.messages,
         guidanceNote: guidance,
@@ -1727,6 +1765,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         importedSource: _workshop.importedSource,
         worldSummary: _workshop.worldSummary,
         canonPinMessageIds: _workshop.canonPinMessageIds,
+        workshopCast: workshopCast,
       );
 
       var raw = await widget.nanoGptService.complete(
@@ -1738,7 +1777,10 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
 
       Lorebook book;
       try {
-        book = _builder.parseLorebookJson(raw);
+        book = _builder.parseLorebookJson(
+          raw,
+          workshopCast: workshopCast,
+        );
       } on FormatException {
         raw = await widget.nanoGptService.complete(
           model: model,
@@ -1753,7 +1795,10 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           baseUrl: baseUrl,
           sampling: sampling,
         );
-        book = _builder.parseLorebookJson(raw);
+        book = _builder.parseLorebookJson(
+          raw,
+          workshopCast: workshopCast,
+        );
       }
       final existingId = _workshop.exportedLorebookId;
       final global = GlobalLorebook(
@@ -2058,6 +2103,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     );
 
     if (!plan.canPlaySolo && !plan.canPlayGroup) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -2159,6 +2205,10 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       );
       final baseUrl = await widget.settingsService.getApiBaseUrl();
       final existingChars = await widget.characterService.loadCharacters();
+      final workshopCast = _builder.workshopCastCharacters(
+        workshop: _workshop,
+        allCharacters: existingChars,
+      );
       final existingNames = {
         for (final c in existingChars) c.name.trim().toLowerCase(),
       };
@@ -2170,6 +2220,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           buildPromptNote: build.promptNote,
           sourceLorebook: _lorebookForPrompt,
           importedSource: _workshop.importedSource,
+          existingCast: workshopCast,
         ),
         baseUrl: baseUrl,
         sampling: sampling,
@@ -2187,6 +2238,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
               buildPromptNote: build.promptNote,
               sourceLorebook: _lorebookForPrompt,
               importedSource: _workshop.importedSource,
+              existingCast: workshopCast,
             ),
             {'role': 'assistant', 'content': detectRaw},
             {
@@ -2507,6 +2559,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           tagged.id,
         );
         await _persist(nextWorkshop);
+        if (!mounted) return;
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Updated “${tagged.name}”.')));
@@ -2647,6 +2700,11 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       final existingNames = {
         for (final p in existingPersonas) p.name.trim().toLowerCase(),
       };
+      final allChars = await widget.characterService.loadCharacters();
+      final workshopCast = _builder.workshopCastCharacters(
+        workshop: _workshop,
+        allCharacters: allChars,
+      );
 
       var detectRaw = await widget.nanoGptService.complete(
         model: build.model,
@@ -2655,6 +2713,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           buildPromptNote: build.promptNote,
           sourceLorebook: _lorebookForPrompt,
           importedSource: _workshop.importedSource,
+          existingCast: workshopCast,
         ),
         baseUrl: baseUrl,
         sampling: sampling,
@@ -2671,6 +2730,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
               buildPromptNote: build.promptNote,
               sourceLorebook: _lorebookForPrompt,
               importedSource: _workshop.importedSource,
+              existingCast: workshopCast,
             ),
             {'role': 'assistant', 'content': detectRaw},
             {
@@ -2754,6 +2814,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
               saved.copyWith(sourceWorkshopId: _workshop.id),
             )).where((p) => p.id == saved.id).first;
       await _persist(_workshop.copyWith(linkedPersonaId: tagged.id));
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Saved ${tagged.name} to Personas.')),
       );
@@ -2895,6 +2956,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
               saved.copyWith(sourceWorkshopId: _workshop.id),
             )).where((p) => p.id == saved.id).first;
       await _persist(_workshop.copyWith(linkedPersonaId: tagged.id));
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Updated persona “${tagged.name}”.')),
       );
