@@ -2,16 +2,37 @@ import '../models/chat_message.dart';
 
 /// How to steer a regeneration / new swipe of an assistant reply.
 enum ReplyRewriteMode {
-  shorten,
-  expand,
-  moreAction,
-  moreDialogue,
+  custom,
+  drunk,
+  romantic,
+  sensual,
+  angry,
+  happy,
+  sad,
+  scared,
+  playful,
+  flirty,
+  tender,
+  tense,
+  hostile,
+  exhausted,
+  suspicious,
+  jealous,
+  vulnerable,
+  desperate,
+  confident,
+  whisper,
   softer,
   tenser,
   darker,
   lighter,
+  blunt,
+  formal,
+  shorten,
+  expand,
+  moreAction,
+  moreDialogue,
   sameBeats,
-  custom,
 }
 
 /// User choice from the rewrite sheet.
@@ -32,19 +53,60 @@ class ReplyRewriteService {
   const ReplyRewriteService();
 
   static const modesForMenu = <ReplyRewriteMode>[
-    ReplyRewriteMode.shorten,
-    ReplyRewriteMode.expand,
-    ReplyRewriteMode.moreAction,
-    ReplyRewriteMode.moreDialogue,
+    ReplyRewriteMode.custom,
+    ReplyRewriteMode.drunk,
+    ReplyRewriteMode.romantic,
+    ReplyRewriteMode.sensual,
+    ReplyRewriteMode.angry,
+    ReplyRewriteMode.happy,
+    ReplyRewriteMode.sad,
+    ReplyRewriteMode.scared,
+    ReplyRewriteMode.playful,
+    ReplyRewriteMode.flirty,
+    ReplyRewriteMode.tender,
+    ReplyRewriteMode.tense,
+    ReplyRewriteMode.hostile,
+    ReplyRewriteMode.exhausted,
+    ReplyRewriteMode.suspicious,
+    ReplyRewriteMode.jealous,
+    ReplyRewriteMode.vulnerable,
+    ReplyRewriteMode.desperate,
+    ReplyRewriteMode.confident,
+    ReplyRewriteMode.whisper,
     ReplyRewriteMode.softer,
     ReplyRewriteMode.tenser,
     ReplyRewriteMode.darker,
     ReplyRewriteMode.lighter,
+    ReplyRewriteMode.blunt,
+    ReplyRewriteMode.formal,
+    ReplyRewriteMode.shorten,
+    ReplyRewriteMode.expand,
+    ReplyRewriteMode.moreAction,
+    ReplyRewriteMode.moreDialogue,
     ReplyRewriteMode.sameBeats,
-    ReplyRewriteMode.custom,
   ];
 
   String label(ReplyRewriteMode mode) => switch (mode) {
+        ReplyRewriteMode.custom => 'Custom instruction…',
+        ReplyRewriteMode.drunk => 'Drunk / intoxicated',
+        ReplyRewriteMode.romantic => 'Romantic',
+        ReplyRewriteMode.sensual => 'Sensual / intimate',
+        ReplyRewriteMode.angry => 'Angry / heated',
+        ReplyRewriteMode.happy => 'Happy / upbeat',
+        ReplyRewriteMode.sad => 'Sad / melancholy',
+        ReplyRewriteMode.scared => 'Scared / fearful',
+        ReplyRewriteMode.playful => 'Playful / teasing',
+        ReplyRewriteMode.flirty => 'Flirty',
+        ReplyRewriteMode.tender => 'Tender / gentle',
+        ReplyRewriteMode.tense => 'Tense / on edge',
+        ReplyRewriteMode.hostile => 'Hostile / cold',
+        ReplyRewriteMode.exhausted => 'Exhausted / drained',
+        ReplyRewriteMode.suspicious => 'Suspicious / guarded',
+        ReplyRewriteMode.jealous => 'Jealous / possessive',
+        ReplyRewriteMode.vulnerable => 'Vulnerable / raw',
+        ReplyRewriteMode.desperate => 'Desperate / pleading',
+        ReplyRewriteMode.confident => 'Confident / bold',
+        ReplyRewriteMode.whisper => 'Quiet / whispered',
         ReplyRewriteMode.shorten => 'Shorten',
         ReplyRewriteMode.expand => 'Expand',
         ReplyRewriteMode.moreAction => 'More action',
@@ -53,11 +115,33 @@ class ReplyRewriteService {
         ReplyRewriteMode.tenser => 'Tenser / urgent',
         ReplyRewriteMode.darker => 'Darker mood',
         ReplyRewriteMode.lighter => 'Lighter mood',
+        ReplyRewriteMode.blunt => 'Blunt / unfiltered',
+        ReplyRewriteMode.formal => 'Formal / composed',
         ReplyRewriteMode.sameBeats => 'Same beats, new wording',
-        ReplyRewriteMode.custom => 'Custom instruction…',
       };
 
   String subtitle(ReplyRewriteMode mode) => switch (mode) {
+        ReplyRewriteMode.custom => 'Type exactly what you want changed',
+        ReplyRewriteMode.drunk => 'Slurred, loose, unsteady delivery',
+        ReplyRewriteMode.romantic => 'Warm tension and intimacy',
+        ReplyRewriteMode.sensual =>
+          'Realistic intimacy — no porn clichés or fade-outs',
+        ReplyRewriteMode.angry => 'Sharp, confrontational heat',
+        ReplyRewriteMode.happy => 'Light, energized mood',
+        ReplyRewriteMode.sad => 'Heavy, quiet melancholy',
+        ReplyRewriteMode.scared => 'Fear, dread, hypervigilance',
+        ReplyRewriteMode.playful => 'Witty, teasing energy',
+        ReplyRewriteMode.flirty => 'Bold attraction and hints',
+        ReplyRewriteMode.tender => 'Gentle, caring, soft delivery',
+        ReplyRewriteMode.tense => 'Tight nerves, high stakes',
+        ReplyRewriteMode.hostile => 'Cold distance or open antagonism',
+        ReplyRewriteMode.exhausted => 'Tired, running on fumes',
+        ReplyRewriteMode.suspicious => 'Guarded, probing, distrustful',
+        ReplyRewriteMode.jealous => 'Possessive edge, insecurity showing',
+        ReplyRewriteMode.vulnerable => 'Emotionally exposed, unguarded',
+        ReplyRewriteMode.desperate => 'Urgent need, pleading undertone',
+        ReplyRewriteMode.confident => 'Assured, self-possessed delivery',
+        ReplyRewriteMode.whisper => 'Hushed, close, careful volume',
         ReplyRewriteMode.shorten => 'Trim length; keep the same events',
         ReplyRewriteMode.expand => 'Add detail and texture',
         ReplyRewriteMode.moreAction => 'More *actions* and physical beats',
@@ -66,9 +150,10 @@ class ReplyRewriteService {
         ReplyRewriteMode.tenser => 'Raise stakes and urgency',
         ReplyRewriteMode.darker => 'Heavier, grittier atmosphere',
         ReplyRewriteMode.lighter => 'Warmer or more hopeful tone',
+        ReplyRewriteMode.blunt => 'Direct, unvarnished, no softening',
+        ReplyRewriteMode.formal => 'Polished, restrained, composed',
         ReplyRewriteMode.sameBeats =>
           'Rewrite without changing what happens',
-        ReplyRewriteMode.custom => 'Type exactly what you want changed',
       };
 
   String instructionFor(
@@ -83,6 +168,49 @@ class ReplyRewriteService {
       return text;
     }
     return switch (mode) {
+      ReplyRewriteMode.drunk =>
+        'Rewrite as DRUNK/INTOXICATED: slurred speech, tangents, loose filter, '
+        'laughter, unsteady body language. Same story beats — intoxicated delivery.',
+      ReplyRewriteMode.romantic =>
+        'Rewrite with ROMANTIC tension: longing, charged pauses, tenderness. '
+        'Same facts and outcome.',
+      ReplyRewriteMode.sensual =>
+        'Rewrite with SENSUAL, realistic intimacy — sensory detail, breath, '
+        'hesitation, emotional stakes. Same facts. No porn clichés, no curtain-call '
+        'lines, no fade-to-black.',
+      ReplyRewriteMode.angry =>
+        'Rewrite ANGRY/HEATED: sharper words, frustration, confrontation as fits '
+        'the character. Same facts and outcome.',
+      ReplyRewriteMode.happy =>
+        'Rewrite with HAPPY, upbeat energy — warmth and ease in voice. Same beats.',
+      ReplyRewriteMode.sad =>
+        'Rewrite with SAD/MELANCHOLY weight — slower, heavier delivery. Same beats.',
+      ReplyRewriteMode.scared =>
+        'Rewrite SCARED/FEARFUL: shaky breath, dread, hypervigilance. Same beats.',
+      ReplyRewriteMode.playful =>
+        'Rewrite PLAYFUL/TEASING: wit and light provocation. Same story beats.',
+      ReplyRewriteMode.flirty =>
+        'Rewrite FLIRTY: bold attraction, teasing hints. Same story beats.',
+      ReplyRewriteMode.tender =>
+        'Rewrite TENDER/GENTLE: soft, careful delivery, kindness in small gestures. Same beats.',
+      ReplyRewriteMode.tense =>
+        'Rewrite TENSE/ON EDGE: tight nerves, watchful pauses, raised stakes. Same beats.',
+      ReplyRewriteMode.hostile =>
+        'Rewrite HOSTILE/COLD: distrust, barbed politeness, refusal to cooperate. Same beats.',
+      ReplyRewriteMode.exhausted =>
+        'Rewrite EXHAUSTED/DRAINED: short answers, heavy pauses, fatigue showing. Same beats.',
+      ReplyRewriteMode.suspicious =>
+        'Rewrite SUSPICIOUS/GUARDED: probing questions, reading between lines. Same beats.',
+      ReplyRewriteMode.jealous =>
+        'Rewrite JEALOUS/POSSESSIVE: insecurity, sharp edges around rivals or attention. Same beats.',
+      ReplyRewriteMode.vulnerable =>
+        'Rewrite VULNERABLE/RAW: emotional exposure, honesty breaking through guard. Same beats.',
+      ReplyRewriteMode.desperate =>
+        'Rewrite DESPERATE/PLEADING: urgent need, stakes feel personal and immediate. Same beats.',
+      ReplyRewriteMode.confident =>
+        'Rewrite CONFIDENT/BOLD: assured voice, self-possessed body language. Same beats.',
+      ReplyRewriteMode.whisper =>
+        'Rewrite QUIET/WHUSHED: hushed volume, close proximity, careful words. Same beats.',
       ReplyRewriteMode.shorten =>
         'SHORTEN this reply while keeping the same story beats, facts, and '
         'outcome. Cut filler; stay in character.',
@@ -102,6 +230,10 @@ class ReplyRewriteService {
         'Rewrite with a DARKER, heavier mood. Same facts and outcome.',
       ReplyRewriteMode.lighter =>
         'Rewrite with a LIGHTER, warmer mood. Same facts and outcome.',
+      ReplyRewriteMode.blunt =>
+        'Rewrite BLUNT/UNFILTERED: direct words, no softening or euphemism. Same beats.',
+      ReplyRewriteMode.formal =>
+        'Rewrite FORMAL/COMPOSED: polished diction, restrained emotion. Same beats.',
       ReplyRewriteMode.sameBeats =>
         'Rewrite with fresh wording but the SAME beats, facts, and outcome. '
         'Do not summarize — write a full replacement reply.',

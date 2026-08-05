@@ -81,7 +81,7 @@ class _ReplyRewriteSheetState extends State<_ReplyRewriteSheet> {
               child: ListView(
                 shrinkWrap: true,
                 children: [
-                  for (final mode in ReplyRewriteService.modesForMenu)
+                  for (final mode in ReplyRewriteService.modesForMenu) ...[
                     ListTile(
                       leading: Icon(
                         _selected == mode
@@ -95,23 +95,25 @@ class _ReplyRewriteSheetState extends State<_ReplyRewriteSheet> {
                       subtitle: Text(_service.subtitle(mode)),
                       onTap: () => setState(() => _selected = mode),
                     ),
-                  if (isCustom)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-                      child: TextField(
-                        controller: _customController,
-                        minLines: 2,
-                        maxLines: 5,
-                        textCapitalization: TextCapitalization.sentences,
-                        decoration: const InputDecoration(
-                          labelText: 'Custom instruction',
-                          hintText:
-                              'e.g. Make her sound more suspicious of the king…',
-                          border: OutlineInputBorder(),
-                          alignLabelWithHint: true,
+                    if (mode == ReplyRewriteMode.custom && isCustom)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                        child: TextField(
+                          controller: _customController,
+                          autofocus: true,
+                          minLines: 2,
+                          maxLines: 5,
+                          textCapitalization: TextCapitalization.sentences,
+                          decoration: const InputDecoration(
+                            labelText: 'Custom instruction',
+                            hintText:
+                                'e.g. Make her sound more suspicious of the king…',
+                            border: OutlineInputBorder(),
+                            alignLabelWithHint: true,
+                          ),
                         ),
                       ),
-                    ),
+                  ],
                 ],
               ),
             ),

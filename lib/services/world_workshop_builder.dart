@@ -10,6 +10,7 @@ import '../models/persona.dart';
 import '../models/workshop_chat_import_options.dart';
 import '../models/world_workshop.dart';
 import '../models/workshop_hub_models.dart';
+import 'authors_note_composer.dart';
 import 'character_card_codec.dart';
 import 'settings_service.dart';
 
@@ -538,8 +539,12 @@ ${lines.join('\n')}
         characters: options.includeEmbeddedCharacterLore ? characters : const [],
       ),
       lorebookNames: loreNames,
-      authorsNote:
-          options.includeAuthorsNote ? session.authorsNote.trim() : '',
+      authorsNote: options.includeAuthorsNote
+          ? AuthorsNoteComposer.effectiveNote(
+              manualAuthorsNote: session.authorsNote,
+              activeSceneMoodIds: session.activeSceneMoodIds,
+            )
+          : '',
       skippedNotes: skippedNotes,
       importProfile: options.summaryLine(
         totalMessages: totalMessages,

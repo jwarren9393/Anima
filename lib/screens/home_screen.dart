@@ -4,6 +4,7 @@ import '../models/character.dart';
 import '../models/chat_session.dart';
 import '../models/new_chat_pick.dart';
 import '../services/api_key_service.dart';
+import '../services/authors_note_composer.dart';
 import '../services/appearance_controller.dart';
 import '../services/character_category_service.dart';
 import '../services/character_service.dart';
@@ -93,7 +94,12 @@ class _HomeScreenState extends State<HomeScreen> {
   String _chatSubtitle(ChatSession chat) {
     final count = chat.messages.length;
     final date = _shortDate(chat.updatedAt);
-    final note = chat.authorsNote.trim().isEmpty ? '' : ' · Note';
+    final note = AuthorsNoteComposer.hasEffectiveNote(
+      manualAuthorsNote: chat.authorsNote,
+      activeSceneMoodIds: chat.activeSceneMoodIds,
+    )
+        ? ' · Note'
+        : '';
     return '$count message${count == 1 ? '' : 's'} · $date$note';
   }
 

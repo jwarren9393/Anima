@@ -19,10 +19,13 @@ class ChatSession {
     this.sourceWorkshopId,
     this.pendingDirectorMessageId,
     this.pendingDirectorAssistantId,
+    List<String>? activeSceneMoodIds,
   })  : messages = List<ChatMessage>.from(messages ?? const []),
         participantIds = List<String>.from(participantIds ?? const []),
         lorebookIds =
-            lorebookIds == null ? null : List<String>.from(lorebookIds);
+            lorebookIds == null ? null : List<String>.from(lorebookIds),
+        activeSceneMoodIds =
+            List<String>.from(activeSceneMoodIds ?? const []);
 
   final String id;
 
@@ -72,6 +75,9 @@ class ChatSession {
   /// Assistant message id this director note is bound to (regen/swipe only).
   final String? pendingDirectorAssistantId;
 
+  /// Active [SceneMoodPreset] ids — merged into Author's Note each turn.
+  final List<String> activeSceneMoodIds;
+
   bool get isGroup => participantIds.length > 1;
 
   /// Effective cast for prompting (falls back to [characterId] when solo).
@@ -103,6 +109,8 @@ class ChatSession {
     bool clearPendingDirector = false,
     String? pendingDirectorAssistantId,
     bool clearPendingDirectorAssistant = false,
+    List<String>? activeSceneMoodIds,
+    bool clearSceneMoods = false,
   }) {
     return ChatSession(
       id: id ?? this.id,
@@ -128,6 +136,9 @@ class ChatSession {
               clearPendingDirectorAssistant
           ? null
           : (pendingDirectorAssistantId ?? this.pendingDirectorAssistantId),
+      activeSceneMoodIds: clearSceneMoods
+          ? const []
+          : (activeSceneMoodIds ?? this.activeSceneMoodIds),
     );
   }
 
@@ -153,6 +164,8 @@ class ChatSession {
         if (pendingDirectorAssistantId != null &&
             pendingDirectorAssistantId!.isNotEmpty)
           'pendingDirectorAssistantId': pendingDirectorAssistantId,
+        if (activeSceneMoodIds.isNotEmpty)
+          'activeSceneMoodIds': activeSceneMoodIds,
       };
 
   factory ChatSession.fromJson(Map<String, dynamic> json) {
@@ -198,6 +211,15 @@ class ChatSession {
         ? covered
         : int.tryParse('$covered') ?? 0;
 
+    final moodIds = <String>[];
+    final rawMoods = json['activeSceneMoodIds'];
+    if (rawMoods is List) {
+      for (final item in rawMoods) {
+        final id = '$item'.trim();
+        if (id.isNotEmpty) moodIds.add(id);
+      }
+    }
+
     return ChatSession(
       id: json['id'] as String? ?? '',
       characterId: json['characterId'] as String? ?? '',
@@ -227,6 +249,7 @@ class ChatSession {
         final raw = '${json['pendingDirectorAssistantId'] ?? ''}'.trim();
         return raw.isEmpty ? null : raw;
       }(),
+      activeSceneMoodIds: moodIds,
     );
   }
 

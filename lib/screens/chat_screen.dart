@@ -14,6 +14,7 @@ import '../models/persona.dart';
 import '../models/ui_style_settings.dart';
 import '../services/api_key_service.dart';
 import '../services/appearance_controller.dart';
+import '../services/authors_note_composer.dart';
 import '../services/chat_background_service.dart';
 import '../services/character_category_service.dart';
 import '../services/character_service.dart';
@@ -64,6 +65,7 @@ import '../widgets/narrator_sheet.dart';
 import '../widgets/preset_picker.dart';
 import '../widgets/reply_rewrite_sheet.dart';
 import '../widgets/rp_rich_text.dart';
+import '../widgets/scene_mood_sheet.dart';
 import 'characters_screen.dart';
 import 'character_edit_screen.dart';
 import 'group_chat_setup_screen.dart';
@@ -609,7 +611,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         includePersona: _persona != null,
         includeGlobalLorebooks: false,
         includeEmbeddedCharacterLore: false,
-        includeAuthorsNote: _session!.authorsNote.trim().isNotEmpty,
+        includeAuthorsNote: AuthorsNoteComposer.hasEffectiveNote(
+          manualAuthorsNote: _session!.authorsNote,
+          activeSceneMoodIds: _session!.activeSceneMoodIds,
+        ),
       ),
     );
     if (!source.hasContent) {
@@ -811,7 +816,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         _participants,
         userName: _userName,
         personaId: _persona?.sessionId,
-        authorsNote: _session?.authorsNote ?? '',
+        authorsNote: _effectiveAuthorsNote(),
+        activeSceneMoodIds: _session?.activeSceneMoodIds ?? const [],
         autoReply: _session?.autoReply ?? false,
         lorebookIds: _session?.lorebookIds,
         greetingIndex: greetingIndex,
@@ -888,7 +894,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               title: Text(ChatService.displayTitle(chat)),
               subtitle: Text(
                 '${chat.messages.length} messages · ${_shortDate(chat.updatedAt)}'
-                '${chat.authorsNote.trim().isEmpty ? '' : ' · Note'}',
+                '${AuthorsNoteComposer.hasEffectiveNote(manualAuthorsNote: chat.authorsNote, activeSceneMoodIds: chat.activeSceneMoodIds) ? ' · Note' : ''}',
               ),
               trailing: selected ? const Icon(Icons.check) : null,
               onTap: () => Navigator.pop(context, chat),
@@ -1978,7 +1984,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final postHistory = _promptBuilder.buildPostHistory(
       character: primary,
       userName: userName,
-      authorsNote: _session?.authorsNote ?? '',
+      authorsNote: _effectiveAuthorsNote(),
       globalPostHistory: globalPrompts.postHistoryInstructions,
     );
 
@@ -2168,6 +2174,46 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
+  String _effectiveAuthorsNote() {
+    return AuthorsNoteComposer.effectiveNote(
+      manualAuthorsNote: _session?.authorsNote ?? '',
+      activeSceneMoodIds: _session?.activeSceneMoodIds ?? const [],
+    );
+  }
+
+  bool get _hasEffectiveAuthorsNote {
+    return AuthorsNoteComposer.hasEffectiveNote(
+      manualAuthorsNote: _session?.authorsNote ?? '',
+      activeSceneMoodIds: _session?.activeSceneMoodIds ?? const [],
+    );
+  }
+
+  int get _activeSceneMoodCount => _session?.activeSceneMoodIds.length ?? 0;
+
+  Future<void> _pickSceneMoods() async {
+    final session = _session;
+    if (session == null || _busy) return;
+    final result = await showSceneMoodSheet(
+      context: context,
+      activeIds: session.activeSceneMoodIds,
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _session = session.copyWith(activeSceneMoodIds: result);
+    });
+    await _persist();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          result.isEmpty
+              ? 'Scene moods cleared.'
+              : '${result.length} scene mood${result.length == 1 ? '' : 's'} active.',
+        ),
+      ),
+    );
+  }
+
   Future<void> _editAuthorsNote() async {
     final session = _session;
     if (session == null || _busy) return;
@@ -2184,7 +2230,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               children: [
                 Text(
                   'Extra instructions for this chat only (injected each turn). '
-                  'Use a preset or write your own.',
+                  'Use a preset, toggle Scene moods from ⋮ or the mood icon, '
+                  'or write your own.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 PresetButton(
@@ -2426,7 +2473,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final postHistory = _promptBuilder.buildPostHistory(
       character: speaker,
       userName: userName,
-      authorsNote: session.authorsNote,
+      authorsNote: _effectiveAuthorsNote(),
       globalPostHistory: globalPrompts.postHistoryInstructions,
     );
     final postHistoryTokens = _contextService.estimateTokens(postHistory);
@@ -3235,7 +3282,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final postHistory = _promptBuilder.buildPostHistory(
       character: character,
       userName: userName,
-      authorsNote: _session?.authorsNote ?? '',
+      authorsNote: _effectiveAuthorsNote(),
       globalPostHistory: globalPrompts.postHistoryInstructions,
     );
 
@@ -3808,8 +3855,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 24;
     final hasMemory =
         (_session?.memorySummary.trim().isNotEmpty ?? false);
-    final hasAuthorsNote =
-        (_session?.authorsNote.trim().isNotEmpty ?? false);
+    final hasAuthorsNote = _hasEffectiveAuthorsNote;
+    final activeMoodCount = _activeSceneMoodCount;
     return Scaffold(
       // We lift the body ourselves via [KeyboardInset] so the composer stays
       // above the keyboard even with a transparent glass scaffold.
@@ -3849,6 +3896,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               if (value == 'new_chat') _newChat();
               if (value == 'persona') _pickPersona();
               if (value == 'authors_note') _editAuthorsNote();
+              if (value == 'scene_moods') _pickSceneMoods();
               if (value == 'lorebooks') _pickChatLorebooks();
               if (value == 'memory') _editMemorySummary();
               if (value == 'summarize') _summarizeNow();
@@ -3887,6 +3935,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               const PopupMenuItem(
                 value: "authors_note",
                 child: Text("Author's Note"),
+              ),
+              PopupMenuItem(
+                value: 'scene_moods',
+                child: Text(
+                  activeMoodCount == 0
+                      ? 'Scene moods'
+                      : 'Scene moods ($activeMoodCount on)',
+                ),
               ),
               PopupMenuItem(
                 value: 'lorebooks',
@@ -4300,14 +4356,26 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                               icon: Icons.psychology_outlined,
                               onPressed: _busy ? null : _editMemorySummary,
                             ),
-                          if (hasMemory && hasAuthorsNote)
+                          if (hasMemory &&
+                              ((_session?.authorsNote.trim().isNotEmpty ??
+                                      false) ||
+                                  activeMoodCount > 0))
                             const SizedBox(width: 8),
-                          if (hasAuthorsNote)
+                          if (_session?.authorsNote.trim().isNotEmpty ?? false)
                             MinimalChipButton(
                               label: 'Note',
                               icon: Icons.edit_note,
                               onPressed: _busy ? null : _editAuthorsNote,
                             ),
+                          if (activeMoodCount > 0) ...[
+                            if (_session?.authorsNote.trim().isNotEmpty ?? false)
+                              const SizedBox(width: 8),
+                            MinimalChipButton(
+                              label: 'Moods ($activeMoodCount)',
+                              icon: Icons.mood_outlined,
+                              onPressed: _busy ? null : _pickSceneMoods,
+                            ),
+                          ],
                         ],
                       ),
                     if (!keyboardOpen && _isGroup)
@@ -4373,6 +4441,22 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
+                        IconButton(
+                          tooltip: activeMoodCount > 0
+                              ? 'Scene moods ($activeMoodCount on)'
+                              : 'Scene moods — steer tone for this chat',
+                          onPressed:
+                              _busy || _formatting ? null : _pickSceneMoods,
+                          visualDensity: VisualDensity.compact,
+                          color: activeMoodCount > 0
+                              ? colorScheme.tertiary
+                              : colorScheme.outline,
+                          icon: Icon(
+                            activeMoodCount > 0
+                                ? Icons.mood
+                                : Icons.mood_outlined,
+                          ),
+                        ),
                         IconButton(
                           tooltip: 'Narrator — scene voice & direction',
                           onPressed: _busy || _formatting
@@ -4515,6 +4599,42 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       : null,
                 ),
                 ListTile(
+                  leading: const Icon(Icons.alt_route),
+                  title: const Text('Paths'),
+                  subtitle: const Text(
+                    'Brainstorm what you could do or say next',
+                  ),
+                  onTap: () => Navigator.pop(context, 'paths'),
+                ),
+                if (!message.isUser && !message.isNarrator) ...[
+                  ListTile(
+                    leading: const Icon(Icons.refresh),
+                    title: Text(
+                      message.isGroupBeat
+                          ? 'Regenerate group react'
+                          : 'Regenerate',
+                    ),
+                    subtitle: Text(
+                      isLast
+                          ? message.isGroupBeat
+                              ? 'Generate this group react again'
+                              : 'Generate this reply again'
+                          : 'Removes later messages, then regenerates',
+                    ),
+                    onTap: () => Navigator.pop(context, 'regen'),
+                  ),
+                  if (!message.isGroupBeat)
+                    ListTile(
+                      leading: const Icon(Icons.tune),
+                      title: const Text('Rewrite reply…'),
+                      subtitle: const Text(
+                        'Shorten, expand, change mood, or custom',
+                      ),
+                      onTap: () => Navigator.pop(context, 'rewrite'),
+                    ),
+                ],
+                const Divider(),
+                ListTile(
                   leading: const Icon(Icons.call_split_outlined),
                   title: const Text('Branch from here'),
                   subtitle: const Text(
@@ -4522,7 +4642,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   ),
                   onTap: () => Navigator.pop(context, 'branch'),
                 ),
-                const Divider(),
                 ListTile(
                   leading: const Icon(Icons.theater_comedy_outlined),
                   title: const Text('Narrator'),
@@ -4542,14 +4661,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   title: const Text('Impersonate'),
                   subtitle: const Text('Write your next line as you'),
                   onTap: () => Navigator.pop(context, 'impersonate'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.alt_route),
-                  title: const Text('Paths'),
-                  subtitle: const Text(
-                    'Brainstorm what you could do or say next',
-                  ),
-                  onTap: () => Navigator.pop(context, 'paths'),
                 ),
                 if (_isGroup && _participants.length >= 2)
                   ListTile(
@@ -4578,30 +4689,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   ),
                   onTap: () => Navigator.pop(context, 'auto_reply'),
                 ),
-                if (!message.isUser && !message.isNarrator) ...[
-                  if (!message.isGroupBeat)
-                    ListTile(
-                      leading: const Icon(Icons.tune),
-                      title: const Text('Rewrite reply…'),
-                      subtitle: const Text(
-                        'Shorten, expand, change mood, or custom',
-                      ),
-                      onTap: () => Navigator.pop(context, 'rewrite'),
-                    ),
-                  ListTile(
-                    leading: const Icon(Icons.refresh),
-                    title: Text(
-                      message.isGroupBeat ? 'Regenerate group react' : 'Regenerate',
-                    ),
-                    subtitle: Text(
-                      isLast
-                          ? message.isGroupBeat
-                              ? 'Generate this group react again'
-                              : 'Generate this reply again'
-                          : 'Removes later messages, then regenerates',
-                    ),
-                    onTap: () => Navigator.pop(context, 'regen'),
-                  ),
+                if (!message.isUser && !message.isNarrator)
                   ListTile(
                     leading: const Icon(Icons.auto_awesome),
                     title: Text(
@@ -4614,7 +4702,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     ),
                     onTap: () => Navigator.pop(context, 'swipe'),
                   ),
-                ],
                 if (canSwipeNav) ...[
                   ListTile(
                     leading: const Icon(Icons.chevron_left),

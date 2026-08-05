@@ -61,8 +61,8 @@ High-value SillyTavern concepts to aim for over time:
 
 **Phase:** Post-roadmap tweaks
 
-**Last updated:** 2026-08-04  
-**Last agent action:** Build **55** — AI review sheets (compact + consistency fix) let you **pick which fields to apply** via checkboxes.
+**Last updated:** 2026-08-05  
+**Last agent action:** Build **56** — **Scene moods** (per-chat toggles merged into Author's Note: drunk, tense, romantic, sensual, angry, happy, etc.) + expanded **Rewrite reply** moods (custom first, tender/tense/jealous/vulnerable/…).
 
 ### What works today
 
@@ -118,7 +118,7 @@ High-value SillyTavern concepts to aim for over time:
 - **Character token badges** — ~token count beside names in **Characters**, character editor (live), group setup, and Creation Center cast pickers (≈1 token per 4 chars; color hints when large)
 - **Persona + lorebook token badges** — same style on **Personas** list + editor; **global lorebooks** list; lorebook editor shows enabled-book total and per-entry content size
 - **AI Compact** — character card, **persona**, whole lorebook, and individual lore entries; review sheet before apply
-- **Chat screen** — Close returns home; bubbles use the chat’s persona avatar
+- **Chat screen** — Close returns home; bubbles use the chat’s persona avatar; **Scene moods** (mood icon + ⋮ menu) toggle per-chat immersion presets (drunk, tense, romantic, sensual, angry, happy, …) merged into Author's Note each turn; **Rewrite reply** expanded (custom first, moods + style options)
 - **Linux install/update** — `./scripts/update_linux.sh` builds and installs the desktop app; add `--pull` to download GitHub changes first
 - **Smoke:** `flutter test` (277) + `flutter analyze` pass; Android + Windows + Linux desktop debug work
 
@@ -241,7 +241,7 @@ lib/
   models/
     chat_message.dart             Bubble + swipes + optional speaker + groupBeat lines
     group_beat_part.dart          One character line inside a group-react card
-    chat_session.dart             Thread + authorsNote + group + lorebookIds + autoReply + memorySummary
+    chat_session.dart             Thread + authorsNote + group + lorebookIds + autoReply + memorySummary + activeSceneMoodIds
     character.dart                ST-compatible card fields (+ Anima id)
     character_category.dart       Anima-only category lists + memberships
     new_chat_pick.dart            Character + persona bundle for solo new chat
@@ -254,6 +254,8 @@ lib/
     sync_target.dart              Sync file location (desktop path or Android URI)
     ui_style_settings.dart        Theme Studio settings + AnimaUiTheme extension + avatars
     theme_palette.dart            VisualStyle / BackgroundMode / fonts + 8 ThemePresets
+    scene_mood_presets.dart       Built-in per-chat scene mood presets (drunk, tense, romantic, sensual, …)
+    authors_note_composer.dart    Merges active scene moods + manual Author's Note for prompts
     anima_presets.dart            Built-in sampling + text presets (Author’s Note, prompts, guidance)
     workshop_chat_import_options.dart Chat-import toggles (trimmed history, lore, cards)
   screens/
@@ -307,7 +309,8 @@ lib/
     preset_picker.dart            Preset button + bottom sheets (sampling / text)
     create_character_from_chat_sheet.dart Scan/generate character card from live chat context
     update_character_from_chat_sheet.dart Pick saved card + optional notes → merge update from chat
-    reply_rewrite_sheet.dart      Rewrite reply mode picker (shorten / expand / mood / custom)
+    scene_mood_sheet.dart         Per-chat scene mood toggle sheet (composer mood icon + ⋮ menu)
+    reply_rewrite_sheet.dart      Rewrite reply mode picker (custom first + moods / style options)
   utils/
     platform_utils.dart           Desktop platform detection (Windows / Linux / macOS)
     scroll_to_end.dart            Retry scroll-to-bottom for lazy chat lists
@@ -437,7 +440,7 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. On phone: download **Anima-1.0.0.apk** from [v1.0.0 release](https://github.com/jwarren9393/Anima/releases/tag/v1.0.0) — build **55** (installs over prior 1.0.0 builds).
+1. On phone: download **Anima-1.0.0.apk** from [v1.0.0 release](https://github.com/jwarren9393/Anima/releases/tag/v1.0.0) — build **56** (installs over prior 1.0.0 builds).
 2. Run the app locally if needed: `cd F:\AI\Anima` then `flutter run -d windows` (or plug in phone and `flutter run`).
 3. **Release rule:** keep `pubspec.yaml` at **`1.0.0+<build>`** — never bump the `1.0.0` name; only increment the number after `+`. Upload to the existing **`v1.0.0`** GitHub release (not a new tag per build).
 
