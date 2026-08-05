@@ -436,7 +436,7 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. On phone: download **Anima-1.0.0.apk** from [v1.0.0 release](https://github.com/jwarren9393/Anima/releases/tag/v1.0.0) — should install over build 46 as an update.
+1. On phone: download **Anima-1.0.0.apk** from [v1.0.0 release](https://github.com/jwarren9393/Anima/releases/tag/v1.0.0) — build **53** (installs over prior 1.0.0 builds).
 2. Run the app locally if needed: `cd F:\AI\Anima` then `flutter run -d windows` (or plug in phone and `flutter run`).
 3. **Release rule:** keep `pubspec.yaml` at **`1.0.0+<build>`** — never bump the `1.0.0` name; only increment the number after `+`. Upload to the existing **`v1.0.0`** GitHub release (not a new tag per build).
 
