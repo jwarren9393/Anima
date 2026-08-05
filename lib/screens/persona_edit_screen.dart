@@ -372,20 +372,22 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
         return;
       }
 
-      final apply = await showAiFieldChangesSheet(
+      final selected = await showAiFieldChangesSheet(
         context: context,
         title: 'Review compacted persona',
-        subtitle: 'Tap a field to compare before and after. Apply updates the persona.',
+        subtitle:
+            'Check fields to apply. Tap a row to compare before and after.',
         changes: changes,
         applyLabel: 'Update persona',
       );
-      if (apply != true || !mounted) return;
+      if (selected == null || !mounted) return;
 
-      setState(() => _applyPersonaFields(compacted!));
+      final merged = mergePersonaChanges(before, compacted, selected);
+      setState(() => _applyPersonaFields(merged));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Compacted ${changes.length} field${changes.length == 1 ? '' : 's'}.',
+            'Compacted ${selected.length} field${selected.length == 1 ? '' : 's'}.',
           ),
         ),
       );

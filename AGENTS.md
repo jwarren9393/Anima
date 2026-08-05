@@ -62,7 +62,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-08-04  
-**Last agent action:** Build **54** — persona **Compact persona…** in editor (review sheet before apply); build 53 added card/lore compact + token badges.
+**Last agent action:** Build **55** — AI review sheets (compact + consistency fix) let you **pick which fields to apply** via checkboxes.
 
 ### What works today
 

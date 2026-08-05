@@ -172,3 +172,141 @@ List<AiFieldChange> compareLorebookEntry(
   _addIfChanged(out, 'Lore content', before.content, after.content);
   return out;
 }
+
+Set<String> _selectedLabels(Iterable<AiFieldChange> selected) =>
+    selected.map((change) => change.label).toSet();
+
+/// Apply only [selected] field changes from [after] onto [before].
+Character mergeCharacterChanges(
+  Character before,
+  Character after,
+  List<AiFieldChange> selected,
+) {
+  final pick = _selectedLabels(selected);
+  if (pick.isEmpty) return before;
+
+  String field(String label, String next, String prev) =>
+      pick.contains(label) ? next : prev;
+
+  return before.copyWith(
+    name: field('Name', after.name, before.name),
+    description: field('Description', after.description, before.description),
+    personality: field('Personality', after.personality, before.personality),
+    scenario: field('Scenario', after.scenario, before.scenario),
+    firstMes: field('First message', after.firstMes, before.firstMes),
+    alternateGreetings: pick.contains('Alternate greetings')
+        ? after.alternateGreetings
+        : before.alternateGreetings,
+    mesExample: field('Example messages', after.mesExample, before.mesExample),
+    systemPrompt: field('System prompt', after.systemPrompt, before.systemPrompt),
+    postHistoryInstructions: field(
+      'Post-history instructions',
+      after.postHistoryInstructions,
+      before.postHistoryInstructions,
+    ),
+    tags: pick.contains('Tags') ? after.tags : before.tags,
+  );
+}
+
+/// Apply only [selected] field changes from [after] onto [before].
+Persona mergePersonaChanges(
+  Persona before,
+  Persona after,
+  List<AiFieldChange> selected,
+) {
+  final pick = _selectedLabels(selected);
+  if (pick.isEmpty) return before;
+
+  String field(String label, String next, String prev) =>
+      pick.contains(label) ? next : prev;
+
+  return before.copyWith(
+    name: field('Name', after.name, before.name),
+    description: field(
+      'Identity and role',
+      after.description,
+      before.description,
+    ),
+    appearance: field('Appearance', after.appearance, before.appearance),
+    personality: field('Personality', after.personality, before.personality),
+    background: field('Background', after.background, before.background),
+    goals: field('Goals', after.goals, before.goals),
+  );
+}
+
+/// Apply only [selected] field changes from [after] onto [before].
+LorebookEntry mergeLorebookEntryChanges(
+  LorebookEntry before,
+  LorebookEntry after,
+  List<AiFieldChange> selected,
+) {
+  final pick = _selectedLabels(selected);
+  if (pick.isEmpty) return before;
+
+  String field(String label, String next, String prev) =>
+      pick.contains(label) ? next : prev;
+
+  return before.copyWith(
+    name: field('Label', after.name, before.name),
+    keys: pick.contains('Keywords') ? after.keys : before.keys,
+    secondaryKeys:
+        pick.contains('Secondary keywords') ? after.secondaryKeys : before.secondaryKeys,
+    content: field('Lore content', after.content, before.content),
+  );
+}
+
+/// Apply only [selected] lorebook changes from [after] onto [before].
+Lorebook mergeLorebookChanges(
+  Lorebook before,
+  Lorebook after,
+  List<AiFieldChange> selected,
+) {
+  final pick = _selectedLabels(selected);
+  if (pick.isEmpty) return before;
+
+  var name = before.name;
+  var description = before.description;
+  if (pick.contains('Book name')) name = after.name;
+  if (pick.contains('Book notes')) description = after.description;
+
+  final beforeByKey = <String, LorebookEntry>{};
+  for (var i = 0; i < before.entries.length; i++) {
+    beforeByKey[_entryKey(before.entries[i], i)] = before.entries[i];
+  }
+  final afterByKey = <String, LorebookEntry>{};
+  for (var i = 0; i < after.entries.length; i++) {
+    afterByKey[_entryKey(after.entries[i], i)] = after.entries[i];
+  }
+
+  final entries = <LorebookEntry>[];
+  for (var i = 0; i < before.entries.length; i++) {
+    final prev = before.entries[i];
+    final key = _entryKey(prev, i);
+    final next = afterByKey[key];
+    if (next != null) {
+      final label = 'Entry · ${next.displayLabel}';
+      entries.add(pick.contains(label) ? next : prev);
+      continue;
+    }
+    final removedLabel = 'Removed entry · ${prev.displayLabel}';
+    if (!pick.contains(removedLabel)) {
+      entries.add(prev);
+    }
+  }
+
+  for (var i = 0; i < after.entries.length; i++) {
+    final next = after.entries[i];
+    final key = _entryKey(next, i);
+    if (beforeByKey.containsKey(key)) continue;
+    final label = 'New entry · ${next.displayLabel}';
+    if (pick.contains(label)) {
+      entries.add(next);
+    }
+  }
+
+  return before.copyWith(
+    name: name,
+    description: description,
+    entries: entries,
+  );
+}

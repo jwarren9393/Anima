@@ -241,20 +241,22 @@ class _LorebookEditScreenState extends State<LorebookEditScreen> {
         return;
       }
 
-      final apply = await showAiFieldChangesSheet(
+      final selected = await showAiFieldChangesSheet(
         context: context,
         title: 'Review lorebook fixes',
-        subtitle: 'Tap an item to see before and after. Apply updates this book.',
+        subtitle:
+            'Check items to apply. Tap a row to compare before and after.',
         changes: changes,
         applyLabel: 'Update lorebook',
       );
-      if (apply != true || !mounted) return;
+      if (selected == null || !mounted) return;
 
-      setState(() => _applyLorebook(fixed!));
+      final merged = mergeLorebookChanges(before, fixed, selected);
+      setState(() => _applyLorebook(merged));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Updated ${changes.length} item${changes.length == 1 ? '' : 's'} from consistency fix.',
+            'Updated ${selected.length} item${selected.length == 1 ? '' : 's'} from consistency fix.',
           ),
         ),
       );
@@ -368,20 +370,22 @@ class _LorebookEditScreenState extends State<LorebookEditScreen> {
         return;
       }
 
-      final apply = await showAiFieldChangesSheet(
+      final selected = await showAiFieldChangesSheet(
         context: context,
         title: 'Review compacted lorebook',
-        subtitle: 'Tap an item to compare before and after. Apply updates the book.',
+        subtitle:
+            'Check items to apply. Tap a row to compare before and after.',
         changes: changes,
         applyLabel: 'Update lorebook',
       );
-      if (apply != true || !mounted) return;
+      if (selected == null || !mounted) return;
 
-      setState(() => _applyLorebook(compacted!));
+      final merged = mergeLorebookChanges(before, compacted, selected);
+      setState(() => _applyLorebook(merged));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Compacted ${changes.length} item${changes.length == 1 ? '' : 's'}.',
+            'Compacted ${selected.length} item${selected.length == 1 ? '' : 's'}.',
           ),
         ),
       );
@@ -1099,20 +1103,22 @@ class _LorebookEntryEditScreenState extends State<_LorebookEntryEditScreen> {
         return;
       }
 
-      final apply = await showAiFieldChangesSheet(
+      final selected = await showAiFieldChangesSheet(
         context: context,
         title: 'Review compacted entry',
-        subtitle: 'Tap a field to compare before and after. Apply updates this entry.',
+        subtitle:
+            'Check fields to apply. Tap a row to compare before and after.',
         changes: changes,
         applyLabel: 'Update entry',
       );
-      if (apply != true || !mounted) return;
+      if (selected == null || !mounted) return;
 
-      _applyEntryFields(compacted);
+      final merged = mergeLorebookEntryChanges(before, compacted, selected);
+      _applyEntryFields(merged);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Compacted ${changes.length} field${changes.length == 1 ? '' : 's'}.',
+            'Compacted ${selected.length} field${selected.length == 1 ? '' : 's'}.',
           ),
         ),
       );

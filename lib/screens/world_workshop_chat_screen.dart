@@ -1555,25 +1555,26 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         return;
       }
 
-      final apply = await showAiFieldChangesSheet(
+      final selected = await showAiFieldChangesSheet(
         context: context,
         title: 'Review lorebook fixes',
         subtitle:
-            'Tap an item to see before and after. Apply saves to World Info.',
+            'Check items to apply. Tap a row to compare before and after.',
         changes: changes,
         applyLabel: 'Update lorebook',
       );
-      if (apply != true || !mounted) return;
+      if (selected == null || !mounted) return;
 
-      final global = linked.copyWith(book: fixed);
+      final merged = mergeLorebookChanges(before, fixed, selected);
+      final global = linked.copyWith(book: merged);
       await widget.worldInfoService.upsert(global);
       if (!mounted) return;
       setState(() => _linkedLorebook = global);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Updated linked lorebook (${changes.length} change'
-            '${changes.length == 1 ? '' : 's'}).',
+            'Updated linked lorebook (${selected.length} change'
+            '${selected.length == 1 ? '' : 's'}).',
           ),
         ),
       );

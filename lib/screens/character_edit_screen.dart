@@ -235,22 +235,22 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         return;
       }
 
-      final apply = await showAiFieldChangesSheet(
+      final selected = await showAiFieldChangesSheet(
         context: context,
         title: 'Review generated card',
         subtitle:
-            'Tap a field to see before and after. Apply fills the slim fields.',
+            'Check fields to apply. Tap a row to compare before and after.',
         changes: changes,
         applyLabel: 'Apply to card',
       );
-      if (apply != true || !mounted) return;
+      if (selected == null || !mounted) return;
 
-      setState(() => _applySlimFields(draft!));
+      final merged = mergeCharacterChanges(before, draft, selected);
+      setState(() => _applySlimFields(merged));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Applied ${changes.length} field${changes.length == 1 ? '' : 's'} '
-            '(description, personality, example dialogue, tags).',
+            'Applied ${selected.length} field${selected.length == 1 ? '' : 's'}.',
           ),
         ),
       );
@@ -332,22 +332,22 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         return;
       }
 
-      final apply = await showAiFieldChangesSheet(
+      final selected = await showAiFieldChangesSheet(
         context: context,
         title: 'Review card updates',
         subtitle:
-            'Tap a field to see before and after. Scenario, greetings, and '
-            'prompts stay as-is.',
+            'Check fields to apply. Tap a row to compare before and after.',
         changes: changes,
         applyLabel: 'Apply updates',
       );
-      if (apply != true || !mounted) return;
+      if (selected == null || !mounted) return;
 
-      setState(() => _applyCharacterUpdate(draft!));
+      final merged = mergeCharacterChanges(existing, draft, selected);
+      setState(() => _applyCharacterUpdate(merged));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Applied ${changes.length} field update${changes.length == 1 ? '' : 's'}.',
+            'Applied ${selected.length} field update${selected.length == 1 ? '' : 's'}.',
           ),
         ),
       );
@@ -640,20 +640,22 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         return;
       }
 
-      final apply = await showAiFieldChangesSheet(
+      final selected = await showAiFieldChangesSheet(
         context: context,
         title: 'Review card fixes',
-        subtitle: 'Tap a field to see before and after. Apply updates the card.',
+        subtitle:
+            'Check fields to apply. Tap a row to compare before and after.',
         changes: changes,
         applyLabel: 'Update card',
       );
-      if (apply != true || !mounted) return;
+      if (selected == null || !mounted) return;
 
-      setState(() => _applyFullCharacter(fixed!));
+      final merged = mergeCharacterChanges(before, fixed, selected);
+      setState(() => _applyFullCharacter(merged));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Updated ${changes.length} field${changes.length == 1 ? '' : 's'} from consistency fix.',
+            'Updated ${selected.length} field${selected.length == 1 ? '' : 's'} from consistency fix.',
           ),
         ),
       );
@@ -774,20 +776,22 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         return;
       }
 
-      final apply = await showAiFieldChangesSheet(
+      final selected = await showAiFieldChangesSheet(
         context: context,
         title: 'Review compacted card',
-        subtitle: 'Tap a field to compare before and after. Apply updates the card.',
+        subtitle:
+            'Check fields to apply. Tap a row to compare before and after.',
         changes: changes,
         applyLabel: 'Update card',
       );
-      if (apply != true || !mounted) return;
+      if (selected == null || !mounted) return;
 
-      setState(() => _applyFullCharacter(compacted!));
+      final merged = mergeCharacterChanges(before, compacted, selected);
+      setState(() => _applyFullCharacter(merged));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Compacted ${changes.length} field${changes.length == 1 ? '' : 's'}.',
+            'Compacted ${selected.length} field${selected.length == 1 ? '' : 's'}.',
           ),
         ),
       );
