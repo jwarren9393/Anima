@@ -187,6 +187,53 @@ Here you go:
       );
     });
 
+    test('parseGapFillJson reads one suggestion per gap', () {
+      const raw = '''
+{
+  "suggestions": [
+    {
+      "id": "gap_1",
+      "gap": "Paradise landmarks thin",
+      "entry": {
+        "name": "Paradise districts",
+        "keys": ["Paradise", "downtown"],
+        "content": "The neon core and the old docks."
+      }
+    }
+  ]
+}
+''';
+      final suggestions = builder.parseGapFillJson(raw);
+      expect(suggestions, hasLength(1));
+      expect(suggestions.first.gap, contains('Paradise'));
+      expect(suggestions.first.entry.keys, contains('Paradise'));
+      expect(suggestions.first.entry.content, contains('neon'));
+    });
+
+    test('mergeSeedEntries prepends selected gap-fill entries', () {
+      final book = Lorebook(
+        name: 'Test',
+        entries: [
+          const LorebookEntry(
+            id: 1,
+            name: 'Existing',
+            keys: ['guild'],
+            content: 'Guild lore',
+          ),
+        ],
+      );
+      final merged = builder.mergeSeedEntries(book, [
+        const LorebookEntry(
+          id: 2,
+          name: 'Paradise',
+          keys: ['Paradise'],
+          content: 'City overview',
+        ),
+      ]);
+      expect(merged.entries, hasLength(2));
+      expect(merged.entries.first.name, 'Paradise');
+    });
+
     test('suggestTitle uses first user message', () {
       final title = builder.suggestTitle([
         ChatMessage(
@@ -1002,31 +1049,6 @@ Here is the card you asked for:
       final user = messages.last['content'] ?? '';
       expect(system, contains('roleplay chat'));
       expect(user, contains('Captain Vex blocks the gate'));
-    });
-  });
-
-  group('opening scene export', () {
-    test('fresh mode omits existing opening scene block', () {
-      final messages = builder.buildOpeningSceneExportMessages(
-        conversation: const [],
-        existingOpeningScene: 'Old rain-soaked streets prose.',
-        reviseExisting: false,
-      );
-      final system = messages.first['content'] ?? '';
-      final user = messages.last['content'] ?? '';
-      expect(system, contains('NEW opening scene'));
-      expect(user, isNot(contains('Old rain-soaked streets prose')));
-    });
-
-    test('revise mode includes existing opening scene block', () {
-      final messages = builder.buildOpeningSceneExportMessages(
-        conversation: const [],
-        existingOpeningScene: 'Old rain-soaked streets prose.',
-        reviseExisting: true,
-      );
-      final user = messages.last['content'] ?? '';
-      expect(user, contains('Current opening scene'));
-      expect(user, contains('Old rain-soaked streets prose.'));
     });
   });
 

@@ -40,40 +40,6 @@ void main() {
       expect(history, isEmpty);
     });
 
-    test('opening scene seeds who hears unaddressed user lines', () {
-      final king = char('k1', 'King Aethlor');
-      final mira = char('m1', 'Mira');
-      const opening =
-          'King Aethlor stands on the Ivory Wing balcony with Seraphiel.';
-      final messages = [
-        ChatMessage(
-          id: 'u1',
-          role: ChatRole.user,
-          text: 'Yes, Your Majesty. Accommodations are adequate.',
-        ),
-      ];
-
-      final kingHistory = presence.filterHistoryForCharacter(
-        history: messages,
-        allMessages: messages,
-        focusCharacter: king,
-        participants: [king, mira],
-        userName: 'Aedric',
-        openingScene: opening,
-      );
-      final miraHistory = presence.filterHistoryForCharacter(
-        history: messages,
-        allMessages: messages,
-        focusCharacter: mira,
-        participants: [king, mira],
-        userName: 'Aedric',
-        openingScene: opening,
-      );
-
-      expect(kingHistory.length, 1);
-      expect(miraHistory, isEmpty);
-    });
-
     test('targeted user line hidden from unaddressed cast', () {
       final mira = char('m1', 'Mira');
       final king = char('k1', 'King Aethlor');
@@ -91,7 +57,6 @@ void main() {
         focusCharacter: king,
         participants: [king, mira],
         userName: 'Aedric',
-        openingScene: 'King Aethlor and Mira are both in the throne room.',
       );
 
       expect(history, isEmpty);
@@ -170,35 +135,6 @@ void main() {
       );
 
       expect(history, isEmpty);
-    });
-  });
-
-  group('PresenceService opening scene', () {
-    test('wasPresentForOpeningScene matches named cast only', () {
-      final king = char('k1', 'King Aethlor');
-      final mira = char('m1', 'Mira');
-      const opening = 'King Aethlor greets you on the balcony.';
-
-      expect(
-        presence.wasPresentForOpeningScene(
-          openingScene: opening,
-          characterName: 'King Aethlor',
-          participants: [king, mira],
-          userName: 'Aedric',
-          messages: const [],
-        ),
-        isTrue,
-      );
-      expect(
-        presence.wasPresentForOpeningScene(
-          openingScene: opening,
-          characterName: 'Mira',
-          participants: [king, mira],
-          userName: 'Aedric',
-          messages: const [],
-        ),
-        isFalse,
-      );
     });
   });
 

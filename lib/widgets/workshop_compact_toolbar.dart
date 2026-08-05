@@ -11,7 +11,6 @@ class WorkshopCompactToolbar extends StatelessWidget {
     required this.hasImportedSource,
     required this.onPickMode,
     required this.onPickReplyLength,
-    this.onOpeningScene,
     this.onImportedSource,
     this.onPromptIdeas,
     this.showPromptIdeas = false,
@@ -22,7 +21,6 @@ class WorkshopCompactToolbar extends StatelessWidget {
   final bool hasImportedSource;
   final VoidCallback onPickMode;
   final VoidCallback onPickReplyLength;
-  final VoidCallback? onOpeningScene;
   final VoidCallback? onImportedSource;
   final VoidCallback? onPromptIdeas;
   final bool showPromptIdeas;
@@ -31,7 +29,6 @@ class WorkshopCompactToolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final hasScene = workshop.openingScene.trim().isNotEmpty;
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -49,14 +46,6 @@ class WorkshopCompactToolbar extends StatelessWidget {
             icon: Icons.short_text,
             onPressed: enabled ? onPickReplyLength : null,
           ),
-          if (onOpeningScene != null) ...[
-            const SizedBox(width: 8),
-            _ChipButton(
-              label: hasScene ? 'Scene' : 'Add scene',
-              icon: hasScene ? Icons.check_circle_outline : Icons.auto_stories_outlined,
-              onPressed: enabled ? onOpeningScene : null,
-            ),
-          ],
           if (hasImportedSource && onImportedSource != null) ...[
             const SizedBox(width: 8),
             _ChipButton(

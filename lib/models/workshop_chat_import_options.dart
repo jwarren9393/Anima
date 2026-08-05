@@ -10,7 +10,6 @@ class WorkshopChatImportOptions {
     this.includeGlobalLorebooks = false,
     this.includeEmbeddedCharacterLore = false,
     this.includeAuthorsNote = true,
-    this.includeOpeningScene = true,
     this.keepRecent = ContextSettings.defaultKeepRecent,
   });
 
@@ -25,7 +24,6 @@ class WorkshopChatImportOptions {
   /// Lorebooks embedded on imported character cards.
   final bool includeEmbeddedCharacterLore;
   final bool includeAuthorsNote;
-  final bool includeOpeningScene;
 
   /// How many recent messages to keep (matches Summarize “keep recent” setting).
   final int keepRecent;
@@ -40,7 +38,6 @@ class WorkshopChatImportOptions {
     bool? includeGlobalLorebooks,
     bool? includeEmbeddedCharacterLore,
     bool? includeAuthorsNote,
-    bool? includeOpeningScene,
     int? keepRecent,
   }) {
     return WorkshopChatImportOptions(
@@ -55,7 +52,6 @@ class WorkshopChatImportOptions {
       includeEmbeddedCharacterLore: includeEmbeddedCharacterLore ??
           this.includeEmbeddedCharacterLore,
       includeAuthorsNote: includeAuthorsNote ?? this.includeAuthorsNote,
-      includeOpeningScene: includeOpeningScene ?? this.includeOpeningScene,
       keepRecent: keepRecent ?? this.keepRecent,
     );
   }
@@ -89,7 +85,6 @@ class WorkshopChatImportOptions {
         '${embeddedLoreCount == 1 ? '' : 's'}',
       );
     }
-    if (includeOpeningScene) bits.add('opening scene');
     if (includeAuthorsNote) bits.add('author\'s note');
     if (bits.isEmpty) return 'Custom import (minimal)';
     return bits.join(' · ');

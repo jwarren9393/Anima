@@ -61,35 +61,31 @@ High-value SillyTavern concepts to aim for over time:
 
 **Phase:** Post-roadmap tweaks
 
-**Last updated:** 2026-08-02  
-**Last agent action:** Build **48** — fixed analyzer issues; consistency fix review sheet + token floors; AI card builder review; pushed **v1.0.0** release.
+**Last updated:** 2026-08-04  
+**Last agent action:** Build **53** — AI **Compact** for character cards (⋮ menu), whole lorebooks, and individual lore entries (review sheet before apply).
 
 ### What works today
 
 - **Home screen** — chat history; **Creation Center** row (continue tile merged into horizontal world tiles); **New** FAB opens sheet (solo / group / workshop); chat rows show preview + date when available
 - **Chat screen** — **minimal chrome**: Close · title · ⋮; composer row (**Narrator** · **Director** · field · ✨ · ▶ · send/stop); **Narrator** / **Director** centered cards — tap to edit, **long-press to delete**; Director commands the next AI reply; solo/group chats only (not Creation Center)
-- **Group chat setup** — cast + order on main form; **Lore / Scene / Note / Auto-reply** chips open sheets (no inline lore checkboxes or long prose fields)
-- **New chat** — choose **Solo** or **Group**; if the character has several greetings, a **Choose opening** sheet picks which one starts (others stay as swipes); then an optional **Opening scene** sheet — pick a saved scene, browse **Opening scene library**, type fresh prose, or skip
-- **Opening scene (narrator)** — per-chat optional prose in a centered narrator card above messages (not a character bubble); **always injected into prompts by default** (turn off via ⋮ → **Stop injecting opening scene** to save tokens); on the **first memory summarize**, the scene is folded into the memory summary so it stays in long-term context; edit via ⋮ → **Opening scene**; works in solo and group; separate from card **Scenario** (still injects every turn)
-- **Opening scenes library** — **Settings → Opening scenes** lists saved narrator setups (create / edit / delete); scenes from Creation Center **auto-sync** when you save or AI-generate an opening scene there; also imported when starting a new chat or opening the library; included in backup
+- **Group chat setup** — cast + order on main form; **Lore / Note / Auto-reply** chips open sheets (no inline lore checkboxes or long prose fields)
+- **New chat** — choose **Solo** or **Group**; **Solo:** pick character **and persona** on one screen (persona bar at top — tap to change); if the character has several greetings, a **Choose opening** sheet picks which one starts (others stay as swipes); **Group:** cast + lore + note as before
 - **Settings hub** — separate menus:
-  - **Personas** — create multiple {{user}} identities with separate identity/role, appearance, personality, background, goals, and photo fields; **AI persona builder** (plain English → fill/replace/update fields — same Character builds settings as character card builder); **AI wand** on creative fields (appends text like Characters); **Generate avatar** from persona details; set a default for new chats; all filled fields are labeled and sent on every chat generation
-  - **Characters** — character cards + **categories**; **temporary characters** (name + quick note, Temporary badge, promote to full card); **Full cards only** filter (hides temporary NPCs); filter; **consistency check + one-tap fix** (review changed fields); AI card builder; **section chips** (Identity / Story / Chat / Lore / Advanced); avatar + consistency in ⋮ menu
-  - **World Info & lore** — **global lorebooks** (create / import ST JSON / export / on-off) + scan depth/budget + link to per-character books; **consistency check + fix** on lorebook editor and Creation Center linked book; **entry AI wand** + **Suggest keywords from content**
-  - **Opening scenes** — saved narrator setups for new chats (manual + synced from Creation Center workshops)
-  - **Creation Center** — hub on Home + Settings; minimal workshop chrome; composer **▶ Continue** (like main chat) when your last message needs a reply; **Stop** while streaming (keeps partial text); world summary folding; **Fix last** chip applies a correction to the previous AI reply in place (no new AI bubble); long-press → Apply correction; delta-style revision prompts; workshop chat uses dedicated guidance (not character-card wand text) + tuned sampling to reduce repetition loops
+  - **Personas** — create multiple {{user}} identities; **list may be empty**; **~token badges** on list + live count in editor; **pick persona when starting solo or group chat** (defaults to app default or **Plain User**); per-chat switch in ⋮ menu; **AI persona builder**; **AI wand**; **Generate avatar**; optional default for new chats
+  - **Characters** — character cards + **categories**; **list may be empty** (no forced starter card); **temporary characters**; **Full cards only** filter; filter; **consistency check + one-tap fix**; AI card builder; **section chips**; avatar + consistency in ⋮ menu; **~token badges**
+  - **World Info & lore** — **global lorebooks** (create / import ST JSON / export / on-off) + **~token badges** on list and per-entry in editor; **Compact lorebook…** / per-entry **Compact entry…** with review sheet; scan depth/budget + link to per-character books; **consistency check + fix** on lorebook editor and Creation Center linked book; **entry AI wand** + **Suggest keywords from content**
+  - **Creation Center** — hub on Home + Settings; minimal workshop chrome; composer **▶ Continue** (like main chat) when your last message needs a reply; **Stop** while streaming (keeps partial text); world summary folding; **Fix last** chip applies a correction to the previous AI reply in place (no new AI bubble); long-press → Apply correction; delta-style revision prompts; workshop chat uses dedicated guidance (not character-card wand text) + tuned sampling to reduce repetition loops; **Create lorebook** pre-flight audit (World Info gaps only) with optional **Fill gaps…** → per-entry preview sheet before export
   - **AI collaborator** — wand guidance note + **Composer Format** + **Roadway / Paths** + **Narrator** notes
   - **Character builds** — model, max tokens, temperature, top P, and prompt for **slim card JSON** generation (description, personality, mes_example, tags only — no scenario, greetings, or per-card system/post-history; Creation Center + New character from chat); separate from main chat model
   - **Global chat prompts** — app-wide **system prompt** + **post-history** merged into every chat (on top of each card; per-chat Author's Note still applies); preset pickers; `{{user}}` / `{{char}}`
   - **Appearance (Theme Studio)** — live preview + **category chips** (Presets / Layout / Colors / Fonts / Chat / Avatars); one section visible at a time
-  - **Backup & restore** — one `.anima-backup` JSON file (chats, characters, personas, categories, lorebooks, workshops, opening scenes, drafts, roadway cache, avatars, settings); **API key is not included** — re-enter after restore; on Linux/Windows Create backup opens a **Save** dialog (Downloads suggested); Android still uses the share sheet; restore replaces Anima data only (whitelist), then returns to Home; **Cross-device sync** — pick one sync file in Google Drive (or a synced folder on desktop); **Push to cloud** overwrites that file in place; **Pull from cloud** restores from it when switching phone ↔ PC (no delete-and-reupload)
+  - **Backup & restore** — one `.anima-backup` JSON file (chats, characters, personas, categories, lorebooks, workshops, drafts, roadway cache, avatars, settings); **API key is not included** — re-enter after restore; on Linux/Windows Create backup opens a **Save** dialog (Downloads suggested); Android still uses the share sheet; restore replaces Anima data only (whitelist), then returns to Home; **Cross-device sync** — pick one sync file in Google Drive (or a synced folder on desktop); **Push to cloud** overwrites that file in place; **Pull from cloud** restores from it when switching phone ↔ PC (no delete-and-reupload)
   - API, Generation parameters
 - **Look** — Theme Studio with glass and solid presets (default Obsidian Gold soft-glow, no sparkle texture); Ivory Ink light preset + full color/font customization
 - **Generation parameters** — detailed help + many sampling presets; **context size in tokens** + presets (1K–24K); **auto-summarize** every N messages
 - **Memory summary** — per chat (⋮ → Memory summary to edit; Summarize now); **clinical bullet facts only** (no RP voice/metaphors); **witness tags** on private facts (`Secret (known by …)`, `Event (witnesses: …)`); filtered per speaking character before injection; auto-updates in background when enabled
 - **Presence / scene law** — **always on, no settings** — strict hard-coded knowledge boundaries:
   - **Narrator** resets the scene: only names in that card (+ you) are present; supports "alone with Mira", exclusions ("Edric waits in the hall")
-  - **Opening scene** seeds who was there at chat start — only those characters receive the opening-scene prompt block
   - **Your messages** — naming someone (`Mira, …`) → only they hear it; no names → only whoever is **currently present** in the scene (not the whole cast)
   - **Character lines** — only visible to those present when the line was sent
   - **Memory** — witness tags required on private facts (`Secret (known by …)`, `Event (witnesses: …)`); untagged Event/Secret lines hidden unless you're named
@@ -97,7 +93,7 @@ High-value SillyTavern concepts to aim for over time:
   - Summarize prompt auto-tags witnesses using character names
 - **Text presets** — expanded Author’s Note / System prompt / Post-history / collaborator guidance sheets
  - **Character AI wand** — sparkle icon on creative card fields; sends all filled fields as context; appends NanoGPT text below what’s already there (uses chat model + sampling)
- - **Consistency check + fix** — ⋮ menu on character editor: AI report, then **Fix inconsistencies** → review changed fields → **Update card** (all card text fields; lorebook unchanged)
+ - **Consistency check + fix** — ⋮ menu on character editor: AI report, then **Fix inconsistencies** → review changed fields → **Update card** (all card text fields; lorebook unchanged); **Compact card…** shortens verbose fields with review before apply
 - **World Info entry AI wand** — sparkle on Label / Keywords / Lore content (and Secondary keywords when Selective); uses book + sibling entry context; appends (keywords merge comma-separated); same model + collaborator guidance
 - **API & connection** — live NanoGPT model catalog: **Category** filter (All · **Uncensored & derestricted (broad)** · Roleplay · …) then **provider**; **Browse models** sheet shows context, max output, parameter size, TPS, TTFT, uptime %, description, capabilities, and pricing/Included — stats from `detailed=true` catalog + providers API; filtered count in status line; refresh; custom model id; subscription toggle reloads catalog; **image model** picker; **See remaining credits**
 - **Chat stop** — while a reply streams, the send button becomes a red **Stop** button (keeps any partial text); status banner shows “Generating… tap Stop to cancel” in Creation Center; the list does **not** auto-scroll during streaming — scroll freely while a reply types in (regular chat + Creation Center)
@@ -118,10 +114,12 @@ High-value SillyTavern concepts to aim for over time:
 - **Group chat controls** — **manual mode (default):** your message only; **Continue** and implicit generation pick the speaker from scene context (last reply, name in your text, etc.) — **no** round-robin “next in order” chip highlight; tap a name chip to **force** that character’s reply; **Group react** chip / ⋮ menu / long-press — one AI call → **one centered group-react card** with each character’s line + avatar; long-press for Delete/Rewind/etc.; regenerate avoids copying prior beats verbatim; auto-reply (optional, long-press toggle) still round-robins when on; leading `Name:` is stripped from solo replies
 - **Manage cast (mid-chat)** — ⋮ → **Rename chat** (groups) or **Manage cast** adds/removes characters; **+ menu → Add temporary character** (quick NPC) or full character; ⋮ → **Add temporary character**; group setup same; ⋮ → **New character** / **Update character from chat**; manage screen **+** uses full or temporary flow
 - **Avatars** — persona + character photos; **Generate avatar** on character and persona create/edit (and Creation Center character review) uses NanoGPT image models + an **auto prompt** that keeps the portrait framing but pulls only appearance-relevant lines from the card (skips scenario, backstory, and long personality blocks; stays under ~1,150 chars); prompt is still editable in the sheet; **tap any avatar** (chat, character list, editor, home) for a **full-screen portrait** — tap again (or ✕) to close; in chat, **long-press** an avatar to edit persona / character card; PNG card import still grabs the card image; chat bubble shape/size via Appearance
-- **Context estimate** — chat ⋮ → **Context estimate** shows ~message/token gauges vs history budget and model window; Creation Center shows a live banner estimate
+- **Context estimate** — chat ⋮ → **Context estimate** shows full next-reply breakdown (speaker card, group snippets, World Info hits, persona/globals, memory, history) plus model window; Creation Center shows a live banner estimate
+- **Character token badges** — ~token count beside names in **Characters**, character editor (live), group setup, and Creation Center cast pickers (≈1 token per 4 chars; color hints when large)
+- **Persona + lorebook token badges** — same style on **Personas** list + editor; **global lorebooks** list; lorebook editor shows enabled-book total and per-entry content size
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar
 - **Linux install/update** — `./scripts/update_linux.sh` builds and installs the desktop app; add `--pull` to download GitHub changes first
-- **Smoke:** `flutter test` (267) + `flutter analyze` pass; Android + Windows + Linux desktop debug work
+- **Smoke:** `flutter test` (276) + `flutter analyze` pass; Android + Windows + Linux desktop debug work
 
 ### What does NOT work yet / limits
 
@@ -133,7 +131,7 @@ High-value SillyTavern concepts to aim for over time:
 - Paths open from the long-press menu (not always on the composer chrome)
 - Full-app backup is plain JSON (not encrypted) and skips the API key on purpose
 - Back-burner QoL not started: undo send, last-chat resume, pinned Author’s Note / mood chips, memory preview, etc.
-- Presence filtering uses narrator + opening-scene name mentions; very old memory without witness tags may leak until re-summarized; honorifics ("Your Majesty") don't match names — use opening scene / narrator to establish who's present
+- Presence filtering uses narrator name mentions; very old memory without witness tags may leak until re-summarized; honorifics ("Your Majesty") don't match names — use narrator to establish who's present
 
 ---
 
@@ -242,17 +240,16 @@ lib/
   models/
     chat_message.dart             Bubble + swipes + optional speaker + groupBeat lines
     group_beat_part.dart          One character line inside a group-react card
-    chat_session.dart             Thread + authorsNote + group + lorebookIds + autoReply + memorySummary + openingScene + openingSceneInMemory
+    chat_session.dart             Thread + authorsNote + group + lorebookIds + autoReply + memorySummary
     character.dart                ST-compatible card fields (+ Anima id)
     character_category.dart       Anima-only category lists + memberships
+    new_chat_pick.dart            Character + persona bundle for solo new chat
     lorebook.dart                 CharacterBook / World Info entries (+ ST import aliases)
     global_lorebook.dart          Standalone global lorebook (id + enabled + book)
     world_workshop.dart           Creation Center workshop + hub fields (summary, kit, sheets, pins)
     workshop_hub_models.dart      Modes, chat kit, locations, relationships, scene ideas
-    opening_scene_length.dart     Short / Medium / Long hints for Creation Center opening-scene AI
     chat_experience_settings.dart Classic vs Storybook layout + background + bubble opacity + hero portrait
     chat_background_service.dart User-picked chat background images (chat_backgrounds/)
-    saved_opening_scene.dart      Saved opening scene (title, text, optional workshop link)
     sync_target.dart              Sync file location (desktop path or Android URI)
     ui_style_settings.dart        Theme Studio settings + AnimaUiTheme extension + avatars
     theme_palette.dart            VisualStyle / BackgroundMode / fonts + 8 ThemePresets
@@ -269,9 +266,8 @@ lib/
     lorebook_edit_screen.dart     World Info entry list + entry editor (+ AI wand)
     lorebooks_screen.dart         Global lorebook list / create / import / export
     world_workshop_list_screen.dart Creation Center list + import chat / lorebook (file / World Info)
-    world_workshop_chat_screen.dart Workshop chat + opening scene + lorebook/characters/persona + start roleplay
-    opening_scenes_screen.dart    Opening scenes library (Settings + browse from new-chat picker)
-    settings_screen.dart          Settings hub (Personas + Characters + Creation Center + Opening scenes + AI collaborator + Backup)
+    world_workshop_chat_screen.dart Workshop chat + lorebook/characters/persona + start roleplay
+    settings_screen.dart          Settings hub (Personas + Characters + Creation Center + AI collaborator + Backup)
     api_settings_screen.dart      API key, model catalog, subscription URL + remaining credits
     lore_settings_screen.dart     Global books + scan/budget + character books link
     sampling_settings_screen.dart ST-style generation parameters
@@ -293,15 +289,17 @@ lib/
     keyboard_inset.dart           Lift UI above keyboard (chat composers)
     rp_rich_text.dart             *action* / "dialogue" styled message text
     greeting_picker.dart          Multi-greeting sheet when starting a chat
-    opening_scene_picker.dart     Optional opening-scene sheet when starting a chat (+ library browse)
-    narrator_bubble.dart          Centered narrator card (opening scene + chat Narrator lines)
+    narrator_bubble.dart          Centered narrator card (chat Narrator lines)
     group_reply_sheet.dart          Group react — multi-select cast + nudge sheet
     group_beat_bubble.dart          Centered multi-character group-react card
     group_beat_edit_sheet.dart      Per-character edit sheet for group-react lines
     narrator_sheet.dart           Narrator sheet — nudge, edit, Generate, Post
     workshop_overview_sheet.dart  Workshop dashboard bottom sheet
     minimal_chip_button.dart        Shared MinimalChipButton + MinimalChipRow
-    workshop_compact_toolbar.dart   Workshop chip row (mode, length, scene, import, ideas)
+    workshop_compact_toolbar.dart   Workshop chip row (mode, length, import, ideas)
+    lorebook_gap_fill_sheet.dart      Per-gap World Info preview before lorebook export
+    character_token_badge.dart      Compact ~1.2K label beside character names
+    new_chat_persona_bar.dart       Persona picker strip on solo new-chat character list
     workshop_chat_import_sheet.dart Import-options sheet when seeding workshop from chat
     chat_lorebook_picker.dart     Per-chat global lorebook picker (chat ⋮ menu)
     character_category_controls.dart Category filter + manage / assign sheets
@@ -323,6 +321,9 @@ lib/
     avatar_prompt_builder.dart    Text prompt for NanoGPT character/persona avatar generation
     character_service.dart        Load/save characters JSON on device
     character_category_service.dart Anima-only category lists (multi-membership)
+    character_token_service.dart    Per-character prompt / lore token estimates
+    persona_token_service.dart    Per-persona promptText token estimates
+    lorebook_token_service.dart   Lorebook enabled-total + per-entry content estimates
     character_card_codec.dart     ST Card V1/V2/V3 + PNG import/export
     character_collaborator.dart   Field-aware prompts + consistency check/fix for character cards
     persona_collaborator.dart     Field-aware prompts for persona AI wand
@@ -348,7 +349,6 @@ lib/
     world_workshop_service.dart   Persist Creation Center workshops + last-opened id
     workshop_hub_service.dart     Hub ops: play plan, bundle, duplicate, merge, status
     workshop_hub_controller.dart  AI hub actions (summarize, glossary, scenes, export)
-    opening_scene_service.dart    Persist opening scenes library (anima_opening_scenes.json)
     sync_service.dart             Push / pull one sync file for phone ↔ desktop handoff
     world_workshop_builder.dart   Workshop prompts + hub JSON parsers
     chat_transcript_codec.dart    Chat JSON / plain-text import/export

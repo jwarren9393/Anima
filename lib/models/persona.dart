@@ -108,6 +108,21 @@ class Persona {
     );
   }
 
+  /// Synthetic persona when none is saved — prompts use the name "User" only.
+  static const String anonymousId = 'persona_anonymous';
+
+  static Persona anonymous() {
+    return const Persona(
+      id: anonymousId,
+      name: 'User',
+    );
+  }
+
+  bool get isAnonymous => id == anonymousId;
+
+  /// Id stored on [ChatSession]; null when using plain User.
+  String? get sessionId => isAnonymous ? null : id;
+
   static Persona starter({
     String name = 'User',
     String description = '',

@@ -5,7 +5,6 @@ import 'dart:typed_data';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
-import 'opening_scene_service.dart';
 import 'persona_service.dart';
 import 'settings_service.dart';
 
@@ -37,7 +36,6 @@ class AppBackupService {
     'anima_character_categories.json',
     'anima_lorebooks.json',
     'anima_world_workshops.json',
-    OpeningSceneService.fileName,
     'anima_composer_drafts.json',
     'anima_roadway_cache.json',
   ];

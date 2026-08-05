@@ -226,7 +226,6 @@ class WorkshopSceneIdea {
 class WorkshopHubStatus {
   const WorkshopHubStatus({
     required this.lorebookState,
-    required this.openingSceneSet,
     required this.characterCount,
     required this.personaLinked,
     required this.sourceChatTitle,
@@ -239,7 +238,6 @@ class WorkshopHubStatus {
   });
 
   final String lorebookState;
-  final bool openingSceneSet;
   final int characterCount;
   final bool personaLinked;
   final String? sourceChatTitle;

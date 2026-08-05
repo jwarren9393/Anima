@@ -10,6 +10,7 @@ import '../models/character.dart';
 import '../models/chat_session.dart';
 import '../models/global_lorebook.dart';
 import '../models/lorebook.dart';
+import '../models/lorebook_gap_suggestion.dart';
 import '../models/persona.dart';
 import '../models/world_workshop.dart';
 import '../models/workshop_chat_import_options.dart';
@@ -128,6 +129,37 @@ class WorkshopHubController {
       sampling: sampling,
     );
     return _builder.parseChecklistJson(raw);
+  }
+
+  Future<List<LorebookGapSuggestion>> aiGapFillSuggestions({
+    required WorldWorkshop workshop,
+    required List<String> gaps,
+    required NanoGptService nanoGpt,
+    required SettingsService settings,
+    Lorebook? sourceLorebook,
+    List<Character> workshopCast = const [],
+  }) async {
+    if (gaps.isEmpty) return const [];
+    final model = await settings.getModel();
+    final sampling = WorldWorkshopBuilder.workshopExportSampling(
+      await settings.getSampling(),
+    );
+    final baseUrl = await settings.getApiBaseUrl();
+    final raw = await nanoGpt.complete(
+      model: model,
+      messages: _builder.buildGapFillMessages(
+        conversation: workshop.messages,
+        gaps: gaps,
+        importedSource: workshop.importedSource,
+        sourceLorebook: sourceLorebook,
+        worldSummary: workshop.worldSummary,
+        canonPinMessageIds: workshop.canonPinMessageIds,
+        workshopCast: workshopCast,
+      ),
+      baseUrl: baseUrl,
+      sampling: sampling,
+    );
+    return _builder.parseGapFillJson(raw);
   }
 
   Future<List<GlossaryEntry>> extractGlossary({

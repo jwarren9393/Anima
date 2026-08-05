@@ -23,10 +23,6 @@ class ChatTranscriptCodec {
       'updatedAt': session.updatedAt.toIso8601String(),
       'authorsNote': session.authorsNote,
       'participantIds': session.participantIds,
-      if (session.openingScene.trim().isNotEmpty)
-        'openingScene': session.openingScene,
-      if (!session.openingSceneInPrompt) 'openingSceneInPrompt': false,
-      if (session.openingSceneInMemory) 'openingSceneInMemory': true,
       'messages': session.messages.map((m) => m.toJson()).toList(),
     };
     return pretty
@@ -140,9 +136,6 @@ class ChatTranscriptCodec {
           DateTime.now(),
       messages: messages,
       authorsNote: (sessionMap['authorsNote'] as String? ?? '').trim(),
-      openingScene: (sessionMap['openingScene'] as String? ?? '').trim(),
-      openingSceneInPrompt: sessionMap['openingSceneInPrompt'] != false,
-      openingSceneInMemory: sessionMap['openingSceneInMemory'] == true,
       participantIds: () {
         final raw = sessionMap['participantIds'];
         if (raw is! List) return const <String>[];

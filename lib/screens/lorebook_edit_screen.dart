@@ -4,8 +4,10 @@ import 'package:flutter/services.dart';
 import '../models/lorebook.dart';
 import '../services/ai_field_changes.dart';
 import '../services/lore_collaborator.dart';
+import '../services/lorebook_token_service.dart';
 import '../services/nanogpt_service.dart';
 import '../services/settings_service.dart';
+import '../widgets/character_token_badge.dart';
 import '../services/world_workshop_builder.dart';
 import '../widgets/ai_field_changes_sheet.dart';
 import '../widgets/keyboard_inset.dart';
@@ -34,6 +36,7 @@ class LorebookEditScreen extends StatefulWidget {
 
 class _LorebookEditScreenState extends State<LorebookEditScreen> {
   static const _collaborator = LoreCollaborator();
+  static const _tokenService = LorebookTokenService();
   final _workshopBuilder = WorldWorkshopBuilder();
 
   late TextEditingController _name;
@@ -277,6 +280,133 @@ class _LorebookEditScreenState extends State<LorebookEditScreen> {
     }
   }
 
+  bool _bookHasCompactableContent() {
+    return _entries.any((e) => e.content.trim().isNotEmpty);
+  }
+
+  Future<void> _runCompactBook() async {
+    if (_consistencyBusy) return;
+    if (!_bookHasCompactableContent()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Add lore entries with content first, then compact.'),
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Compact lorebook?'),
+        content: const Text(
+          'AI will shorten entry text while keeping important facts. '
+          'You review every change before saving.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Compact'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _consistencyBusy = true);
+    try {
+      final before = _snapshot();
+      final collaborator =
+          await widget.settingsService.getCollaboratorSettings();
+      final messages = _collaborator.buildBookCompactMessages(
+        book: before,
+        characterName: widget.characterName,
+        guidanceNote: collaborator.guidanceNote,
+      );
+      final model = await widget.settingsService.getModel();
+      final sampling = WorldWorkshopBuilder.consistencyFixSampling(
+        await widget.settingsService.getSampling(),
+      );
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+
+      Lorebook? compacted;
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final raw = await widget.nanoGptService.complete(
+          model: model,
+          messages: messages,
+          baseUrl: baseUrl,
+          sampling: sampling,
+        );
+        try {
+          compacted = _workshopBuilder.parseLorebookConsistencyFixJson(
+            raw,
+            original: before,
+          );
+          break;
+        } on FormatException {
+          if (attempt == 1) rethrow;
+        }
+      }
+      if (compacted == null) {
+        throw const FormatException(
+          'Could not find lorebook JSON in the AI reply. Try again.',
+        );
+      }
+
+      if (!mounted) return;
+      final changes = compareLorebooks(before, compacted);
+      if (changes.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No shorter version was suggested. Try editing manually.'),
+          ),
+        );
+        return;
+      }
+
+      final apply = await showAiFieldChangesSheet(
+        context: context,
+        title: 'Review compacted lorebook',
+        subtitle: 'Tap an item to compare before and after. Apply updates the book.',
+        changes: changes,
+        applyLabel: 'Update lorebook',
+      );
+      if (apply != true || !mounted) return;
+
+      setState(() => _applyLorebook(compacted!));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Compacted ${changes.length} item${changes.length == 1 ? '' : 's'}.',
+          ),
+        ),
+      );
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } on NanoGptCancelledException {
+      // Ignore.
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Compact failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _consistencyBusy = false);
+    }
+  }
+
   Future<void> _editEntry(int? index) async {
     final existing = index == null ? null : _entries[index];
     final siblings = <LoreSiblingSummary>[];
@@ -374,6 +504,7 @@ class _LorebookEditScreenState extends State<LorebookEditScreen> {
             enabled: !_consistencyBusy,
             onSelected: (value) {
               if (value == 'consistency') _runConsistencyCheck();
+              if (value == 'compact') _runCompactBook();
             },
             itemBuilder: (context) => [
               PopupMenuItem(
@@ -391,6 +522,17 @@ class _LorebookEditScreenState extends State<LorebookEditScreen> {
                       const Icon(Icons.fact_check_outlined),
                     const SizedBox(width: 12),
                     const Text('Consistency check'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'compact',
+                enabled: !_consistencyBusy,
+                child: const Row(
+                  children: [
+                    Icon(Icons.compress_outlined),
+                    SizedBox(width: 12),
+                    Text('Compact lorebook…'),
                   ],
                 ),
               ),
@@ -473,9 +615,32 @@ class _LorebookEditScreenState extends State<LorebookEditScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          Text(
-            'Entries (${_entries.length})',
-            style: Theme.of(context).textTheme.titleMedium,
+          Builder(
+            builder: (context) {
+              final breakdown = _tokenService.breakdown(_snapshot());
+              return Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Entries (${_entries.length})',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  if (breakdown.totalTokens > 0) ...[
+                    Text(
+                      '${breakdown.enabledCount} on · ',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: Theme.of(context).colorScheme.outline,
+                          ),
+                    ),
+                    CharacterTokenBadge(
+                      tokens: breakdown.enabledTokens,
+                      tooltip: lorebookTokenTooltip(breakdown),
+                    ),
+                  ],
+                ],
+              );
+            },
           ),
           const SizedBox(height: 8),
           TextField(
@@ -533,6 +698,7 @@ class _LorebookEditScreenState extends State<LorebookEditScreen> {
           else
             ..._visibleEntries.map((entry) {
               final index = _entryIndexOf(entry);
+              final entryTokens = _tokenService.entryTokens(entry);
               final subtitleParts = <String>[
                 if (entry.constant)
                   'Always on'
@@ -545,7 +711,18 @@ class _LorebookEditScreenState extends State<LorebookEditScreen> {
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
                 child: ListTile(
-                  title: Text(entry.displayLabel),
+                  title: Row(
+                    children: [
+                      Expanded(child: Text(entry.displayLabel)),
+                      if (entryTokens > 0) ...[
+                        const SizedBox(width: 6),
+                        CharacterTokenBadge(
+                          tokens: entryTokens,
+                          tooltip: lorebookEntryTokenTooltip(entry, entryTokens),
+                        ),
+                      ],
+                    ],
+                  ),
                   subtitle: Text(
                     subtitleParts.join(' · '),
                     maxLines: 2,
@@ -605,6 +782,7 @@ class _LorebookEntryEditScreen extends StatefulWidget {
 
 class _LorebookEntryEditScreenState extends State<_LorebookEntryEditScreen> {
   static const _collaborator = LoreCollaborator();
+  final _workshopBuilder = WorldWorkshopBuilder();
 
   late TextEditingController _name;
   late TextEditingController _keys;
@@ -622,6 +800,7 @@ class _LorebookEntryEditScreenState extends State<_LorebookEntryEditScreen> {
   int? _id;
   LoreCollaboratorField? _wandBusy;
   bool _suggestKeysBusy = false;
+  bool _compactBusy = false;
 
   @override
   void initState() {
@@ -810,8 +989,157 @@ class _LorebookEntryEditScreenState extends State<_LorebookEntryEditScreen> {
     }
   }
 
+  LorebookEntry _entryFromDraft() {
+    return LorebookEntry(
+      id: _id,
+      name: _name.text.trim(),
+      keys: _csv(_keys.text),
+      secondaryKeys: _csv(_secondaryKeys.text),
+      content: _content.text.trim(),
+      enabled: _enabled,
+      insertionOrder: int.tryParse(_order.text.trim()) ?? 100,
+      caseSensitive: _caseSensitive,
+      selective: _selective,
+      constant: _constant,
+      position: _position,
+      priority: int.tryParse(_priority.text.trim()) ?? 10,
+      comment: _comment.text.trim(),
+      extensions: _extensions,
+    );
+  }
+
+  void _applyEntryFields(LorebookEntry entry) {
+    _name.text = entry.name;
+    _keys.text = entry.keys.join(', ');
+    _secondaryKeys.text = entry.secondaryKeys.join(', ');
+    _content.text = entry.content;
+    setState(() {});
+  }
+
+  Future<void> _runCompactEntry() async {
+    if (_wandBusy != null || _compactBusy || _suggestKeysBusy) return;
+    if (_content.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Write lore content first, then compact.'),
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Compact lore entry?'),
+        content: const Text(
+          'AI will shorten this entry while keeping important facts. '
+          'You review changes before saving.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Compact'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _compactBusy = true);
+    try {
+      final before = _entryFromDraft();
+      final collaborator =
+          await widget.settingsService.getCollaboratorSettings();
+      final messages = _collaborator.buildEntryCompactMessages(
+        draft: _draftContext(),
+        guidanceNote: collaborator.guidanceNote,
+      );
+      final model = await widget.settingsService.getModel();
+      final sampling = WorldWorkshopBuilder.consistencyFixSampling(
+        await widget.settingsService.getSampling(),
+      );
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+
+      LorebookEntry? compacted;
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final raw = await widget.nanoGptService.complete(
+          model: model,
+          messages: messages,
+          baseUrl: baseUrl,
+          sampling: sampling,
+        );
+        try {
+          compacted = _workshopBuilder.parseLorebookEntryCompactJson(
+            raw,
+            original: before,
+          );
+          break;
+        } on FormatException {
+          if (attempt == 1) rethrow;
+        }
+      }
+      if (compacted == null) {
+        throw const FormatException(
+          'Could not find lore entry JSON in the AI reply. Try again.',
+        );
+      }
+
+      if (!mounted) return;
+      final changes = compareLorebookEntry(before, compacted);
+      if (changes.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No shorter version was suggested. Try editing manually.'),
+          ),
+        );
+        return;
+      }
+
+      final apply = await showAiFieldChangesSheet(
+        context: context,
+        title: 'Review compacted entry',
+        subtitle: 'Tap a field to compare before and after. Apply updates this entry.',
+        changes: changes,
+        applyLabel: 'Update entry',
+      );
+      if (apply != true || !mounted) return;
+
+      _applyEntryFields(compacted);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Compacted ${changes.length} field${changes.length == 1 ? '' : 's'}.',
+          ),
+        ),
+      );
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } on NanoGptCancelledException {
+      // Ignore.
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Compact failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _compactBusy = false);
+    }
+  }
+
   void _save() {
-    if (_wandBusy != null) return;
+    if (_wandBusy != null || _compactBusy) return;
     final content = _content.text.trim();
     if (content.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -850,13 +1178,14 @@ class _LorebookEntryEditScreenState extends State<_LorebookEntryEditScreen> {
   @override
   Widget build(BuildContext context) {
     final anyWandBusy = _wandBusy != null;
+    final busy = anyWandBusy || _compactBusy;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.existing == null ? 'New lore entry' : 'Edit lore entry'),
         actions: [
           TextButton(
-            onPressed: anyWandBusy ? null : _save,
+            onPressed: busy ? null : _save,
             child: const Text('Done'),
           ),
         ],
@@ -868,6 +1197,18 @@ class _LorebookEntryEditScreenState extends State<_LorebookEntryEditScreen> {
             'Tap the wand on Label, Keywords, or Lore content to append AI text '
             '(uses your NanoGPT model + Settings → AI collaborator).',
             style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: (busy || _suggestKeysBusy) ? null : _runCompactEntry,
+            icon: _compactBusy
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.compress_outlined),
+            label: const Text('Compact entry…'),
           ),
           const SizedBox(height: 12),
           SwitchListTile(

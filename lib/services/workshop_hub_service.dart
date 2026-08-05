@@ -40,7 +40,6 @@ class WorkshopHubService {
 
     return WorkshopHubStatus(
       lorebookState: lorebookState,
-      openingSceneSet: workshop.openingScene.trim().isNotEmpty,
       characterCount: fromWorkshopChars,
       personaLinked: workshop.linkedPersonaId != null,
       sourceChatTitle: workshop.importedSource?.chatTitle,
@@ -59,12 +58,6 @@ class WorkshopHubService {
     if (workshop.messages.isEmpty &&
         (workshop.importedSource?.hasContent != true)) {
       items.add('No workshop chat or imported source yet.');
-    }
-    if (workshop.openingScene.trim().isEmpty) {
-      items.add('Opening scene not set (optional but recommended).');
-    }
-    if (workshop.linkedCharacterIds.isEmpty) {
-      items.add('No characters linked to this workshop yet.');
     }
     if (workshop.exportedLorebookId != null && workshop.isLorebookStale) {
       items.add(
@@ -117,8 +110,6 @@ class WorkshopHubService {
       messages: workshop.messages,
       updatedAt: DateTime.now(),
       importedSource: workshop.importedSource,
-      openingScene: workshop.openingScene,
-      openingSceneLength: workshop.openingSceneLength,
       replyLength: workshop.replyLength,
       includeLinkedLorebookInPrompt: workshop.includeLinkedLorebookInPrompt,
       pinned: false,
@@ -156,10 +147,6 @@ class WorkshopHubService {
       title: '${primary.title.trim()} + ${secondary.title.trim()}',
       messages: combinedMessages,
       updatedAt: DateTime.now(),
-      openingScene: primary.openingScene.trim().isNotEmpty
-          ? primary.openingScene
-          : secondary.openingScene,
-      openingSceneLength: primary.openingSceneLength,
       replyLength: primary.replyLength,
       tags: combinedTags,
       worldSummary: [
@@ -182,7 +169,7 @@ class WorkshopHubService {
     );
   }
 
-  /// Play this world — resolve cast, lore, persona, opening scene from workshop kit.
+  /// Play this world — resolve cast, lore, and persona from workshop kit.
   Future<PlayWorldPlan> buildPlayWorldPlan({
     required WorldWorkshop workshop,
     required List<Character> allCharacters,
@@ -238,7 +225,6 @@ class WorkshopHubService {
           ? kit.defaultAuthorsNote
           : _defaultAuthorsNoteFromWorkshop(workshop),
       autoReply: kit.autoReply,
-      openingScene: workshop.openingScene,
       title: workshop.title.trim().isNotEmpty ? workshop.title.trim() : null,
       sourceWorkshopId: workshop.id,
     );
@@ -355,7 +341,6 @@ class PlayWorldPlan {
     this.lorebookIds,
     this.authorsNote = '',
     this.autoReply = false,
-    this.openingScene = '',
     this.title,
     this.sourceWorkshopId,
   });
@@ -365,7 +350,6 @@ class PlayWorldPlan {
   final List<String>? lorebookIds;
   final String authorsNote;
   final bool autoReply;
-  final String openingScene;
   final String? title;
   final String? sourceWorkshopId;
 

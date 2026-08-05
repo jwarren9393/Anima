@@ -5,7 +5,7 @@ import 'narrator_service.dart';
 /// Automatic presence / knowledge filtering for live chat prompts.
 ///
 /// Always on — no settings. Characters only receive history, memory, lore
-/// scans, and opening-scene context from scenes they personally witnessed.
+/// scans, and narrator context from scenes they personally witnessed.
 class PresenceService {
   const PresenceService({
     this.narrator = const NarratorService(),
@@ -38,62 +38,6 @@ Knowledge boundaries (absolute — never break these):
         .trim();
   }
 
-  /// True when [characterName] was present in the chat's opening-scene setup.
-  bool wasPresentForOpeningScene({
-    required String openingScene,
-    required String characterName,
-    required List<Character> participants,
-    required String userName,
-    required List<ChatMessage> messages,
-  }) {
-    final focus = _normName(characterName);
-    if (focus.isEmpty) return false;
-
-    final cast = _castNames(participants, userName);
-    final body = openingScene.trim();
-
-    if (body.isNotEmpty) {
-      final mentioned = _mentionedCastFromText(body, cast);
-      return mentioned.contains(focus);
-    }
-
-    if (participants.length <= 1) {
-      return focus == _normName(participants.first.name);
-    }
-
-    for (final message in messages) {
-      if (message.isAssistant) {
-        final speaker = message.speakerName?.trim();
-        if (speaker != null && speaker.isNotEmpty) {
-          return focus == _normName(speaker);
-        }
-      }
-      if (message.isGroupBeat && message.beatLines != null) {
-        for (final line in message.beatLines!) {
-          final name = line.speakerName.trim();
-          if (name.isNotEmpty) {
-            return focus == _normName(name);
-          }
-        }
-      }
-    }
-    return false;
-  }
-
-  /// Names present in the opening-scene prose (for prompt labeling).
-  List<String> openingScenePresentNames({
-    required String openingScene,
-    required List<Character> participants,
-    required String userName,
-  }) {
-    final cast = _castNames(participants, userName);
-    final mentioned = _mentionedCastFromText(openingScene, cast);
-    return participants
-        .map((c) => c.name.trim())
-        .where((name) => name.isNotEmpty && mentioned.contains(_normName(name)))
-        .toList(growable: false);
-  }
-
   /// Filter recent history for one speaking character.
   List<ChatMessage> filterHistoryForCharacter({
     required List<ChatMessage> history,
@@ -101,7 +45,6 @@ Knowledge boundaries (absolute — never break these):
     required Character focusCharacter,
     required List<Character> participants,
     required String userName,
-    String openingScene = '',
   }) {
     if (history.isEmpty) return history;
     final focus = focusCharacter.name.trim();
@@ -122,7 +65,6 @@ Knowledge boundaries (absolute — never break these):
         castNames: castNames,
         participants: participants,
         soloChat: isSolo,
-        openingScene: openingScene,
       );
     }).toList(growable: false);
   }
@@ -134,7 +76,6 @@ Knowledge boundaries (absolute — never break these):
     required List<Character> speakers,
     required List<Character> participants,
     required String userName,
-    String openingScene = '',
   }) {
     if (speakers.isEmpty) return history;
     if (speakers.length == 1) {
@@ -144,7 +85,6 @@ Knowledge boundaries (absolute — never break these):
         focusCharacter: speakers.first,
         participants: participants,
         userName: userName,
-        openingScene: openingScene,
       );
     }
 
@@ -161,7 +101,6 @@ Knowledge boundaries (absolute — never break these):
           castNames: _castNames(participants, userName),
           participants: participants,
           soloChat: false,
-          openingScene: openingScene,
         )) {
           return true;
         }
@@ -179,7 +118,6 @@ Knowledge boundaries (absolute — never break these):
     required Set<String> castNames,
     List<Character> participants = const [],
     bool soloChat = false,
-    String openingScene = '',
   }) {
     final focus = _normName(focusCharacterName);
     if (focus.isEmpty) return true;
@@ -209,7 +147,6 @@ Knowledge boundaries (absolute — never break these):
         userName: userName,
         castNames: castNames,
         participants: participants,
-        openingScene: openingScene,
       );
       return present.contains(focus);
     }
@@ -231,7 +168,6 @@ Knowledge boundaries (absolute — never break these):
       userName: userName,
       castNames: castNames,
       participants: participants,
-      openingScene: openingScene,
     );
 
     if (soloChat) {
@@ -248,12 +184,10 @@ Knowledge boundaries (absolute — never break these):
     required String userName,
     required Set<String> castNames,
     List<Character> participants = const [],
-    String openingScene = '',
   }) {
     final user = _normName(userName);
     final soloChat = participants.length <= 1;
     final present = _seedPresent(
-      openingScene: openingScene,
       castNames: castNames,
       user: user,
       participants: participants,
@@ -374,7 +308,6 @@ Do NOT use facts from scenes $char did not witness. If a fact is not listed, $ch
   }
 
   Set<String> _seedPresent({
-    required String openingScene,
     required Set<String> castNames,
     required String user,
     required List<Character> participants,
@@ -383,12 +316,6 @@ Do NOT use facts from scenes $char did not witness. If a fact is not listed, $ch
   }) {
     final present = <String>{};
     if (user.isNotEmpty) present.add(user);
-
-    final opening = openingScene.trim();
-    if (opening.isNotEmpty) {
-      _addMentionedCast(opening, castNames, present);
-      return present;
-    }
 
     if (soloChat && participants.length == 1) {
       present.add(_normName(participants.first.name));

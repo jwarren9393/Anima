@@ -10,6 +10,7 @@ import '../services/avatar_prompt_builder.dart';
 import '../services/avatar_service.dart';
 import '../services/character_collaborator.dart';
 import '../services/character_service.dart';
+import '../services/character_token_service.dart';
 import '../services/ai_field_changes.dart';
 import '../services/nanogpt_service.dart';
 import '../services/settings_service.dart';
@@ -62,6 +63,7 @@ class CharacterEditScreen extends StatefulWidget {
 class _CharacterEditScreenState extends State<CharacterEditScreen> {
   static const _collaborator = CharacterCollaborator();
   static const _avatarPromptBuilder = AvatarPromptBuilder();
+  static const _tokenService = CharacterTokenService();
   static final _workshopBuilder = WorldWorkshopBuilder();
 
   final _avatarService = AvatarService();
@@ -393,6 +395,21 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
       _avatarFileName = existing.avatarFileName;
       _isTemporary = existing.isTemporary;
     }
+    for (final controller in [
+      _name,
+      _description,
+      _personality,
+      _scenario,
+      _mesExample,
+      _systemPrompt,
+      _postHistory,
+    ]) {
+      controller.addListener(_onDraftFieldChanged);
+    }
+  }
+
+  void _onDraftFieldChanged() {
+    if (mounted) setState(() {});
   }
 
   List<String> _lines(String raw) => raw
@@ -662,6 +679,140 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
     }
   }
 
+  bool _draftHasCompactableContent(CharacterDraftContext draft) {
+    return draft.description.trim().isNotEmpty ||
+        draft.personality.trim().isNotEmpty ||
+        draft.scenario.trim().isNotEmpty ||
+        draft.firstMes.trim().isNotEmpty ||
+        draft.alternateGreetings.trim().isNotEmpty ||
+        draft.mesExample.trim().isNotEmpty ||
+        draft.systemPrompt.trim().isNotEmpty ||
+        draft.postHistoryInstructions.trim().isNotEmpty;
+  }
+
+  Future<void> _runCompactCard() async {
+    if (_wandBusy != null || _consistencyBusy || _aiCardBusy) return;
+    final draft = _draftContext();
+    if (!_draftHasCompactableContent(draft)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Add some card text first, then compact.'),
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Compact character card?'),
+        content: const Text(
+          'AI will shorten fields while keeping important facts and voice. '
+          'You review every change before saving.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Compact'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _consistencyBusy = true);
+    try {
+      final before = _characterFromDraft();
+      final collaborator =
+          await widget.settingsService.getCollaboratorSettings();
+      final messages = _collaborator.buildCompactMessages(
+        draft: draft,
+        guidanceNote: collaborator.guidanceNote,
+      );
+      final model = await widget.settingsService.getModel();
+      final sampling = WorldWorkshopBuilder.consistencyFixSampling(
+        await widget.settingsService.getSampling(),
+      );
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+
+      Character? compacted;
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final raw = await widget.nanoGptService.complete(
+          model: model,
+          messages: messages,
+          baseUrl: baseUrl,
+          sampling: sampling,
+        );
+        try {
+          compacted = _workshopBuilder.parseCharacterConsistencyFixJson(
+            raw,
+            original: before,
+          );
+          break;
+        } on FormatException {
+          if (attempt == 1) rethrow;
+        }
+      }
+      if (compacted == null) {
+        throw const FormatException(
+          'Could not find character card JSON in the AI reply. Try again.',
+        );
+      }
+
+      if (!mounted) return;
+      final changes = compareCharacterFields(before, compacted);
+      if (changes.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No shorter version was suggested. Try editing manually.'),
+          ),
+        );
+        return;
+      }
+
+      final apply = await showAiFieldChangesSheet(
+        context: context,
+        title: 'Review compacted card',
+        subtitle: 'Tap a field to compare before and after. Apply updates the card.',
+        changes: changes,
+        applyLabel: 'Update card',
+      );
+      if (apply != true || !mounted) return;
+
+      setState(() => _applyFullCharacter(compacted!));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Compacted ${changes.length} field${changes.length == 1 ? '' : 's'}.',
+          ),
+        ),
+      );
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } on NanoGptCancelledException {
+      // Ignore.
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Compact failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _consistencyBusy = false);
+    }
+  }
+
   Future<void> _pickAvatar() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.image,
@@ -842,6 +993,17 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
 
   @override
   void dispose() {
+    for (final controller in [
+      _name,
+      _description,
+      _personality,
+      _scenario,
+      _mesExample,
+      _systemPrompt,
+      _postHistory,
+    ]) {
+      controller.removeListener(_onDraftFieldChanged);
+    }
     _name.dispose();
     _aiBrief.dispose();
     _description.dispose();
@@ -952,6 +1114,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
                 !_consistencyBusy,
             onSelected: (value) {
               if (value == 'consistency') _runConsistencyCheck();
+              if (value == 'compact') _runCompactCard();
               if (value == 'avatar_pick') _pickAvatar();
               if (value == 'avatar_gen') _generateAvatar();
               if (value == 'avatar_clear') _clearAvatar();
@@ -960,6 +1123,10 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
               const PopupMenuItem(
                 value: 'consistency',
                 child: Text('Consistency check'),
+              ),
+              const PopupMenuItem(
+                value: 'compact',
+                child: Text('Compact card…'),
               ),
               const PopupMenuDivider(),
               const PopupMenuItem(
@@ -1166,6 +1333,34 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
                   avatarService: _avatarService,
                 ),
                 const SizedBox(height: 8),
+                Builder(
+                  builder: (context) {
+                    final breakdown = _tokenService.breakdown(_characterFromDraft());
+                    return Column(
+                      children: [
+                        Text(
+                          'Prompt ~${CharacterTokenService.format(breakdown.speakerTotal)}'
+                          '${breakdown.embeddedLoreTokens > 0 ? ' · Lore (max) ~${CharacterTokenService.format(breakdown.embeddedLoreTokens)}' : ''}',
+                          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                color: Theme.of(context).colorScheme.outline,
+                              ),
+                        ),
+                        if (breakdown.groupSummaryTokens > 0)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              'Group snippet ~${CharacterTokenService.format(breakdown.groupSummaryTokens)} when someone else speaks',
+                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                    color: Theme.of(context).colorScheme.outline,
+                                  ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 4),
                 Text(
                   'Avatar: ⋮ menu → pick or generate.',
                   style: Theme.of(context).textTheme.bodySmall,

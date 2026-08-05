@@ -117,36 +117,6 @@ void main() {
     expect(groupBucket.single.participantIds.length, 3);
   });
 
-  test('startNewChat stores opening scene on session', () async {
-    final character = char('alice', 'Alice');
-    final session = await chatService.startNewChat(
-      character,
-      openingScene: 'Fog rolls over the docks.',
-    );
-
-    expect(session.openingScene, 'Fog rolls over the docks.');
-    expect(session.openingSceneInPrompt, isTrue);
-
-    final saved = await chatService.listChats('alice');
-    expect(saved.single.openingScene, 'Fog rolls over the docks.');
-  });
-
-  test('openingSceneInMemory tracks summarize seeding', () {
-    final session = ChatSession(
-      id: 's1',
-      characterId: 'c1',
-      title: 'Test',
-      updatedAt: DateTime.utc(2026),
-      openingScene: 'Rain on the docks.',
-      openingSceneInMemory: false,
-    );
-    expect(session.openingSceneInMemory, isFalse);
-
-    final afterSummarize = session.copyWith(openingSceneInMemory: true);
-    expect(afterSummarize.openingSceneInMemory, isTrue);
-    expect(afterSummarize.openingSceneInPrompt, isTrue);
-  });
-
   test('startGroupChat uses short default title', () async {
     final session = await chatService.startGroupChat([
       char('a', 'Alice'),

@@ -194,30 +194,6 @@ class PromptBuilder {
     return parts.join('\n\n');
   }
 
-  /// One-time narrator/setup block for the start of a chat.
-  String buildOpeningSceneBlock({
-    required String openingScene,
-    required String charName,
-    required String userName,
-    List<String> presentCharacterNames = const [],
-  }) {
-    final scene = openingScene.trim();
-    if (scene.isEmpty) return '';
-    final safeChar = charName.trim().isEmpty ? 'Character' : charName.trim();
-    final safeUser = userName.trim().isEmpty ? 'User' : userName.trim();
-    final expanded = applyMacros(
-      scene,
-      charName: safeChar,
-      userName: safeUser,
-    );
-    final presentLine = presentCharacterNames.isEmpty
-        ? ''
-        : '\nCharacters present in this opening: ${presentCharacterNames.join(', ')}. '
-            'Only they witnessed this setup.';
-    return 'Opening scene ($safeChar was present for this setup; use only as background '
-        'you personally witnessed — not omniscient knowledge):$presentLine\n$expanded';
-  }
-
   String expandGreeting({
     required String greeting,
     required Character character,

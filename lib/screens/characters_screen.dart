@@ -8,14 +8,20 @@ import 'package:share_plus/share_plus.dart';
 
 import '../models/character.dart';
 import '../models/character_category.dart';
+import '../models/new_chat_pick.dart';
+import '../models/persona.dart';
 import '../services/avatar_service.dart';
 import '../services/character_card_codec.dart';
 import '../services/character_category_service.dart';
 import '../services/character_service.dart';
+import '../services/character_token_service.dart';
 import '../services/nanogpt_service.dart';
+import '../services/persona_service.dart';
 import '../services/settings_service.dart';
 import '../widgets/anima_avatar.dart';
 import '../widgets/character_category_controls.dart';
+import '../widgets/character_token_badge.dart';
+import '../widgets/new_chat_persona_bar.dart';
 import '../widgets/temporary_character_sheet.dart';
 import 'character_edit_screen.dart';
 
@@ -31,6 +37,8 @@ class CharactersScreen extends StatefulWidget {
     required this.settingsService,
     required this.nanoGptService,
     this.pickMode = false,
+    this.pickPersona = false,
+    this.personaService,
   });
 
   final CharacterService characterService;
@@ -41,18 +49,24 @@ class CharactersScreen extends StatefulWidget {
   /// When true, tapping a row selects that character and pops the screen.
   final bool pickMode;
 
+  /// Solo new-chat flow: also pick persona; returns [NewChatPick].
+  final bool pickPersona;
+  final PersonaService? personaService;
+
   @override
   State<CharactersScreen> createState() => _CharactersScreenState();
 }
 
 class _CharactersScreenState extends State<CharactersScreen> {
   final _codec = CharacterCardCodec();
+  static const _tokenService = CharacterTokenService();
   final _avatarService = AvatarService();
   List<Character> _characters = [];
   CharacterCategoryState _categoryState = CharacterCategoryState.empty;
   String _filterCategoryId = CharacterCategoryService.allFilterId;
   bool _fullCardsOnly = false;
   String? _selectedId;
+  Persona? _pickedPersona;
   bool _loading = true;
   bool _busy = false;
 
@@ -82,9 +96,16 @@ class _CharactersScreenState extends State<CharactersScreen> {
     );
     var selectedId = await widget.settingsService.getSelectedCharacterId();
     final ids = characters.map((c) => c.id).toSet();
-    if (selectedId == null || !ids.contains(selectedId)) {
+    if (characters.isEmpty) {
+      selectedId = null;
+      await widget.settingsService.saveSelectedCharacterId(null);
+    } else if (selectedId == null || !ids.contains(selectedId)) {
       selectedId = characters.first.id;
       await widget.settingsService.saveSelectedCharacterId(selectedId);
+    }
+    Persona? pickedPersona = _pickedPersona;
+    if (widget.pickMode && widget.pickPersona && widget.personaService != null) {
+      pickedPersona ??= await widget.personaService!.defaultForNewChat();
     }
     if (!mounted) return;
     final filterStillValid = _filterCategoryId.isEmpty ||
@@ -93,11 +114,23 @@ class _CharactersScreenState extends State<CharactersScreen> {
       _characters = characters;
       _categoryState = categoryState;
       _selectedId = selectedId;
+      _pickedPersona = pickedPersona;
       if (!filterStillValid) {
         _filterCategoryId = CharacterCategoryService.allFilterId;
       }
       _loading = false;
     });
+  }
+
+  void _popPick(Character character) {
+    if (widget.pickPersona) {
+      final persona = _pickedPersona ?? Persona.anonymous();
+      Navigator.of(context).pop(
+        NewChatPick(character: character, persona: persona),
+      );
+      return;
+    }
+    Navigator.of(context).pop(character);
   }
 
   String _subtitle(Character character) {
@@ -135,7 +168,7 @@ class _CharactersScreenState extends State<CharactersScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Now chatting with ${character.name}')),
     );
-    Navigator.of(context).pop(character);
+    _popPick(character);
   }
 
   Future<void> _onTileTap(Character character) async {
@@ -161,7 +194,7 @@ class _CharactersScreenState extends State<CharactersScreen> {
     await _load();
     if (!mounted) return;
     if (widget.pickMode) {
-      Navigator.of(context).pop(created);
+      _popPick(created);
     }
   }
 
@@ -263,7 +296,11 @@ class _CharactersScreenState extends State<CharactersScreen> {
     final remaining = await widget.characterService.delete(character.id);
     await widget.categoryService.removeCharacter(character.id);
     if (_selectedId == character.id) {
-      await widget.settingsService.saveSelectedCharacterId(remaining.first.id);
+      if (remaining.isEmpty) {
+        await widget.settingsService.saveSelectedCharacterId(null);
+      } else {
+        await widget.settingsService.saveSelectedCharacterId(remaining.first.id);
+      }
     }
     await _load();
   }
@@ -441,10 +478,28 @@ class _CharactersScreenState extends State<CharactersScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
+                if (widget.pickPersona &&
+                    widget.personaService != null &&
+                    _pickedPersona != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: NewChatPersonaBar(
+                      persona: _pickedPersona!,
+                      personaService: widget.personaService!,
+                      settingsService: widget.settingsService,
+                      nanoGptService: widget.nanoGptService,
+                      busy: _busy,
+                      onPersonaChanged: (persona) {
+                        setState(() => _pickedPersona = persona);
+                      },
+                    ),
+                  ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                   child: Text(
-                    widget.pickMode
+                    widget.pickPersona
+                        ? 'Pick a character. Your persona is set above — tap to change.'
+                        : widget.pickMode
                         ? 'Pick who to chat with. Filter by category if you like.'
                         : 'Import SillyTavern cards (.json or .png). Organize with '
                             'categories — the same character can be in several lists.',
@@ -510,6 +565,15 @@ class _CharactersScreenState extends State<CharactersScreen> {
                               title: Row(
                                 children: [
                                   Expanded(child: Text(character.name)),
+                                  if (!character.isTemporary) ...[
+                                    const SizedBox(width: 6),
+                                    CharacterTokenBadge(
+                                      tokens: _tokenService.badgeTokens(character),
+                                      tooltip: characterTokenTooltip(
+                                        _tokenService.breakdown(character),
+                                      ),
+                                    ),
+                                  ],
                                   if (character.isTemporary) ...[
                                     const SizedBox(width: 8),
                                     const TemporaryCharacterBadge(),

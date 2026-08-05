@@ -20,7 +20,6 @@ class WorkshopOverviewSheet extends StatelessWidget {
     required this.workshopChats,
     this.onPlayWorld,
     this.onOpenLorebook,
-    this.onOpenOpeningScene,
     this.onOpenChat,
     this.onSummarizeWorld,
     this.onGenerateOverview,
@@ -45,7 +44,6 @@ class WorkshopOverviewSheet extends StatelessWidget {
   final List<ChatSession> workshopChats;
   final VoidCallback? onPlayWorld;
   final VoidCallback? onOpenLorebook;
-  final VoidCallback? onOpenOpeningScene;
   final ValueChanged<ChatSession>? onOpenChat;
   final VoidCallback? onSummarizeWorld;
   final VoidCallback? onGenerateOverview;
@@ -138,14 +136,6 @@ class WorkshopOverviewSheet extends StatelessWidget {
                         Chip(
                           avatar: const Icon(Icons.menu_book, size: 18),
                           label: Text(_lorebookLabel()),
-                        ),
-                        Chip(
-                          avatar: const Icon(Icons.theater_comedy, size: 18),
-                          label: Text(
-                            status.openingSceneSet
-                                ? 'Opening scene set'
-                                : 'No opening scene',
-                          ),
                         ),
                         Chip(
                           avatar: const Icon(Icons.people_outline, size: 18),
@@ -288,12 +278,6 @@ class WorkshopOverviewSheet extends StatelessWidget {
                         leading: const Icon(Icons.menu_book_outlined),
                         title: const Text('World Info lorebook'),
                         onTap: onOpenLorebook,
-                      ),
-                    if (onOpenOpeningScene != null)
-                      ListTile(
-                        leading: const Icon(Icons.theater_comedy_outlined),
-                        title: const Text('Opening scene'),
-                        onTap: onOpenOpeningScene,
                       ),
                     if (onSummarizeWorld != null)
                       ListTile(

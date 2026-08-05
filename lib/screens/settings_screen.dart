@@ -6,7 +6,6 @@ import '../services/character_category_service.dart';
 import '../services/character_service.dart';
 import '../services/chat_service.dart';
 import '../services/nanogpt_service.dart';
-import '../services/opening_scene_service.dart';
 import '../services/persona_service.dart';
 import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
@@ -19,7 +18,6 @@ import 'collaborator_settings_screen.dart';
 import 'character_build_settings_screen.dart';
 import 'global_chat_prompts_screen.dart';
 import 'lore_settings_screen.dart';
-import 'opening_scenes_screen.dart';
 import 'personas_screen.dart';
 import 'sampling_settings_screen.dart';
 import 'world_workshop_list_screen.dart';
@@ -37,7 +35,6 @@ class SettingsScreen extends StatefulWidget {
     required this.nanoGptService,
     required this.worldInfoService,
     required this.worldWorkshopService,
-    required this.openingSceneService,
     required this.appearanceController,
   });
 
@@ -50,7 +47,6 @@ class SettingsScreen extends StatefulWidget {
   final NanoGptService nanoGptService;
   final WorldInfoService worldInfoService;
   final WorldWorkshopService worldWorkshopService;
-  final OpeningSceneService openingSceneService;
   final AppearanceController appearanceController;
 
   @override
@@ -187,18 +183,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           _SettingsTile(
-            icon: Icons.auto_stories_outlined,
-            title: 'Opening scenes',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => OpeningScenesScreen(
-                  openingSceneService: widget.openingSceneService,
-                  workshopService: widget.worldWorkshopService,
-                ),
-              ),
-            ),
-          ),
-          _SettingsTile(
             icon: Icons.menu_book,
             title: 'World Info & lore',
             onTap: () => Navigator.of(context).push(
@@ -228,7 +212,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   apiKeyService: widget.apiKeyService,
                   settingsService: widget.settingsService,
                   nanoGptService: widget.nanoGptService,
-                  openingSceneService: widget.openingSceneService,
                   appearanceController: widget.appearanceController,
                 ),
               ),

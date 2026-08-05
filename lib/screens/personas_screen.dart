@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import '../models/persona.dart';
 import '../services/nanogpt_service.dart';
 import '../services/persona_service.dart';
+import '../services/persona_token_service.dart';
 import '../services/settings_service.dart';
 import '../widgets/anima_avatar.dart';
+import '../widgets/character_token_badge.dart';
 import 'persona_edit_screen.dart';
 
 /// List / create / edit personas and pick the app default for new chats.
@@ -32,6 +34,8 @@ class PersonasScreen extends StatefulWidget {
 }
 
 class _PersonasScreenState extends State<PersonasScreen> {
+  static const _tokenService = PersonaTokenService();
+
   List<Persona> _personas = [];
   String? _activeId;
   bool _loading = true;
@@ -48,7 +52,7 @@ class _PersonasScreenState extends State<PersonasScreen> {
     if (!mounted) return;
     setState(() {
       _personas = personas;
-      _activeId = active ?? personas.first.id;
+      _activeId = active ?? (personas.isEmpty ? null : personas.first.id);
       _loading = false;
     });
   }
@@ -91,12 +95,6 @@ class _PersonasScreenState extends State<PersonasScreen> {
   }
 
   Future<void> _delete(Persona persona) async {
-    if (_personas.length <= 1) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Keep at least one persona.')),
-      );
-      return;
-    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -145,7 +143,30 @@ class _PersonasScreenState extends State<PersonasScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
+          : _personas.isEmpty && !widget.pickForChat
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'No personas yet.',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Create one to save your name, look, and backstory '
+                          'for roleplay — or start chats as plain User.',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : Column(
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -161,10 +182,33 @@ class _PersonasScreenState extends State<PersonasScreen> {
                 Expanded(
                   child: ListView.separated(
                     padding: const EdgeInsets.fromLTRB(12, 8, 12, 88),
-                    itemCount: _personas.length,
+                    itemCount: (widget.pickForChat ? 1 : 0) + _personas.length,
                     separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (context, index) {
-                      final persona = _personas[index];
+                      if (widget.pickForChat && index == 0) {
+                        final anonymous = Persona.anonymous();
+                        final selected = anonymous.id == highlightId;
+                        return ListTile(
+                          selected: selected,
+                          selectedTileColor: colorScheme.primaryContainer
+                              .withValues(alpha: 0.45),
+                          leading: AnimaAvatar(
+                            fileName: null,
+                            label: anonymous.name,
+                            radius: 22,
+                          ),
+                          title: const Text('Plain User'),
+                          subtitle: const Text(
+                            'No saved persona details — just {{user}} as User',
+                          ),
+                          trailing: selected ? const Icon(Icons.check) : null,
+                          onTap: () =>
+                              Navigator.of(context).pop(anonymous),
+                        );
+                      }
+                      final personaIndex =
+                          widget.pickForChat ? index - 1 : index;
+                      final persona = _personas[personaIndex];
                       final selected = persona.id == highlightId;
                       final isDefault = persona.id == _activeId;
                       return ListTile(
@@ -176,7 +220,20 @@ class _PersonasScreenState extends State<PersonasScreen> {
                           label: persona.name,
                           radius: 22,
                         ),
-                        title: Text(persona.name),
+                        title: Row(
+                          children: [
+                            Expanded(child: Text(persona.name)),
+                            if (!persona.isAnonymous) ...[
+                              const SizedBox(width: 6),
+                              CharacterTokenBadge(
+                                tokens: _tokenService.badgeTokens(persona),
+                                tooltip: personaTokenTooltip(
+                                  _tokenService.breakdown(persona),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                         subtitle: Text(
                           [
                             if (isDefault && !widget.pickForChat)

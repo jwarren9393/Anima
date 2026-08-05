@@ -5,21 +5,22 @@ import '../models/character.dart';
 import '../models/character_category.dart';
 import '../models/chat_session.dart';
 import '../models/global_lorebook.dart';
+import '../models/persona.dart';
 import '../services/character_category_service.dart';
 import '../services/character_service.dart';
+import '../services/character_token_service.dart';
 import '../services/chat_service.dart';
 import '../services/nanogpt_service.dart';
-import '../services/opening_scene_service.dart';
 import '../services/persona_service.dart';
 import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
-import '../services/world_workshop_service.dart';
 import '../widgets/anima_avatar.dart';
+import '../widgets/character_token_badge.dart';
 import '../widgets/character_category_controls.dart';
 import '../widgets/create_character_from_chat_sheet.dart';
 import '../widgets/greeting_picker.dart';
 import '../widgets/minimal_chip_button.dart';
-import '../widgets/opening_scene_picker.dart';
+import '../widgets/new_chat_persona_bar.dart';
 import '../widgets/preset_picker.dart';
 import '../widgets/temporary_character_sheet.dart';
 import 'character_edit_screen.dart';
@@ -36,11 +37,8 @@ class GroupChatSetupScreen extends StatefulWidget {
     required this.worldInfoService,
     required this.settingsService,
     required this.nanoGptService,
-    required this.openingSceneService,
-    required this.worldWorkshopService,
     this.preselectedIds = const {},
     this.existingSession,
-    this.initialOpeningScene = '',
   });
 
   final CharacterService characterService;
@@ -50,17 +48,12 @@ class GroupChatSetupScreen extends StatefulWidget {
   final WorldInfoService worldInfoService;
   final SettingsService settingsService;
   final NanoGptService nanoGptService;
-  final OpeningSceneService openingSceneService;
-  final WorldWorkshopService worldWorkshopService;
 
   /// Character ids already checked (e.g. current chat cast).
   final Set<String> preselectedIds;
 
   /// When set, changes apply to this chat instead of starting a new one.
   final ChatSession? existingSession;
-
-  /// Prefill opening scene when starting from Creation Center.
-  final String initialOpeningScene;
 
   bool get isEditMode => existingSession != null;
 
@@ -69,6 +62,7 @@ class GroupChatSetupScreen extends StatefulWidget {
 }
 
 class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
+  static const _tokenService = CharacterTokenService();
   List<Character> _all = const [];
   CharacterCategoryState _categoryState = CharacterCategoryState.empty;
   String _filterCategoryId = CharacterCategoryService.allFilterId;
@@ -77,9 +71,9 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
   final List<Character> _ordered = [];
   final Set<String> _selectedLoreIds = {};
   final _authorsNoteController = TextEditingController();
-  final _openingSceneController = TextEditingController();
   final _titleController = TextEditingController();
   bool _autoReply = false;
+  Persona? _selectedPersona;
   bool _loading = true;
   bool _working = false;
 
@@ -121,6 +115,10 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
       existingCharacterIds: characters.map((c) => c.id),
     );
     final lore = await widget.worldInfoService.loadBooks();
+    Persona? selectedPersona;
+    if (!_isEditMode) {
+      selectedPersona = await widget.personaService.defaultForNewChat();
+    }
     if (!mounted) return;
 
     final session = widget.existingSession;
@@ -157,7 +155,6 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
         ..addAll(selectedLore);
       if (session != null) {
         _authorsNoteController.text = session.authorsNote;
-        _openingSceneController.text = session.openingScene;
         _autoReply = session.autoReply;
         final storedTitle = session.title.trim();
         _titleController.text = ChatService.isLegacyGroupMemberListTitle(
@@ -165,9 +162,8 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
         )
             ? ''
             : storedTitle;
-      } else if (widget.initialOpeningScene.trim().isNotEmpty) {
-        _openingSceneController.text = widget.initialOpeningScene.trim();
       }
+      _selectedPersona = selectedPersona;
       _loading = false;
     });
   }
@@ -195,7 +191,6 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
   @override
   void dispose() {
     _authorsNoteController.dispose();
-    _openingSceneController.dispose();
     _titleController.dispose();
     super.dispose();
   }
@@ -238,7 +233,7 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
 
   Future<void> _createCharacter() async {
     if (widget.isEditMode && widget.existingSession != null) {
-      final persona = await widget.personaService.getActivePersona();
+      final persona = await widget.personaService.defaultForNewChat();
       if (!mounted) return;
       final created = await showCreateCharacterFromChatSheet(
         context: context,
@@ -303,7 +298,7 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
         return;
       }
 
-      final persona = await widget.personaService.getActivePersona();
+      final persona = _selectedPersona ?? Persona.anonymous();
       if (!mounted) {
         setState(() => _working = false);
         return;
@@ -318,40 +313,16 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
         setState(() => _working = false);
         return;
       }
-      await widget.openingSceneService.importMissingFromWorkshops(
-        await widget.worldWorkshopService.loadWorkshops(),
-      );
-      if (!mounted) {
-        setState(() => _working = false);
-        return;
-      }
-      final savedScenes = await widget.openingSceneService.loadScenes();
-      if (!mounted) {
-        setState(() => _working = false);
-        return;
-      }
-      final openingPick = await pickOpeningScene(
-        context,
-        initial: _openingSceneController.text,
-        savedScenes: savedScenes,
-        openingSceneService: widget.openingSceneService,
-        workshopService: widget.worldWorkshopService,
-      );
-      if (openingPick == null || !mounted) {
-        setState(() => _working = false);
-        return;
-      }
       final session = await widget.chatService.startGroupChat(
         List<Character>.from(_ordered),
         userName: persona.name,
-        personaId: persona.id,
+        personaId: persona.sessionId,
         authorsNote: _authorsNoteController.text,
         autoReply: _autoReply,
         lorebookIds: _lorebooks.isEmpty
             ? null
             : _selectedLoreIds.toList(growable: false),
         greetingIndex: greetingIndex,
-        openingScene: openingPick.text,
         title: _titleController.text,
       );
       if (!mounted) return;
@@ -450,59 +421,6 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
     );
   }
 
-  Future<void> _showOpeningSceneEditor() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (sheetContext) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
-          ),
-          child: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Opening scene',
-                    style: Theme.of(sheetContext).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Optional narrator setup at the top of the chat.',
-                    style: Theme.of(sheetContext).textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _openingSceneController,
-                    minLines: 4,
-                    maxLines: 10,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: const InputDecoration(
-                      hintText: 'The harbor fog lifts as your party gathers…',
-                      border: OutlineInputBorder(),
-                      alignLabelWithHint: true,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  FilledButton(
-                    onPressed: () => Navigator.pop(sheetContext),
-                    child: const Text('Done'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-    setState(() {});
-  }
-
   Future<void> _showAuthorsNoteEditor() async {
     await showModalBottomSheet<void>(
       context: context,
@@ -569,7 +487,6 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
   }
 
   Widget _optionsChipRow() {
-    final hasScene = _openingSceneController.text.trim().isNotEmpty;
     final hasNote = _authorsNoteController.text.trim().isNotEmpty;
     return MinimalChipRow(
       children: [
@@ -577,14 +494,6 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
           label: 'Lore (${_selectedLoreIds.length})',
           icon: Icons.menu_book_outlined,
           onPressed: _working ? null : _showLorePicker,
-        ),
-        const SizedBox(width: 8),
-        MinimalChipButton(
-          label: hasScene ? 'Scene' : 'Add scene',
-          icon: hasScene
-              ? Icons.check_circle_outline
-              : Icons.auto_stories_outlined,
-          onPressed: _working ? null : _showOpeningSceneEditor,
         ),
         const SizedBox(width: 8),
         MinimalChipButton(
@@ -656,6 +565,19 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     const SizedBox(height: 16),
+                    if (!_isEditMode && _selectedPersona != null)
+                      NewChatPersonaBar(
+                        persona: _selectedPersona!,
+                        personaService: widget.personaService,
+                        settingsService: widget.settingsService,
+                        nanoGptService: widget.nanoGptService,
+                        busy: _working,
+                        onPersonaChanged: (persona) {
+                          setState(() => _selectedPersona = persona);
+                        },
+                      ),
+                    if (!_isEditMode && _selectedPersona != null)
+                      const SizedBox(height: 16),
                     TextField(
                       controller: _titleController,
                       enabled: !_working,
@@ -701,6 +623,15 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
                         title: Row(
                           children: [
                             Expanded(child: Text(c.name)),
+                            if (!c.isTemporary) ...[
+                              const SizedBox(width: 6),
+                              CharacterTokenBadge(
+                                tokens: _tokenService.badgeTokens(c),
+                                tooltip: characterTokenTooltip(
+                                  _tokenService.breakdown(c),
+                                ),
+                              ),
+                            ],
                             if (c.isTemporary) ...[
                               const SizedBox(width: 8),
                               const TemporaryCharacterBadge(),
@@ -739,6 +670,15 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
                             title: Row(
                           children: [
                             Expanded(child: Text(c.name)),
+                            if (!c.isTemporary) ...[
+                              const SizedBox(width: 6),
+                              CharacterTokenBadge(
+                                tokens: _tokenService.badgeTokens(c),
+                                tooltip: characterTokenTooltip(
+                                  _tokenService.breakdown(c),
+                                ),
+                              ),
+                            ],
                             if (c.isTemporary) ...[
                               const SizedBox(width: 8),
                               const TemporaryCharacterBadge(),

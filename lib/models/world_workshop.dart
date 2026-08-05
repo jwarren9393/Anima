@@ -1,5 +1,4 @@
 import 'chat_message.dart';
-import 'opening_scene_length.dart';
 import 'workshop_hub_models.dart';
 
 /// How long Creation Center chat replies are allowed to be (max_tokens cap).
@@ -52,7 +51,6 @@ class WorkshopSourceContext {
     this.lorebookNames = const [],
     this.authorsNote = '',
     this.skippedNotes = const [],
-    this.openingScene = '',
     this.importProfile = '',
     this.totalMessageCount = 0,
   });
@@ -71,7 +69,6 @@ class WorkshopSourceContext {
   final List<String> lorebookNames;
   final String authorsNote;
   final List<String> skippedNotes;
-  final String openingScene;
 
   /// Human-readable note of what was included at import time.
   final String importProfile;
@@ -85,8 +82,7 @@ class WorkshopSourceContext {
       charactersText.trim().isNotEmpty ||
       personaText.trim().isNotEmpty ||
       loreReferenceText.trim().isNotEmpty ||
-      authorsNote.trim().isNotEmpty ||
-      openingScene.trim().isNotEmpty;
+      authorsNote.trim().isNotEmpty;
 
   /// One-line summary for list tiles / source cards.
   String get compactSummary {
@@ -112,9 +108,6 @@ class WorkshopSourceContext {
         '${lorebookNames.length == 1 ? '' : 's'}',
       );
     }
-    if (openingScene.trim().isNotEmpty) {
-      bits.add('opening scene');
-    }
     if (bits.isEmpty) return 'Imported chat source';
     return bits.join(' · ');
   }
@@ -132,11 +125,6 @@ class WorkshopSourceContext {
       buffer.writeln();
       buffer.writeln('Author\'s Note:');
       buffer.writeln(authorsNote.trim());
-    }
-    if (openingScene.trim().isNotEmpty) {
-      buffer.writeln();
-      buffer.writeln('Opening scene (narrator setup at story start):');
-      buffer.writeln(openingScene.trim());
     }
     if (importProfile.trim().isNotEmpty) {
       buffer.writeln();
@@ -192,7 +180,6 @@ class WorkshopSourceContext {
         if (lorebookNames.isNotEmpty) 'lorebookNames': lorebookNames,
         if (authorsNote.trim().isNotEmpty) 'authorsNote': authorsNote,
         if (skippedNotes.isNotEmpty) 'skippedNotes': skippedNotes,
-        if (openingScene.trim().isNotEmpty) 'openingScene': openingScene,
         if (importProfile.trim().isNotEmpty) 'importProfile': importProfile,
         if (totalMessageCount > 0) 'totalMessageCount': totalMessageCount,
       };
@@ -226,7 +213,6 @@ class WorkshopSourceContext {
       lorebookNames: stringList(json['lorebookNames']),
       authorsNote: '${json['authorsNote'] ?? ''}'.trim(),
       skippedNotes: stringList(json['skippedNotes']),
-      openingScene: '${json['openingScene'] ?? ''}'.trim(),
       importProfile: '${json['importProfile'] ?? ''}'.trim(),
       totalMessageCount:
           (json['totalMessageCount'] as num?)?.toInt().clamp(0, 100000) ?? 0,
@@ -243,8 +229,6 @@ class WorldWorkshop {
     required this.updatedAt,
     this.exportedLorebookId,
     this.importedSource,
-    this.openingScene = '',
-    this.openingSceneLength = OpeningSceneLength.medium,
     this.replyLength = WorkshopReplyLength.normal,
     this.includeLinkedLorebookInPrompt = false,
     this.pinned = false,
@@ -279,12 +263,6 @@ class WorldWorkshop {
 
   /// Optional seed from an existing roleplay chat (read-only reference).
   final WorkshopSourceContext? importedSource;
-
-  /// Narrator-style opening prose for roleplay chats started from this workshop.
-  final String openingScene;
-
-  /// Target length when generating an opening scene from this workshop.
-  final OpeningSceneLength openingSceneLength;
 
   /// Reply length preset for workshop brainstorming chat (not exports).
   final WorkshopReplyLength replyLength;
@@ -357,8 +335,6 @@ class WorldWorkshop {
     bool clearExportedLorebookId = false,
     WorkshopSourceContext? importedSource,
     bool clearImportedSource = false,
-    String? openingScene,
-    OpeningSceneLength? openingSceneLength,
     WorkshopReplyLength? replyLength,
     bool? includeLinkedLorebookInPrompt,
     bool? pinned,
@@ -391,8 +367,6 @@ class WorldWorkshop {
       importedSource: clearImportedSource
           ? null
           : (importedSource ?? this.importedSource),
-      openingScene: openingScene ?? this.openingScene,
-      openingSceneLength: openingSceneLength ?? this.openingSceneLength,
       replyLength: replyLength ?? this.replyLength,
       includeLinkedLorebookInPrompt: includeLinkedLorebookInPrompt ??
           this.includeLinkedLorebookInPrompt,
@@ -428,8 +402,6 @@ class WorldWorkshop {
         if (exportedLorebookId != null && exportedLorebookId!.isNotEmpty)
           'exportedLorebookId': exportedLorebookId,
         if (importedSource != null) 'importedSource': importedSource!.toJson(),
-        if (openingScene.trim().isNotEmpty) 'openingScene': openingScene,
-        'openingSceneLength': openingSceneLength.toJson(),
         'replyLength': replyLength.toJson(),
         'includeLinkedLorebookInPrompt': includeLinkedLorebookInPrompt,
         if (pinned) 'pinned': true,
@@ -536,9 +508,6 @@ class WorldWorkshop {
               ? null
               : ('${json['exportedLorebookId']}').trim(),
       importedSource: imported,
-      openingScene: (json['openingScene'] as String? ?? '').trim(),
-      openingSceneLength:
-          OpeningSceneLength.fromJson(json['openingSceneLength']),
       replyLength: WorkshopReplyLength.fromJson(json['replyLength']),
       includeLinkedLorebookInPrompt:
           json['includeLinkedLorebookInPrompt'] == true,

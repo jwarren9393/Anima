@@ -208,23 +208,6 @@ void main() {
       expect(system, isNot(contains('emotional tone and character voice')));
     });
 
-    test('buildSummarizeMessages seeds opening scene on first fold', () {
-      final messages = service.buildSummarizeMessages(
-        chunk: [msg('1', 'We enter the throne room.')],
-        existingSummary: '',
-        userName: 'Jay',
-        charName: 'Edric',
-        openingScene: 'Rain lashes the castle walls.',
-        seedOpeningScene: true,
-      );
-
-      final user = messages.last['content'] ?? '';
-      final system = messages.first['content'] ?? '';
-      expect(user, contains('Rain lashes the castle walls.'));
-      expect(user, contains('clinical bullets'));
-      expect(system, contains('Revise the existing memory'));
-    });
-
     test('formatMemoryForPrompt discourages style mimicry', () {
       final block = ChatContextService.formatMemoryForPrompt(
         '- Location: Tower\n- Event: They met.',

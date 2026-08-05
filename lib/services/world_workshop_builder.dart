@@ -5,7 +5,7 @@ import '../models/chat_message.dart';
 import '../models/chat_session.dart';
 import '../models/global_lorebook.dart';
 import '../models/lorebook.dart';
-import '../models/opening_scene_length.dart';
+import '../models/lorebook_gap_suggestion.dart';
 import '../models/persona.dart';
 import '../models/workshop_chat_import_options.dart';
 import '../models/world_workshop.dart';
@@ -51,7 +51,7 @@ class WorldWorkshopBuilder {
   /// numbered follow-up questions — this floor applies only in Creation Center.
   static const workshopChatMinMaxTokens = 1536;
 
-  /// Minimum completion budget for workshop exports (lorebook, opening scene).
+  /// Minimum completion budget for workshop exports (lorebook).
   ///
   /// RP "Short replies" caps truncate large JSON payloads — exports need room
   /// for many lore entries in one object.
@@ -76,7 +76,7 @@ class WorldWorkshopBuilder {
   /// JSON shape for Creation Center / chat-import character card generation.
   ///
   /// Omits scenario, greetings, and per-card system/post-history fields — Anima
-  /// uses per-chat opening scenes and global prompts instead.
+  /// uses global prompts instead.
   static const slimCharacterCardJsonShape = '''
 {
   "spec": "chara_card_v2",
@@ -109,7 +109,7 @@ FIELD SPLIT (token efficiency — critical):
 - Generate ONLY these card fields: name, description, personality, mes_example,
   creator_notes, and tags.
 - Do NOT output scenario, first_mes, alternate_greetings, system_prompt, or
-  post_history_instructions. Anima uses per-chat opening scenes and app-wide
+  post_history_instructions. Anima uses app-wide
   system/post-history prompts instead of per-character copies of those fields.
 - Do NOT include a character_book / lorebook on the card — world lore stays in
   the separate global lorebook.
@@ -339,7 +339,6 @@ YOUR ACTUAL ROLE IN THE APP:
 WHAT YOU CANNOT DO (never pretend you did these in chat):
 - Create, update, or save World Info / lorebook entries.
 - Create, update, or save character cards or personas.
-- Save opening scene prose to the app.
 - Start a roleplay chat or change app settings.
 - Execute "I'll build the lorebook now" or "I created those entries" — you only
   send text; the app saves through separate buttons the user taps.
@@ -541,8 +540,6 @@ ${lines.join('\n')}
       lorebookNames: loreNames,
       authorsNote:
           options.includeAuthorsNote ? session.authorsNote.trim() : '',
-      openingScene:
-          options.includeOpeningScene ? session.openingScene.trim() : '',
       skippedNotes: skippedNotes,
       importProfile: options.summaryLine(
         totalMessages: totalMessages,
@@ -585,7 +582,6 @@ ${lines.join('\n')}
       loreReferenceText: full.loreReferenceText,
       lorebookNames: full.lorebookNames,
       authorsNote: full.authorsNote,
-      openingScene: full.openingScene,
       skippedNotes: full.skippedNotes,
       importProfile: full.importProfile,
       totalMessageCount: full.totalMessageCount,
@@ -1245,6 +1241,7 @@ $transcriptBlock
     String worldSummary = '',
     List<String> canonPinMessageIds = const [],
     List<Character> workshopCast = const [],
+    List<LorebookEntry> seedEntries = const [],
   }) {
     final guidance = guidanceNote.trim().isEmpty
         ? CollaboratorSettings.defaultGuidanceNote
@@ -1302,6 +1299,7 @@ $lorebookExportScopeRules
         ? ''
         : 'World summary:\n${worldSummary.trim()}\n\n';
     final canonBlock = formatCanonPins(conversation, canonPinMessageIds);
+    final seedBlock = formatSeedEntriesForExport(seedEntries);
     final isUpdate = sourceLorebook != null;
     final updateRules = isUpdate
         ? '''
@@ -1319,7 +1317,7 @@ UPDATE MODE (linked lorebook present):
         : '';
     final user =
         '''
-$imported$summaryBlock${castBlock.isEmpty ? '' : '$castBlock\n'}${canonBlock.isEmpty ? '' : '$canonBlock\n'}${source.isEmpty ? '' : '''
+$imported$summaryBlock${castBlock.isEmpty ? '' : '$castBlock\n'}${canonBlock.isEmpty ? '' : '$canonBlock\n'}${seedBlock.isEmpty ? '' : seedBlock}${source.isEmpty ? '' : '''
 This is the current linked lorebook. Preserve its entries, IDs, settings, and
 extensions unless the conversation explicitly asks to change or remove them:
 
@@ -1742,6 +1740,40 @@ ${formatTranscript(conversation)}
     );
   }
 
+  /// Parse a compacted lore entry, preserving entry settings when omitted.
+  LorebookEntry parseLorebookEntryCompactJson(
+    String raw, {
+    required LorebookEntry original,
+  }) {
+    final map = _extractJsonObject(
+      raw,
+      emptyMessage: 'The AI returned an empty lore entry.',
+      missingMessage:
+          'Could not find lore entry JSON in the AI reply. Try again.',
+      notObjectMessage: 'Lore entry JSON must be an object.',
+    );
+    final entryMap = map['entries'] is List && (map['entries'] as List).isNotEmpty
+        ? Map<String, dynamic>.from((map['entries'] as List).first as Map)
+        : map;
+    final parsed = LorebookEntry.fromJson(entryMap);
+
+    List<String> pickKeys(List<String> next, List<String> previous) {
+      return next.isEmpty ? previous : next;
+    }
+
+    String pick(String next, String previous) {
+      final trimmed = next.trim();
+      return trimmed.isEmpty ? previous : trimmed;
+    }
+
+    return original.copyWith(
+      name: pick(parsed.name, original.name),
+      keys: pickKeys(parsed.keys, original.keys),
+      secondaryKeys: pickKeys(parsed.secondaryKeys, original.secondaryKeys),
+      content: pick(parsed.content, original.content),
+    );
+  }
+
   /// Parse an update draft, keeping [original] id/avatar/book/extensions/metadata
   /// and any core field the model left empty.
   Character parseCharacterUpdateJson(
@@ -1853,95 +1885,6 @@ ${formatTranscript(conversation)}
       {'role': 'system', 'content': system},
       {'role': 'user', 'content': user},
     ];
-  }
-
-  /// Build NanoGPT messages to extract opening scene prose from a workshop.
-  List<Map<String, String>> buildOpeningSceneExportMessages({
-    required List<ChatMessage> conversation,
-    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
-    Lorebook? sourceLorebook,
-    WorkshopSourceContext? importedSource,
-    String existingOpeningScene = '',
-    bool reviseExisting = true,
-    OpeningSceneLength length = OpeningSceneLength.medium,
-  }) {
-    final guidance = guidanceNote.trim().isEmpty
-        ? CollaboratorSettings.defaultGuidanceNote
-        : guidanceNote.trim();
-    final existing = reviseExisting ? existingOpeningScene.trim() : '';
-
-    final revisionRule = existing.isEmpty
-        ? '- Write a NEW opening scene from scratch using the conversation and '
-            'source material. Do not copy wording from any prior saved scene '
-            'unless the user explicitly asked to keep it.'
-        : '- Revise the existing opening scene below when the user asked for changes.';
-
-    final system =
-        '''
-You convert a world-building conversation into ONE opening scene for a roleplay chat.
-
-An opening scene is narrator/setup prose shown once at the start of a chat — NOT a
-character's first line, NOT a lorebook entry, and NOT a scenario card field.
-
-Guidance note (follow closely):
-$guidance
-
-Output rules:
-- Reply with ONLY a single JSON object. No markdown fences. No preamble.
-- Shape: {"openingScene": "..."}
-- Write in third-person or omniscient narrator voice (stage-direction style is fine).
-- Set the moment, place, mood, and what is happening when the story begins.
-- Do NOT write dialogue as the character's official first message.
-- ${length.promptHint}
-- Preserve established facts. Do not sanitize or moralize.
-$revisionRule
-'''
-            .trim();
-
-    final source = formatLorebookContext(sourceLorebook);
-    final imported = _importedBlock(importedSource);
-    final user =
-        '''
-$imported${source.isEmpty ? '' : '''
-Use this linked lorebook as source material:
-
-$source
-
-'''}${existing.isEmpty ? '' : '''
-Current opening scene (revise when appropriate):
-
-$existing
-
-'''}Extract or write the opening scene from the linked lorebook, imported chat source, and workshop conversation:
-
-${formatTranscript(conversation)}
-'''
-            .trim();
-
-    return [
-      {'role': 'system', 'content': system},
-      {'role': 'user', 'content': user},
-    ];
-  }
-
-  /// Parse model output into opening-scene prose. Throws [FormatException].
-  String parseOpeningSceneJson(String raw) {
-    final map = _extractJsonObject(
-      raw,
-      emptyMessage: 'The AI returned an empty opening scene.',
-      missingMessage:
-          'Could not find opening scene JSON in the AI reply. Try Create opening scene again.',
-      notObjectMessage: 'Opening scene JSON must be an object.',
-    );
-    final text = (map['openingScene'] ?? map['opening_scene'] ?? '')
-        .toString()
-        .trim();
-    if (text.isEmpty) {
-      throw const FormatException(
-        'The AI returned an opening scene with no text. Try chatting a bit more, then Create again.',
-      );
-    }
-    return text;
   }
 
   /// Parse model output into a [Lorebook]. Throws [FormatException] on failure.
@@ -2654,8 +2597,21 @@ Extract locations and relationships from a workshop. Reply with ONLY JSON:
         '''
 Audit a workshop before lorebook export. Reply with ONLY JSON:
 {"items": ["short actionable note", ...]}
-List gaps: missing locations, unnamed factions, thin world rules, contradictions,
-stale lorebook vs chat, lore entries that duplicate character-card bios for cast.
+
+WORLD INFO GAPS ONLY — flag missing or thin:
+- Locations (districts, landmarks, geography)
+- Factions, organizations, institutions
+- World rules (magic, tech, law, culture)
+- Items, artifacts, systems, historical events
+- Contradictions between summary, lorebook, and chat
+- Lore entries that duplicate character-card bios (should be removed)
+
+Do NOT flag:
+- Missing linked character cards (characters are separate from World Info)
+- Individual character appearance, personality, backstory, or dialogue style
+  (those belong on character cards, not in a lorebook)
+- Cast member details that should live on a character card
+
 Max 8 items. Empty list if ready.
 '''
             .trim();
@@ -2690,6 +2646,164 @@ ${formatTranscript(conversation)}
       for (final item in rawItems)
         if ('$item'.trim().isNotEmpty) '$item'.trim(),
     ];
+  }
+
+  /// Draft one World Info entry per workshop gap before the main export.
+  List<Map<String, String>> buildGapFillMessages({
+    required List<ChatMessage> conversation,
+    required List<String> gaps,
+    WorkshopSourceContext? importedSource,
+    Lorebook? sourceLorebook,
+    String worldSummary = '',
+    List<String> canonPinMessageIds = const [],
+    List<Character> workshopCast = const [],
+  }) {
+    if (gaps.isEmpty) {
+      throw ArgumentError('gaps must not be empty');
+    }
+    final gapList = gaps.map((g) => '- $g').join('\n');
+    final castBlock = formatWorkshopCastForLoreExport(workshopCast);
+
+    final system =
+        '''
+You draft World Info lorebook ENTRIES to fill specific workshop gaps before export.
+
+Reply with ONLY JSON:
+{
+  "suggestions": [
+    {
+      "id": "gap_1",
+      "gap": "short restatement of the gap this entry fixes",
+      "entry": {
+        "name": "optional label",
+        "keys": ["keyword", "alias"],
+        "secondary_keys": [],
+        "content": "lore text injected when keys match",
+        "enabled": true,
+        "constant": false,
+        "selective": false,
+        "insertion_order": 100,
+        "priority": 10,
+        "case_sensitive": false,
+        "position": "before_char",
+        "comment": ""
+      }
+    }
+  ]
+}
+
+Rules:
+- One suggestion per gap listed below (same order). Use ids gap_1, gap_2, …
+- WORLD INFO only — places, factions, rules, items, events, organizations.
+- Do NOT write full character-card bios for playable cast (see cast list).
+- Base content on the workshop chat, summary, and canon — invent only small glue.
+- Keep each entry focused; prefer concrete keywords that appear in chat.
+- content is plain lore text, not JSON.
+
+$lorebookExportScopeRules
+'''
+            .trim();
+
+    final imported = _importedBlock(importedSource);
+    final source = formatLorebookContext(sourceLorebook);
+    final canon = formatCanonPins(conversation, canonPinMessageIds);
+    final user =
+        '''
+$imported
+${worldSummary.trim().isEmpty ? '' : 'Summary:\n${worldSummary.trim()}\n\n'}
+${castBlock.isEmpty ? '' : '$castBlock\n'}
+${source.isEmpty ? '' : 'Current lorebook:\n$source\n\n'}
+${canon.isEmpty ? '' : '$canon\n'}
+Gaps to fill (one entry each):
+$gapList
+
+Workshop conversation:
+${formatTranscript(conversation)}
+'''
+            .trim();
+
+    return [
+      {'role': 'system', 'content': system},
+      {'role': 'user', 'content': user},
+    ];
+  }
+
+  List<LorebookGapSuggestion> parseGapFillJson(String raw) {
+    final map = _extractJsonObject(
+      raw,
+      emptyMessage: 'Gap-fill response was empty.',
+      missingMessage: 'Could not find gap-fill JSON.',
+      notObjectMessage: 'Gap-fill JSON must be an object.',
+    );
+    final rawSuggestions = map['suggestions'];
+    if (rawSuggestions is! List) return const [];
+
+    final out = <LorebookGapSuggestion>[];
+    var nextId = DateTime.now().millisecondsSinceEpoch;
+    for (var i = 0; i < rawSuggestions.length; i++) {
+      final item = rawSuggestions[i];
+      if (item is! Map) continue;
+      final gap = '${item['gap'] ?? ''}'.trim();
+      final entryRaw = item['entry'];
+      if (entryRaw is! Map) continue;
+      var entry = LorebookEntry.fromJson(
+        Map<String, dynamic>.from(entryRaw),
+      );
+      if (entry.content.trim().isEmpty && entry.keys.isEmpty) continue;
+      entry = entry.copyWith(id: entry.id ?? (nextId + i));
+      final id = '${item['id'] ?? 'gap_${i + 1}'}'.trim();
+      out.add(
+        LorebookGapSuggestion(
+          id: id.isEmpty ? 'gap_${i + 1}' : id,
+          gap: gap.isEmpty ? 'Suggested World Info entry' : gap,
+          entry: entry,
+        ),
+      );
+    }
+    return out;
+  }
+
+  String formatSeedEntriesForExport(List<LorebookEntry> entries) {
+    if (entries.isEmpty) return '';
+    final buffer = StringBuffer(
+      'USER-SELECTED GAP-FILL ENTRIES (include in the lorebook — keep wording, '
+      'merge with related workshop content if needed):\n',
+    );
+    for (final entry in entries) {
+      buffer.writeln();
+      buffer.writeln(
+        const JsonEncoder.withIndent('  ').convert({
+          if (entry.name.isNotEmpty) 'name': entry.name,
+          'keys': entry.keys,
+          if (entry.secondaryKeys.isNotEmpty)
+            'secondary_keys': entry.secondaryKeys,
+          'content': entry.content,
+          'enabled': entry.enabled,
+          'constant': entry.constant,
+          'selective': entry.selective,
+          'insertion_order': entry.insertionOrder,
+          'priority': entry.priority,
+          'position': entry.position.jsonValue,
+          if (entry.comment.isNotEmpty) 'comment': entry.comment,
+        }),
+      );
+    }
+    return '${buffer.toString().trim()}\n\n';
+  }
+
+  Lorebook mergeSeedEntries(Lorebook book, List<LorebookEntry> seeds) {
+    if (seeds.isEmpty) return book;
+    final existingKeys = {
+      for (final e in book.entries) e.displayLabel.toLowerCase(),
+    };
+    final toAdd = <LorebookEntry>[];
+    for (final seed in seeds) {
+      final label = seed.displayLabel.toLowerCase();
+      if (label.isNotEmpty && existingKeys.contains(label)) continue;
+      toAdd.add(seed);
+    }
+    if (toAdd.isEmpty) return book;
+    return book.copyWith(entries: [...toAdd, ...book.entries]);
   }
 
   List<Map<String, String>> buildSceneIdeasMessages({

@@ -380,6 +380,67 @@ class CharacterCollaborator {
     ];
   }
 
+  /// Compact a card for fewer prompt tokens while keeping RP-critical facts.
+  ///
+  /// Returns the same JSON shape as [buildConsistencyFixMessages] for parsing.
+  List<Map<String, String>> buildCompactMessages({
+    required CharacterDraftContext draft,
+    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+  }) {
+    final guidance = guidanceNote.trim().isEmpty
+        ? CollaboratorSettings.defaultGuidanceNote
+        : guidanceNote.trim();
+    final contextBlock = _buildFullContextBlock(draft);
+
+    final system = StringBuffer()
+      ..writeln(
+        'You compact SillyTavern-style character cards for a private mobile app '
+        'called Anima.',
+      )
+      ..writeln()
+      ..writeln('Guidance note (follow closely):')
+      ..writeln(guidance)
+      ..writeln()
+      ..writeln('Goal: shorten the card for fewer prompt tokens while keeping '
+          'everything needed for good roleplay.')
+      ..writeln()
+      ..writeln('Hard rules:')
+      ..writeln('- Keep the same character identity, voice, and established facts.')
+      ..writeln('- Remove filler, repetition, and prose that does not change behavior.')
+      ..writeln('- Put each fact in one field only: description = looks/role/backstory; '
+          'personality = temperament/behavior/speech; mes_example = sample lines only.')
+      ..writeln('- Shorten greetings and examples — keep tone, cut padding.')
+      ..writeln('- Prefer tight bullet phrases over long paragraphs where possible.')
+      ..writeln('- Aim for roughly 30–50% shorter overall when the card is verbose.')
+      ..writeln('- Do not add moralizing notes or invent new plot.')
+      ..writeln('- If a field is already minimal, leave it unchanged or only lightly trim.')
+      ..writeln()
+      ..writeln('Output rules:')
+      ..writeln('- Reply with ONLY a single JSON object. No markdown fences. No preamble.')
+      ..writeln('- Prefer this shape (chara_card_v2):')
+      ..writeln(_fullCharacterCardJsonShape)
+      ..writeln(
+        '- Include every listed field from the current card (use empty string or '
+        '[] when a field is intentionally blank).',
+      )
+      ..writeln('- Do NOT include character_book / lorebook — lore stays separate.')
+      ..writeln('- Do NOT include creator_notes, creator, or character_version.');
+
+    final user = StringBuffer()
+      ..writeln('CURRENT CHARACTER CARD (compact this):')
+      ..writeln(contextBlock.isEmpty ? '(card is mostly empty)' : contextBlock)
+      ..writeln()
+      ..writeln(
+        'Output the compacted character card as one JSON object. Shorter, denser, '
+        'same character.',
+      );
+
+    return [
+      {'role': 'system', 'content': system.toString().trim()},
+      {'role': 'user', 'content': user.toString().trim()},
+    ];
+  }
+
   String _buildFullContextBlock(CharacterDraftContext draft) {
     final lines = <String>[];
     void add(String label, String value) {

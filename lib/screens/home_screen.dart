@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/character.dart';
 import '../models/chat_session.dart';
+import '../models/new_chat_pick.dart';
 import '../services/api_key_service.dart';
 import '../services/appearance_controller.dart';
 import '../services/character_category_service.dart';
@@ -9,7 +10,6 @@ import '../services/character_service.dart';
 import '../services/chat_service.dart';
 import '../services/composer_draft_service.dart';
 import '../services/nanogpt_service.dart';
-import '../services/opening_scene_service.dart';
 import '../services/roadway_cache_service.dart';
 import '../services/persona_service.dart';
 import '../services/settings_service.dart';
@@ -18,7 +18,6 @@ import '../models/world_workshop.dart';
 import '../services/world_workshop_service.dart';
 import '../widgets/anima_avatar.dart';
 import '../widgets/greeting_picker.dart';
-import '../widgets/opening_scene_picker.dart';
 import 'characters_screen.dart';
 import 'chat_screen.dart';
 import 'group_chat_setup_screen.dart';
@@ -39,7 +38,6 @@ class HomeScreen extends StatefulWidget {
     required this.nanoGptService,
     required this.worldInfoService,
     required this.worldWorkshopService,
-    required this.openingSceneService,
     required this.appearanceController,
   });
 
@@ -52,7 +50,6 @@ class HomeScreen extends StatefulWidget {
   final NanoGptService nanoGptService;
   final WorldInfoService worldInfoService;
   final WorldWorkshopService worldWorkshopService;
-  final OpeningSceneService openingSceneService;
   final AppearanceController appearanceController;
 
   @override
@@ -138,7 +135,6 @@ class _HomeScreenState extends State<HomeScreen> {
           nanoGptService: widget.nanoGptService,
           worldInfoService: widget.worldInfoService,
           worldWorkshopService: widget.worldWorkshopService,
-          openingSceneService: widget.openingSceneService,
           appearanceController: widget.appearanceController,
         ),
       ),
@@ -160,7 +156,6 @@ class _HomeScreenState extends State<HomeScreen> {
           nanoGptService: widget.nanoGptService,
           worldInfoService: widget.worldInfoService,
           worldWorkshopService: widget.worldWorkshopService,
-          openingSceneService: widget.openingSceneService,
           appearanceController: widget.appearanceController,
           initialSession: session,
         ),
@@ -209,48 +204,33 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _startNewChat() async => _showNewSheet();
 
   Future<void> _startSoloChat() async {
-    final character = await Navigator.of(context).push<Character>(
+    final pick = await Navigator.of(context).push<NewChatPick>(
       MaterialPageRoute(
         builder: (_) => CharactersScreen(
           characterService: widget.characterService,
           categoryService: widget.characterCategoryService,
           settingsService: widget.settingsService,
           nanoGptService: widget.nanoGptService,
+          personaService: widget.personaService,
           pickMode: true,
+          pickPersona: true,
         ),
       ),
     );
-    if (character == null || !mounted) return;
+    if (pick == null || !mounted) return;
 
-    final persona = await widget.personaService.getActivePersona();
-    if (!mounted) return;
     final greetingIndex = await pickGreetingIndex(
       context,
-      character: character,
-      userName: persona.name,
+      character: pick.character,
+      userName: pick.persona.name,
     );
     if (greetingIndex == null || !mounted) return;
 
-    await widget.openingSceneService.importMissingFromWorkshops(
-      await widget.worldWorkshopService.loadWorkshops(),
-    );
-    if (!mounted) return;
-    final savedScenes = await widget.openingSceneService.loadScenes();
-    if (!mounted) return;
-    final openingPick = await pickOpeningScene(
-      context,
-      savedScenes: savedScenes,
-      openingSceneService: widget.openingSceneService,
-      workshopService: widget.worldWorkshopService,
-    );
-    if (openingPick == null || !mounted) return;
-
     final session = await widget.chatService.startNewChat(
-      character,
-      userName: persona.name,
-      personaId: persona.id,
+      pick.character,
+      userName: pick.persona.name,
+      personaId: pick.persona.sessionId,
       greetingIndex: greetingIndex,
-      openingScene: openingPick.text,
     );
     if (!mounted) return;
     await _openChat(session);
@@ -267,8 +247,6 @@ class _HomeScreenState extends State<HomeScreen> {
           worldInfoService: widget.worldInfoService,
           settingsService: widget.settingsService,
           nanoGptService: widget.nanoGptService,
-          openingSceneService: widget.openingSceneService,
-          worldWorkshopService: widget.worldWorkshopService,
         ),
       ),
     );
@@ -296,7 +274,6 @@ class _HomeScreenState extends State<HomeScreen> {
           apiKeyService: widget.apiKeyService,
           settingsService: widget.settingsService,
           nanoGptService: widget.nanoGptService,
-          openingSceneService: widget.openingSceneService,
           appearanceController: widget.appearanceController,
         ),
       ),
@@ -319,7 +296,6 @@ class _HomeScreenState extends State<HomeScreen> {
           settingsService: widget.settingsService,
           nanoGptService: widget.nanoGptService,
           worldWorkshopService: widget.worldWorkshopService,
-          openingSceneService: widget.openingSceneService,
           appearanceController: widget.appearanceController,
         ),
       ),
@@ -373,7 +349,6 @@ class _HomeScreenState extends State<HomeScreen> {
               final bits = <String>[];
               if (isContinue) bits.add('continue');
               if (w.exportedLorebookId != null) bits.add('lore');
-              if (w.openingScene.trim().isNotEmpty) bits.add('scene');
               if (w.linkedCharacterIds.isNotEmpty) {
                 bits.add('${w.linkedCharacterIds.length} cast');
               }

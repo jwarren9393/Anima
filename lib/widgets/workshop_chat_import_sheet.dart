@@ -194,15 +194,6 @@ Future<WorkshopChatImportOptions?> pickWorkshopChatImportOptions(
                     ),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Opening scene'),
-                      value: options.includeOpeningScene,
-                      onChanged: (v) {
-                        options = options.copyWith(includeOpeningScene: v);
-                        refreshPreview();
-                      },
-                    ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
                       title: const Text('Author\'s Note'),
                       value: options.includeAuthorsNote,
                       onChanged: (v) {

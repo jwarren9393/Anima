@@ -7,7 +7,6 @@ import 'package:anima/services/character_category_service.dart';
 import 'package:anima/services/character_service.dart';
 import 'package:anima/services/chat_service.dart';
 import 'package:anima/services/nanogpt_service.dart';
-import 'package:anima/services/opening_scene_service.dart';
 import 'package:anima/services/persona_service.dart';
 import 'package:anima/services/settings_service.dart';
 import 'package:anima/services/world_info_service.dart';
@@ -30,7 +29,6 @@ void main() {
     final nanoGptService = NanoGptService(apiKeyService: apiKeyService);
     final worldInfoService = WorldInfoService();
     final worldWorkshopService = WorldWorkshopService();
-    final openingSceneService = OpeningSceneService();
     final appearanceController = AppearanceController(
       settingsService: settingsService,
     );
@@ -46,7 +44,6 @@ void main() {
         nanoGptService: nanoGptService,
         worldInfoService: worldInfoService,
         worldWorkshopService: worldWorkshopService,
-        openingSceneService: openingSceneService,
         appearanceController: appearanceController,
       ),
     );

@@ -369,6 +369,31 @@ class LoreCollaborator {
     return lines.join('\n\n');
   }
 
+  String _buildEntryContextBlock(LoreEntryDraftContext draft) {
+    final lines = <String>[];
+    void add(String label, String value) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) return;
+      lines.add('$label:\n$trimmed');
+    }
+
+    add('Character (card this book belongs to)', draft.characterName);
+    add('Lorebook name', draft.bookName);
+    add('Lorebook notes', draft.bookDescription);
+    if (draft.constant) {
+      lines.add('This entry is Always on (no keyword required).');
+    }
+    if (draft.selective) {
+      lines.add('This entry uses Selective (two-key) matching.');
+    }
+    add('Entry label', draft.name);
+    add('Keywords', draft.keys);
+    add('Secondary keywords', draft.secondaryKeys);
+    add('Lore content', draft.content);
+    add('Editor comment', draft.comment);
+    return lines.join('\n\n');
+  }
+
   String _buildFullBookBlock(Lorebook book, {String characterName = ''}) {
     final lines = <String>[];
     void add(String label, String value) {
@@ -531,6 +556,111 @@ class LoreCollaborator {
       ..writeln(
         'Output the corrected lorebook as one JSON object. Fix only what the '
         'report requires; keep everything else aligned with the current book.',
+      );
+
+    return [
+      {'role': 'system', 'content': system.toString().trim()},
+      {'role': 'user', 'content': user.toString().trim()},
+    ];
+  }
+
+  static const _entryCompactJsonShape = '''
+{
+  "name": "optional label",
+  "keys": ["keyword", "alias"],
+  "secondary_keys": [],
+  "content": "compacted lore text"
+}''';
+
+  /// Compact one lore entry for mobile token budgets.
+  List<Map<String, String>> buildEntryCompactMessages({
+    required LoreEntryDraftContext draft,
+    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+  }) {
+    final guidance = guidanceNote.trim().isEmpty
+        ? CollaboratorSettings.defaultGuidanceNote
+        : guidanceNote.trim();
+    final contextBlock = _buildEntryContextBlock(draft);
+
+    final system = StringBuffer()
+      ..writeln(
+        'You compact one SillyTavern World Info lore entry for a private mobile '
+        'app called Anima.',
+      )
+      ..writeln()
+      ..writeln('Guidance note (follow closely):')
+      ..writeln(guidance)
+      ..writeln()
+      ..writeln('Goal: shorten lore content for fewer tokens when this entry fires.')
+      ..writeln()
+      ..writeln('Hard rules:')
+      ..writeln('- Keep facts, names, relationships, and rules the model must know.')
+      ..writeln('- Remove filler, repetition, and decorative prose.')
+      ..writeln('- Prefer tight phrases or short bullets over long paragraphs.')
+      ..writeln('- Trim keywords to the strongest triggers (keep at least one).')
+      ..writeln('- Aim for roughly 30–50% shorter content when verbose.')
+      ..writeln('- Do not invent new lore or moralize.')
+      ..writeln()
+      ..writeln('Output rules:')
+      ..writeln('- Reply with ONLY a single JSON object. No markdown fences. No preamble.')
+      ..writeln('- Shape:')
+      ..writeln(_entryCompactJsonShape);
+
+    final user = StringBuffer()
+      ..writeln('CURRENT LORE ENTRY (compact this):')
+      ..writeln(contextBlock.isEmpty ? '(entry is mostly empty)' : contextBlock)
+      ..writeln()
+      ..writeln('Output the compacted entry as one JSON object.');
+
+    return [
+      {'role': 'system', 'content': system.toString().trim()},
+      {'role': 'user', 'content': user.toString().trim()},
+    ];
+  }
+
+  /// Compact every entry in a lorebook (may lightly merge obvious duplicates).
+  List<Map<String, String>> buildBookCompactMessages({
+    required Lorebook book,
+    String characterName = '',
+    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+  }) {
+    final guidance = guidanceNote.trim().isEmpty
+        ? CollaboratorSettings.defaultGuidanceNote
+        : guidanceNote.trim();
+    final contextBlock = _buildFullBookBlock(book, characterName: characterName);
+
+    final system = StringBuffer()
+      ..writeln(
+        'You compact a SillyTavern World Info lorebook for a private mobile app '
+        'called Anima.',
+      )
+      ..writeln()
+      ..writeln('Guidance note (follow closely):')
+      ..writeln(guidance)
+      ..writeln()
+      ..writeln('Goal: reduce total lore size while keeping RP-critical world facts.')
+      ..writeln()
+      ..writeln('Hard rules:')
+      ..writeln('- Keep entry IDs, insertion_order, priority, and settings unless merging.')
+      ..writeln('- Shorten each entry\'s content — same facts, fewer words.')
+      ..writeln('- Merge only entries that clearly duplicate the same topic.')
+      ..writeln('- Trim keywords to strong triggers; do not leave entries without keys '
+          '(unless constant).')
+      ..writeln('- Prefer 30–50% shorter content on verbose entries.')
+      ..writeln('- Do not invent new lore or moralize.')
+      ..writeln()
+      ..writeln('Output rules:')
+      ..writeln('- Reply with ONLY a single JSON object. No markdown fences. No preamble.')
+      ..writeln('- Shape:')
+      ..writeln(_lorebookJsonShape)
+      ..writeln('- Output the complete compacted lorebook in one object.');
+
+    final user = StringBuffer()
+      ..writeln('CURRENT LOREBOOK (compact this):')
+      ..writeln(contextBlock.isEmpty ? '(lorebook is mostly empty)' : contextBlock)
+      ..writeln()
+      ..writeln(
+        'Output the compacted lorebook as one JSON object. Shorter entries, same world.',
       );
 
     return [

@@ -17,6 +17,7 @@ import '../services/appearance_controller.dart';
 import '../services/chat_background_service.dart';
 import '../services/character_category_service.dart';
 import '../services/character_service.dart';
+import '../services/character_token_service.dart';
 import '../services/chat_context_service.dart';
 import '../services/chat_service.dart';
 import '../services/chat_transcript_codec.dart';
@@ -42,7 +43,6 @@ import '../services/world_info_service.dart';
 import '../models/world_workshop.dart';
 import '../models/workshop_chat_import_options.dart';
 import '../services/world_workshop_service.dart';
-import '../services/opening_scene_service.dart';
 import '../utils/platform_utils.dart';
 import '../utils/scroll_to_end.dart';
 import '../widgets/chat_composer_field.dart';
@@ -86,7 +86,6 @@ class ChatScreen extends StatefulWidget {
     required this.nanoGptService,
     required this.worldInfoService,
     required this.worldWorkshopService,
-    required this.openingSceneService,
     required this.appearanceController,
     required this.initialSession,
   });
@@ -100,7 +99,6 @@ class ChatScreen extends StatefulWidget {
   final NanoGptService nanoGptService;
   final WorldInfoService worldInfoService;
   final WorldWorkshopService worldWorkshopService;
-  final OpeningSceneService openingSceneService;
   final AppearanceController appearanceController;
   final ChatSession initialSession;
 
@@ -115,6 +113,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final _promptBuilder = const PromptBuilder();
   final _lorebookService = const LorebookService();
   final _contextService = const ChatContextService();
+  static const _tokenService = CharacterTokenService();
   final _transcriptCodec = ChatTranscriptCodec();
   final _draftService = ComposerDraftService();
   static const _formatter = MessageFormatter();
@@ -186,8 +185,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   String _lastSavedDraft = '';
 
   List<ChatMessage> get _messages => _session?.messages ?? const [];
-  String get _openingScene => (_session?.openingScene ?? '').trim();
-  bool get _hasOpeningScene => _openingScene.isNotEmpty;
   bool get _isGroup => _session?.isGroup == true;
   String get _userName => _persona?.name.trim().isNotEmpty == true
       ? _persona!.name.trim()
@@ -245,10 +242,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final uiStyle = await widget.settingsService.getUiStyle();
     final enterToSend = await widget.settingsService.getEnterToSendComposer();
     var persona = await widget.personaService.resolve(session.personaId);
-    // Bind persona onto older chats that never stored one.
-    if (session.personaId == null || session.personaId != persona.id) {
-      session = session.copyWith(personaId: persona.id);
-      await widget.chatService.saveChat(session);
+    if (session.personaId == null) {
+      final savedDefault = await widget.personaService.tryGetActivePersona();
+      if (savedDefault != null) {
+        session = session.copyWith(personaId: savedDefault.id);
+        persona = savedDefault;
+        await widget.chatService.saveChat(session);
+      }
     }
     final participants = await _resolveParticipants(session, character);
     final draft = await _draftService.loadDraft(session.id);
@@ -342,6 +342,18 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   Future<Character> _resolveSelectedCharacter() async {
     final characters = await widget.characterService.loadCharacters();
+    if (characters.isEmpty) {
+      final session = _session;
+      if (session != null && !session.isGroup) {
+        final solo = await widget.characterService.getById(session.characterId);
+        if (solo != null) return solo;
+        return Character(
+          id: session.characterId,
+          name: session.title.trim().isNotEmpty ? session.title : 'Character',
+        );
+      }
+      return const Character(id: 'char_missing', name: 'Character');
+    }
     final selectedId = await widget.settingsService.getSelectedCharacterId();
     Character chosen = characters.first;
     for (final character in characters) {
@@ -539,7 +551,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           nanoGptService: widget.nanoGptService,
           worldInfoService: widget.worldInfoService,
           worldWorkshopService: widget.worldWorkshopService,
-          openingSceneService: widget.openingSceneService,
           appearanceController: widget.appearanceController,
         ),
       ),
@@ -575,7 +586,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               settingsService: widget.settingsService,
               nanoGptService: widget.nanoGptService,
               worldWorkshopService: widget.worldWorkshopService,
-              openingSceneService: widget.openingSceneService,
               appearanceController: widget.appearanceController,
             ),
           ),
@@ -600,7 +610,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         includeGlobalLorebooks: false,
         includeEmbeddedCharacterLore: false,
         includeAuthorsNote: _session!.authorsNote.trim().isNotEmpty,
-        includeOpeningScene: _session!.openingScene.trim().isNotEmpty,
       ),
     );
     if (!source.hasContent) {
@@ -630,7 +639,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           settingsService: widget.settingsService,
           nanoGptService: widget.nanoGptService,
           worldWorkshopService: widget.worldWorkshopService,
-          openingSceneService: widget.openingSceneService,
           appearanceController: widget.appearanceController,
         ),
       ),
@@ -651,7 +659,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       ),
     );
     if (chosen == null || !mounted) return;
-    final updated = _session!.copyWith(personaId: chosen.id);
+    final updated = _session!.copyWith(personaId: chosen.sessionId);
     await widget.chatService.saveChat(updated);
     if (!mounted) return;
     setState(() {
@@ -775,8 +783,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final session = await widget.chatService.loadOrCreateActiveChat(
       character,
       userName: _userName,
-      personaId:
-          _persona?.id ?? (await widget.personaService.getActivePersona()).id,
+      personaId: _persona?.sessionId,
     );
     final participants = await _resolveParticipants(session, character);
     if (!mounted) return;
@@ -803,7 +810,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       final session = await widget.chatService.startGroupChat(
         _participants,
         userName: _userName,
-        personaId: _persona?.id,
+        personaId: _persona?.sessionId,
         authorsNote: _session?.authorsNote ?? '',
         autoReply: _session?.autoReply ?? false,
         lorebookIds: _session?.lorebookIds,
@@ -823,7 +830,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final session = await widget.chatService.startNewChat(
       character,
       userName: _userName,
-      personaId: _persona?.id,
+      personaId: _persona?.sessionId,
       greetingIndex: greetingIndex,
     );
     if (!mounted) return;
@@ -1009,7 +1016,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         userName: userName,
       );
 
-      final withPersona = imported.copyWith(personaId: _persona?.id);
+      final withPersona = imported.copyWith(personaId: _persona?.sessionId);
       await widget.chatService.saveChat(withPersona);
       await widget.chatService.setActiveChatId(character.id, withPersona.id);
       if (!mounted) return;
@@ -1848,7 +1855,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     final userName = _userName;
     final persona = _persona?.promptText ?? '';
-    final openingScene = (_session?.openingScene ?? '').trim();
     final loreSettings = await widget.settingsService.getLoreSettings();
     final extraBooks = await widget.worldInfoService.booksForChat(
       chatLorebookIds: _session?.lorebookIds,
@@ -1863,7 +1869,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         focusCharacter: character,
         participants: _participants,
         userName: userName,
-        openingScene: openingScene,
       );
       final injection = _lorebookService.buildInjection(
         character: character,
@@ -1901,7 +1906,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       speakers: speakers,
       participants: _participants,
       userName: userName,
-      openingScene: openingScene,
     );
 
     final pendingDirectorId = _session?.pendingDirectorMessageId;
@@ -1956,31 +1960,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         await widget.settingsService.getGlobalChatPromptSettings();
     final primary = speakers.first;
 
-    var openingBlock = '';
-    if (openingScene.isNotEmpty && (_session?.openingSceneInPrompt ?? false)) {
-      final anyPresent = speakers.any(
-        (s) => _presence.wasPresentForOpeningScene(
-          openingScene: openingScene,
-          characterName: s.name,
-          participants: _participants,
-          userName: userName,
-          messages: _messages,
-        ),
-      );
-      if (anyPresent) {
-        openingBlock = _promptBuilder.buildOpeningSceneBlock(
-          openingScene: openingScene,
-          charName: primary.name,
-          userName: userName,
-          presentCharacterNames: _presence.openingScenePresentNames(
-            openingScene: openingScene,
-            participants: _participants,
-            userName: userName,
-          ),
-        );
-      }
-    }
-
     var memoryBlock = '';
     final memory = (_session?.memorySummary ?? '').trim();
     if (memory.isNotEmpty) {
@@ -2012,7 +1991,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       loreBefore: loreBefore.toString(),
       loreAfter: loreAfter.toString(),
       memoryBlock: memoryBlock,
-      openingBlock: openingBlock,
       nudge: nudge,
       globalSystemPrompt: globalPrompts.systemPrompt,
       postHistory: postHistory,
@@ -2300,101 +2278,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
-  Future<void> _editOpeningScene() async {
-    final session = _session;
-    if (session == null || _busy) return;
-    final controller = TextEditingController(text: session.openingScene);
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Opening scene'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Narrator/setup prose shown at the top of this chat. '
-                  'Injected into prompts until you send a message or turn it off.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: controller,
-                  minLines: 5,
-                  maxLines: 12,
-                  autofocus: true,
-                  textCapitalization: TextCapitalization.sentences,
-                  decoration: const InputDecoration(
-                    hintText: 'The scene opens on…',
-                    border: OutlineInputBorder(),
-                    alignLabelWithHint: true,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, ''),
-              child: const Text('Clear'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, controller.text.trim()),
-              child: const Text('Save'),
-            ),
-          ],
-        );
-      },
-    );
-    if (result == null || !mounted) return;
-    setState(() {
-      final trimmed = result.trim();
-      _session = session.copyWith(
-        openingScene: trimmed,
-        openingSceneInPrompt: trimmed.isNotEmpty,
-      );
-    });
-    await _persist();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          result.trim().isEmpty
-              ? 'Opening scene cleared.'
-              : 'Opening scene saved for this chat.',
-        ),
-      ),
-    );
-  }
-
-  Future<void> _toggleOpeningSceneInjection() async {
-    final session = _session;
-    if (session == null || _busy || session.openingScene.trim().isEmpty) {
-      return;
-    }
-    final next = !session.openingSceneInPrompt;
-    setState(() {
-      _session = session.copyWith(openingSceneInPrompt: next);
-    });
-    await _persist();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          next
-              ? 'Opening scene will be injected into prompts again.'
-              : 'Opening scene hidden from prompts (still visible in chat).',
-        ),
-      ),
-    );
-  }
-
   Future<void> _editMemorySummary() async {
     final session = _session;
     if (session == null || _busy) return;
@@ -2467,6 +2350,147 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
+  Future<ChatPromptBreakdown> _buildChatPromptBreakdown() async {
+    final session = _session!;
+    final speaker = _resolvedGroupSpeaker();
+    final userName = _userName;
+    final persona = _persona?.promptText ?? '';
+    final end = _messages.length;
+
+    final historyForScan = _presence.filterHistoryForCharacter(
+      history: _messages.sublist(0, end),
+      allMessages: _messages,
+      focusCharacter: speaker,
+      participants: _participants,
+      userName: userName,
+    );
+    final loreSettings = await widget.settingsService.getLoreSettings();
+    final extraBooks = await widget.worldInfoService.booksForChat(
+      chatLorebookIds: session.lorebookIds,
+    );
+    final lore = _lorebookService.buildInjection(
+      character: speaker,
+      messages: historyForScan,
+      extraBooks: extraBooks,
+      scanDepthOverride: loreSettings.scanDepth,
+      tokenBudgetOverride: loreSettings.tokenBudget,
+      recursiveScanningOverride: loreSettings.recursiveScanning,
+    );
+    final loreTokens = _contextService.estimateTokens(
+      '${lore.beforeChar}\n${lore.afterChar}',
+    );
+
+    final others = _participants.where((c) => c.id != speaker.id).toList();
+    final globalPrompts =
+        await widget.settingsService.getGlobalChatPromptSettings();
+
+    final systemBase = _promptBuilder.buildSystemPrompt(
+      character: speaker,
+      userName: userName,
+      userPersona: '',
+      lore: const LorebookInjection(),
+      others: const [],
+      globalSystemPrompt: '',
+    );
+    final systemWithPersona = _promptBuilder.buildSystemPrompt(
+      character: speaker,
+      userName: userName,
+      userPersona: persona,
+      lore: const LorebookInjection(),
+      others: const [],
+      globalSystemPrompt: '',
+    );
+    final systemWithGlobal = _promptBuilder.buildSystemPrompt(
+      character: speaker,
+      userName: userName,
+      userPersona: '',
+      lore: const LorebookInjection(),
+      others: const [],
+      globalSystemPrompt: globalPrompts.systemPrompt,
+    );
+    final speakerCardTokens = _contextService.estimateTokens(systemBase);
+    final personaOnlyTokens = _contextService.estimateTokens(systemWithPersona) -
+        speakerCardTokens;
+    final globalPromptTokens = _contextService.estimateTokens(systemWithGlobal) -
+        speakerCardTokens;
+    final castSummaries = <({String name, int tokens})>[
+      for (final other in others)
+        (
+          name: other.name.trim().isEmpty ? 'Character' : other.name.trim(),
+          tokens: _tokenService.breakdown(other).groupSummaryTokens,
+        ),
+    ];
+    final castSummaryTokens =
+        castSummaries.fold<int>(0, (sum, row) => sum + row.tokens);
+
+    final postHistory = _promptBuilder.buildPostHistory(
+      character: speaker,
+      userName: userName,
+      authorsNote: session.authorsNote,
+      globalPostHistory: globalPrompts.postHistoryInstructions,
+    );
+    final postHistoryTokens = _contextService.estimateTokens(postHistory);
+
+    var memoryTokens = 0;
+    final memory = session.memorySummary.trim();
+    if (memory.isNotEmpty) {
+      final filtered = _presence.filterMemoryForCharacter(
+        memory: memory,
+        characterName: speaker.name,
+        userName: userName,
+        castNames: _participants.map((c) => c.name),
+      );
+      final block = _presence.formatFilteredMemoryForPrompt(
+        filteredMemory: filtered,
+        charName: speaker.name,
+      );
+      memoryTokens = _contextService.estimateTokens(block);
+    }
+
+    final contextSettings = await widget.settingsService.getContextSettings();
+    final history = _contextService.selectHistory(
+      messages: _messages,
+      endExclusive: end,
+      memoryCoveredCount: session.memoryCoveredCount,
+      historyTokenBudget: contextSettings.historyTokenBudget,
+      isGroup: _isGroup,
+    );
+    final visibleHistory = _presence.filterHistoryForCharacter(
+      history: history,
+      allMessages: _messages,
+      focusCharacter: speaker,
+      participants: _participants,
+      userName: userName,
+    );
+    final historyTokens = _contextService.estimateConversationTokens(
+      visibleHistory,
+      isGroup: _isGroup,
+    );
+
+    final personaTokens = personaOnlyTokens + globalPromptTokens;
+    final estimatedSent = speakerCardTokens +
+        castSummaryTokens +
+        personaOnlyTokens +
+        globalPromptTokens +
+        loreTokens +
+        memoryTokens +
+        historyTokens +
+        postHistoryTokens;
+
+    return ChatPromptBreakdown(
+      speakerName: speaker.name.trim().isEmpty ? 'Character' : speaker.name.trim(),
+      speakerCardTokens: speakerCardTokens,
+      castSummaries: castSummaries,
+      loreTokens: loreTokens,
+      loreMatchedCount: lore.matchedCount,
+      personaTokens: personaTokens,
+      memoryTokens: memoryTokens,
+      historyTokens: historyTokens,
+      postHistoryTokens: postHistoryTokens,
+      estimatedSentTokens: estimatedSent,
+    );
+  }
+
   Future<void> _showContextEstimate() async {
     final session = _session;
     if (session == null) return;
@@ -2487,8 +2511,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     try {
       final contextSettings = await widget.settingsService.getContextSettings();
-      final globalPrompts =
-          await widget.settingsService.getGlobalChatPromptSettings();
+      final breakdown = await _buildChatPromptBreakdown();
       final modelId = await widget.settingsService.getModel();
       final baseUrl = await widget.settingsService.getApiBaseUrl();
       int? modelContext;
@@ -2502,32 +2525,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         }
       } catch (_) {}
 
-      // Approximate system / post-history size without rebuilding full lore.
-      final character = _character;
-      final systemApprox = character == null
-          ? ''
-          : [
-              character.name,
-              character.description,
-              character.personality,
-              character.scenario,
-              character.systemPrompt,
-              globalPrompts.systemPrompt,
-              _persona?.description ?? '',
-            ].join('\n');
-      final postApprox = [
-        globalPrompts.postHistoryInstructions,
-        character?.postHistoryInstructions ?? '',
-        session.authorsNote,
-      ].join('\n');
-
       final estimate = _contextService.estimateChat(
         messages: _messages,
         memoryCoveredCount: session.memoryCoveredCount,
         historyTokenBudget: contextSettings.historyTokenBudget,
         memorySummary: session.memorySummary,
-        systemPrompt: systemApprox,
-        postHistory: postApprox,
+        systemPrompt: '',
+        postHistory: '',
         isGroup: session.isGroup,
         modelContextLength: modelContext,
       );
@@ -2535,7 +2539,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       if (!mounted) return;
       Navigator.of(context).pop(); // loading dialog
 
-      final ratio = estimate.fillRatio;
+      final ratio = modelContext == null || modelContext <= 0
+          ? null
+          : (breakdown.estimatedSentTokens / modelContext).clamp(0.0, 2.0);
       await showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
@@ -2556,25 +2562,56 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   'Full transcript: ~${ContextEstimate.formatTokenCount(estimate.fullTranscriptTokens)} tokens',
                 ),
                 Text(
-                  'Likely sent next reply: ~${ContextEstimate.formatTokenCount(estimate.estimatedSentTokens)} tokens',
+                  'Likely sent next reply: ~${ContextEstimate.formatTokenCount(breakdown.estimatedSentTokens)} tokens',
                 ),
-                if (estimate.messagesInPrompt != null)
+                const SizedBox(height: 12),
+                Text(
+                  'Next reply breakdown',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Speaking as ${breakdown.speakerName}: ~${ContextEstimate.formatTokenCount(breakdown.speakerCardTokens)} tokens (full card)',
+                ),
+                if (breakdown.castSummaries.isNotEmpty)
+                  for (final row in breakdown.castSummaries)
+                    Text(
+                      '  ${row.name} (group snippet): ~${ContextEstimate.formatTokenCount(row.tokens)}',
+                    ),
+                if (breakdown.loreTokens > 0)
                   Text(
-                    'Messages in prompt: ${estimate.messagesInPrompt}'
-                    '${estimate.messagesTrimmedAway > 0 ? ' (${estimate.messagesTrimmedAway} older trimmed)' : ''}',
+                    'World Info (this turn): ~${ContextEstimate.formatTokenCount(breakdown.loreTokens)} tokens'
+                    '${breakdown.loreMatchedCount > 0 ? ' (${breakdown.loreMatchedCount} entries)' : ''}',
+                  )
+                else
+                  const Text('World Info (this turn): none matched'),
+                if (breakdown.personaTokens > 0)
+                  Text(
+                    'Persona + global prompts: ~${ContextEstimate.formatTokenCount(breakdown.personaTokens)} tokens',
                   ),
-                if (estimate.memoryTokens > 0)
+                if (breakdown.memoryTokens > 0)
                   Text(
-                    'Memory summary: ~${ContextEstimate.formatTokenCount(estimate.memoryTokens)} tokens',
+                    'Memory summary: ~${ContextEstimate.formatTokenCount(breakdown.memoryTokens)} tokens',
+                  ),
+                Text(
+                  'Message history: ~${ContextEstimate.formatTokenCount(breakdown.historyTokens)} tokens'
+                  '${estimate.messagesInPrompt != null ? ' (${estimate.messagesInPrompt} messages' : ''}'
+                  '${estimate.messagesTrimmedAway > 0 ? ', ${estimate.messagesTrimmedAway} older trimmed' : ''}'
+                  '${estimate.messagesInPrompt != null ? ')' : ''}',
+                ),
+                if (breakdown.postHistoryTokens > 0)
+                  Text(
+                    'Post-history / Author\'s note: ~${ContextEstimate.formatTokenCount(breakdown.postHistoryTokens)} tokens',
                   ),
                 if (estimate.historyBudgetTokens != null)
                   Text(
                     'History budget (Settings): ${ContextEstimate.formatTokenCount(estimate.historyBudgetTokens!)} tokens',
                   ),
+                const SizedBox(height: 8),
                 Text('Current model: $modelId'),
-                if (estimate.modelContextLength != null)
+                if (modelContext != null)
                   Text(
-                    'Model context: ${ContextEstimate.formatTokenCount(estimate.modelContextLength!)} tokens'
+                    'Model context: ${ContextEstimate.formatTokenCount(modelContext)} tokens'
                     '${ratio == null ? '' : ' (~${(ratio * 100).round()}% of window vs send size)'}',
                   )
                 else
@@ -2638,8 +2675,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
 
     final chunk = _messages.sublist(session.memoryCoveredCount, cut);
-    final seedOpening = !session.openingSceneInMemory &&
-        session.openingScene.trim().isNotEmpty;
     setState(() {
       _summarizing = true;
       _error = null;
@@ -2656,8 +2691,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           existingSummary: session.memorySummary,
           userName: _userName,
           charName: _character!.name,
-          openingScene: session.openingScene,
-          seedOpeningScene: seedOpening,
         ),
         baseUrl: baseUrl,
         sampling: ChatContextService.summarizeSampling(sampling),
@@ -2667,8 +2700,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         _session = session.copyWith(
           memorySummary: updated.trim(),
           memoryCoveredCount: cut,
-          openingSceneInMemory:
-              seedOpening || session.openingSceneInMemory,
         );
         _summarizing = false;
       });
@@ -2725,8 +2756,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           worldInfoService: widget.worldInfoService,
           settingsService: widget.settingsService,
           nanoGptService: widget.nanoGptService,
-          openingSceneService: widget.openingSceneService,
-          worldWorkshopService: widget.worldWorkshopService,
           existingSession: _session,
           preselectedIds: _session!.effectiveParticipantIds.toSet(),
         ),
@@ -2953,8 +2982,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           worldInfoService: widget.worldInfoService,
           settingsService: widget.settingsService,
           nanoGptService: widget.nanoGptService,
-          openingSceneService: widget.openingSceneService,
-          worldWorkshopService: widget.worldWorkshopService,
           preselectedIds: {if (_character != null) _character!.id},
         ),
       ),
@@ -3165,7 +3192,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final character = speakingAs ?? _resolvedGroupSpeaker();
     final userName = _userName;
     final persona = _persona?.promptText ?? '';
-    final openingScene = (_session?.openingScene ?? '').trim();
 
     final end = historyEndExclusive ??
         (excludeLastAssistant ? _messages.length - 1 : _messages.length);
@@ -3176,7 +3202,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       focusCharacter: character,
       participants: _participants,
       userName: userName,
-      openingScene: openingScene,
     );
     final loreSettings = await widget.settingsService.getLoreSettings();
     final extraBooks = await widget.worldInfoService.booksForChat(
@@ -3218,31 +3243,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       {'role': 'system', 'content': system},
     ];
 
-    if (openingScene.isNotEmpty && (_session?.openingSceneInPrompt ?? false)) {
-      if (_presence.wasPresentForOpeningScene(
-        openingScene: openingScene,
-        characterName: character.name,
-        participants: _participants,
-        userName: userName,
-        messages: _messages,
-      )) {
-        final presentNames = _presence.openingScenePresentNames(
-          openingScene: openingScene,
-          participants: _participants,
-          userName: userName,
-        );
-        final block = _promptBuilder.buildOpeningSceneBlock(
-          openingScene: openingScene,
-          charName: character.name,
-          userName: userName,
-          presentCharacterNames: presentNames,
-        );
-        if (block.isNotEmpty) {
-          msgs.add({'role': 'system', 'content': block});
-        }
-      }
-    }
-
     final memory = (_session?.memorySummary ?? '').trim();
     if (memory.isNotEmpty) {
       final filtered = _presence.filterMemoryForCharacter(
@@ -3275,7 +3275,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       focusCharacter: character,
       participants: _participants,
       userName: userName,
-      openingScene: openingScene,
     );
 
     final pendingDirectorId = _session?.pendingDirectorMessageId;
@@ -3851,8 +3850,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               if (value == 'persona') _pickPersona();
               if (value == 'authors_note') _editAuthorsNote();
               if (value == 'lorebooks') _pickChatLorebooks();
-              if (value == 'opening_scene') _editOpeningScene();
-              if (value == 'opening_inject') _toggleOpeningSceneInjection();
               if (value == 'memory') _editMemorySummary();
               if (value == 'summarize') _summarizeNow();
               if (value == 'context') _showContextEstimate();
@@ -3895,21 +3892,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 value: 'lorebooks',
                 child: Text(chatLorebookMenuLabel(_session?.lorebookIds)),
               ),
-              PopupMenuItem(
-                value: 'opening_scene',
-                child: Text(
-                  _hasOpeningScene ? 'Opening scene' : 'Add opening scene',
-                ),
-              ),
-              if (_hasOpeningScene)
-                PopupMenuItem(
-                  value: 'opening_inject',
-                  child: Text(
-                    (_session?.openingSceneInPrompt ?? false)
-                        ? 'Stop injecting opening scene'
-                        : 'Inject opening scene in prompts',
-                  ),
-                ),
               PopupMenuItem(
                 value: 'memory',
                 child: Text(
@@ -4011,7 +3993,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       imagePath: _chatBackgroundPath!,
                       blurSigma: ui.chatExperience.backgroundBlur,
                     ),
-                  _messages.isEmpty && !_busy && !_hasOpeningScene
+                  _messages.isEmpty && !_busy
                       ? _EmptyChat(
                           hasApiKey: _hasApiKey,
                           characterName: characterName,
@@ -4022,25 +4004,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       : CustomScrollView(
                       controller: _scrollController,
                       slivers: [
-                        if (_hasOpeningScene)
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-                              child: NarratorBubble(
-                                text: _openingScene,
-                                injecting:
-                                    _session?.openingSceneInPrompt ?? false,
-                                onTap: _busy ? null : _editOpeningScene,
-                              ),
-                            ),
-                          ),
                         SliverPadding(
-                          padding: EdgeInsets.fromLTRB(
-                            12,
-                            _hasOpeningScene ? 4 : 12,
-                            12,
-                            8,
-                          ),
+                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
                           sliver: SliverList(
                             delegate: SliverChildBuilderDelegate(
                               (context, index) {

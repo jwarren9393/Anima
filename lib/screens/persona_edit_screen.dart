@@ -10,7 +10,9 @@ import '../services/avatar_service.dart';
 import '../services/nanogpt_service.dart';
 import '../services/persona_collaborator.dart';
 import '../services/persona_service.dart';
+import '../services/persona_token_service.dart';
 import '../services/settings_service.dart';
+import '../widgets/character_token_badge.dart';
 import '../services/world_workshop_builder.dart';
 import '../widgets/anima_avatar.dart';
 import '../widgets/generate_avatar_sheet.dart';
@@ -41,6 +43,7 @@ class PersonaEditScreen extends StatefulWidget {
 class _PersonaEditScreenState extends State<PersonaEditScreen> {
   static const _avatarPromptBuilder = AvatarPromptBuilder();
   static const _collaborator = PersonaCollaborator();
+  static const _tokenService = PersonaTokenService();
   final _workshopBuilder = WorldWorkshopBuilder();
 
   final _avatarService = AvatarService();
@@ -257,6 +260,20 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
       _goalsController.text = existing.goals;
       _avatarFileName = existing.avatarFileName;
     }
+    for (final controller in [
+      _nameController,
+      _descriptionController,
+      _appearanceController,
+      _personalityController,
+      _backgroundController,
+      _goalsController,
+    ]) {
+      controller.addListener(_onDraftFieldChanged);
+    }
+  }
+
+  void _onDraftFieldChanged() {
+    if (mounted) setState(() {});
   }
 
   PersonaDraftContext _draftContext() {
@@ -469,6 +486,16 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
 
   @override
   void dispose() {
+    for (final controller in [
+      _nameController,
+      _descriptionController,
+      _appearanceController,
+      _personalityController,
+      _backgroundController,
+      _goalsController,
+    ]) {
+      controller.removeListener(_onDraftFieldChanged);
+    }
     _aiBrief.dispose();
     _nameController.dispose();
     _descriptionController.dispose();
@@ -647,6 +674,28 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
                         child: const Text('Remove'),
                       ),
                   ],
+                ),
+                const SizedBox(height: 8),
+                Builder(
+                  builder: (context) {
+                    final breakdown =
+                        _tokenService.breakdown(_personaFromDraft());
+                    return Column(
+                      children: [
+                        CharacterTokenBadge(
+                          tokens: breakdown.promptTokens,
+                          tooltip: personaTokenTooltip(breakdown),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Injected into every chat as {{user}}',
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: Theme.of(context).colorScheme.outline,
+                              ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 8),
                 Text(

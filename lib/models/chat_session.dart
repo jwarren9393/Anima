@@ -16,9 +16,6 @@ class ChatSession {
     List<String>? lorebookIds,
     this.memorySummary = '',
     this.memoryCoveredCount = 0,
-    this.openingScene = '',
-    this.openingSceneInPrompt = true,
-    this.openingSceneInMemory = false,
     this.sourceWorkshopId,
     this.pendingDirectorMessageId,
     this.pendingDirectorAssistantId,
@@ -66,17 +63,6 @@ class ChatSession {
   /// [memorySummary] (those can be skipped when packing recent history).
   final int memoryCoveredCount;
 
-  /// Optional narrator/setup prose shown at the top of the chat (not stored in
-  /// [messages] and not tied to a character greeting).
-  final String openingScene;
-
-  /// When true, [openingScene] is injected into API prompts (default on).
-  /// Turn off via the chat ⋮ menu to save tokens.
-  final bool openingSceneInPrompt;
-
-  /// True after the opening scene has been folded into [memorySummary] once.
-  final bool openingSceneInMemory;
-
   /// Creation Center workshop this chat was started from (provenance).
   final String? sourceWorkshopId;
 
@@ -111,9 +97,6 @@ class ChatSession {
     bool clearLorebookIds = false,
     String? memorySummary,
     int? memoryCoveredCount,
-    String? openingScene,
-    bool? openingSceneInPrompt,
-    bool? openingSceneInMemory,
     String? sourceWorkshopId,
     bool clearSourceWorkshopId = false,
     String? pendingDirectorMessageId,
@@ -135,11 +118,6 @@ class ChatSession {
       lorebookIds: clearLorebookIds ? null : (lorebookIds ?? this.lorebookIds),
       memorySummary: memorySummary ?? this.memorySummary,
       memoryCoveredCount: memoryCoveredCount ?? this.memoryCoveredCount,
-      openingScene: openingScene ?? this.openingScene,
-      openingSceneInPrompt:
-          openingSceneInPrompt ?? this.openingSceneInPrompt,
-      openingSceneInMemory:
-          openingSceneInMemory ?? this.openingSceneInMemory,
       sourceWorkshopId: clearSourceWorkshopId
           ? null
           : (sourceWorkshopId ?? this.sourceWorkshopId),
@@ -167,9 +145,6 @@ class ChatSession {
         if (lorebookIds != null) 'lorebookIds': lorebookIds,
         if (memorySummary.trim().isNotEmpty) 'memorySummary': memorySummary,
         if (memoryCoveredCount > 0) 'memoryCoveredCount': memoryCoveredCount,
-        if (openingScene.trim().isNotEmpty) 'openingScene': openingScene,
-        if (!openingSceneInPrompt) 'openingSceneInPrompt': false,
-        if (openingSceneInMemory) 'openingSceneInMemory': true,
         if (sourceWorkshopId != null && sourceWorkshopId!.isNotEmpty)
           'sourceWorkshopId': sourceWorkshopId,
         if (pendingDirectorMessageId != null &&
@@ -240,9 +215,6 @@ class ChatSession {
       lorebookIds: lorebookIds,
       memorySummary: (json['memorySummary'] as String? ?? '').trim(),
       memoryCoveredCount: coveredCount.clamp(0, 100000),
-      openingScene: (json['openingScene'] as String? ?? '').trim(),
-      openingSceneInPrompt: json['openingSceneInPrompt'] != false,
-      openingSceneInMemory: json['openingSceneInMemory'] == true,
       sourceWorkshopId: () {
         final raw = '${json['sourceWorkshopId'] ?? ''}'.trim();
         return raw.isEmpty ? null : raw;

@@ -140,8 +140,6 @@ class ChatService {
     String userName = 'User',
     String? personaId,
     int greetingIndex = 0,
-    String openingScene = '',
-    bool openingSceneInPrompt = true,
     String? sourceWorkshopId,
   }) async {
     final builder = const PromptBuilder();
@@ -177,10 +175,6 @@ class ChatService {
       updatedAt: DateTime.now(),
       messages: messages,
       personaId: personaId,
-      openingScene: openingScene.trim(),
-      openingSceneInPrompt: openingScene.trim().isNotEmpty
-          ? openingSceneInPrompt
-          : true,
       sourceWorkshopId: sourceWorkshopId?.trim().isEmpty == true
           ? null
           : sourceWorkshopId?.trim(),
@@ -307,8 +301,6 @@ class ChatService {
     bool autoReply = false,
     List<String>? lorebookIds,
     int greetingIndex = 0,
-    String openingScene = '',
-    bool openingSceneInPrompt = true,
     String? title,
     String? sourceWorkshopId,
   }) async {
@@ -359,10 +351,6 @@ class ChatService {
       personaId: personaId,
       autoReply: autoReply,
       lorebookIds: lorebookIds,
-      openingScene: openingScene.trim(),
-      openingSceneInPrompt: openingScene.trim().isNotEmpty
-          ? openingSceneInPrompt
-          : true,
       sourceWorkshopId: sourceWorkshopId?.trim().isEmpty == true
           ? null
           : sourceWorkshopId?.trim(),

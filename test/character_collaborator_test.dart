@@ -103,5 +103,19 @@ void main() {
       expect(messages[1]['content'], contains('Age contradicts'));
       expect(messages[1]['content'], contains('Tall scout'));
     });
+
+    test('compact asks for shorter JSON card', () {
+      final messages = collaborator.buildCompactMessages(
+        draft: CharacterDraftContext(
+          name: 'Rin',
+          description: 'A' * 120,
+          personality: 'Quiet and watchful.',
+        ),
+      );
+      expect(messages[0]['content'], contains('compact'));
+      expect(messages[0]['content'], contains('30–50%'));
+      expect(messages[0]['content'], contains('JSON'));
+      expect(messages[1]['content'], contains('Rin'));
+    });
   });
 }

@@ -29,45 +29,34 @@ class CharacterService {
     return File('${dir.path}/$_fileName');
   }
 
-  /// Loads all characters. Creates a starter character if the file is missing.
+  /// Loads all characters. Returns an empty list when none are saved yet.
   Future<List<Character>> loadCharacters() async {
     final file = await _file();
     if (!await file.exists()) {
-      final starter = Character.starter();
-      await saveCharacters([starter]);
-      return [starter];
+      await saveCharacters(const []);
+      return const [];
     }
 
     try {
       final raw = await file.readAsString();
       if (raw.trim().isEmpty) {
-        final starter = Character.starter();
-        await saveCharacters([starter]);
-        return [starter];
+        await saveCharacters(const []);
+        return const [];
       }
       final decoded = jsonDecode(raw);
       if (decoded is! List) {
-        final starter = Character.starter();
-        await saveCharacters([starter]);
-        return [starter];
+        await saveCharacters(const []);
+        return const [];
       }
 
-      final characters = decoded
+      return decoded
           .whereType<Map>()
           .map((item) => Character.fromJson(Map<String, dynamic>.from(item)))
           .where((c) => c.id.isNotEmpty && c.name.isNotEmpty)
           .toList();
-
-      if (characters.isEmpty) {
-        final starter = Character.starter();
-        await saveCharacters([starter]);
-        return [starter];
-      }
-      return characters;
     } catch (_) {
-      final starter = Character.starter();
-      await saveCharacters([starter]);
-      return [starter];
+      await saveCharacters(const []);
+      return const [];
     }
   }
 
@@ -102,7 +91,7 @@ class CharacterService {
     return all;
   }
 
-  /// Deletes a character. Keeps at least one starter if the list would be empty.
+  /// Deletes a character. The list may end up empty.
   Future<List<Character>> delete(String id) async {
     final all = await loadCharacters();
     Character? removed;
@@ -115,9 +104,6 @@ class CharacterService {
     all.removeWhere((c) => c.id == id);
     if (removed?.avatarFileName != null) {
       await _avatarService.delete(removed!.avatarFileName);
-    }
-    if (all.isEmpty) {
-      all.add(Character.starter());
     }
     await saveCharacters(all);
     return all;

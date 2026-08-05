@@ -161,8 +161,6 @@ LENGTH:
     required String existingSummary,
     required String userName,
     required String charName,
-    String openingScene = '',
-    bool seedOpeningScene = false,
   }) {
     final transcript = StringBuffer();
     for (final message in chunk) {
@@ -204,14 +202,6 @@ LENGTH:
       user.writeln();
     } else {
       user.writeln('No existing memory summary yet.');
-      user.writeln();
-    }
-    if (seedOpeningScene && openingScene.trim().isNotEmpty) {
-      user.writeln(
-        'Story opening (fold into memory as established background facts only; '
-        'strip any prose style — convert to clinical bullets):',
-      );
-      user.writeln(openingScene.trim());
       user.writeln();
     }
     user.writeln('New chat segment to fold in:');

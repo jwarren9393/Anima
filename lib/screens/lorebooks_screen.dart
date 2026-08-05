@@ -7,9 +7,11 @@ import 'package:share_plus/share_plus.dart';
 
 import '../models/global_lorebook.dart';
 import '../models/lorebook.dart';
+import '../services/lorebook_token_service.dart';
 import '../services/nanogpt_service.dart';
 import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
+import '../widgets/character_token_badge.dart';
 import 'lorebook_edit_screen.dart';
 
 /// Create / import / enable standalone World Info lorebooks (global).
@@ -30,6 +32,8 @@ class LorebooksScreen extends StatefulWidget {
 }
 
 class _LorebooksScreenState extends State<LorebooksScreen> {
+  static const _tokenService = LorebookTokenService();
+
   List<GlobalLorebook> _books = [];
   bool _loading = true;
   bool _busy = false;
@@ -263,7 +267,18 @@ class _LorebooksScreenState extends State<LorebooksScreen> {
                             ? Theme.of(context).colorScheme.primary
                             : Theme.of(context).disabledColor,
                       ),
-                      title: Text(book.displayName),
+                      title: Row(
+                        children: [
+                          Expanded(child: Text(book.displayName)),
+                          const SizedBox(width: 6),
+                          CharacterTokenBadge(
+                            tokens: _tokenService.badgeTokens(book.book),
+                            tooltip: lorebookTokenTooltip(
+                              _tokenService.breakdown(book.book),
+                            ),
+                          ),
+                        ],
+                      ),
                       subtitle: Text(
                         '${book.enabledEntryCount}/${book.entryCount} entries on'
                         '${book.enabled ? '' : ' · disabled'}',

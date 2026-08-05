@@ -9,12 +9,12 @@ import '../models/chat_session.dart';
 import '../models/global_lorebook.dart';
 import '../models/lorebook.dart';
 import '../models/persona.dart';
-import '../models/opening_scene_length.dart';
 import '../models/world_workshop.dart';
 import '../services/api_key_service.dart';
 import '../services/appearance_controller.dart';
 import '../services/character_category_service.dart';
 import '../services/character_service.dart';
+import '../services/character_token_service.dart';
 import '../services/chat_context_service.dart';
 import '../services/chat_service.dart';
 import '../services/nanogpt_service.dart';
@@ -25,7 +25,6 @@ import '../services/lore_collaborator.dart';
 import '../services/ai_field_changes.dart';
 import '../services/world_info_service.dart';
 import '../services/world_workshop_builder.dart';
-import '../services/opening_scene_service.dart';
 import '../services/world_workshop_service.dart';
 import '../models/workshop_hub_models.dart';
 import '../services/workshop_hub_controller.dart';
@@ -35,13 +34,13 @@ import 'lorebooks_screen.dart';
 import '../utils/platform_utils.dart';
 import '../utils/scroll_to_end.dart';
 import '../widgets/anima_avatar.dart';
+import '../widgets/character_token_badge.dart';
+import '../widgets/lorebook_gap_fill_sheet.dart';
 import '../widgets/ai_field_changes_sheet.dart';
 import '../widgets/chat_composer_field.dart';
 import '../widgets/greeting_picker.dart';
 import '../widgets/keyboard_inset.dart';
 import '../widgets/minimal_chip_button.dart';
-import '../widgets/narrator_bubble.dart';
-import '../widgets/opening_scene_picker.dart';
 import '../widgets/reply_rewrite_sheet.dart';
 import 'character_edit_screen.dart';
 import 'characters_screen.dart';
@@ -64,7 +63,6 @@ class WorldWorkshopChatScreen extends StatefulWidget {
     required this.settingsService,
     required this.nanoGptService,
     required this.worldWorkshopService,
-    required this.openingSceneService,
     required this.appearanceController,
   });
 
@@ -79,7 +77,6 @@ class WorldWorkshopChatScreen extends StatefulWidget {
   final SettingsService settingsService;
   final NanoGptService nanoGptService;
   final WorldWorkshopService worldWorkshopService;
-  final OpeningSceneService openingSceneService;
   final AppearanceController appearanceController;
 
   @override
@@ -94,10 +91,10 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   final _hubController = WorkshopHubController();
   final _contextService = const ChatContextService();
   static const _replyRewrite = ReplyRewriteService();
+  static const _tokenService = CharacterTokenService();
 
   final _input = TextEditingController();
   FocusNode? _composerFocusNode;
-  final _openingSceneController = TextEditingController();
   final _scroll = ScrollController();
   late WorldWorkshop _workshop;
   GlobalLorebook? _linkedLorebook;
@@ -179,7 +176,6 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     if (isDesktopPlatform) _composerFocusNode = FocusNode();
     WidgetsBinding.instance.addObserver(this);
     _workshop = widget.workshop;
-    _openingSceneController.text = _workshop.openingScene;
     unawaited(widget.workshopService.setLastOpenedId(_workshop.id));
     _loadLinkedLorebook();
     _loadModelContext();
@@ -379,21 +375,8 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     widget.nanoGptService.cancelActiveStream();
     _input.dispose();
     _composerFocusNode?.dispose();
-    _openingSceneController.dispose();
     _scroll.dispose();
     super.dispose();
-  }
-
-  Future<void> _saveOpeningSceneField() async {
-    final text = _openingSceneController.text.trim();
-    if (text == _workshop.openingScene) return;
-    final next = _workshop.copyWith(openingScene: text);
-    await _persist(next);
-    await widget.openingSceneService.syncFromWorkshop(
-      workshopId: next.id,
-      workshopTitle: next.title,
-      openingScene: text,
-    );
   }
 
   Future<void> _persist(WorldWorkshop workshop) async {
@@ -1412,52 +1395,6 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     );
   }
 
-  Future<void> _setOpeningSceneLength(OpeningSceneLength length) async {
-    if (_workshop.openingSceneLength == length) return;
-    setState(() => _workshop = _workshop.copyWith(openingSceneLength: length));
-    await _persist(_workshop);
-  }
-
-  Widget _openingSceneLengthPicker(ThemeData theme) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 0, 0, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Length', style: theme.textTheme.labelLarge),
-          const SizedBox(height: 6),
-          SegmentedButton<OpeningSceneLength>(
-            segments: [
-              for (final mode in OpeningSceneLength.values)
-                ButtonSegment<OpeningSceneLength>(
-                  value: mode,
-                  label: Text(mode.label),
-                  tooltip: mode.subtitle,
-                ),
-            ],
-            selected: {_workshop.openingSceneLength},
-            onSelectionChanged: _busy || _exporting
-                ? null
-                : (selected) {
-                    if (selected.isEmpty) return;
-                    unawaited(_setOpeningSceneLength(selected.first));
-                  },
-            showSelectedIcon: false,
-            style: ButtonStyle(
-              visualDensity: VisualDensity.compact,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            _workshop.openingSceneLength.subtitle,
-            style: theme.textTheme.bodySmall,
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _setReplyLength(WorkshopReplyLength length) async {
     if (_workshop.replyLength == length) return;
     setState(() => _workshop = _workshop.copyWith(replyLength: length));
@@ -1686,20 +1623,37 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     }
 
     final isUpdate = _workshop.exportedLorebookId != null;
+    var seedEntries = <LorebookEntry>[];
 
-    // Updates merge chat into the linked book automatically — no pre-flight audit.
     if (!isUpdate) {
-      final localChecks = _hubController.hub.localExportChecklist(_workshop);
-      final aiChecks = await _hubController.aiChecklist(
-        workshop: _workshop,
-        nanoGpt: widget.nanoGptService,
-        settings: widget.settingsService,
-        sourceLorebook: _linkedLorebook?.book,
-      );
+      setState(() => _exportStatus = 'Checking workshop gaps…');
+      List<String> allChecks;
+      try {
+        final localChecks = _hubController.hub.localExportChecklist(_workshop);
+        final aiChecks = await _hubController.aiChecklist(
+          workshop: _workshop,
+          nanoGpt: widget.nanoGptService,
+          settings: widget.settingsService,
+          sourceLorebook: _linkedLorebook?.book,
+        );
+        allChecks = [...localChecks, ...aiChecks];
+      } catch (error) {
+        if (mounted) {
+          setState(() => _exportStatus = null);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Gap check failed: $error')),
+          );
+        }
+        return;
+      } finally {
+        if (mounted && _exportStatus == 'Checking workshop gaps…') {
+          setState(() => _exportStatus = null);
+        }
+      }
+
       if (!mounted) return;
-      final allChecks = [...localChecks, ...aiChecks];
       if (allChecks.isNotEmpty) {
-        final proceed = await showDialog<bool>(
+        final choice = await showDialog<_LorebookCreateChoice>(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Before lorebook export'),
@@ -1709,7 +1663,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                 children: [
                   Text(
                     'Next step: AI builds a lorebook from this workshop chat. '
-                    'These notes are a preview — the export will try to cover them.',
+                    'These are World Info gaps only — not character cards.',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                   const SizedBox(height: 12),
@@ -1723,19 +1677,98 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context, false),
+                onPressed: () =>
+                    Navigator.pop(context, _LorebookCreateChoice.cancel),
                 child: const Text('Cancel'),
               ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, true),
+              FilledButton.tonal(
+                onPressed: () =>
+                    Navigator.pop(context, _LorebookCreateChoice.createOnly),
                 child: const Text('Create lorebook'),
+              ),
+              FilledButton(
+                onPressed: () =>
+                    Navigator.pop(context, _LorebookCreateChoice.fillGaps),
+                child: const Text('Fill gaps…'),
               ),
             ],
           ),
         );
-        if (proceed != true) return;
+        if (choice == null || choice == _LorebookCreateChoice.cancel) return;
+
+        if (choice == _LorebookCreateChoice.fillGaps) {
+          final picked = await _runGapFillFlow(allChecks);
+          if (!mounted) return;
+          if (picked == null) return;
+          seedEntries = picked;
+        }
       }
     }
+
+    await _executeLorebookExport(seedEntries: seedEntries);
+  }
+
+  Future<List<LorebookEntry>?> _runGapFillFlow(List<String> gaps) async {
+    setState(() => _exportStatus = 'Drafting gap-fill entries…');
+    try {
+      final allChars = await widget.characterService.loadCharacters();
+      final workshopCast = _builder.workshopCastCharacters(
+        workshop: _workshop,
+        allCharacters: allChars,
+      );
+      final suggestions = await _hubController.aiGapFillSuggestions(
+        workshop: _workshop,
+        gaps: gaps,
+        nanoGpt: widget.nanoGptService,
+        settings: widget.settingsService,
+        sourceLorebook: _linkedLorebook?.book,
+        workshopCast: workshopCast,
+      );
+      if (!mounted) return null;
+      if (suggestions.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not draft gap-fill entries. Try Create lorebook, or chat '
+              'a bit more and retry.',
+            ),
+          ),
+        );
+        return const [];
+      }
+      return showLorebookGapFillSheet(
+        context: context,
+        suggestions: suggestions,
+      );
+    } on FormatException catch (error) {
+      if (!mounted) return null;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+      return null;
+    } on NanoGptException catch (error) {
+      if (!mounted) return null;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+      return null;
+    } catch (error) {
+      if (!mounted) return null;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gap-fill failed: $error')),
+      );
+      return null;
+    } finally {
+      if (mounted) {
+        setState(() => _exportStatus = null);
+      }
+    }
+  }
+
+  Future<void> _executeLorebookExport({
+    List<LorebookEntry> seedEntries = const [],
+  }) async {
+    final isUpdate = _workshop.exportedLorebookId != null;
 
     setState(() {
       _exporting = true;
@@ -1766,6 +1799,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         worldSummary: _workshop.worldSummary,
         canonPinMessageIds: _workshop.canonPinMessageIds,
         workshopCast: workshopCast,
+        seedEntries: seedEntries,
       );
 
       var raw = await widget.nanoGptService.complete(
@@ -1800,6 +1834,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           workshopCast: workshopCast,
         );
       }
+      book = _builder.mergeSeedEntries(book, seedEntries);
       final existingId = _workshop.exportedLorebookId;
       final global = GlobalLorebook(
         id: (existingId != null && existingId.isNotEmpty)
@@ -1868,92 +1903,6 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     }
   }
 
-  Future<void> _createOpeningScene({required bool reviseExisting}) async {
-    if (_sending || _exporting || _loadingLinkedLorebook) return;
-    if (!_hasSourceMaterial) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Chat a bit first (or import a roleplay chat), then create the opening scene.',
-          ),
-        ),
-      );
-      return;
-    }
-
-    setState(() {
-      _exporting = true;
-      _exportStatus = 'Creating opening scene…';
-    });
-    try {
-      final collaborator = await widget.settingsService
-          .getCollaboratorSettings();
-      final model = await widget.settingsService.getModel();
-      final sampling = WorldWorkshopBuilder.workshopExportSampling(
-        await widget.settingsService.getSampling(),
-      );
-      final baseUrl = await widget.settingsService.getApiBaseUrl();
-
-      final raw = await widget.nanoGptService.complete(
-        model: model,
-        messages: _builder.buildOpeningSceneExportMessages(
-          conversation: _workshop.messages,
-          guidanceNote: collaborator.guidanceNote,
-          sourceLorebook: _lorebookForPrompt,
-          importedSource: _workshop.importedSource,
-          existingOpeningScene: _workshop.openingScene,
-          reviseExisting: reviseExisting,
-          length: _workshop.openingSceneLength,
-        ),
-        baseUrl: baseUrl,
-        sampling: sampling,
-      );
-
-      final scene = _builder.parseOpeningSceneJson(raw);
-      _openingSceneController.text = scene;
-      final next = _workshop.copyWith(openingScene: scene);
-      await _persist(next);
-      await widget.openingSceneService.syncFromWorkshop(
-        workshopId: next.id,
-        workshopTitle: next.title,
-        openingScene: scene,
-      );
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            reviseExisting
-                ? 'Opening scene revised from chat.'
-                : 'Fresh opening scene generated from chat.',
-          ),
-        ),
-      );
-    } on FormatException catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
-    } on NanoGptException catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not create opening scene: $error')),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _exporting = false;
-          _exportStatus = null;
-        });
-      }
-    }
-  }
-
   Future<void> _openChat(ChatSession session) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
@@ -1967,7 +1916,6 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           nanoGptService: widget.nanoGptService,
           worldInfoService: widget.worldInfoService,
           worldWorkshopService: widget.worldWorkshopService,
-          openingSceneService: widget.openingSceneService,
           appearanceController: widget.appearanceController,
           initialSession: session,
         ),
@@ -1977,8 +1925,6 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
 
   Future<void> _startRoleplay() async {
     if (_sending || _exporting || _loadingLinkedLorebook) return;
-    await _saveOpeningSceneField();
-    if (!mounted) return;
 
     final choice = await showModalBottomSheet<String>(
       context: context,
@@ -1990,13 +1936,13 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
             ListTile(
               leading: const Icon(Icons.person_outline),
               title: const Text('Solo chat'),
-              subtitle: const Text('One character with this opening scene'),
+              subtitle: const Text('One character from this workshop'),
               onTap: () => Navigator.pop(context, 'solo'),
             ),
             ListTile(
               leading: const Icon(Icons.groups_outlined),
               title: const Text('Group chat'),
-              subtitle: const Text('Several characters + opening scene'),
+              subtitle: const Text('Several characters from this workshop'),
               onTap: () => Navigator.pop(context, 'group'),
             ),
           ],
@@ -2016,9 +1962,6 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
             worldInfoService: widget.worldInfoService,
             settingsService: widget.settingsService,
             nanoGptService: widget.nanoGptService,
-            openingSceneService: widget.openingSceneService,
-            worldWorkshopService: widget.worldWorkshopService,
-            initialOpeningScene: _workshop.openingScene,
           ),
         ),
       );
@@ -2049,30 +1992,11 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     );
     if (greetingIndex == null || !mounted) return;
 
-    await widget.openingSceneService.importMissingFromWorkshops(
-      await widget.worldWorkshopService.loadWorkshops(),
-    );
-    if (!mounted) return;
-    final savedScenes = await widget.openingSceneService.loadScenes();
-    if (!mounted) return;
-
-    final openingPick = await pickOpeningScene(
-      context,
-      initial: _workshop.openingScene,
-      subtitle:
-          'Prefilled from this workshop. Edit, skip, or use as-is for the new chat.',
-      savedScenes: savedScenes,
-      openingSceneService: widget.openingSceneService,
-      workshopService: widget.worldWorkshopService,
-    );
-    if (openingPick == null || !mounted) return;
-
     final session = await widget.chatService.startNewChat(
       character,
       userName: persona.name,
       personaId: persona.id,
       greetingIndex: greetingIndex,
-      openingScene: openingPick.text,
       sourceWorkshopId: _workshop.id,
     );
     if (!mounted) return;
@@ -2088,8 +2012,6 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
 
   Future<void> _playThisWorld() async {
     if (_sending || _exporting || _loadingLinkedLorebook) return;
-    await _saveOpeningSceneField();
-    if (!mounted) return;
 
     final allChars = await widget.characterService.loadCharacters();
     final defaultPersona = await widget.personaService.getActivePersona();
@@ -2132,7 +2054,6 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         authorsNote: plan.authorsNote,
         autoReply: plan.autoReply,
         lorebookIds: plan.lorebookIds,
-        openingScene: plan.openingScene,
         title: plan.title,
         sourceWorkshopId: plan.sourceWorkshopId,
       );
@@ -2154,7 +2075,6 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       userName: persona.name,
       personaId: persona.id,
       greetingIndex: greetingIndex,
-      openingScene: plan.openingScene,
       sourceWorkshopId: plan.sourceWorkshopId,
     );
     if (!mounted) return;
@@ -2631,7 +2551,20 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                           label: character.name,
                           radius: 20,
                         ),
-                        title: Text(character.name),
+                        title: Row(
+                          children: [
+                            Expanded(child: Text(character.name)),
+                            if (!character.isTemporary) ...[
+                              const SizedBox(width: 6),
+                              CharacterTokenBadge(
+                                tokens: _tokenService.badgeTokens(character),
+                                tooltip: characterTokenTooltip(
+                                  _tokenService.breakdown(character),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                         subtitle: Text(
                           character.description.trim().isNotEmpty
                               ? character.description.trim()
@@ -3229,121 +3162,6 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     );
   }
 
-  Future<void> _showOpeningSceneEditor() async {
-    if (_exporting) return;
-    _openingSceneController.text = _workshop.openingScene;
-    final theme = Theme.of(context);
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (sheetContext) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
-          ),
-          child: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('Opening scene', style: theme.textTheme.titleLarge),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Narrator setup for roleplay chats — separate from lore entries '
-                    'and character greetings. Saved scenes sync to Settings → '
-                    'Opening scenes.',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: 12),
-                  _openingSceneLengthPicker(theme),
-                  if (_workshop.openingScene.trim().isNotEmpty) ...[
-                    NarratorBubble(text: _workshop.openingScene, onTap: null),
-                    const SizedBox(height: 8),
-                    Text(
-                      'An opening scene is already saved for this workshop. '
-                      'Choose fresh to ignore the saved text, or revise to merge '
-                      'changes from chat.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  TextField(
-                    controller: _openingSceneController,
-                    minLines: 4,
-                    maxLines: 10,
-                    enabled: !_exporting,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: const InputDecoration(
-                      hintText:
-                          'Rain on cobblestones. The city holds its breath…',
-                      border: OutlineInputBorder(),
-                      alignLabelWithHint: true,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  if (_workshop.openingScene.trim().isEmpty)
-                    FilledButton.icon(
-                      onPressed:
-                          (_sending || _exporting || _loadingLinkedLorebook)
-                          ? null
-                          : () async {
-                              await _createOpeningScene(reviseExisting: false);
-                              if (sheetContext.mounted) {
-                                Navigator.pop(sheetContext);
-                              }
-                            },
-                      icon: const Icon(Icons.auto_awesome),
-                      label: const Text('Generate from chat'),
-                    )
-                  else ...[
-                    FilledButton.icon(
-                      onPressed:
-                          (_sending || _exporting || _loadingLinkedLorebook)
-                          ? null
-                          : () async {
-                              await _createOpeningScene(reviseExisting: false);
-                              if (sheetContext.mounted) {
-                                Navigator.pop(sheetContext);
-                              }
-                            },
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Fresh from chat'),
-                    ),
-                    const SizedBox(height: 8),
-                    OutlinedButton.icon(
-                      onPressed:
-                          (_sending || _exporting || _loadingLinkedLorebook)
-                          ? null
-                          : () async {
-                              await _createOpeningScene(reviseExisting: true);
-                              if (sheetContext.mounted) {
-                                Navigator.pop(sheetContext);
-                              }
-                            },
-                      icon: const Icon(Icons.edit_note),
-                      label: const Text('Revise from chat'),
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed: () => Navigator.pop(sheetContext),
-                    child: const Text('Done'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-    await _saveOpeningSceneField();
-  }
-
   Future<void> _showOverview() async {
     final allChars = await widget.characterService.loadCharacters();
     final chats = await widget.chatService.listChatsForWorkshop(_workshop.id);
@@ -3396,10 +3214,6 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                   ),
                 );
               },
-        onOpenOpeningScene: () {
-          Navigator.pop(context);
-          _showOpeningSceneEditor();
-        },
         onOpenChat: (chat) {
           Navigator.pop(context);
           _openChat(chat);
@@ -3967,7 +3781,6 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   Widget _workshopOverflowButton({
     required bool busy,
     required String lorebookLabel,
-    required String openingLabel,
   }) {
     return PopupMenuButton<String>(
       tooltip: 'Workshop menu',
@@ -4013,20 +3826,6 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                   )
                 : const Icon(Icons.menu_book_outlined),
             title: Text(lorebookLabel),
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-        PopupMenuItem(
-          value: 'opening',
-          child: ListTile(
-            leading: _exporting && (_exportStatus?.contains('opening') == true)
-                ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.auto_stories_outlined),
-            title: Text(openingLabel),
             contentPadding: EdgeInsets.zero,
           ),
         ),
@@ -4112,8 +3911,6 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         _startRoleplay();
       case 'lorebook':
         _createLorebook();
-      case 'opening':
-        _showOpeningSceneEditor();
       case 'characters':
         _createCharacters();
       case 'update':
@@ -4179,9 +3976,6 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     final lorebookLabel = _workshop.exportedLorebookId == null
         ? 'Create lorebook'
         : 'Update lorebook';
-    final openingLabel = _workshop.openingScene.trim().isEmpty
-        ? 'Opening scene'
-        : 'Edit opening scene';
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
@@ -4199,7 +3993,6 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           _workshopOverflowButton(
             busy: busy,
             lorebookLabel: lorebookLabel,
-            openingLabel: openingLabel,
           ),
         ],
       ),
@@ -4214,7 +4007,6 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                 enabled: !busy,
                 onPickMode: _pickModeFromSheet,
                 onPickReplyLength: _pickReplyLengthFromSheet,
-                onOpeningScene: _showOpeningSceneEditor,
                 onImportedSource: hasImported
                     ? _showImportedSourceDetails
                     : null,
@@ -4233,7 +4025,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                                     'the lorebook—or create characters directly.'
                               : hasImported
                               ? 'Your imported chat is ready as source material.\n\n'
-                                    'Ask the AI what to extract, then use ⋮ for lorebook or opening scene.'
+                                    'Ask the AI what to extract, then use ⋮ for lorebook or characters.'
                               : 'Example: “I want a rainy coastal city with rival '
                                     'guilds and a buried god under the harbor…”',
                           textAlign: TextAlign.center,
@@ -4489,3 +4281,5 @@ class _WorkshopSwipePager extends StatelessWidget {
     );
   }
 }
+
+enum _LorebookCreateChoice { cancel, createOnly, fillGaps }

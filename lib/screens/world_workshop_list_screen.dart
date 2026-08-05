@@ -14,7 +14,6 @@ import '../services/character_category_service.dart';
 import '../services/character_service.dart';
 import '../services/chat_service.dart';
 import '../services/nanogpt_service.dart';
-import '../services/opening_scene_service.dart';
 import '../services/persona_service.dart';
 import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
@@ -40,7 +39,6 @@ class WorldWorkshopListScreen extends StatefulWidget {
     required this.apiKeyService,
     required this.settingsService,
     required this.nanoGptService,
-    required this.openingSceneService,
     required this.appearanceController,
   });
 
@@ -53,7 +51,6 @@ class WorldWorkshopListScreen extends StatefulWidget {
   final ApiKeyService apiKeyService;
   final SettingsService settingsService;
   final NanoGptService nanoGptService;
-  final OpeningSceneService openingSceneService;
   final AppearanceController appearanceController;
 
   @override
@@ -101,7 +98,6 @@ class _WorldWorkshopListScreenState extends State<WorldWorkshopListScreen> {
           settingsService: widget.settingsService,
           nanoGptService: widget.nanoGptService,
           worldWorkshopService: widget.workshopService,
-          openingSceneService: widget.openingSceneService,
           appearanceController: widget.appearanceController,
         ),
       ),

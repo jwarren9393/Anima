@@ -38,7 +38,8 @@ class PersonaService {
     return File('${dir.path}/$_fileName');
   }
 
-  /// Loads all personas. Migrates the old single persona from Settings once.
+  /// Loads all personas. Migrates legacy Settings persona once if the file is
+  /// missing and old fields were filled in.
   Future<List<Persona>> loadPersonas() async {
     final file = await _file();
     if (!await file.exists()) {
@@ -48,23 +49,19 @@ class PersonaService {
     try {
       final raw = await file.readAsString();
       if (raw.trim().isEmpty) {
-        return _migrateFromLegacySettings();
+        return const [];
       }
       final decoded = jsonDecode(raw);
       if (decoded is! List) {
-        return _migrateFromLegacySettings();
+        return const [];
       }
-      final personas = decoded
+      return decoded
           .whereType<Map>()
           .map((item) => Persona.fromJson(Map<String, dynamic>.from(item)))
-          .where((p) => p.id.isNotEmpty && p.name.isNotEmpty)
+          .where((p) => p.id.isNotEmpty && p.name.isNotEmpty && !p.isAnonymous)
           .toList();
-      if (personas.isEmpty) {
-        return _migrateFromLegacySettings();
-      }
-      return personas;
     } catch (_) {
-      return _migrateFromLegacySettings();
+      return const [];
     }
   }
 
@@ -72,6 +69,14 @@ class PersonaService {
     final name = await _settingsService.getUserName();
     final description = await _settingsService.getUserPersona();
     final avatar = await _settingsService.getPersonaAvatarFileName();
+    final hasLegacy = description.trim().isNotEmpty ||
+        (avatar != null && avatar.isNotEmpty) ||
+        (name.trim().isNotEmpty &&
+            name.trim() != SettingsService.defaultUserName);
+    if (!hasLegacy) {
+      await savePersonas(const []);
+      return const [];
+    }
     final starter = Persona.starter(
       name: name,
       description: description,
@@ -104,9 +109,10 @@ class PersonaService {
     await _storage.write(key: _activeIdKey, value: id.trim());
   }
 
-  /// Default persona for new chats (falls back to first in the list).
-  Future<Persona> getActivePersona() async {
+  /// Saved default persona, or null when the list is empty.
+  Future<Persona?> tryGetActivePersona() async {
     final all = await loadPersonas();
+    if (all.isEmpty) return null;
     final activeId = await getActivePersonaId();
     if (activeId != null) {
       for (final p in all) {
@@ -118,9 +124,21 @@ class PersonaService {
     return first;
   }
 
+  /// Default for new chats — active persona, first saved, or generic User.
+  Future<Persona> defaultForNewChat() async {
+    return (await tryGetActivePersona()) ?? Persona.anonymous();
+  }
+
+  /// Default persona for new chats (falls back to [Persona.anonymous]).
+  Future<Persona> getActivePersona() async {
+    return defaultForNewChat();
+  }
+
   /// Resolve a persona by id, or the active default if missing.
   Future<Persona> resolve(String? personaId) async {
-    if (personaId != null && personaId.trim().isNotEmpty) {
+    if (personaId != null &&
+        personaId.trim().isNotEmpty &&
+        personaId != Persona.anonymousId) {
       final all = await loadPersonas();
       for (final p in all) {
         if (p.id == personaId) return p;
@@ -130,6 +148,7 @@ class PersonaService {
   }
 
   Future<Persona?> getById(String id) async {
+    if (id == Persona.anonymousId) return Persona.anonymous();
     final all = await loadPersonas();
     for (final p in all) {
       if (p.id == id) return p;
@@ -153,7 +172,7 @@ class PersonaService {
     return all;
   }
 
-  /// Deletes a persona. Always keeps at least one.
+  /// Deletes a persona. The list may end up empty.
   Future<List<Persona>> delete(String id) async {
     final all = await loadPersonas();
     Persona? removed;
@@ -163,16 +182,17 @@ class PersonaService {
         break;
       }
     }
-    if (all.length <= 1) {
-      return all;
-    }
     all.removeWhere((p) => p.id == id);
     if (removed?.avatarFileName != null) {
       await _avatarService.delete(removed!.avatarFileName);
     }
     final active = await getActivePersonaId();
     if (active == id) {
-      await setActivePersonaId(all.first.id);
+      if (all.isEmpty) {
+        await setActivePersonaId(null);
+      } else {
+        await setActivePersonaId(all.first.id);
+      }
     }
     await savePersonas(all);
     return all;

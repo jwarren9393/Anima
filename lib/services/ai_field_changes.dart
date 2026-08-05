@@ -136,3 +136,26 @@ List<AiFieldChange> compareLorebooks(Lorebook before, Lorebook after) {
 
   return out;
 }
+
+/// Compare editable fields on one lore entry.
+List<AiFieldChange> compareLorebookEntry(
+  LorebookEntry before,
+  LorebookEntry after,
+) {
+  final out = <AiFieldChange>[];
+  _addIfChanged(out, 'Label', before.name, after.name);
+  _addIfChanged(
+    out,
+    'Keywords',
+    before.keys.join(', '),
+    after.keys.join(', '),
+  );
+  _addIfChanged(
+    out,
+    'Secondary keywords',
+    before.secondaryKeys.join(', '),
+    after.secondaryKeys.join(', '),
+  );
+  _addIfChanged(out, 'Lore content', before.content, after.content);
+  return out;
+}
