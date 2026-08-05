@@ -11,8 +11,10 @@ import '../services/nanogpt_service.dart';
 import '../services/persona_collaborator.dart';
 import '../services/persona_service.dart';
 import '../services/persona_token_service.dart';
+import '../services/ai_field_changes.dart';
 import '../services/settings_service.dart';
 import '../widgets/character_token_badge.dart';
+import '../widgets/ai_field_changes_sheet.dart';
 import '../services/world_workshop_builder.dart';
 import '../widgets/anima_avatar.dart';
 import '../widgets/generate_avatar_sheet.dart';
@@ -57,12 +59,14 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
   bool _saving = false;
   bool _avatarBusy = false;
   bool _aiCardBusy = false;
+  bool _compactBusy = false;
   PersonaCollaboratorField? _wandBusy;
   String? _avatarFileName;
   late final String _personaId;
 
   bool get _isEditing => widget.existing != null;
-  bool get _busy => _saving || _avatarBusy || _wandBusy != null || _aiCardBusy;
+  bool get _busy =>
+      _saving || _avatarBusy || _wandBusy != null || _aiCardBusy || _compactBusy;
 
   bool get _hasPersonaContent =>
       _descriptionController.text.trim().isNotEmpty ||
@@ -274,6 +278,137 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
 
   void _onDraftFieldChanged() {
     if (mounted) setState(() {});
+  }
+
+  bool _draftHasCompactableContent(PersonaDraftContext draft) {
+    return draft.description.trim().isNotEmpty ||
+        draft.appearance.trim().isNotEmpty ||
+        draft.personality.trim().isNotEmpty ||
+        draft.background.trim().isNotEmpty ||
+        draft.goals.trim().isNotEmpty;
+  }
+
+  Future<void> _runCompactPersona() async {
+    if (_compactBusy || _aiCardBusy || _wandBusy != null) return;
+    final draft = _draftContext();
+    if (!_draftHasCompactableContent(draft)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Add some persona details first, then compact.'),
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Compact persona?'),
+        content: const Text(
+          'AI will shorten fields while keeping important facts. '
+          'You review every change before saving.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Compact'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _compactBusy = true);
+    try {
+      final before = _personaFromDraft();
+      final collaborator =
+          await widget.settingsService.getCollaboratorSettings();
+      final messages = _collaborator.buildCompactMessages(
+        draft: draft,
+        guidanceNote: collaborator.guidanceNote,
+      );
+      final model = await widget.settingsService.getModel();
+      final sampling = WorldWorkshopBuilder.consistencyFixSampling(
+        await widget.settingsService.getSampling(),
+      );
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+
+      Persona? compacted;
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final raw = await widget.nanoGptService.complete(
+          model: model,
+          messages: messages,
+          baseUrl: baseUrl,
+          sampling: sampling,
+        );
+        try {
+          compacted = _workshopBuilder.parsePersonaUpdateJson(
+            raw,
+            original: before,
+          );
+          break;
+        } on FormatException {
+          if (attempt == 1) rethrow;
+        }
+      }
+      if (compacted == null) {
+        throw const FormatException(
+          'Could not find persona JSON in the AI reply. Try again.',
+        );
+      }
+
+      if (!mounted) return;
+      final changes = comparePersonaFields(before, compacted);
+      if (changes.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No shorter version was suggested. Try editing manually.'),
+          ),
+        );
+        return;
+      }
+
+      final apply = await showAiFieldChangesSheet(
+        context: context,
+        title: 'Review compacted persona',
+        subtitle: 'Tap a field to compare before and after. Apply updates the persona.',
+        changes: changes,
+        applyLabel: 'Update persona',
+      );
+      if (apply != true || !mounted) return;
+
+      setState(() => _applyPersonaFields(compacted!));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Compacted ${changes.length} field${changes.length == 1 ? '' : 's'}.',
+          ),
+        ),
+      );
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } on NanoGptCancelledException {
+      // Ignore.
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Compact failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _compactBusy = false);
+    }
   }
 
   PersonaDraftContext _draftContext() {
@@ -560,6 +695,20 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
               ? 'Review generated persona'
               : (_isEditing ? 'Edit persona' : 'New persona'),
         ),
+        actions: [
+          PopupMenuButton<String>(
+            enabled: !_busy,
+            onSelected: (value) {
+              if (value == 'compact') _runCompactPersona();
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'compact',
+                child: Text('Compact persona…'),
+              ),
+            ],
+          ),
+        ],
       ),
       body: ListView(
         padding: SettingsUi.listPadding,

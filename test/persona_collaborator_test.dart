@@ -69,5 +69,19 @@ void main() {
       expect(user, contains('OLD ROLE'));
       expect(user, isNot(contains('Identity and role:\nOLD ROLE')));
     });
+
+    test('compact asks for shorter JSON persona', () {
+      final messages = collaborator.buildCompactMessages(
+        draft: PersonaDraftContext(
+          name: 'Val',
+          description: 'A' * 100,
+          personality: 'Calm and watchful.',
+        ),
+      );
+      expect(messages[0]['content'], contains('compact'));
+      expect(messages[0]['content'], contains('30–50%'));
+      expect(messages[0]['content'], contains('JSON'));
+      expect(messages[1]['content'], contains('Val'));
+    });
   });
 }

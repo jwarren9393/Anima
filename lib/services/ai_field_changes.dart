@@ -1,5 +1,6 @@
 import '../models/character.dart';
 import '../models/lorebook.dart';
+import '../models/persona.dart';
 
 /// One field (or entry) that changed between before/after AI review.
 class AiFieldChange {
@@ -134,6 +135,18 @@ List<AiFieldChange> compareLorebooks(Lorebook before, Lorebook after) {
     }
   }
 
+  return out;
+}
+
+/// Compare editable persona text fields.
+List<AiFieldChange> comparePersonaFields(Persona before, Persona after) {
+  final out = <AiFieldChange>[];
+  _addIfChanged(out, 'Name', before.name, after.name);
+  _addIfChanged(out, 'Identity and role', before.description, after.description);
+  _addIfChanged(out, 'Appearance', before.appearance, after.appearance);
+  _addIfChanged(out, 'Personality', before.personality, after.personality);
+  _addIfChanged(out, 'Background', before.background, after.background);
+  _addIfChanged(out, 'Goals', before.goals, after.goals);
   return out;
 }
 

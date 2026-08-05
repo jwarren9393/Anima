@@ -191,4 +191,82 @@ class PersonaCollaborator {
 
     return lines.join('\n\n');
   }
+
+  static const _personaJsonShape = '''
+{
+  "name": "Player name",
+  "description": "identity and role in the setting",
+  "appearance": "physical look and clothing",
+  "personality": "traits, temperament, speech",
+  "background": "history and important personal facts",
+  "goals": "motivations and what they want"
+}''';
+
+  /// Compact persona fields for fewer prompt tokens while keeping RP facts.
+  List<Map<String, String>> buildCompactMessages({
+    required PersonaDraftContext draft,
+    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+  }) {
+    final guidance = guidanceNote.trim().isEmpty
+        ? CollaboratorSettings.defaultGuidanceNote
+        : guidanceNote.trim();
+    final contextBlock = _buildCompactContextBlock(draft);
+
+    final system = StringBuffer()
+      ..writeln(
+        'You compact a user persona ({{user}}) for a private mobile roleplay '
+        'app called Anima.',
+      )
+      ..writeln()
+      ..writeln('Guidance note (follow closely):')
+      ..writeln(guidance)
+      ..writeln()
+      ..writeln('Goal: shorten the persona for fewer prompt tokens while keeping '
+          'everything needed for good roleplay.')
+      ..writeln()
+      ..writeln('Hard rules:')
+      ..writeln('- Keep the same player identity, voice, and established facts.')
+      ..writeln('- Remove filler, repetition, and prose that does not change play.')
+      ..writeln('- Put each fact in one field only (identity vs appearance vs personality vs background vs goals).')
+      ..writeln('- Prefer tight bullet phrases over long paragraphs where possible.')
+      ..writeln('- Aim for roughly 30–50% shorter overall when the persona is verbose.')
+      ..writeln('- Do not invent new plot or moralize.')
+      ..writeln('- If a field is already minimal, leave it unchanged or only lightly trim.')
+      ..writeln()
+      ..writeln('Output rules:')
+      ..writeln('- Reply with ONLY a single JSON object. No markdown fences. No preamble.')
+      ..writeln('- Shape:')
+      ..writeln(_personaJsonShape)
+      ..writeln('- Include every listed field (use empty string when intentionally blank).');
+
+    final user = StringBuffer()
+      ..writeln('CURRENT PERSONA (compact this):')
+      ..writeln(contextBlock.isEmpty ? '(persona is mostly empty)' : contextBlock)
+      ..writeln()
+      ..writeln(
+        'Output the compacted persona as one JSON object. Shorter, denser, same player.',
+      );
+
+    return [
+      {'role': 'system', 'content': system.toString().trim()},
+      {'role': 'user', 'content': user.toString().trim()},
+    ];
+  }
+
+  String _buildCompactContextBlock(PersonaDraftContext draft) {
+    final lines = <String>[];
+    void add(String label, String value) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) return;
+      lines.add('$label:\n$trimmed');
+    }
+
+    add('Name', draft.name);
+    add('Identity and role', draft.description);
+    add('Appearance', draft.appearance);
+    add('Personality', draft.personality);
+    add('Background', draft.background);
+    add('Goals and motivations', draft.goals);
+    return lines.join('\n\n');
+  }
 }
