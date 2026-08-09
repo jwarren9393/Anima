@@ -19,15 +19,317 @@ void main() {
     expect(restored.text, message.text);
   });
 
-  test('formatForPrompt labels omniscient narrator', () {
+  test('formatForPrompt labels mandatory scene law', () {
     final block = service.formatForPrompt(
       text: 'The door creaks open.',
       userName: 'Jay',
       charName: 'Luna',
     );
-    expect(block, contains('Narrator'));
+    expect(block, contains('PLAYER NARRATOR'));
+    expect(block, contains('SCENE LAW'));
+    expect(block, contains('MANDATORY'));
     expect(block, contains('The door creaks open.'));
-    expect(block, contains('not Jay or Luna speaking'));
+    expect(block, contains('NOT a suggestion'));
+    expect(block, contains('MUST treat this as true'));
+  });
+
+  test('latestNarratorId returns most recent narrator before end', () {
+    final id = service.latestNarratorId(
+      [
+        ChatMessage(
+          id: 'n1',
+          role: ChatRole.narrator,
+          text: 'Old beat.',
+        ),
+        ChatMessage(id: 'u1', role: ChatRole.user, text: 'Hi'),
+        ChatMessage(
+          id: 'n2',
+          role: ChatRole.narrator,
+          text: 'New beat.',
+        ),
+      ],
+      endExclusive: 3,
+    );
+    expect(id, 'n2');
+  });
+
+  test('historyBlockFor skips active narrator', () {
+    final message = ChatMessage(
+      id: 'n2',
+      role: ChatRole.narrator,
+      text: 'Active.',
+    );
+    expect(
+      service.historyBlockFor(message: message, activeNarratorId: 'n2'),
+      isNull,
+    );
+    final historical = service.historyBlockFor(
+      message: message,
+      activeNarratorId: 'n1',
+    );
+    expect(historical, isNotNull);
+    expect(historical!['content'], contains('Earlier narrator beat'));
+  });
+
+  test('activeSceneLawBlock adds entrance line when speaker is named', () {
+    final block = service.activeSceneLawBlock(
+      messages: [
+        ChatMessage(
+          id: 'n1',
+          role: ChatRole.narrator,
+          text: 'Ashley walks into the kitchen smiling at the two of them.',
+        ),
+      ],
+      activeNarratorId: 'n1',
+      userName: 'Jay',
+      charName: 'Ashley Diamond',
+      isGroup: true,
+      speakingAsName: 'Ashley Diamond',
+      physicallyPresent: {'jay', 'jaisha diamond', 'ashley diamond'},
+    );
+    expect(block, isNotNull);
+    expect(block!, contains('You are Ashley Diamond'));
+    expect(block, contains('ARE physically in this scene'));
+    expect(block, contains('phone'));
+    expect(block, isNot(contains('already moved on')));
+  });
+
+  test('activeSceneLawBlock suppresses entrance after speaker already replied', () {
+    final block = service.activeSceneLawBlock(
+      messages: [
+        ChatMessage(
+          id: 'n1',
+          role: ChatRole.narrator,
+          text: 'Ashley walks into the kitchen smiling at the two of them.',
+        ),
+        ChatMessage(id: 'u1', role: ChatRole.user, text: 'Hey Ash.'),
+        ChatMessage(
+          id: 'a1',
+          role: ChatRole.assistant,
+          speakerName: 'Ashley Diamond',
+          text: '*She grins.* "Hey guys!"',
+        ),
+        ChatMessage(id: 'u2', role: ChatRole.user, text: 'Come sit.'),
+      ],
+      activeNarratorId: 'n1',
+      userName: 'Jay',
+      charName: 'Ashley Diamond',
+      isGroup: true,
+      speakingAsName: 'Ashley Diamond',
+      physicallyPresent: {'jay', 'jaisha diamond', 'ashley diamond'},
+      endExclusive: 4,
+      excludeMessageIndex: 3,
+    );
+    expect(block, isNotNull);
+    expect(block!, contains('already moved on'));
+    expect(block, contains('Do NOT'));
+    expect(block, contains('re-walk-in'));
+    expect(block, isNot(contains('enact your entrance')));
+    expect(block, isNot(contains('You are Ashley Diamond — enact')));
+  });
+
+  test('activeSceneLawBlock tells cast not to steal another arrival beat', () {
+    final block = service.activeSceneLawBlock(
+      messages: [
+        ChatMessage(
+          id: 'n1',
+          role: ChatRole.narrator,
+          text: 'Jay leaves the house and Jaisha comes back downstairs.',
+        ),
+      ],
+      activeNarratorId: 'n1',
+      userName: 'Jay',
+      charName: 'Ashley Diamond',
+      isGroup: true,
+      speakingAsName: 'Ashley Diamond',
+      physicallyPresent: {
+        'ashley diamond',
+        'jaisha diamond',
+        'bam',
+        'jessica',
+      },
+      departedPresent: {'jay'},
+      narratorBeatFor: {'jaisha diamond'},
+    );
+    expect(block, isNotNull);
+    expect(block!, contains('NOT physically present'));
+    expect(block, contains('jay'));
+    expect(block, contains('do NOT perform their action'));
+    expect(block, contains('jaisha diamond'));
+    expect(block, isNot(contains('Comes back down the stairs')));
+  });
+
+  test('userSpokeAfterNarrator detects player line after narrator', () {
+    expect(
+      service.userSpokeAfterNarrator(
+        messages: [
+          ChatMessage(
+            id: 'n1',
+            role: ChatRole.narrator,
+            text: 'Jay comes home.',
+          ),
+          ChatMessage(id: 'u1', role: ChatRole.user, text: 'Hey baby.'),
+        ],
+        narratorId: 'n1',
+      ),
+      isTrue,
+    );
+    expect(
+      service.userSpokeAfterNarrator(
+        messages: [
+          ChatMessage(
+            id: 'n1',
+            role: ChatRole.narrator,
+            text: 'Jay comes home.',
+          ),
+        ],
+        narratorId: 'n1',
+      ),
+      isFalse,
+    );
+  });
+
+  test('activeSceneLawBlock tells cast to respond when player already spoke', () {
+    final block = service.activeSceneLawBlock(
+      messages: [
+        ChatMessage(
+          id: 'n1',
+          role: ChatRole.narrator,
+          text:
+              'Later that evening, Jay comes back home and Ashley is in the living room.',
+        ),
+        ChatMessage(id: 'u1', role: ChatRole.user, text: 'Hey baby, I\'m home.'),
+      ],
+      activeNarratorId: 'n1',
+      userName: 'Jay',
+      charName: 'Ashley Diamond',
+      isGroup: true,
+      speakingAsName: 'Ashley Diamond',
+      physicallyPresent: {'jay', 'ashley diamond'},
+      narratorBeatFor: {'jay'},
+      endExclusive: 2,
+    );
+    expect(block, isNotNull);
+    expect(block!, contains('Jay already spoke'));
+    expect(block, contains('respond to their last line'));
+  });
+
+  test('activeSceneLawBlock tells Ashley to follow Jaisha after she already spoke', () {
+    final block = service.activeSceneLawBlock(
+      messages: [
+        ChatMessage(
+          id: 'n1',
+          role: ChatRole.narrator,
+          text:
+              'An hour later, Jaisha makes it home while Jay and Ashley are on the couch. '
+              'Jaisha comes in and hugs them both.',
+        ),
+        ChatMessage(
+          id: 'a1',
+          role: ChatRole.assistant,
+          speakerName: 'Jaisha Diamond',
+          text: '*flops on the couch* "Hi, I missed you both."',
+        ),
+      ],
+      activeNarratorId: 'n1',
+      userName: 'Jay',
+      charName: 'Ashley Diamond',
+      isGroup: true,
+      speakingAsName: 'Ashley Diamond',
+      physicallyPresent: {'jay', 'ashley diamond', 'jaisha diamond'},
+      narratorBeatFor: {'jaisha diamond'},
+      endExclusive: 2,
+    );
+    expect(block, isNotNull);
+    expect(block!, contains('already enacted this narrator beat in chat'));
+    expect(block, contains('do NOT act surprised'));
+    expect(block, isNot(contains('MUST react as if these facts already happened')));
+  });
+
+  test('sceneContinuedAfterNarrator detects other cast lines', () {
+    final continuation = service.sceneContinuedAfterNarrator(
+      messages: [
+        ChatMessage(
+          id: 'n1',
+          role: ChatRole.narrator,
+          text: 'Jaisha arrives.',
+        ),
+        ChatMessage(
+          id: 'a1',
+          role: ChatRole.assistant,
+          speakerName: 'Jaisha Diamond',
+          text: 'Hey.',
+        ),
+      ],
+      narratorId: 'n1',
+      speakerName: 'Ashley Diamond',
+    );
+    expect(continuation.continued, isTrue);
+    expect(continuation.castWhoSpoke, contains('Jaisha Diamond'));
+  });
+
+  test('characterAlreadyRepliedSinceNarrator matches first names', () {
+    expect(
+      service.characterAlreadyRepliedSinceNarrator(
+        messages: [
+          ChatMessage(
+            id: 'n1',
+            role: ChatRole.narrator,
+            text: 'Ashley enters.',
+          ),
+          ChatMessage(
+            id: 'a1',
+            role: ChatRole.assistant,
+            speakerName: 'Ashley',
+            text: '*waves*',
+          ),
+        ],
+        narratorId: 'n1',
+        speakerName: 'Ashley Diamond',
+      ),
+      isTrue,
+    );
+  });
+
+  test('activeSceneLawBlock off-screen cast knows scene but not dialogue', () {
+    final block = service.activeSceneLawBlock(
+      messages: [
+        ChatMessage(
+          id: 'n1',
+          role: ChatRole.narrator,
+          text:
+              'Jay and Jaisha wrestle on the kitchen floor, flour everywhere.',
+        ),
+      ],
+      activeNarratorId: 'n1',
+      userName: 'Jay',
+      charName: 'Bam',
+      isGroup: true,
+      speakingAsName: 'Bam',
+      physicallyPresent: {'jay', 'jaisha diamond'},
+    );
+    expect(block, isNotNull);
+    expect(block!, contains('NOT physically in this scene yet'));
+    expect(block, contains('kitchen'));
+    expect(block, contains('did NOT hear private dialogue'));
+  });
+
+  test('activeSceneLawBlock returns mandatory block for latest narrator', () {
+    final block = service.activeSceneLawBlock(
+      messages: [
+        ChatMessage(
+          id: 'n1',
+          role: ChatRole.narrator,
+          text: 'Rain falls.',
+        ),
+      ],
+      activeNarratorId: 'n1',
+      userName: 'Jay',
+      charName: 'Luna',
+    );
+    expect(block, isNotNull);
+    expect(block!, contains('Rain falls.'));
+    expect(block, contains('MANDATORY'));
   });
 
   test('inferPresentCast uses recent speakers not full group cast', () {

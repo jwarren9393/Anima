@@ -1,4 +1,7 @@
+import 'character.dart';
 import 'chat_message.dart';
+import 'lorebook.dart';
+import 'persona.dart';
 
 /// One saved conversation (solo or group) — SillyTavern-style chat thread.
 class ChatSession {
@@ -20,12 +23,18 @@ class ChatSession {
     this.pendingDirectorMessageId,
     this.pendingDirectorAssistantId,
     List<String>? activeSceneMoodIds,
+    Map<String, Character>? characterOverrides,
+    this.personaOverride,
+    this.chatLorebook,
   })  : messages = List<ChatMessage>.from(messages ?? const []),
         participantIds = List<String>.from(participantIds ?? const []),
         lorebookIds =
             lorebookIds == null ? null : List<String>.from(lorebookIds),
         activeSceneMoodIds =
-            List<String>.from(activeSceneMoodIds ?? const []);
+            List<String>.from(activeSceneMoodIds ?? const []),
+        characterOverrides = Map<String, Character>.from(
+          characterOverrides ?? const {},
+        );
 
   final String id;
 
@@ -78,6 +87,20 @@ class ChatSession {
   /// Active [SceneMoodPreset] ids — merged into Author's Note each turn.
   final List<String> activeSceneMoodIds;
 
+  /// Per-chat character card copies keyed by library character id.
+  final Map<String, Character> characterOverrides;
+
+  /// Per-chat persona copy (library persona stays unchanged).
+  final Persona? personaOverride;
+
+  /// Lorebook owned by this chat only — merged with selected global books.
+  final Lorebook? chatLorebook;
+
+  bool get hasCharacterOverrides => characterOverrides.isNotEmpty;
+
+  Character? characterOverrideFor(String characterId) =>
+      characterOverrides[characterId];
+
   bool get isGroup => participantIds.length > 1;
 
   /// Effective cast for prompting (falls back to [characterId] when solo).
@@ -111,6 +134,12 @@ class ChatSession {
     bool clearPendingDirectorAssistant = false,
     List<String>? activeSceneMoodIds,
     bool clearSceneMoods = false,
+    Map<String, Character>? characterOverrides,
+    bool clearCharacterOverrides = false,
+    Persona? personaOverride,
+    bool clearPersonaOverride = false,
+    Lorebook? chatLorebook,
+    bool clearChatLorebook = false,
   }) {
     return ChatSession(
       id: id ?? this.id,
@@ -139,6 +168,15 @@ class ChatSession {
       activeSceneMoodIds: clearSceneMoods
           ? const []
           : (activeSceneMoodIds ?? this.activeSceneMoodIds),
+      characterOverrides: clearCharacterOverrides
+          ? const {}
+          : (characterOverrides ?? this.characterOverrides),
+      personaOverride: clearPersonaOverride
+          ? null
+          : (personaOverride ?? this.personaOverride),
+      chatLorebook: clearChatLorebook
+          ? null
+          : (chatLorebook ?? this.chatLorebook),
     );
   }
 
@@ -166,6 +204,14 @@ class ChatSession {
           'pendingDirectorAssistantId': pendingDirectorAssistantId,
         if (activeSceneMoodIds.isNotEmpty)
           'activeSceneMoodIds': activeSceneMoodIds,
+        if (characterOverrides.isNotEmpty)
+          'characterOverrides': {
+            for (final entry in characterOverrides.entries)
+              entry.key: entry.value.toJson(),
+          },
+        if (personaOverride != null) 'personaOverride': personaOverride!.toJson(),
+        if (chatLorebook != null && !chatLorebook!.isEmpty)
+          'chatLorebook': chatLorebook!.toJson(),
       };
 
   factory ChatSession.fromJson(Map<String, dynamic> json) {
@@ -220,6 +266,35 @@ class ChatSession {
       }
     }
 
+    final overrides = <String, Character>{};
+    final rawOverrides = json['characterOverrides'];
+    if (rawOverrides is Map) {
+      for (final entry in rawOverrides.entries) {
+        final key = '${entry.key}'.trim();
+        final value = entry.value;
+        if (key.isEmpty || value is! Map) continue;
+        overrides[key] = Character.fromJson(Map<String, dynamic>.from(value));
+      }
+    }
+
+    Persona? personaOverride;
+    final rawPersonaOverride = json['personaOverride'];
+    if (rawPersonaOverride is Map) {
+      personaOverride = Persona.fromJson(
+        Map<String, dynamic>.from(rawPersonaOverride),
+      );
+    }
+
+    Lorebook? chatLorebook;
+    final rawChatLore = json['chatLorebook'];
+    if (rawChatLore is Map) {
+      try {
+        chatLorebook = Lorebook.fromJson(Map<String, dynamic>.from(rawChatLore));
+      } catch (_) {
+        chatLorebook = null;
+      }
+    }
+
     return ChatSession(
       id: json['id'] as String? ?? '',
       characterId: json['characterId'] as String? ?? '',
@@ -250,6 +325,9 @@ class ChatSession {
         return raw.isEmpty ? null : raw;
       }(),
       activeSceneMoodIds: moodIds,
+      characterOverrides: overrides,
+      personaOverride: personaOverride,
+      chatLorebook: chatLorebook,
     );
   }
 

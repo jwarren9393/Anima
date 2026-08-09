@@ -37,4 +37,11 @@ void main() {
       'Make her sound wary.',
     );
   });
+
+  test('explicit rewrite includes vocabulary law', () {
+    final text = service.instructionFor(ReplyRewriteMode.explicit);
+    expect(text, contains('EXPLICIT/GRAPHIC'));
+    expect(text, contains('EXPLICIT VOCABULARY LAW'));
+    expect(text, contains('his member'));
+  });
 }

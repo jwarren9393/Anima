@@ -6,7 +6,7 @@ import '../utils/platform_utils.dart';
 import '../widgets/preset_picker.dart';
 import 'settings_ui.dart';
 
-/// Settings for character/lore wand guidance + composer Format note.
+/// Settings for character/lore wand guidance + chat composer options.
 class CollaboratorSettingsScreen extends StatefulWidget {
   const CollaboratorSettingsScreen({
     super.key,
@@ -23,12 +23,12 @@ class CollaboratorSettingsScreen extends StatefulWidget {
 class _CollaboratorSettingsScreenState
     extends State<CollaboratorSettingsScreen> {
   final _guidanceController = TextEditingController();
-  final _composerFormatController = TextEditingController();
   final _roadwayController = TextEditingController();
   final _narratorController = TextEditingController();
   bool _loading = true;
   bool _saving = false;
   bool _enterToSend = true;
+  bool _autoWrapDialogueOnSend = false;
 
   @override
   void initState() {
@@ -39,13 +39,15 @@ class _CollaboratorSettingsScreenState
   Future<void> _load() async {
     final settings = await widget.settingsService.getCollaboratorSettings();
     final enterToSend = await widget.settingsService.getEnterToSendComposer();
+    final autoWrapDialogue =
+        await widget.settingsService.getAutoWrapDialogueOnSend();
     if (!mounted) return;
     setState(() {
       _guidanceController.text = settings.guidanceNote;
-      _composerFormatController.text = settings.composerFormatNote;
       _roadwayController.text = settings.roadwayNote;
       _narratorController.text = settings.narratorNote;
       _enterToSend = enterToSend;
+      _autoWrapDialogueOnSend = autoWrapDialogue;
       _loading = false;
     });
   }
@@ -55,12 +57,14 @@ class _CollaboratorSettingsScreenState
     await widget.settingsService.saveCollaboratorSettings(
       CollaboratorSettings(
         guidanceNote: _guidanceController.text,
-        composerFormatNote: _composerFormatController.text,
         roadwayNote: _roadwayController.text,
         narratorNote: _narratorController.text,
       ),
     );
     await widget.settingsService.saveEnterToSendComposer(_enterToSend);
+    await widget.settingsService.saveAutoWrapDialogueOnSend(
+      _autoWrapDialogueOnSend,
+    );
     if (!mounted) return;
     setState(() => _saving = false);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -71,13 +75,6 @@ class _CollaboratorSettingsScreenState
   Future<void> _resetWandDefault() async {
     setState(() {
       _guidanceController.text = CollaboratorSettings.defaultGuidanceNote;
-    });
-  }
-
-  Future<void> _resetComposerDefault() async {
-    setState(() {
-      _composerFormatController.text =
-          CollaboratorSettings.defaultComposerFormatNote;
     });
   }
 
@@ -106,7 +103,6 @@ class _CollaboratorSettingsScreenState
   @override
   void dispose() {
     _guidanceController.dispose();
-    _composerFormatController.dispose();
     _roadwayController.dispose();
     _narratorController.dispose();
     super.dispose();
@@ -170,30 +166,17 @@ class _CollaboratorSettingsScreenState
                   value: _enterToSend,
                   onChanged: (value) => setState(() => _enterToSend = value),
                 ),
-                const SizedBox(height: 32),
-                SettingsUi.sectionTitle(context, 'Composer Format'),
-                const SizedBox(height: 8),
-                SettingsUi.sectionHint(
-                  context,
-                  'Used only by the ✨ Format button next to Send in chat. '
-                  'Default behavior: fix caps/punctuation and add *asterisks* '
-                  'and "quotes" — without rewording what you typed.',
-                ),
-                TextField(
-                  controller: _composerFormatController,
-                  minLines: 4,
-                  maxLines: 10,
-                  scrollPadding: SettingsUi.keyboardScrollPadding,
-                  textCapitalization: TextCapitalization.sentences,
-                  decoration: SettingsUi.fieldDecoration(
-                    label: 'Composer format note',
-                    hintText: 'How Format should treat your draft…',
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Auto-wrap dialogue on send'),
+                  subtitle: const Text(
+                    'Wraps plain text in "quotes" on send — *actions* stay as '
+                    'asterisks. No AI, no extra taps. Turn off if you prefer '
+                    'raw text.',
                   ),
-                ),
-                const SizedBox(height: 12),
-                OutlinedButton(
-                  onPressed: _saving ? null : _resetComposerDefault,
-                  child: const Text('Reset Format note to default'),
+                  value: _autoWrapDialogueOnSend,
+                  onChanged: (value) =>
+                      setState(() => _autoWrapDialogueOnSend = value),
                 ),
                 const SizedBox(height: 32),
                 SettingsUi.sectionTitle(context, 'Roadway / Paths'),
@@ -246,9 +229,8 @@ class _CollaboratorSettingsScreenState
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Wand, Format, Paths, and Narrator use your normal NanoGPT '
-                  'model and generation parameters from Settings. Format also '
-                  'cools temperature slightly so it stays closer to your words.',
+                  'Wand, Paths, and Narrator use your normal NanoGPT model and '
+                  'generation parameters from Settings.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 24),

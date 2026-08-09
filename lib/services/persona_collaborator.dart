@@ -1,3 +1,4 @@
+import '../models/field_wand_options.dart';
 import 'settings_service.dart';
 
 /// Creative persona fields the AI wand can expand.
@@ -86,6 +87,8 @@ class PersonaCollaborator {
     required PersonaCollaboratorField field,
     required PersonaDraftContext draft,
     String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+    FieldWandExpansion expansion = FieldWandExpansion.light,
+    FieldWandExternalSource? externalSource,
   }) {
     final current = draft.valueFor(field).trim();
     final contextBlock = _buildContextBlock(draft, exclude: field);
@@ -118,7 +121,19 @@ class PersonaCollaborator {
       ..writeln(
         'Output plain field text only — no quotes around the whole reply, '
         'no “here is…”, no field labels.',
+      )
+      ..writeln()
+      ..writeln('Expansion level:')
+      ..writeln(expansion.promptInstruction);
+    if (externalSource != null && !externalSource.isEmpty) {
+      system.writeln();
+      system.writeln(
+        'Use the ${externalSource.label.toUpperCase()} CONTEXT in the user '
+        'message to add facts that belong in this field. Do not dump unrelated '
+        'material. If the field is sparse, prioritize concrete details from '
+        'that context over inventing.',
       );
+    }
 
     final user = StringBuffer();
     if (contextBlock.isEmpty) {
@@ -144,6 +159,11 @@ class PersonaCollaborator {
         'Expand, continue, or refine based on that draft. Produce new text '
         'to append (do not restate the whole draft unless rewriting is needed).',
       );
+    }
+    if (externalSource != null && !externalSource.isEmpty) {
+      user.writeln();
+      user.writeln('${externalSource.label} context:');
+      user.writeln(externalSource.contextBlock.trim());
     }
 
     return [

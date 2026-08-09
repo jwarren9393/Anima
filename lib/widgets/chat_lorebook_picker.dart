@@ -62,7 +62,8 @@ Future<ChatLorebookPickResult?> pickChatLorebooks(
                         Text(
                           'Pick which global lorebooks apply here. Each '
                           'character’s own embedded lorebook still applies when '
-                          'they speak.',
+                          'they speak. Use Chat lore (⋮ menu) for facts that '
+                          'belong only to this thread.',
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                 color: Theme.of(context)
                                     .colorScheme

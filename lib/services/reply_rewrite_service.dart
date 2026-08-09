@@ -1,4 +1,5 @@
 import '../models/chat_message.dart';
+import '../models/explicit_scene_guidance.dart';
 
 /// How to steer a regeneration / new swipe of an assistant reply.
 enum ReplyRewriteMode {
@@ -6,6 +7,9 @@ enum ReplyRewriteMode {
   drunk,
   romantic,
   sensual,
+  explicit,
+  intimateBuildup,
+  afterglow,
   angry,
   happy,
   sad,
@@ -40,23 +44,26 @@ class ReplyRewriteChoice {
   const ReplyRewriteChoice({
     required this.mode,
     this.customInstruction = '',
-    this.asNewSwipe = false,
   });
 
   final ReplyRewriteMode mode;
   final String customInstruction;
-  final bool asNewSwipe;
 }
 
 /// Builds rewrite instructions for roleplay assistant replies.
 class ReplyRewriteService {
   const ReplyRewriteService();
 
+  static final _vocabularyLaw = ExplicitSceneGuidance.vocabularyRule.trim();
+
   static const modesForMenu = <ReplyRewriteMode>[
     ReplyRewriteMode.custom,
     ReplyRewriteMode.drunk,
     ReplyRewriteMode.romantic,
     ReplyRewriteMode.sensual,
+    ReplyRewriteMode.explicit,
+    ReplyRewriteMode.intimateBuildup,
+    ReplyRewriteMode.afterglow,
     ReplyRewriteMode.angry,
     ReplyRewriteMode.happy,
     ReplyRewriteMode.sad,
@@ -91,6 +98,9 @@ class ReplyRewriteService {
         ReplyRewriteMode.drunk => 'Drunk / intoxicated',
         ReplyRewriteMode.romantic => 'Romantic',
         ReplyRewriteMode.sensual => 'Sensual / intimate',
+        ReplyRewriteMode.explicit => 'Explicit / graphic',
+        ReplyRewriteMode.intimateBuildup => 'Intimate build-up',
+        ReplyRewriteMode.afterglow => 'Afterglow / aftermath',
         ReplyRewriteMode.angry => 'Angry / heated',
         ReplyRewriteMode.happy => 'Happy / upbeat',
         ReplyRewriteMode.sad => 'Sad / melancholy',
@@ -125,7 +135,13 @@ class ReplyRewriteService {
         ReplyRewriteMode.drunk => 'Slurred, loose, unsteady delivery',
         ReplyRewriteMode.romantic => 'Warm tension and intimacy',
         ReplyRewriteMode.sensual =>
-          'Realistic intimacy — no porn clichés or fade-outs',
+          'Realistic intimacy — emotional, not graphic',
+        ReplyRewriteMode.explicit =>
+          'Raw adult words — no euphemisms or AI tropes',
+        ReplyRewriteMode.intimateBuildup =>
+          'Teasing, tension, anticipation before sex',
+        ReplyRewriteMode.afterglow =>
+          'Post-climax — messy, human, not a movie ending',
         ReplyRewriteMode.angry => 'Sharp, confrontational heat',
         ReplyRewriteMode.happy => 'Light, energized mood',
         ReplyRewriteMode.sad => 'Heavy, quiet melancholy',
@@ -178,6 +194,18 @@ class ReplyRewriteService {
         'Rewrite with SENSUAL, realistic intimacy — sensory detail, breath, '
         'hesitation, emotional stakes. Same facts. No porn clichés, no curtain-call '
         'lines, no fade-to-black.',
+      ReplyRewriteMode.explicit =>
+        'Rewrite EXPLICIT/GRAPHIC: full sensory detail, plain adult vocabulary, '
+        'stay in the physical moment. Same facts and outcome. Do not sanitize.\n\n'
+        '$_vocabularyLaw',
+      ReplyRewriteMode.intimateBuildup =>
+        'Rewrite as INTIMATE BUILD-UP: teasing, charged pauses, hands and mouths '
+        'wandering, clothes coming off, restraint breaking — anticipation before '
+        'the main act unless already there. Same facts.\n\n$_vocabularyLaw',
+      ReplyRewriteMode.afterglow =>
+        'Rewrite as AFTERGLOW/AFTERMATH: post-climax messiness, catching breath, '
+        'tangled limbs, tenderness or awkward humor — not a generic porn wrap-up. '
+        'Same facts.\n\n$_vocabularyLaw',
       ReplyRewriteMode.angry =>
         'Rewrite ANGRY/HEATED: sharper words, frustration, confrontation as fits '
         'the character. Same facts and outcome.',

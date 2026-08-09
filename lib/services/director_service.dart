@@ -59,6 +59,7 @@ $body
 This is authoritative scene direction from the player. It is NOT dialogue from $user and NOT a suggestion.
 $target MUST follow this direction exactly for this one generation — actions, emotions, tone, intent, beats, and how they respond are law.
 Do not ignore, soften, reinterpret, or contradict this instruction.
+Do not default to unrelated habits or props from your character card if they contradict this direction.
 ${isGroup && !groupBeat ? 'Only $char is speaking in this reply — obey the direction for $char.' : ''}
 Do not speak for $user.
 Stay in character while obeying the direction.

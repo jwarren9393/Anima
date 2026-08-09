@@ -23,7 +23,10 @@ import '../widgets/minimal_chip_button.dart';
 import '../widgets/preset_picker.dart';
 import '../widgets/temporary_character_sheet.dart';
 import '../models/anima_presets.dart';
+import '../models/field_wand_options.dart';
 import 'lorebook_edit_screen.dart';
+import '../widgets/field_wand_icon_button.dart';
+import '../widgets/field_wand_menu_sheet.dart';
 
 enum _CharacterSection { identity, story, chat, lore, advanced }
 
@@ -38,6 +41,8 @@ class CharacterEditScreen extends StatefulWidget {
     this.generatedDraft = false,
     this.updatingExisting = false,
     this.promoteAsFull = false,
+    this.persistToLibrary = true,
+    this.wandExternalSources = const [],
   });
 
   final CharacterService characterService;
@@ -55,6 +60,12 @@ class CharacterEditScreen extends StatefulWidget {
 
   /// When true, saving clears [Character.isTemporary] (promote NPC to full card).
   final bool promoteAsFull;
+
+  /// When false, Save returns the card without writing to the library.
+  final bool persistToLibrary;
+
+  /// Optional workshop / chat transcripts for long-press field wand sources.
+  final List<FieldWandExternalSource> wandExternalSources;
 
   @override
   State<CharacterEditScreen> createState() => _CharacterEditScreenState();
@@ -456,8 +467,23 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
     }
   }
 
-  Future<void> _runWand(CharacterCollaboratorField field) async {
+  Future<void> _runWand(
+    CharacterCollaboratorField field, {
+    FieldWandChoice choice = const FieldWandChoice(
+      expansion: FieldWandExpansion.light,
+    ),
+  }) async {
     if (_wandBusy != null || _consistencyBusy) return;
+
+    FieldWandExternalSource? external;
+    if (choice.externalSourceId != null) {
+      for (final source in widget.wandExternalSources) {
+        if (source.id == choice.externalSourceId) {
+          external = source;
+          break;
+        }
+      }
+    }
 
     setState(() => _wandBusy = field);
     try {
@@ -467,6 +493,8 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         field: field,
         draft: _draftContext(),
         guidanceNote: collaborator.guidanceNote,
+        expansion: choice.expansion,
+        externalSource: external,
       );
       final model = await widget.settingsService.getModel();
       final sampling = await widget.settingsService.getSampling();
@@ -484,7 +512,9 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Appended AI text to ${_collaborator.fieldLabel(field)}.',
+            choice.usesExternal
+                ? 'Appended ${choice.expansion.menuTitle.toLowerCase()} detail from ${external?.label ?? 'source'} to ${_collaborator.fieldLabel(field)}.'
+                : 'Appended AI text to ${_collaborator.fieldLabel(field)}.',
           ),
         ),
       );
@@ -503,6 +533,17 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
     } finally {
       if (mounted) setState(() => _wandBusy = null);
     }
+  }
+
+  Future<void> _showWandMenu(CharacterCollaboratorField field) async {
+    if (_wandBusy != null || _consistencyBusy) return;
+    final choice = await showFieldWandMenuSheet(
+      context: context,
+      fieldLabel: _collaborator.fieldLabel(field),
+      externalSources: widget.wandExternalSources,
+    );
+    if (choice == null || !mounted) return;
+    await _runWand(field, choice: choice);
   }
 
   Future<void> _runConsistencyCheck() async {
@@ -980,7 +1021,9 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
       avatarFileName: _avatarFileName,
       isTemporary: widget.promoteAsFull ? false : _isTemporary,
     );
-    await widget.characterService.upsert(character);
+    if (widget.persistToLibrary) {
+      await widget.characterService.upsert(character);
+    }
     if (!mounted) return;
     Navigator.of(context).pop(character);
   }
@@ -1066,17 +1109,11 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
               border: const OutlineInputBorder(),
               suffixIcon: wandField == null
                   ? null
-                  : IconButton(
-                      tooltip: 'AI wand — expand this field',
-                      onPressed:
-                          anyWandBusy ? null : () => _runWand(wandField),
-                      icon: wandBusy
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.auto_awesome),
+                  : FieldWandIconButton(
+                      busy: wandBusy,
+                      enabled: !anyWandBusy,
+                      onTap: () => _runWand(wandField),
+                      onLongPress: () => _showWandMenu(wandField),
                     ),
             ),
           ),

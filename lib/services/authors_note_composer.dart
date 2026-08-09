@@ -1,4 +1,5 @@
 import '../models/scene_mood_presets.dart';
+import '../models/explicit_scene_guidance.dart';
 
 /// Merges per-chat scene moods with the manual Author's Note field.
 class AuthorsNoteComposer {
@@ -14,6 +15,9 @@ class AuthorsNoteComposer {
     }
     final manual = manualAuthorsNote.trim();
     if (manual.isNotEmpty) parts.add(manual);
+    if (ExplicitSceneGuidance.needsVocabularyRule(activeSceneMoodIds)) {
+      parts.add(ExplicitSceneGuidance.vocabularyRule.trim());
+    }
     return parts.join('\n\n');
   }
 

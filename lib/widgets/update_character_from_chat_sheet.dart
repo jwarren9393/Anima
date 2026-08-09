@@ -11,8 +11,19 @@ import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
 import '../services/world_workshop_builder.dart';
 
+/// Result from updating a character from chat context.
+class CharacterChatUpdateResult {
+  const CharacterChatUpdateResult({
+    required this.character,
+    required this.chatOnly,
+  });
+
+  final Character character;
+  final bool chatOnly;
+}
+
 /// Bottom sheet: update one saved character card from the current chat context.
-Future<Character?> showUpdateCharacterFromChatSheet({
+Future<CharacterChatUpdateResult?> showUpdateCharacterFromChatSheet({
   required BuildContext context,
   required ChatSession session,
   required List<Character> participants,
@@ -22,7 +33,7 @@ Future<Character?> showUpdateCharacterFromChatSheet({
   required NanoGptService nanoGptService,
   required WorldInfoService worldInfoService,
 }) {
-  return showModalBottomSheet<Character?>(
+  return showModalBottomSheet<CharacterChatUpdateResult>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
@@ -125,7 +136,7 @@ class _UpdateCharacterFromChatSheetState
     });
   }
 
-  Future<void> _updateFromChat() async {
+  Future<void> _updateFromChat({required bool chatOnly}) async {
     final selected = _selected;
     if (selected == null) {
       setState(() => _error = 'Choose a saved character to update.');
@@ -190,12 +201,15 @@ class _UpdateCharacterFromChatSheetState
             nanoGptService: widget.nanoGptService,
             existing: draft,
             generatedDraft: true,
-            updatingExisting: true,
+            updatingExisting: !chatOnly,
+            persistToLibrary: !chatOnly,
           ),
         ),
       );
-      if (!mounted) return;
-      Navigator.of(context).pop(saved);
+      if (!mounted || saved == null) return;
+      Navigator.of(context).pop(
+        CharacterChatUpdateResult(character: saved, chatOnly: chatOnly),
+      );
     } on FormatException catch (error) {
       if (!mounted) return;
       setState(() {
@@ -239,7 +253,8 @@ class _UpdateCharacterFromChatSheetState
             Text(
               _hasChatContext
                   ? 'Pick a saved card to revise from this chat. Characters '
-                      'in this thread are listed first.'
+                      'in this thread are listed first. Choose whether to '
+                      'update this chat only or overwrite the library card.'
                   : 'Chat a bit first, then update a character from what happened.',
               style: theme.textTheme.bodySmall,
             ),
@@ -322,17 +337,25 @@ class _UpdateCharacterFromChatSheetState
             FilledButton.icon(
               onPressed: busy || _allCharacters.isEmpty || !_hasChatContext
                   ? null
-                  : _updateFromChat,
+                  : () => _updateFromChat(chatOnly: true),
               icon: _generating
                   ? const SizedBox(
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Icon(Icons.auto_awesome),
+                  : const Icon(Icons.chat_bubble_outline),
               label: Text(
-                _generating ? 'Updating card…' : 'Update from chat',
+                _generating ? 'Updating…' : 'Update for this chat only',
               ),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: busy || _allCharacters.isEmpty || !_hasChatContext
+                  ? null
+                  : () => _updateFromChat(chatOnly: false),
+              icon: const Icon(Icons.save_outlined),
+              label: const Text('Update saved card in library'),
             ),
           ],
         ),

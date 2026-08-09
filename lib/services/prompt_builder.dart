@@ -1,4 +1,5 @@
 import '../models/character.dart';
+import 'chat_style_rules.dart';
 import 'lorebook_service.dart';
 import 'presence_service.dart';
 
@@ -19,6 +20,7 @@ class PromptBuilder {
   const PromptBuilder();
 
   static const _presence = PresenceService();
+  static const _chatStyle = ChatStyleRules();
 
   /// Default fallback system line when the card has no `system_prompt`.
   static const defaultSystemSeed =
@@ -190,6 +192,13 @@ class PromptBuilder {
         ),
       );
     }
+
+    parts.add(
+      _chatStyle.formatModernChatToneRule(
+        charName: charName,
+        userName: safeUser,
+      ),
+    );
 
     return parts.join('\n\n');
   }

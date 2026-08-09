@@ -64,6 +64,7 @@ class GroupReplyService {
     String nudge = '',
     String globalSystemPrompt = '',
     String postHistory = '',
+    String narratorBlock = '',
     String directorBlock = '',
     String priorBeatToAvoid = '',
   }) {
@@ -177,6 +178,9 @@ class GroupReplyService {
 
     if (postHistory.trim().isNotEmpty) {
       msgs.add({'role': 'system', 'content': postHistory.trim()});
+    }
+    if (narratorBlock.trim().isNotEmpty) {
+      msgs.add({'role': 'system', 'content': narratorBlock.trim()});
     }
     if (directorBlock.trim().isNotEmpty) {
       msgs.add({'role': 'system', 'content': directorBlock.trim()});

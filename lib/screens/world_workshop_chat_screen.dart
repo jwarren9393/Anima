@@ -10,6 +10,8 @@ import '../models/global_lorebook.dart';
 import '../models/lorebook.dart';
 import '../models/persona.dart';
 import '../models/world_workshop.dart';
+import '../models/field_wand_options.dart';
+import '../services/field_wand_context_builder.dart';
 import '../services/api_key_service.dart';
 import '../services/appearance_controller.dart';
 import '../services/character_category_service.dart';
@@ -28,6 +30,7 @@ import '../services/world_workshop_builder.dart';
 import '../services/world_workshop_service.dart';
 import '../models/workshop_hub_models.dart';
 import '../services/workshop_hub_controller.dart';
+import '../widgets/workshop_card_merge_sheet.dart';
 import '../widgets/workshop_compact_toolbar.dart';
 import '../widgets/workshop_overview_sheet.dart';
 import 'lorebooks_screen.dart';
@@ -40,6 +43,7 @@ import '../widgets/ai_field_changes_sheet.dart';
 import '../widgets/chat_composer_field.dart';
 import '../widgets/greeting_picker.dart';
 import '../widgets/keyboard_inset.dart';
+import '../utils/text_punctuation.dart';
 import '../widgets/minimal_chip_button.dart';
 import '../widgets/reply_rewrite_sheet.dart';
 import 'character_edit_screen.dart';
@@ -105,6 +109,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   bool _exporting = false;
   bool _consistencyBusy = false;
   String? _exportStatus;
+  String? _consistencyStatus;
   bool _enterToSend = false;
   bool _fixLastReplyMode = false;
 
@@ -126,6 +131,18 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     if (last.isUser) return true;
     if (!last.isUser && last.text.trim().isEmpty) return true;
     return !last.isUser && last.text.trim().isNotEmpty;
+  }
+
+  List<FieldWandExternalSource> _workshopWandSources() {
+    final source = FieldWandContextBuilder(_builder).workshopSource(
+      conversation: _workshop.messages,
+      sourceLorebook: _lorebookForPrompt,
+      importedSource: _workshop.importedSource,
+      worldSummary: _workshop.worldSummary,
+      canonPinMessageIds: _workshop.canonPinMessageIds,
+    );
+    if (source == null) return const [];
+    return [source];
   }
 
   void _refocusComposer() {
@@ -388,8 +405,16 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   bool get _busy =>
       _sending || _exporting || _loadingLinkedLorebook || _consistencyBusy;
 
+  bool get _showOperationProgress =>
+      _exporting || _consistencyBusy || _exportStatus != null;
+
+  String? get _bannerStatusLine =>
+      _exportStatus ??
+      _consistencyStatus ??
+      (_sending ? 'Generating… tap Stop to cancel' : null);
+
   Future<void> _send() async {
-    final text = _input.text.trim();
+    final text = normalizeEmDashes(_input.text.trim());
     if (text.isEmpty || _busy) return;
 
     if (_fixLastReplyMode && _canFixLastReply) {
@@ -1051,7 +1076,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     if (!mounted || choice == null) return;
     await _regenerateMessage(
       index,
-      asNewSwipe: choice.asNewSwipe,
+      asNewSwipe: true,
       rewrite: choice,
     );
   }
@@ -1418,9 +1443,29 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
 
   Future<void> _runLinkedLorebookConsistencyCheck() async {
     final linked = _linkedLorebook;
-    if (linked == null || _busy) return;
+    if (linked == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No linked lorebook yet. Use ⋮ → Create lorebook first.',
+          ),
+        ),
+      );
+      return;
+    }
+    if (_busy) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Wait for the current task to finish, then try again.'),
+        ),
+      );
+      return;
+    }
 
-    setState(() => _consistencyBusy = true);
+    setState(() {
+      _consistencyBusy = true;
+      _consistencyStatus = 'Checking lorebook consistency…';
+    });
     try {
       final collaborator =
           await widget.settingsService.getCollaboratorSettings();
@@ -1496,7 +1541,12 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         SnackBar(content: Text('Consistency check failed: $error')),
       );
     } finally {
-      if (mounted) setState(() => _consistencyBusy = false);
+      if (mounted) {
+        setState(() {
+          _consistencyBusy = false;
+          _consistencyStatus = null;
+        });
+      }
     }
   }
 
@@ -1504,7 +1554,10 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     final linked = _linkedLorebook;
     if (linked == null) return;
 
-    setState(() => _consistencyBusy = true);
+    setState(() {
+      _consistencyBusy = true;
+      _consistencyStatus = 'Drafting lorebook fixes…';
+    });
     try {
       final before = linked.book;
       final collaborator =
@@ -1596,7 +1649,12 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         SnackBar(content: Text('Consistency fix failed: $error')),
       );
     } finally {
-      if (mounted) setState(() => _consistencyBusy = false);
+      if (mounted) {
+        setState(() {
+          _consistencyBusy = false;
+          _consistencyStatus = null;
+        });
+      }
     }
   }
 
@@ -1836,22 +1894,58 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         );
       }
       book = _builder.mergeSeedEntries(book, seedEntries);
+      final existingBook = _linkedLorebook?.book;
+      final before = isUpdate && existingBook != null
+          ? existingBook
+          : Lorebook.empty(name: _workshop.title);
+
+      if (!mounted) return;
+      setState(() {
+        _exporting = false;
+        _exportStatus = null;
+      });
+
+      final changes = compareLorebooks(before, book);
+      if (changes.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isUpdate
+                  ? 'No lorebook changes were generated. Try chatting more, then update again.'
+                  : 'No lorebook entries were generated. Chat more about the world, then try again.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      final selected = await showAiFieldChangesSheet(
+        context: context,
+        title: isUpdate ? 'Review lorebook update' : 'Review new lorebook',
+        subtitle:
+            'Check items to save to World Info. Tap a row to compare before and after.',
+        changes: changes,
+        applyLabel: isUpdate ? 'Update lorebook' : 'Save lorebook',
+      );
+      if (selected == null || !mounted) return;
+
+      final merged = mergeLorebookChanges(before, book, selected);
       final existingId = _workshop.exportedLorebookId;
       final global = GlobalLorebook(
         id: (existingId != null && existingId.isNotEmpty)
             ? existingId
             : GlobalLorebook.newId(),
         enabled: _linkedLorebook?.enabled ?? true,
-        book: book,
+        book: merged,
       );
       await widget.worldInfoService.upsert(global);
       if (mounted) {
         setState(() => _linkedLorebook = global);
       }
 
-      final title = book.name.trim().isEmpty
+      final title = merged.name.trim().isEmpty
           ? _workshop.title
-          : book.name.trim();
+          : merged.name.trim();
       await _persist(
         _workshop.copyWith(
           title: title,
@@ -1866,9 +1960,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         SnackBar(
           content: Text(
             isUpdate
-                ? 'Updated “${global.displayName}” (${book.entries.length} entries) '
+                ? 'Updated “${global.displayName}” (${merged.entries.length} entries) '
                       'in World Info.'
-                : 'Saved “${global.displayName}” (${book.entries.length} entries) '
+                : 'Saved “${global.displayName}” (${merged.entries.length} entries) '
                       'to World Info.',
           ),
         ),
@@ -2197,6 +2291,13 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       );
       if (!mounted || selected == null || selected.isEmpty) return;
 
+      final mergeDepth = await showWorkshopCardMergeSheet(
+        context: context,
+        isUpdate: false,
+      );
+      if (!mounted) return;
+      if (mergeDepth == null) return;
+
       setState(() {
         _exporting = true;
         _exportStatus = 'Generating characters…';
@@ -2223,6 +2324,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
               buildPromptNote: build.promptNote,
               sourceLorebook: _lorebookForPrompt,
               importedSource: _workshop.importedSource,
+              mergeDepth: mergeDepth,
             ),
             baseUrl: baseUrl,
             sampling: WorldWorkshopBuilder.workshopExportSampling(
@@ -2250,6 +2352,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
                 nanoGptService: widget.nanoGptService,
                 existing: draft,
                 generatedDraft: true,
+                wandExternalSources: _workshopWandSources(),
               ),
             ),
           );
@@ -2422,6 +2525,13 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   Future<void> _runCharacterUpdate(Character selected) async {
     if (_sending || _exporting || _loadingLinkedLorebook) return;
 
+    final mergeDepth = await showWorkshopCardMergeSheet(
+      context: context,
+      isUpdate: true,
+    );
+    if (!mounted) return;
+    if (mergeDepth == null) return;
+
     setState(() {
       _exporting = true;
       _exportStatus = 'Updating ${selected.name}…';
@@ -2439,6 +2549,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           buildPromptNote: build.promptNote,
           sourceLorebook: _lorebookForPrompt,
           importedSource: _workshop.importedSource,
+          mergeDepth: mergeDepth,
         ),
         baseUrl: baseUrl,
         sampling: WorldWorkshopBuilder.workshopExportSampling(build.sampling),
@@ -2464,6 +2575,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
             existing: draft,
             generatedDraft: true,
             updatingExisting: true,
+            wandExternalSources: _workshopWandSources(),
           ),
         ),
       );
@@ -2700,6 +2812,13 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       );
       if (!mounted || selected == null) return;
 
+      final mergeDepth = await showWorkshopCardMergeSheet(
+        context: context,
+        isUpdate: false,
+      );
+      if (!mounted) return;
+      if (mergeDepth == null) return;
+
       setState(() {
         _exporting = true;
         _exportStatus = 'Generating persona: ${selected.name}…';
@@ -2715,6 +2834,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           guidanceNote: collaborator.guidanceNote,
           sourceLorebook: _lorebookForPrompt,
           importedSource: _workshop.importedSource,
+          mergeDepth: mergeDepth,
         ),
         baseUrl: baseUrl,
         sampling: sampling,
@@ -2738,6 +2858,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
             nanoGptService: widget.nanoGptService,
             existing: draft,
             generatedDraft: true,
+            wandExternalSources: _workshopWandSources(),
           ),
         ),
       );
@@ -2831,6 +2952,13 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   Future<void> _runPersonaUpdate(Persona existing) async {
     if (_sending || _exporting || _loadingLinkedLorebook) return;
 
+    final mergeDepth = await showWorkshopCardMergeSheet(
+      context: context,
+      isUpdate: true,
+    );
+    if (!mounted) return;
+    if (mergeDepth == null) return;
+
     setState(() {
       _exporting = true;
       _exportStatus = 'Updating ${existing.name}…';
@@ -2855,6 +2983,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           importedSource: _workshop.importedSource,
           worldSummary: _workshop.worldSummary,
           canonPinMessageIds: _workshop.canonPinMessageIds,
+          mergeDepth: mergeDepth,
         ),
         baseUrl: baseUrl,
         sampling: sampling,
@@ -2879,6 +3008,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
             nanoGptService: widget.nanoGptService,
             existing: draft,
             generatedDraft: true,
+            wandExternalSources: _workshopWandSources(),
           ),
         ),
       );
@@ -3819,7 +3949,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
             leading:
                 _exporting &&
                     (_exportStatus != null &&
-                        _exportStatus!.contains('lorebook'))
+                        (_exportStatus!.contains('lorebook') ||
+                            _exportStatus!.contains('gaps') ||
+                            _exportStatus!.contains('gap-fill')))
                 ? const SizedBox(
                     width: 24,
                     height: 24,
@@ -3928,30 +4060,45 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   }
 
   Widget _statusBanner(ThemeData theme) {
+    final statusLine = _bannerStatusLine ?? _estimate.compactBannerLine;
+    final operationActive = _showOperationProgress || _sending;
+
     return Material(
       color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
       child: InkWell(
-        onTap: _showContextEstimate,
+        onTap: operationActive ? null : _showContextEstimate,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           child: Row(
             children: [
+              if (operationActive) ...[
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: theme.colorScheme.tertiary,
+                  ),
+                ),
+                const SizedBox(width: 10),
+              ],
               Expanded(
                 child: Text(
-                  _exportStatus ??
-                      (_sending
-                          ? 'Generating… tap Stop to cancel'
-                          : _estimate.compactBannerLine),
+                  statusLine,
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color: (_estimate.fillRatio ?? 0) >= 0.85
+                    color: (_estimate.fillRatio ?? 0) >= 0.85 &&
+                            !operationActive
                         ? theme.colorScheme.error
                         : theme.colorScheme.tertiary,
                   ),
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (_exportStatus == null && _workshop.isLorebookStale)
+              if (_exportStatus == null &&
+                  _consistencyStatus == null &&
+                  !_sending &&
+                  _workshop.isLorebookStale)
                 IconButton(
                   tooltip: 'Update lorebook',
                   visualDensity: VisualDensity.compact,
@@ -3969,7 +4116,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final busy = _sending || _exporting || _loadingLinkedLorebook;
+    final busy = _sending || _exporting || _loadingLinkedLorebook || _consistencyBusy;
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 24;
     final linkedName = _linkedLorebook?.displayName;
     final imported = _workshop.importedSource;
@@ -4000,7 +4147,10 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       body: KeyboardInset(
         child: Column(
           children: [
-            if (!keyboardOpen) _statusBanner(theme),
+            if (!keyboardOpen || _showOperationProgress || _sending)
+              _statusBanner(theme),
+            if (_showOperationProgress)
+              const LinearProgressIndicator(minHeight: 2),
             if (!keyboardOpen)
               WorkshopCompactToolbar(
                 workshop: _workshop,

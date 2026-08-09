@@ -11,6 +11,7 @@ import '../models/character.dart';
 import '../models/chat_message.dart';
 import '../models/chat_session.dart';
 import '../models/persona.dart';
+import '../models/lorebook.dart';
 import '../models/ui_style_settings.dart';
 import '../services/api_key_service.dart';
 import '../services/appearance_controller.dart';
@@ -21,6 +22,9 @@ import '../services/character_service.dart';
 import '../services/character_token_service.dart';
 import '../services/chat_context_service.dart';
 import '../services/chat_service.dart';
+import '../services/chat_session_resolver.dart';
+import '../models/field_wand_options.dart';
+import '../services/field_wand_context_builder.dart';
 import '../services/chat_transcript_codec.dart';
 import '../services/composer_draft_service.dart';
 import '../models/group_beat_part.dart';
@@ -28,7 +32,6 @@ import '../services/group_beat_codec.dart';
 import '../services/group_reply_service.dart';
 import '../services/group_speaker_inference.dart';
 import '../services/lorebook_service.dart';
-import '../services/message_formatter.dart';
 import '../services/presence_service.dart';
 import '../services/director_service.dart';
 import '../services/narrator_service.dart';
@@ -46,8 +49,12 @@ import '../models/workshop_chat_import_options.dart';
 import '../services/world_workshop_service.dart';
 import '../utils/platform_utils.dart';
 import '../utils/scroll_to_end.dart';
+import '../utils/text_punctuation.dart';
+import '../utils/composer_markup.dart';
 import '../widgets/chat_composer_field.dart';
+import '../widgets/chat_composer_tools_sheet.dart';
 import '../widgets/chat_lorebook_picker.dart';
+import '../widgets/chat_overrides_sheet.dart';
 import '../widgets/chat_hero_portrait.dart';
 import '../widgets/chat_image_background.dart';
 import '../widgets/create_character_from_chat_sheet.dart';
@@ -69,6 +76,7 @@ import '../widgets/scene_mood_sheet.dart';
 import 'characters_screen.dart';
 import 'character_edit_screen.dart';
 import 'group_chat_setup_screen.dart';
+import 'lorebook_edit_screen.dart';
 import 'persona_edit_screen.dart';
 import 'personas_screen.dart';
 import '../services/world_workshop_builder.dart';
@@ -118,13 +126,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   static const _tokenService = CharacterTokenService();
   final _transcriptCodec = ChatTranscriptCodec();
   final _draftService = ComposerDraftService();
-  static const _formatter = MessageFormatter();
   static const _replyRewrite = ReplyRewriteService();
   static const _narrator = NarratorService();
   static const _director = DirectorService();
   static const _presence = PresenceService();
   static const _groupReply = GroupReplyService();
   static const _groupSpeakerInference = GroupSpeakerInference();
+  static const _sessionResolver = ChatSessionResolver();
+  final _workshopBuilder = WorldWorkshopBuilder();
 
   Character _resolvedGroupSpeaker({Character? explicit}) {
     if (explicit != null) return explicit;
@@ -142,11 +151,27 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   bool get _shouldAdvanceGroupSpeaker =>
       _isGroup && (_session?.autoReply ?? false);
 
+  List<FieldWandExternalSource> _chatWandSources() {
+    final session = _session;
+    if (session == null) return const [];
+    final title = session.title.trim();
+    final source = FieldWandContextBuilder(_workshopBuilder).chatSource(
+      messages: _messages,
+      chatTitle: title.isNotEmpty
+          ? title
+          : (_character?.name.trim().isNotEmpty == true
+              ? _character!.name.trim()
+              : 'Chat'),
+    );
+    if (source == null) return const [];
+    return [source];
+  }
+
   void _refocusComposer() {
     if (!isDesktopPlatform || _composerFocusNode == null) return;
-    if (!mounted || _formatting || _busy) return;
+    if (!mounted || _busy) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _busy || _formatting) return;
+      if (!mounted || _busy) return;
       final node = _composerFocusNode;
       if (node == null || node.hasFocus || !node.canRequestFocus) return;
       node.requestFocus();
@@ -159,7 +184,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   void _onComposerContinue() {
-    if (_busy || _formatting) return;
+    if (_busy) return;
     unawaited(_continueScene());
   }
 
@@ -167,8 +192,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   bool _loading = true;
   bool _busy = false;
   bool _summarizing = false;
-  bool _formatting = false;
   bool _enterToSend = false;
+  bool _autoWrapDialogueOnSend = false;
 
   /// When on, Send posts a Director note that commands the next AI reply.
   bool _directorMode = false;
@@ -196,7 +221,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    if (isDesktopPlatform) _composerFocusNode = FocusNode();
+    _composerFocusNode = FocusNode();
     WidgetsBinding.instance.addObserver(this);
     _inputController.addListener(_onComposerChanged);
     _bootstrap();
@@ -243,6 +268,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final character = await _resolveCharacterForSession(session);
     final uiStyle = await widget.settingsService.getUiStyle();
     final enterToSend = await widget.settingsService.getEnterToSendComposer();
+    final autoWrapDialogue =
+        await widget.settingsService.getAutoWrapDialogueOnSend();
     var persona = await widget.personaService.resolve(session.personaId);
     if (session.personaId == null) {
       final savedDefault = await widget.personaService.tryGetActivePersona();
@@ -253,6 +280,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       }
     }
     final participants = await _resolveParticipants(session, character);
+    persona = _resolvePersonaForSession(session, persona) ?? persona;
     final draft = await _draftService.loadDraft(session.id);
     if (!mounted) return;
     if (draft.isNotEmpty) {
@@ -270,6 +298,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _avatarStyle = uiStyle.avatarStyle;
       _persona = persona;
       _enterToSend = enterToSend;
+      _autoWrapDialogueOnSend = autoWrapDialogue;
       _loading = false;
     });
     _scrollToBottom(jump: true);
@@ -315,15 +344,74 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     ChatSession session,
     Character fallback,
   ) async {
-    if (!session.isGroup) return [fallback];
+    if (!session.isGroup) {
+      final solo = await widget.characterService.getById(session.characterId);
+      final base = solo ?? fallback;
+      return [_sessionResolver.resolveCharacter(base, session)];
+    }
     final all = await widget.characterService.loadCharacters();
     final byId = {for (final c in all) c.id: c};
     final resolved = <Character>[];
     for (final id in session.effectiveParticipantIds) {
       final c = byId[id];
-      if (c != null) resolved.add(c);
+      if (c != null) {
+        resolved.add(_sessionResolver.resolveCharacter(c, session));
+      }
     }
-    return resolved.isEmpty ? [fallback] : resolved;
+    return resolved.isEmpty
+        ? [_sessionResolver.resolveCharacter(fallback, session)]
+        : resolved;
+  }
+
+  Future<List<Lorebook>> _lorebooksForSession(ChatSession? session) async {
+    final global = await widget.worldInfoService.booksForChat(
+      chatLorebookIds: session?.lorebookIds,
+    );
+    if (session == null) return global;
+    return [...global, ..._sessionResolver.chatLorebooks(session)];
+  }
+
+  Persona? _resolvePersonaForSession(ChatSession session, Persona? library) {
+    return _sessionResolver.resolvePersona(library, session);
+  }
+
+  Future<void> _refreshCastFromSession(ChatSession session) async {
+    final fallback = _character ?? await _resolveCharacterForSession(session);
+    final participants = await _resolveParticipants(session, fallback);
+    final primary = session.isGroup
+        ? (participants.isNotEmpty ? participants.first : fallback)
+        : (participants.isNotEmpty ? participants.first : fallback);
+    var persona = await widget.personaService.resolve(session.personaId);
+    persona = _resolvePersonaForSession(session, persona) ?? persona;
+    if (!mounted) return;
+    setState(() {
+      _session = session;
+      _character = primary;
+      _participants = participants;
+      _persona = persona;
+    });
+  }
+
+  void _setCharacterOverride(Character character) {
+    final session = _session;
+    if (session == null) return;
+    final overrides = Map<String, Character>.from(session.characterOverrides)
+      ..[character.id] = character;
+    final updated = session.copyWith(characterOverrides: overrides);
+    unawaited(_persistSessionAndRefreshCast(updated));
+  }
+
+  void _setPersonaOverride(Persona persona) {
+    final session = _session;
+    if (session == null) return;
+    final updated = session.copyWith(personaOverride: persona);
+    unawaited(_persistSessionAndRefreshCast(updated));
+  }
+
+  Future<void> _persistSessionAndRefreshCast(ChatSession session) async {
+    await widget.chatService.saveChat(session);
+    if (!mounted) return;
+    await _refreshCastFromSession(session);
   }
 
   Character _speakerForTurn() {
@@ -664,7 +752,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       ),
     );
     if (chosen == null || !mounted) return;
-    final updated = _session!.copyWith(personaId: chosen.sessionId);
+    final updated = _session!.copyWith(
+      personaId: chosen.sessionId,
+      clearPersonaOverride: true,
+    );
     await widget.chatService.saveChat(updated);
     if (!mounted) return;
     setState(() {
@@ -701,36 +792,26 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           settingsService: widget.settingsService,
           nanoGptService: widget.nanoGptService,
           existing: target,
+          persistToLibrary: false,
+          wandExternalSources: _chatWandSources(),
         ),
       ),
     );
     if (updated == null || !mounted) return;
 
-    setState(() {
-      if (_character?.id == updated.id) {
-        _character = updated;
-      }
-      _participants = [
-        for (final c in _participants) c.id == updated.id ? updated : c,
-      ];
-      // Solo chats always keep the edited card as primary.
-      if (!_isGroup) {
-        _character = updated;
-        _participants = [updated];
-      }
-    });
+    _setCharacterOverride(updated);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Updated “${updated.name}” — next replies use the new card.',
+          'Saved chat copy of “${updated.name}” — library card unchanged.',
         ),
         duration: const Duration(seconds: 2),
       ),
     );
   }
 
-  /// Tap your avatar → edit this chat’s persona.
+  /// Tap your avatar → edit this chat’s persona copy.
   Future<void> _editPersonaFromAvatar() async {
     if (_busy) return;
     final persona = _persona;
@@ -743,16 +824,19 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           settingsService: widget.settingsService,
           nanoGptService: widget.nanoGptService,
           existing: persona,
+          persistToLibrary: false,
+          wandExternalSources: _chatWandSources(),
         ),
       ),
     );
     if (updated == null || !mounted) return;
 
-    setState(() => _persona = updated);
+    _setPersonaOverride(updated);
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Updated persona “${updated.name}” — next replies use it.',
+          'Saved chat copy of persona “${updated.name}” — library unchanged.',
         ),
         duration: const Duration(seconds: 2),
       ),
@@ -1058,13 +1142,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _send() async {
-    var text = _inputController.text.trim();
+    var text = normalizeEmDashes(_inputController.text.trim());
     if (text.isEmpty ||
         _busy ||
-        _formatting ||
         _session == null ||
         _character == null) {
       return;
+    }
+
+    if (_autoWrapDialogueOnSend && !_directorMode) {
+      text = autoWrapDialogue(text);
     }
 
     if (!_hasApiKey) {
@@ -1248,8 +1335,58 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
+  String? _narratorActiveBlock({
+    required String charName,
+    required int endExclusive,
+    String speakingAsName = '',
+    int? excludeMessageIndex,
+  }) {
+    final activeId = _narrator.latestNarratorId(
+      _messages,
+      endExclusive: endExclusive,
+    );
+    final speaker = speakingAsName.isNotEmpty ? speakingAsName : charName;
+    final sceneSnapshot = _isGroup
+        ? _presence.sceneSnapshotFromLatestNarrator(
+            messages: _messages,
+            participants: _participants,
+            userName: _userName,
+            endExclusive: endExclusive,
+          )
+        : const NarratorSceneSnapshot(
+            present: {},
+            departed: {},
+            arriving: {},
+          );
+    return _narrator.activeSceneLawBlock(
+      messages: _messages,
+      activeNarratorId: activeId,
+      userName: _userName,
+      charName: charName,
+      isGroup: _isGroup,
+      speakingAsName: speaker,
+      physicallyPresent: sceneSnapshot.present,
+      departedPresent: sceneSnapshot.departed,
+      narratorBeatFor: sceneSnapshot.arriving,
+      endExclusive: endExclusive,
+      excludeMessageIndex: excludeMessageIndex,
+    );
+  }
+
+  void _appendNarratorHistoryBlock(
+    List<Map<String, String>> msgs,
+    ChatMessage message,
+    String? activeNarratorId,
+  ) {
+    final block = _narrator.historyBlockFor(
+      message: message,
+      activeNarratorId: activeNarratorId,
+    );
+    if (block != null) msgs.add(block);
+  }
+
   Future<void> _openNarratorSheet({String initialText = ''}) async {
-    if (_busy || _formatting || _session == null || _character == null) return;
+    if (_busy || _session == null || _character == null) return;
     if (!_hasApiKey) {
       setState(() {
         _error = 'Add your NanoGPT API key in Settings before using Narrator.';
@@ -1315,7 +1452,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
     WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
     if (result == null || !mounted) return;
-    final trimmed = result.trim();
+    final trimmed = normalizeEmDashes(result.trim());
     if (trimmed.isEmpty) return;
     setState(() {
       _session!.messages[index] = message.withEditedText(trimmed);
@@ -1550,7 +1687,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _openGroupReplySheet() async {
-    if (_busy || _formatting || _session == null || !_isGroup) return;
+    if (_busy || _session == null || !_isGroup) return;
     if (_participants.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Need at least two characters in the cast.')),
@@ -1645,7 +1782,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     required List<Character> speakers,
     String nudge = '',
   }) async {
-    if (_busy || _formatting || _session == null) return;
+    if (_busy || _session == null) return;
     if (speakers.length < 2) return;
     if (!_hasApiKey) return;
 
@@ -1862,9 +1999,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final userName = _userName;
     final persona = _persona?.promptText ?? '';
     final loreSettings = await widget.settingsService.getLoreSettings();
-    final extraBooks = await widget.worldInfoService.booksForChat(
-      chatLorebookIds: _session?.lorebookIds,
-    );
+    final extraBooks = await _lorebooksForSession(_session);
 
     final loreBefore = StringBuffer();
     final loreAfter = StringBuffer();
@@ -1915,17 +2050,18 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
 
     final pendingDirectorId = _session?.pendingDirectorMessageId;
+    final activeNarratorId = _narrator.latestNarratorId(
+      _messages,
+      endExclusive: historyEndExclusive ?? _messages.length,
+    );
 
     for (final message in visibleHistory) {
       if (message.isNarrator) {
-        final block = _narrator.formatForPrompt(
-          text: message.text,
-          userName: userName,
-          charName: speakers.first.name,
+        _appendNarratorHistoryBlock(
+          historyApi,
+          message,
+          activeNarratorId,
         );
-        if (block.isNotEmpty) {
-          historyApi.add({'role': 'system', 'content': block});
-        }
         continue;
       }
       final directorHistory = _director.historyBlockFor(
@@ -2000,6 +2136,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       nudge: nudge,
       globalSystemPrompt: globalPrompts.systemPrompt,
       postHistory: postHistory,
+      narratorBlock: _narratorActiveBlock(
+            charName: primary.name,
+            endExclusive: historyEndExclusive ?? _messages.length,
+          ) ??
+          '',
       directorBlock: _directorBlockForGeneration(
             character: primary,
             mode: PromptMode.normal,
@@ -2012,7 +2153,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _continueScene() async {
-    if (_busy || _formatting || _session == null || _character == null) return;
+    if (_busy || _session == null || _character == null) return;
     if (!_hasApiKey) {
       setState(() {
         _error = 'Add your NanoGPT API key in Settings before you can chat.';
@@ -2044,68 +2185,23 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
-  /// AI-formats the composer draft with *actions* and "dialogue".
-  Future<void> _formatDraft() async {
-    if (_busy || _formatting || _session == null) return;
-    final draft = _inputController.text.trim();
-    if (draft.isEmpty) return;
-    if (!_hasApiKey) {
-      setState(() {
-        _error = 'Add your NanoGPT API key in Settings before you can format.';
-      });
-      return;
-    }
-
-    setState(() {
-      _formatting = true;
-      _error = null;
-    });
-    try {
-      final collaborator = await widget.settingsService
-          .getCollaboratorSettings();
-      final model = await widget.settingsService.getModel();
-      final sampling = await widget.settingsService.getSampling();
-      // Cooler sampling = less “creative rewrite,” closer to the draft.
-      final formatSampling = sampling.copyWith(
-        temperature: sampling.temperature > 0.35 ? 0.35 : sampling.temperature,
-      );
-      final baseUrl = await widget.settingsService.getApiBaseUrl();
-      final charName = _character?.name.trim().isNotEmpty == true
-          ? _character!.name.trim()
-          : 'Character';
-      final messages = _formatter.buildMessages(
-        draft: draft,
-        userName: _userName,
-        characterName: charName,
-        recentMessages: _messages,
-        formatNote: collaborator.composerFormatNote,
-      );
-      final formatted = await widget.nanoGptService.complete(
-        model: model,
-        messages: messages,
-        baseUrl: baseUrl,
-        sampling: formatSampling,
-      );
-      if (!mounted) return;
-      _inputController.text = formatted.trim();
-      _inputController.selection = TextSelection.collapsed(
-        offset: _inputController.text.length,
-      );
-    } on NanoGptCancelledException {
-      // Ignore.
-    } on NanoGptException catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Format failed: $error')));
-    } finally {
-      if (mounted) setState(() => _formatting = false);
-    }
+  void _openComposerToolsSheet() {
+    if (_busy) return;
+    unawaited(
+      showChatComposerToolsSheet(
+        context: context,
+        directorMode: _directorMode,
+        activeMoodCount: _activeSceneMoodCount,
+        showGroupReact: _isGroup && _participants.length >= 2,
+        actions: ChatComposerToolsActions(
+          onSceneMoods: _pickSceneMoods,
+          onNarrator: _openNarratorSheet,
+          onToggleDirector: _toggleDirectorMode,
+          onContinue: _continueScene,
+          onGroupReact: _openGroupReplySheet,
+        ),
+      ),
+    );
   }
 
   Future<void> _showPathsSheet() async {
@@ -2138,7 +2234,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         recentMessages: List<ChatMessage>.from(_messages),
         userName: _userName,
         characterName: charName,
-        generationBlocked: _busy || _formatting,
+        generationBlocked: _busy,
       ),
     );
     if (chosen == null || !mounted) return;
@@ -2379,7 +2475,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
     WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
     if (result == null || !mounted) return;
-    final trimmed = result.trim();
+    final trimmed = normalizeEmDashes(result.trim());
     setState(() {
       _session = session.copyWith(
         memorySummary: trimmed,
@@ -2412,9 +2508,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       userName: userName,
     );
     final loreSettings = await widget.settingsService.getLoreSettings();
-    final extraBooks = await widget.worldInfoService.booksForChat(
-      chatLorebookIds: session.lorebookIds,
-    );
+    final extraBooks = await _lorebooksForSession(session);
     final lore = _lorebookService.buildInjection(
       character: speaker,
       messages: historyForScan,
@@ -2502,12 +2596,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       historyTokenBudget: contextSettings.historyTokenBudget,
       isGroup: _isGroup,
     );
-    final visibleHistory = _presence.filterHistoryForCharacter(
-      history: history,
+    final visibleHistory = _presence.ensureLastUserMessageIncluded(
+      visibleHistory: _presence.filterHistoryForCharacter(
+        history: history,
+        allMessages: _messages,
+        focusCharacter: speaker,
+        participants: _participants,
+        userName: userName,
+      ),
       allMessages: _messages,
-      focusCharacter: speaker,
-      participants: _participants,
-      userName: userName,
+      endExclusive: end,
     );
     final historyTokens = _contextService.estimateConversationTokens(
       visibleHistory,
@@ -2822,7 +2920,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   Future<void> _updateCharacterFromChat() async {
     if (_busy || _session == null) return;
-    final updated = await showUpdateCharacterFromChatSheet(
+    final result = await showUpdateCharacterFromChatSheet(
       context: context,
       session: _session!,
       participants: _participants,
@@ -2832,28 +2930,89 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       nanoGptService: widget.nanoGptService,
       worldInfoService: widget.worldInfoService,
     );
-    if (updated == null || !mounted) return;
+    if (result == null || !mounted) return;
 
-    if (_participants.any((c) => c.id == updated.id)) {
-      final nextParticipants = [
-        for (final c in _participants)
-          if (c.id == updated.id) updated else c,
-      ];
-      final primary = _character?.id == updated.id ? updated : _character;
-      await _applySession(
-        _session!,
-        participants: nextParticipants,
-        character: primary,
+    if (result.chatOnly) {
+      _setCharacterOverride(result.character);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Saved chat copy of “${result.character.name}” — library unchanged.',
+          ),
+        ),
       );
+      return;
     }
 
+    final updated = result.character;
+    final overrides = Map<String, Character>.from(_session!.characterOverrides)
+      ..remove(updated.id);
+    final session = _session!.copyWith(
+      characterOverrides: overrides,
+      clearCharacterOverrides: overrides.isEmpty,
+    );
+    await widget.chatService.saveChat(session);
+    await _refreshCastFromSession(session);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Updated “${updated.name}” — next replies use the new card.',
+          'Updated saved card “${updated.name}” — next replies use it.',
         ),
       ),
+    );
+  }
+
+  Future<void> _openChatLorebook() async {
+    final session = _session;
+    if (session == null || _busy) return;
+    final initial = session.chatLorebook ??
+        const Lorebook(
+          name: 'Chat story lore',
+          description: 'Facts and relationships for this thread only.',
+        );
+    final book = await Navigator.of(context).push<Lorebook>(
+      MaterialPageRoute(
+        builder: (_) => LorebookEditScreen(
+          initial: initial,
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
+          characterName: _isGroup
+              ? _participants.map((c) => c.name).join(', ')
+              : (_character?.name ?? ''),
+        ),
+      ),
+    );
+    if (book == null || !mounted) return;
+    final updated = session.copyWith(
+      chatLorebook: book.isEmpty ? null : book,
+      clearChatLorebook: book.isEmpty,
+    );
+    await _persistSessionAndRefreshCast(updated);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          book.isEmpty
+              ? 'Chat lore cleared.'
+              : 'Chat lore saved (${book.entries.length} entries).',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openChatOverrides() async {
+    final session = _session;
+    if (session == null || _busy) return;
+    await showChatOverridesSheet(
+      context: context,
+      session: session,
+      participants: _participants,
+      persona: _persona,
+      onChanged: (next) async {
+        await _persistSessionAndRefreshCast(next);
+      },
     );
   }
 
@@ -3124,7 +3283,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (!mounted || choice == null) return;
     await _regenerateMessageAt(
       index,
-      asNewSwipe: choice.asNewSwipe,
+      asNewSwipe: true,
       rewrite: choice,
     );
   }
@@ -3243,17 +3402,19 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final end = historyEndExclusive ??
         (excludeLastAssistant ? _messages.length - 1 : _messages.length);
     final rawHistoryForScan = _messages.sublist(0, end);
-    final historyForScan = _presence.filterHistoryForCharacter(
-      history: rawHistoryForScan,
+    final historyForScan = _presence.ensureLastUserMessageIncluded(
+      visibleHistory: _presence.filterHistoryForCharacter(
+        history: rawHistoryForScan,
+        allMessages: _messages,
+        focusCharacter: character,
+        participants: _participants,
+        userName: userName,
+      ),
       allMessages: _messages,
-      focusCharacter: character,
-      participants: _participants,
-      userName: userName,
+      endExclusive: end,
     );
     final loreSettings = await widget.settingsService.getLoreSettings();
-    final extraBooks = await widget.worldInfoService.booksForChat(
-      chatLorebookIds: _session?.lorebookIds,
-    );
+    final extraBooks = await _lorebooksForSession(_session);
     final lore = _lorebookService.buildInjection(
       character: character,
       messages: historyForScan,
@@ -3316,26 +3477,31 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       isGroup: _isGroup,
     );
 
-    final visibleHistory = _presence.filterHistoryForCharacter(
-      history: history,
+    final visibleHistory = _presence.ensureLastUserMessageIncluded(
+      visibleHistory: _presence.filterHistoryForCharacter(
+        history: history,
+        allMessages: _messages,
+        focusCharacter: character,
+        participants: _participants,
+        userName: userName,
+      ),
       allMessages: _messages,
-      focusCharacter: character,
-      participants: _participants,
-      userName: userName,
+      endExclusive: end,
     );
 
     final pendingDirectorId = _session?.pendingDirectorMessageId;
+    final activeNarratorId = _narrator.latestNarratorId(
+      _messages,
+      endExclusive: end,
+    );
 
     for (final message in visibleHistory) {
       if (message.isNarrator) {
-        final block = _narrator.formatForPrompt(
-          text: message.text,
-          userName: userName,
-          charName: character.name,
+        _appendNarratorHistoryBlock(
+          msgs,
+          message,
+          activeNarratorId,
         );
-        if (block.isNotEmpty) {
-          msgs.add({'role': 'system', 'content': block});
-        }
         continue;
       }
       final directorHistory = _director.historyBlockFor(
@@ -3407,6 +3573,22 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       msgs.add({'role': 'system', 'content': postHistory});
     }
 
+    int? excludeMessageIndex;
+    if (targetAssistantId != null) {
+      final idx = _messages.indexWhere((m) => m.id == targetAssistantId);
+      if (idx >= 0) excludeMessageIndex = idx;
+    }
+
+    final narratorBlock = _narratorActiveBlock(
+      charName: character.name,
+      endExclusive: end,
+      speakingAsName: character.name,
+      excludeMessageIndex: excludeMessageIndex,
+    );
+    if (narratorBlock != null && narratorBlock.trim().isNotEmpty) {
+      msgs.add({'role': 'system', 'content': narratorBlock.trim()});
+    }
+
     final directorBlock = _directorBlockForGeneration(
       character: character,
       mode: mode,
@@ -3416,7 +3598,41 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       msgs.add({'role': 'system', 'content': directorBlock.trim()});
     }
 
+    // Scene law + director are injected late (mandatory). If the player just
+    // spoke after a narrator card, their line sits above this stack and the
+    // model no longer has a user turn to answer — add one last.
+    _appendPostSceneLawReplyNudge(
+      msgs,
+      messages: _messages,
+      endExclusive: end,
+      characterName: character.name,
+      userName: userName,
+    );
+
     return msgs;
+  }
+
+  /// When the latest chat line is the player's, ensure the API ends on a user
+  /// turn after late system blocks (narrator scene law, director).
+  void _appendPostSceneLawReplyNudge(
+    List<Map<String, String>> msgs, {
+    required List<ChatMessage> messages,
+    required int endExclusive,
+    required String characterName,
+    required String userName,
+  }) {
+    if (endExclusive <= 0 || endExclusive > messages.length) return;
+    final last = messages[endExclusive - 1];
+    if (!last.isUser || last.text.trim().isEmpty) return;
+
+    final char =
+        characterName.trim().isEmpty ? 'Character' : characterName.trim();
+    final user = userName.trim().isEmpty ? 'User' : userName.trim();
+    msgs.add({
+      'role': 'user',
+      'content':
+          '(Write only $char\'s next reply to $user\'s last message. Stay in character.)',
+    });
   }
 
   Future<void> _streamIntoLastAssistant({
@@ -3692,7 +3908,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
     WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
     if (result == null || !mounted) return;
-    final trimmed = result.trim();
+    final trimmed = normalizeEmDashes(result.trim());
     if (trimmed.isEmpty) return;
     setState(() {
       _session!.messages[index] = message.withEditedText(trimmed);
@@ -3853,6 +4069,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final showChatBackground = ui.chatExperience.backgroundEnabled &&
         _chatBackgroundPath != null;
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 24;
+    final compactComposer = !isDesktopPlatform;
     final hasMemory =
         (_session?.memorySummary.trim().isNotEmpty ?? false);
     final hasAuthorsNote = _hasEffectiveAuthorsNote;
@@ -3898,6 +4115,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               if (value == 'authors_note') _editAuthorsNote();
               if (value == 'scene_moods') _pickSceneMoods();
               if (value == 'lorebooks') _pickChatLorebooks();
+              if (value == 'chat_lore') _openChatLorebook();
+              if (value == 'chat_copies') _openChatOverrides();
               if (value == 'memory') _editMemorySummary();
               if (value == 'summarize') _summarizeNow();
               if (value == 'context') _showContextEstimate();
@@ -3948,6 +4167,21 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 value: 'lorebooks',
                 child: Text(chatLorebookMenuLabel(_session?.lorebookIds)),
               ),
+              PopupMenuItem(
+                value: 'chat_lore',
+                child: Text(
+                  (_session?.chatLorebook != null &&
+                          !_session!.chatLorebook!.isEmpty)
+                      ? 'Chat lore (${_session!.chatLorebook!.entries.length})'
+                      : 'Chat lore (this thread)',
+                ),
+              ),
+              if (_session != null &&
+                  _sessionResolver.hasChatOverrides(_session!))
+                const PopupMenuItem(
+                  value: 'chat_copies',
+                  child: Text('Chat copies…'),
+                ),
               PopupMenuItem(
                 value: 'memory',
                 child: Text(
@@ -4342,12 +4576,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             SafeArea(
               top: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                padding: EdgeInsets.fromLTRB(
+                  12,
+                  keyboardOpen && compactComposer ? 4 : 8,
+                  12,
+                  keyboardOpen && compactComposer ? 8 : 12,
+                ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (!keyboardOpen && (hasMemory || hasAuthorsNote))
+                    if (!keyboardOpen && (hasMemory || hasAuthorsNote || activeMoodCount > 0))
                       MinimalChipRow(
                         children: [
                           if (hasMemory)
@@ -4377,6 +4616,23 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                             ),
                           ],
                         ],
+                      ),
+                    if (compactComposer &&
+                        keyboardOpen &&
+                        (_directorMode || activeMoodCount > 0))
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          [
+                            if (_directorMode) 'Director on',
+                            if (activeMoodCount > 0)
+                              '$activeMoodCount mood'
+                                  '${activeMoodCount == 1 ? '' : 's'} active',
+                          ].join(' · '),
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: colorScheme.tertiary,
+                              ),
+                        ),
                       ),
                     if (!keyboardOpen && _isGroup)
                       Padding(
@@ -4423,7 +4679,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                     size: 18,
                                   ),
                                   label: const Text('Group react'),
-                                  onPressed: _busy || _formatting
+                                  onPressed: _busy
                                       ? null
                                       : _openGroupReplySheet,
                                   visualDensity: VisualDensity.compact,
@@ -4441,55 +4697,71 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        IconButton(
-                          tooltip: activeMoodCount > 0
-                              ? 'Scene moods ($activeMoodCount on)'
-                              : 'Scene moods — steer tone for this chat',
-                          onPressed:
-                              _busy || _formatting ? null : _pickSceneMoods,
-                          visualDensity: VisualDensity.compact,
-                          color: activeMoodCount > 0
-                              ? colorScheme.tertiary
-                              : colorScheme.outline,
-                          icon: Icon(
-                            activeMoodCount > 0
-                                ? Icons.mood
-                                : Icons.mood_outlined,
+                        if (compactComposer)
+                          IconButton(
+                            tooltip: 'Composer tools',
+                            onPressed: _busy
+                                ? null
+                                : _openComposerToolsSheet,
+                            visualDensity: VisualDensity.compact,
+                            color: (_directorMode || activeMoodCount > 0)
+                                ? colorScheme.tertiary
+                                : colorScheme.outline,
+                            icon: const Icon(Icons.add_circle_outline),
+                          )
+                        else ...[
+                          IconButton(
+                            tooltip: activeMoodCount > 0
+                                ? 'Scene moods ($activeMoodCount on)'
+                                : 'Scene moods — steer tone for this chat',
+                            onPressed:
+                                _busy ? null : _pickSceneMoods,
+                            visualDensity: VisualDensity.compact,
+                            color: activeMoodCount > 0
+                                ? colorScheme.tertiary
+                                : colorScheme.outline,
+                            icon: Icon(
+                              activeMoodCount > 0
+                                  ? Icons.mood
+                                  : Icons.mood_outlined,
+                            ),
                           ),
-                        ),
-                        IconButton(
-                          tooltip: 'Narrator — scene voice & direction',
-                          onPressed: _busy || _formatting
-                              ? null
-                              : _openNarratorSheet,
-                          visualDensity: VisualDensity.compact,
-                          color: colorScheme.tertiary,
-                          icon: const Icon(Icons.theater_comedy_outlined),
-                        ),
-                        IconButton(
-                          tooltip: _directorMode
-                              ? 'Director on — your note commands the next reply'
-                              : 'Director off — normal roleplay send',
-                          onPressed: _busy || _formatting
-                              ? null
-                              : _toggleDirectorMode,
-                          visualDensity: VisualDensity.compact,
-                          color: _directorMode
-                              ? colorScheme.primary
-                              : colorScheme.outline,
-                          icon: Icon(
-                            _directorMode
-                                ? Icons.control_camera
-                                : Icons.control_camera_outlined,
+                          IconButton(
+                            tooltip: 'Narrator — scene voice & direction',
+                            onPressed: _busy
+                                ? null
+                                : _openNarratorSheet,
+                            visualDensity: VisualDensity.compact,
+                            color: colorScheme.tertiary,
+                            icon: const Icon(Icons.theater_comedy_outlined),
                           ),
-                        ),
+                          IconButton(
+                            tooltip: _directorMode
+                                ? 'Director on — your note commands the next reply'
+                                : 'Director off — normal roleplay send',
+                            onPressed: _busy
+                                ? null
+                                : _toggleDirectorMode,
+                            visualDensity: VisualDensity.compact,
+                            color: _directorMode
+                                ? colorScheme.primary
+                                : colorScheme.outline,
+                            icon: Icon(
+                              _directorMode
+                                  ? Icons.control_camera
+                                  : Icons.control_camera_outlined,
+                            ),
+                          ),
+                        ],
                         Expanded(
                           child: ChatComposerField(
                             key: const ValueKey('chat_composer'),
                             controller: _inputController,
                             focusNode: _composerFocusNode,
-                            enabled: !_busy && !_formatting,
+                            enabled: !_busy,
                             enterToSend: _enterToSend,
+                            minLines: compactComposer && keyboardOpen ? 2 : 1,
+                            maxLines: compactComposer && keyboardOpen ? 8 : 5,
                             decoration: InputDecoration(
                               hintText: _directorMode
                                   ? 'Direct the scene — how they act, feel, respond…'
@@ -4499,7 +4771,28 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                         ? 'Message $characterName…'
                                         : 'Send only — Continue or long-press…'),
                               filled: true,
-                              border: const OutlineInputBorder(),
+                              border: OutlineInputBorder(
+                                borderSide: BorderSide(
+                                  color: _directorMode
+                                      ? colorScheme.primary
+                                      : colorScheme.outline,
+                                ),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderSide: BorderSide(
+                                  color: _directorMode
+                                      ? colorScheme.primary
+                                      : colorScheme.outline,
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderSide: BorderSide(
+                                  color: _directorMode
+                                      ? colorScheme.primary
+                                      : colorScheme.primary,
+                                  width: _directorMode ? 2 : 1,
+                                ),
+                              ),
                               isDense: true,
                             ),
                             onSend: _send,
@@ -4520,29 +4813,24 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                             ),
                             child: const Icon(Icons.stop),
                           )
+                        else if (compactComposer)
+                          FilledButton(
+                            onPressed: _send,
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.all(14),
+                              minimumSize: const Size(48, 48),
+                            ),
+                            child: const Icon(Icons.send),
+                          )
                         else ...[
-                          IconButton(
-                            tooltip: 'Format (*actions* / "dialogue")',
-                            visualDensity: VisualDensity.compact,
-                            onPressed: _formatting ? null : _formatDraft,
-                            icon: _formatting
-                                ? const SizedBox(
-                                    width: 22,
-                                    height: 22,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.auto_awesome),
-                          ),
                           IconButton(
                             tooltip: 'Continue',
                             visualDensity: VisualDensity.compact,
-                            onPressed: _formatting ? null : _continueScene,
+                            onPressed: _continueScene,
                             icon: const Icon(Icons.play_arrow),
                           ),
                           FilledButton(
-                            onPressed: _formatting ? null : _send,
+                            onPressed: _send,
                             style: FilledButton.styleFrom(
                               padding: const EdgeInsets.all(14),
                               minimumSize: const Size(48, 48),

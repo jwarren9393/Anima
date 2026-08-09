@@ -54,7 +54,7 @@ class SceneMoodPresets {
     SceneMoodPreset(
       id: 'sensual',
       name: 'Sensual / intimate',
-      description: 'Realistic adult intimacy — no porn clichés.',
+      description: 'Realistic intimacy — emotional, not graphic.',
       text:
           'SCENE MOOD — SENSUAL / INTIMATE (ongoing until turned off):\n'
           'Write adult intimacy like real people: breath, hesitation, humor, awkward '
@@ -62,6 +62,39 @@ class SceneMoodPresets {
           'yes", no breathy stammering for its own sake, no "that was amazing" '
           'curtain-call, no instant fade-to-black after climax. Stay in the moment; '
           'match {{user}}\'s pacing. {{char}} stays in character — not a generic lover voice.',
+    ),
+    SceneMoodPreset(
+      id: 'intimate_buildup',
+      name: 'Intimate build-up',
+      description: 'Tension, teasing, anticipation before sex.',
+      text:
+          'SCENE MOOD — INTIMATE BUILD-UP (ongoing until turned off):\n'
+          'This beat is BEFORE full sex: charged pauses, teasing, hands wandering, '
+          'clothes coming off or almost off, breath on skin, restraint giving way, '
+          'dirty talk that builds — not the main act yet unless {{user}} leads there. '
+          '{{char}} stays in character. Slow the moment down; make anticipation physical.',
+    ),
+    SceneMoodPreset(
+      id: 'explicit',
+      name: 'Explicit / graphic',
+      description: 'Raw adult vocabulary — no euphemisms or AI tropes.',
+      text:
+          'SCENE MOOD — EXPLICIT / GRAPHIC (ongoing until turned off):\n'
+          'Write the sex scene in full, graphic detail. Plain adult words, not purple '
+          'prose or euphemisms. Stay in the moment — thrust, rhythm, sweat, sound, '
+          'mess, breath, grip, pace changes. Match {{user}}\'s energy; do not sanitize, '
+          'summarize, or fade to black. {{char}} stays in character — not a porn narrator.',
+    ),
+    SceneMoodPreset(
+      id: 'afterglow',
+      name: 'Afterglow / aftermath',
+      description: 'Post-climax — messy, real, not a movie ending.',
+      text:
+          'SCENE MOOD — AFTERGLOW / AFTERMATH (ongoing until turned off):\n'
+          'The act is over or winding down: tangled limbs, sweat, catching breath, '
+          'stupid jokes, tenderness, vulnerability, cleanup, water, smoke, silence. '
+          'No generic "that was amazing" curtain-call. Let it be awkward, sweet, '
+          'raw, or quiet as fits {{char}}. Stay specific and human.',
     ),
     SceneMoodPreset(
       id: 'angry',

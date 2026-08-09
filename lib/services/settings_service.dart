@@ -415,6 +415,7 @@ class SettingsService {
   static const _roadwayNoteKey = 'roadway_guidance_note';
   static const _narratorNoteKey = 'narrator_guidance_note';
   static const _enterToSendComposerKey = 'composer_enter_to_send';
+  static const _autoWrapDialogueOnSendKey = 'composer_auto_wrap_dialogue_on_send';
   static const _characterBuildUseMainModelKey = 'character_build_use_main_model';
   static const _characterBuildModelKey = 'character_build_model_id';
   static const _characterBuildMaxTokensKey = 'character_build_max_tokens';
@@ -461,6 +462,7 @@ class SettingsService {
     _roadwayNoteKey,
     _narratorNoteKey,
     _enterToSendComposerKey,
+    _autoWrapDialogueOnSendKey,
     _characterBuildUseMainModelKey,
     _characterBuildModelKey,
     _characterBuildMaxTokensKey,
@@ -761,6 +763,21 @@ class SettingsService {
       key: _enterToSendComposerKey,
       value: value ? 'true' : 'false',
     );
+  }
+
+  /// Wrap plain composer text in "quotes" on send (*actions* stay as-is).
+  Future<bool> getAutoWrapDialogueOnSend() async {
+    final raw = await _storage.read(key: _autoWrapDialogueOnSendKey);
+    if (raw == null) return true;
+    return raw == 'true';
+  }
+
+  Future<void> saveAutoWrapDialogueOnSend(bool value) async {
+    if (!value) {
+      await _storage.write(key: _autoWrapDialogueOnSendKey, value: 'false');
+      return;
+    }
+    await _storage.write(key: _autoWrapDialogueOnSendKey, value: 'true');
   }
 
   Future<void> saveCollaboratorSettings(CollaboratorSettings settings) async {

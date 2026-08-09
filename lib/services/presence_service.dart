@@ -18,10 +18,12 @@ class PresenceService {
   static const knowledgeBoundaryPrompt = '''
 Knowledge boundaries (absolute — never break these):
 - You are {{char}}. You ONLY know what {{char}} personally witnessed in-scene or was told directly while present.
-- Chat history, memory, and narrator lines below are already filtered to {{char}}'s knowledge. If something is missing, {{char}} does NOT know it — do not guess, infer, or "sense" off-screen events.
+- Chat history below is filtered to {{char}}'s knowledge — private dialogue from scenes {{char}} was not physically in is omitted. The latest player Narrator line (injected separately) defines the current scene and who is physically present; ALL cast know that scene brief even when off-screen.
+- If something is missing from history, {{char}} does NOT know it — do not guess, infer, or "sense" off-screen events.
 - Do NOT reference private conversations, moods, actions, or thoughts from scenes where {{char}} was not present — not even vaguely, not even "I heard", not even unless {{user}} told you in-scene.
 - Other character summaries in the system prompt are identity reference only — not shared knowledge.
 - If uncertain, stay neutral or ask — never invent awareness.
+- Player Narrator lines establish scene facts (who is present, where, what happened) — treat them as law, not suggestions. Do not ignore or contradict the latest narrator beat.
 - {{user}}'s agency stays intact; do not speak for {{user}}.
 ''';
 
@@ -39,6 +41,8 @@ Knowledge boundaries (absolute — never break these):
   }
 
   /// Filter recent history for one speaking character.
+  ///
+  /// Solo chats skip filtering — one character and the user share the thread.
   List<ChatMessage> filterHistoryForCharacter({
     required List<ChatMessage> history,
     required List<ChatMessage> allMessages,
@@ -47,6 +51,7 @@ Knowledge boundaries (absolute — never break these):
     required String userName,
   }) {
     if (history.isEmpty) return history;
+    if (participants.length <= 1) return history;
     final focus = focusCharacter.name.trim();
     if (focus.isEmpty) return history;
 
@@ -127,10 +132,20 @@ Knowledge boundaries (absolute — never break these):
     }
 
     if (message.isNarrator) {
+      final prior = messageIndex > 0
+          ? inferPresentAt(
+              messages: allMessages,
+              upToIndex: messageIndex - 1,
+              userName: userName,
+              castNames: castNames,
+              participants: participants,
+            )
+          : const <String>{};
       final scenePresent = _presentFromNarrator(
         message.text,
         castNames,
         _normName(userName),
+        previousPresent: prior,
       );
       return scenePresent.contains(focus);
     }
@@ -177,6 +192,90 @@ Knowledge boundaries (absolute — never break these):
     return present.contains(focus);
   }
 
+  /// The replying character must always see the latest user message, even when
+  /// presence filtering would otherwise hide it (common in long group chats).
+  List<ChatMessage> ensureLastUserMessageIncluded({
+    required List<ChatMessage> visibleHistory,
+    required List<ChatMessage> allMessages,
+    required int endExclusive,
+  }) {
+    if (endExclusive <= 0) return visibleHistory;
+
+    ChatMessage? lastUser;
+    for (var i = endExclusive - 1; i >= 0; i--) {
+      final message = allMessages[i];
+      if (message.isUser && message.text.trim().isNotEmpty) {
+        lastUser = message;
+        break;
+      }
+    }
+    if (lastUser == null) return visibleHistory;
+    if (visibleHistory.any((m) => m.id == lastUser!.id)) {
+      return visibleHistory;
+    }
+
+    final merged = [...visibleHistory, lastUser];
+    merged.sort((a, b) {
+      final ai = _indexOfMessage(allMessages, a);
+      final bi = _indexOfMessage(allMessages, b);
+      return ai.compareTo(bi);
+    });
+    return merged;
+  }
+
+  /// Who is physically in the scene per the latest narrator beat (group chats).
+  ///
+  /// Empty when there is no narrator yet — [inferPresentAt] handles that case.
+  Set<String> physicallyPresentFromLatestNarrator({
+    required List<ChatMessage> messages,
+    required List<Character> participants,
+    required String userName,
+    int? endExclusive,
+  }) {
+    return sceneSnapshotFromLatestNarrator(
+      messages: messages,
+      participants: participants,
+      userName: userName,
+      endExclusive: endExclusive,
+    ).present;
+  }
+
+  /// Present + movement cast for the latest narrator beat (departures / arrivals).
+  NarratorSceneSnapshot sceneSnapshotFromLatestNarrator({
+    required List<ChatMessage> messages,
+    required List<Character> participants,
+    required String userName,
+    int? endExclusive,
+  }) {
+    final castNames = _castNames(participants, userName);
+    final user = _normName(userName);
+    final end = (endExclusive ?? messages.length).clamp(0, messages.length);
+    for (var i = end - 1; i >= 0; i--) {
+      final message = messages[i];
+      if (!message.isNarrator || message.text.trim().isEmpty) continue;
+      final prior = i > 0
+          ? inferPresentAt(
+              messages: messages,
+              upToIndex: i - 1,
+              userName: userName,
+              castNames: castNames,
+              participants: participants,
+            )
+          : const <String>{};
+      return _resolveNarratorScene(
+        narratorText: message.text,
+        castNames: castNames,
+        user: user,
+        previousPresent: prior,
+      );
+    }
+    return const NarratorSceneSnapshot(
+      present: {},
+      departed: {},
+      arriving: {},
+    );
+  }
+
   /// Who is in the scene at [upToIndex] (inclusive).
   Set<String> inferPresentAt({
     required List<ChatMessage> messages,
@@ -212,9 +311,17 @@ Knowledge boundaries (absolute — never break these):
     for (var i = start; i <= end; i++) {
       final message = messages[i];
       if (message.isNarrator) {
+        final prior = Set<String>.from(present);
         present
           ..clear()
-          ..addAll(_presentFromNarrator(message.text, castNames, user));
+          ..addAll(
+            _resolveNarratorScene(
+              narratorText: message.text,
+              castNames: castNames,
+              user: user,
+              previousPresent: prior,
+            ).present,
+          );
         continue;
       }
 
@@ -418,8 +525,22 @@ Do NOT use facts from scenes $char did not witness. If a fact is not listed, $ch
   Set<String> _presentFromNarrator(
     String narratorText,
     Set<String> castNames,
-    String user,
-  ) {
+    String user, {
+    Set<String> previousPresent = const {},
+  }) =>
+      _resolveNarratorScene(
+        narratorText: narratorText,
+        castNames: castNames,
+        user: user,
+        previousPresent: previousPresent,
+      ).present;
+
+  NarratorSceneSnapshot _resolveNarratorScene({
+    required String narratorText,
+    required Set<String> castNames,
+    required String user,
+    Set<String> previousPresent = const {},
+  }) {
     final lower = narratorText.toLowerCase();
 
     for (final name in castNames) {
@@ -431,13 +552,55 @@ Do NOT use facts from scenes $char did not witness. If a fact is not listed, $ch
         caseSensitive: false,
       );
       if (alonePattern.hasMatch(lower)) {
-        return {user, name};
+        return NarratorSceneSnapshot(
+          present: {user, name},
+          departed: const {},
+          arriving: const {},
+        );
       }
     }
 
-    final present = <String>{};
-    if (user.isNotEmpty) present.add(user);
-    _addMentionedCast(narratorText, castNames, present);
+    final departed = <String>{};
+    final arriving = <String>{};
+    for (final name in castNames) {
+      if (name.isEmpty) continue;
+      if (_narratorCastDeparts(lower, name)) departed.add(name);
+      if (_narratorCastArrives(lower, name)) arriving.add(name);
+    }
+
+    final hasDelta = departed.isNotEmpty || arriving.isNotEmpty;
+    final present = (hasDelta && previousPresent.isNotEmpty)
+        ? Set<String>.from(previousPresent)
+        : <String>{if (user.isNotEmpty) user};
+
+    if (!hasDelta) {
+      _addMentionedCast(narratorText, castNames, present);
+    }
+
+    for (final name in departed) {
+      present.removeWhere(
+        (p) => _namesEquivalent(p, name),
+      );
+    }
+    if (user.isNotEmpty &&
+        departed.any((name) => _namesEquivalent(name, user))) {
+      present.removeWhere((p) => _namesEquivalent(p, user));
+    }
+    arriving.removeWhere(
+      (name) => departed.any((d) => _namesEquivalent(d, name)),
+    );
+    present.addAll(arriving);
+
+    if (_narratorMeansEveryone(lower)) {
+      present.addAll(castNames.where((n) => n.isNotEmpty));
+      for (final name in departed) {
+        present.removeWhere((p) => _namesEquivalent(p, name));
+      }
+      if (user.isNotEmpty &&
+          departed.any((name) => _namesEquivalent(name, user))) {
+        present.removeWhere((p) => _namesEquivalent(p, user));
+      }
+    }
 
     for (final name in castNames) {
       if (name.isEmpty || name == user) continue;
@@ -445,7 +608,68 @@ Do NOT use facts from scenes $char did not witness. If a fact is not listed, $ch
         present.remove(name);
       }
     }
-    return present;
+
+    return NarratorSceneSnapshot(
+      present: present,
+      departed: departed,
+      arriving: arriving,
+    );
+  }
+
+  static const _departureVerbs =
+      r'(?:leaves?|left|departs?|departed|walks?\s+out|walked\s+out|walking\s+out|went\s+out|heads?\s+out|headed\s+out|is\s+gone|exits?|exited|exiting|drives?\s+away|drove\s+away)';
+
+  static const _arrivalVerbs =
+      r'(?:walks?|walked|walking|enters?|entered|entering|arrives?|arrived|arriving|comes?|came|coming|steps?|stepped|stepping|strolls?|strolled|strolling|appears?|appeared|appearing|returns?|returned|returning)';
+
+  bool _narratorCastDeparts(String lower, String name) {
+    for (final token in _nameMatchTokens(name)) {
+      final escaped = RegExp.escape(token);
+      if (RegExp(
+        '\\b$escaped\\b[^.\\n]{0,20}\\b$_departureVerbs\\b',
+        caseSensitive: false,
+      ).hasMatch(lower)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool _narratorCastArrives(String lower, String name) {
+    for (final token in _nameMatchTokens(name)) {
+      final escaped = RegExp.escape(token);
+      if (RegExp(
+        '\\b$escaped\\b[^.\\n]{0,20}\\b$_arrivalVerbs\\b',
+        caseSensitive: false,
+      ).hasMatch(lower)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool _namesEquivalent(String a, String b) {
+    if (a == b) return true;
+    final aFirst = a.split(RegExp(r'\s+')).first;
+    final bFirst = b.split(RegExp(r'\s+')).first;
+    return aFirst.length >= 3 && aFirst == bFirst;
+  }
+
+  bool _narratorMeansEveryone(String lower) {
+    const phrases = [
+      'everyone',
+      'everybody',
+      'whole family',
+      'whole cast',
+      'entire family',
+      'entire cast',
+      'all of them',
+      'the full cast',
+      'whole group',
+      'entire group',
+      'the whole group',
+    ];
+    return phrases.any(lower.contains);
   }
 
   bool _narratorExcludesCast(String lower, String name) {
@@ -496,10 +720,25 @@ Do NOT use facts from scenes $char did not witness. If a fact is not listed, $ch
 
   bool _textContainsCastName(String lower, String name) {
     if (name.isEmpty) return false;
-    return RegExp(
+    if (RegExp(
       '\\b${RegExp.escape(name)}\\b',
       caseSensitive: false,
-    ).hasMatch(lower);
+    ).hasMatch(lower)) {
+      return true;
+    }
+    // First-name match for multi-word cast ("Ashley" → Ashley Diamond).
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.length > 1) {
+      final first = parts.first.toLowerCase();
+      if (first.length >= 3 &&
+          RegExp(
+            '\\b${RegExp.escape(first)}\\b',
+            caseSensitive: false,
+          ).hasMatch(lower)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   Set<String> _mentionedCastFromText(String text, Set<String> castNames) {
@@ -514,6 +753,29 @@ Do NOT use facts from scenes $char did not witness. If a fact is not listed, $ch
 
   void _addMentionedCast(String text, Set<String> castNames, Set<String> present) {
     present.addAll(_mentionedCastFromText(text, castNames));
+  }
+
+  /// "Ashley walks into…" — arriving cast witness their entrance beat.
+  void _addArrivingCastFromNarrator(
+    String text,
+    Set<String> castNames,
+    Set<String> present,
+  ) {
+    final lower = text.toLowerCase();
+    for (final name in castNames) {
+      if (name.isEmpty) continue;
+      if (_narratorCastArrives(lower, name)) present.add(name);
+    }
+  }
+
+  Iterable<String> _nameMatchTokens(String normalizedName) sync* {
+    if (normalizedName.isEmpty) return;
+    yield normalizedName;
+    final parts = normalizedName.split(RegExp(r'\s+'));
+    if (parts.length > 1) {
+      final first = parts.first;
+      if (first.length >= 3) yield first;
+    }
   }
 
   String? _messageSpeakerName(ChatMessage message, String fallbackChar) {
@@ -542,4 +804,17 @@ Do NOT use facts from scenes $char did not witness. If a fact is not listed, $ch
   }
 
   String _normName(String value) => value.trim().toLowerCase();
+}
+
+/// Who is in-scene and who moved per a narrator beat.
+class NarratorSceneSnapshot {
+  const NarratorSceneSnapshot({
+    required this.present,
+    required this.departed,
+    required this.arriving,
+  });
+
+  final Set<String> present;
+  final Set<String> departed;
+  final Set<String> arriving;
 }

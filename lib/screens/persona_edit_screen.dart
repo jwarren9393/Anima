@@ -19,6 +19,9 @@ import '../services/world_workshop_builder.dart';
 import '../widgets/anima_avatar.dart';
 import '../widgets/generate_avatar_sheet.dart';
 import '../widgets/keyboard_inset.dart';
+import '../models/field_wand_options.dart';
+import '../widgets/field_wand_icon_button.dart';
+import '../widgets/field_wand_menu_sheet.dart';
 import 'settings_ui.dart';
 
 /// Create or edit one user persona.
@@ -30,6 +33,8 @@ class PersonaEditScreen extends StatefulWidget {
     required this.nanoGptService,
     this.existing,
     this.generatedDraft = false,
+    this.persistToLibrary = true,
+    this.wandExternalSources = const [],
   });
 
   final PersonaService personaService;
@@ -37,6 +42,11 @@ class PersonaEditScreen extends StatefulWidget {
   final NanoGptService nanoGptService;
   final Persona? existing;
   final bool generatedDraft;
+
+  /// When false, Save returns the persona without writing to the library.
+  final bool persistToLibrary;
+
+  final List<FieldWandExternalSource> wandExternalSources;
 
   @override
   State<PersonaEditScreen> createState() => _PersonaEditScreenState();
@@ -439,8 +449,23 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
     }
   }
 
-  Future<void> _runWand(PersonaCollaboratorField field) async {
+  Future<void> _runWand(
+    PersonaCollaboratorField field, {
+    FieldWandChoice choice = const FieldWandChoice(
+      expansion: FieldWandExpansion.light,
+    ),
+  }) async {
     if (_wandBusy != null || _saving || _avatarBusy || _aiCardBusy) return;
+
+    FieldWandExternalSource? external;
+    if (choice.externalSourceId != null) {
+      for (final source in widget.wandExternalSources) {
+        if (source.id == choice.externalSourceId) {
+          external = source;
+          break;
+        }
+      }
+    }
 
     setState(() => _wandBusy = field);
     try {
@@ -450,6 +475,8 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
         field: field,
         draft: _draftContext(),
         guidanceNote: collaborator.guidanceNote,
+        expansion: choice.expansion,
+        externalSource: external,
       );
       final model = await widget.settingsService.getModel();
       final sampling = await widget.settingsService.getSampling();
@@ -469,7 +496,9 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Appended AI text to ${_collaborator.fieldLabel(field)}.',
+            choice.usesExternal
+                ? 'Appended ${choice.expansion.menuTitle.toLowerCase()} detail from ${external?.label ?? 'source'} to ${_collaborator.fieldLabel(field)}.'
+                : 'Appended AI text to ${_collaborator.fieldLabel(field)}.',
           ),
         ),
       );
@@ -488,6 +517,17 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
     } finally {
       if (mounted) setState(() => _wandBusy = null);
     }
+  }
+
+  Future<void> _showWandMenu(PersonaCollaboratorField field) async {
+    if (_wandBusy != null || _saving || _avatarBusy || _aiCardBusy) return;
+    final choice = await showFieldWandMenuSheet(
+      context: context,
+      fieldLabel: _collaborator.fieldLabel(field),
+      externalSources: widget.wandExternalSources,
+    );
+    if (choice == null || !mounted) return;
+    await _runWand(field, choice: choice);
   }
 
   Future<void> _pickAvatar() async {
@@ -616,7 +656,9 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
       avatarFileName: _avatarFileName,
       sourceWorkshopId: widget.existing?.sourceWorkshopId,
     );
-    await widget.personaService.upsert(persona);
+    if (widget.persistToLibrary) {
+      await widget.personaService.upsert(persona);
+    }
     if (!mounted) return;
     Navigator.of(context).pop(persona);
   }
@@ -670,18 +712,11 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
               alignLabelWithHint: minLines > 1,
               suffixIcon: wandField == null
                   ? null
-                  : IconButton(
-                      tooltip: 'AI wand — expand this field',
-                      onPressed: anyWandBusy || _saving || _avatarBusy
-                          ? null
-                          : () => _runWand(wandField),
-                      icon: wandBusy
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.auto_awesome),
+                  : FieldWandIconButton(
+                      busy: wandBusy,
+                      enabled: !anyWandBusy && !_saving && !_avatarBusy,
+                      onTap: () => _runWand(wandField),
+                      onLongPress: () => _showWandMenu(wandField),
                     ),
             ),
       ),

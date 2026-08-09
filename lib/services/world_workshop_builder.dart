@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../models/field_wand_options.dart';
 import '../models/character.dart';
 import '../models/chat_message.dart';
 import '../models/chat_session.dart';
@@ -1361,6 +1362,7 @@ ${formatTranscript(conversation)}
     WorkshopSourceContext? importedSource,
     String worldSummary = '',
     List<String> canonPinMessageIds = const [],
+    WorkshopCardMergeDepth mergeDepth = WorkshopCardMergeDepth.standard,
   }) {
     final guidance = guidanceNote.trim().isEmpty
         ? CollaboratorSettings.defaultGuidanceNote
@@ -1383,7 +1385,7 @@ Preserve-and-merge rules:
 - Merge in new details from the workshop conversation, imported source, and lorebook.
 - Do not invent contradictions or erase identity the persona already states.
 - Keep the same person (same name unless the workshop explicitly renames them).
-
+${mergeDepth.mergeRules}
 Output rules:
 - Reply with ONLY a single JSON object. No markdown fences. No preamble.
 - Shape:
@@ -1497,6 +1499,7 @@ ${formatTranscript(conversation)}
     String buildPromptNote = CharacterBuildSettings.defaultPromptNote,
     Lorebook? sourceLorebook,
     WorkshopSourceContext? importedSource,
+    WorkshopCardMergeDepth mergeDepth = WorkshopCardMergeDepth.standard,
   }) {
     final guidance = buildPromptNote.trim().isEmpty
         ? CharacterBuildSettings.defaultPromptNote
@@ -1521,7 +1524,8 @@ Output rules:
 $slimCharacterCardJsonShape
 $slimCharacterCardFieldRules
 - Fill fields from the conversation. Invent only what is needed for a usable card.
-- Keep each field concise (a few sentences each). Do not write long essays.
+${mergeDepth == WorkshopCardMergeDepth.enrich ? '- Include rich, specific detail from the workshop — relationships, sensory beats, speech quirks, secrets, and history fragments. Several sentences per field are fine.' : '- Keep each field concise (a few sentences each). Do not write long essays.'}
+${mergeDepth.mergeRules}
 - Do not sanitize or moralize. Output only the JSON object.
 '''
             .trim();
@@ -1619,6 +1623,7 @@ ${formatTranscript(conversation)}
     String buildPromptNote = CharacterBuildSettings.defaultPromptNote,
     Lorebook? sourceLorebook,
     WorkshopSourceContext? importedSource,
+    WorkshopCardMergeDepth mergeDepth = WorkshopCardMergeDepth.standard,
   }) {
     final guidance = buildPromptNote.trim().isEmpty
         ? CharacterBuildSettings.defaultPromptNote
@@ -1645,7 +1650,7 @@ Preserve-and-merge rules:
 - Prefer richer, specific wording over vague replacements.
 - Keep the same character identity (same person). Do not rename unless the
   workshop explicitly asks for a name change.
-
+${mergeDepth.mergeRules}
 Output rules:
 - Reply with ONLY a single JSON object. No markdown fences. No preamble.
 - Prefer this shape (chara_card_v2):
@@ -1833,6 +1838,7 @@ ${formatTranscript(conversation)}
     String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
     Lorebook? sourceLorebook,
     WorkshopSourceContext? importedSource,
+    WorkshopCardMergeDepth mergeDepth = WorkshopCardMergeDepth.standard,
   }) {
     final guidance = guidanceNote.trim().isEmpty
         ? CollaboratorSettings.defaultGuidanceNote
@@ -1865,6 +1871,8 @@ Output rules:
 }
 - Write facts about the target persona only. Keep broad world history in the
   separate lorebook instead of repeating it here.
+${mergeDepth == WorkshopCardMergeDepth.enrich ? '- Include rich personal detail from the workshop — relationships, motives, secrets, appearance specifics, and speech habits. Several sentences per field are fine.' : '- Keep each field concise (a few sentences each).'}
+${mergeDepth.mergeRules}
 - Do not include greetings, example dialogue, system instructions, or commands
   telling the assistant to roleplay this persona.
 - Preserve established facts. Do not sanitize or moralize.

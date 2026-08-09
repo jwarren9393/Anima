@@ -23,7 +23,6 @@ class _ReplyRewriteSheetState extends State<_ReplyRewriteSheet> {
   static const _service = ReplyRewriteService();
   final _customController = TextEditingController();
   ReplyRewriteMode? _selected;
-  bool _asNewSwipe = false;
 
   @override
   void dispose() {
@@ -46,7 +45,6 @@ class _ReplyRewriteSheetState extends State<_ReplyRewriteSheet> {
       ReplyRewriteChoice(
         mode: mode,
         customInstruction: _customController.text.trim(),
-        asNewSwipe: _asNewSwipe,
       ),
     );
   }
@@ -72,8 +70,8 @@ class _ReplyRewriteSheetState extends State<_ReplyRewriteSheet> {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
               child: Text(
-                'Steer the next generation without OOC. Pick an option, then '
-                'choose replace or new swipe.',
+                'Steer the next generation without OOC. The rewrite is saved '
+                'as a new swipe — swipe back to the old text anytime.',
                 style: theme.textTheme.bodySmall,
               ),
             ),
@@ -116,16 +114,6 @@ class _ReplyRewriteSheetState extends State<_ReplyRewriteSheet> {
                   ],
                 ],
               ),
-            ),
-            SwitchListTile(
-              title: const Text('Save as new swipe'),
-              subtitle: const Text(
-                'Off = replace the current version. On = keep the old text.',
-              ),
-              value: _asNewSwipe,
-              onChanged: _selected == null
-                  ? null
-                  : (value) => setState(() => _asNewSwipe = value),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),

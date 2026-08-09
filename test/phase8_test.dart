@@ -23,6 +23,19 @@ void main() {
       expect(text, contains('Stay cozy.'));
       expect(text, contains("Author's note:"));
       expect(text, contains('3 sentences'));
+      expect(text, contains('Modern chat tone'));
+    });
+
+    test('modern chat tone rule is always injected', () {
+      final character = Character(id: 'c1', name: 'Aiko');
+      final text = builder.buildPostHistory(
+        character: character,
+        userName: 'Sam',
+      );
+      expect(text, contains('Modern chat tone'));
+      expect(text, contains('Sam'));
+      expect(text, contains('Aiko'));
+      expect(text, contains('lmao'));
     });
 
     test('global prompts merge with card fields and authors note', () {
