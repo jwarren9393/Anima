@@ -458,9 +458,14 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. On phone: download **Anima-1.0.0.apk** from [v1.0.0 release](https://github.com/jwarren9393/Anima/releases/tag/v1.0.0) — build **57** (installs over prior 1.0.0 builds).
-2. Run the app locally if needed: `cd F:\AI\Anima` then `flutter run -d windows` (or plug in phone and `flutter run`).
-3. **Release rule:** keep `pubspec.yaml` at **`1.0.0+<build>`** — never bump the `1.0.0` name; only increment the number after `+`. Upload to the existing **`v1.0.0`** GitHub release (not a new tag per build).
+1. **GitHub:** code for **build 58** is on `main`. Run `gh auth login`, then upload release assets:
+   ```powershell
+   cd D:\AI\Anima
+   .\scripts\upload_github_release.ps1
+   ```
+   (Windows zip is already built on this PC; APK still needs `flutter build apk --release` on a machine with Android SDK.)
+2. On phone: install **Anima-1.0.0.apk** from [v1.0.0 release](https://github.com/jwarren9393/Anima/releases/tag/v1.0.0) after upload — build **58**.
+3. **Release rule:** keep `pubspec.yaml` at **`1.0.0+<build>`** — only increment the number after `+`. Upload to the existing **`v1.0.0`** GitHub release (not a new tag per build).
 
 ---
 
