@@ -102,9 +102,7 @@ class CharacterService {
       }
     }
     all.removeWhere((c) => c.id == id);
-    if (removed?.avatarFileName != null) {
-      await _avatarService.delete(removed!.avatarFileName);
-    }
+    await _avatarService.deleteAllForStem(id);
     await saveCharacters(all);
     return all;
   }

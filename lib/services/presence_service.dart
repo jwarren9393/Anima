@@ -1,31 +1,70 @@
 import '../models/character.dart';
 import '../models/chat_message.dart';
-import 'narrator_service.dart';
+import '../utils/rp_observable_text.dart';
 
 /// Automatic presence / knowledge filtering for live chat prompts.
 ///
 /// Always on — no settings. Characters only receive history, memory, lore
 /// scans, and narrator context from scenes they personally witnessed.
 class PresenceService {
-  const PresenceService({
-    this.narrator = const NarratorService(),
-    this.sceneLookback = 12,
-  });
+  const PresenceService({this.sceneLookback = 12});
 
-  final NarratorService narrator;
   final int sceneLookback;
 
   static const knowledgeBoundaryPrompt = '''
 Knowledge boundaries (absolute — never break these):
 - You are {{char}}. You ONLY know what {{char}} personally witnessed in-scene or was told directly while present.
-- Chat history below is filtered to {{char}}'s knowledge — private dialogue from scenes {{char}} was not physically in is omitted. The latest player Narrator line (injected separately) defines the current scene and who is physically present; ALL cast know that scene brief even when off-screen.
+- Chat history below is filtered to {{char}}'s knowledge — scenes {{char}} missed are omitted. Other characters' *asterisk* blocks that read like private thoughts are omitted; their visible actions and spoken "dialogue" remain.
+- Player Narrator and Director blocks may include omniscient staging for the story. Facts explicitly marked as unknown to {{char}}, or secrets {{char}} did not witness in chat, are NOT {{char}}'s knowledge — never speak them, confess them, or react as if you heard them.
 - If something is missing from history, {{char}} does NOT know it — do not guess, infer, or "sense" off-screen events.
 - Do NOT reference private conversations, moods, actions, or thoughts from scenes where {{char}} was not present — not even vaguely, not even "I heard", not even unless {{user}} told you in-scene.
 - Other character summaries in the system prompt are identity reference only — not shared knowledge.
 - If uncertain, stay neutral or ask — never invent awareness.
-- Player Narrator lines establish scene facts (who is present, where, what happened) — treat them as law, not suggestions. Do not ignore or contradict the latest narrator beat.
+- Narrator establishes who is present and the scene backdrop — honor that. Do not contradict it. Do not treat narrator secrets meant for other characters as facts {{char}} knows.
 - {{user}}'s agency stays intact; do not speak for {{user}}.
 ''';
+
+  /// Strips omniscient staging (narrator / director) that [focusCharacterName]
+  /// must not treat as personal knowledge.
+  String sanitizeStagingTextForCharacter({
+    required String text,
+    required String focusCharacterName,
+    Iterable<String> castNames = const [],
+  }) {
+    final body = text.trim();
+    if (body.isEmpty) return body;
+
+    final focus = _normName(focusCharacterName);
+    if (focus.isEmpty) return body;
+
+    final cast = castNames.map(_normName).where((n) => n.isNotEmpty).toSet();
+    final kept = <String>[];
+    for (final sentence in _splitStagingSentences(body)) {
+      if (_dropStagingSentenceForCharacter(
+        sentence: sentence,
+        focus: focus,
+        cast: cast,
+      )) {
+        continue;
+      }
+      kept.add(sentence);
+    }
+    return kept.join(' ').trim();
+  }
+
+  /// History text another character may witness — keeps visible *actions*,
+  /// strips *asterisk* blocks that read like private internal monologue.
+  String observableMessageTextForCharacter({
+    required String text,
+    required String messageSpeakerName,
+    required String observerCharacterName,
+  }) {
+    final observer = _normName(observerCharacterName);
+    final speaker = _normName(messageSpeakerName);
+    if (observer.isEmpty || speaker.isEmpty) return text;
+    if (observer == speaker || _namesEquivalent(observer, speaker)) return text;
+    return observableRpTextForOthers(text);
+  }
 
   /// Hard-coded system addendum with macros applied.
   String formatKnowledgeBoundary({
@@ -804,6 +843,97 @@ Do NOT use facts from scenes $char did not witness. If a fact is not listed, $ch
   }
 
   String _normName(String value) => value.trim().toLowerCase();
+
+  List<String> _splitStagingSentences(String text) {
+    final sentences = <String>[];
+    final buffer = StringBuffer();
+    for (var i = 0; i < text.length; i++) {
+      final ch = text[i];
+      buffer.write(ch);
+      if (ch == '.' || ch == '!' || ch == '?' || ch == '\n') {
+        final sentence = buffer.toString().trim();
+        if (sentence.isNotEmpty) sentences.add(sentence);
+        buffer.clear();
+      }
+    }
+    final tail = buffer.toString().trim();
+    if (tail.isNotEmpty) sentences.add(tail);
+    return sentences;
+  }
+
+  bool _dropStagingSentenceForCharacter({
+    required String sentence,
+    required String focus,
+    required Set<String> cast,
+  }) {
+    final lower = sentence.toLowerCase();
+
+    if (RegExp(
+      r'\b(?:neither|nor)\s+does\s+',
+      caseSensitive: false,
+    ).hasMatch(lower)) {
+      for (final name in cast) {
+        if (name == focus && _textContainsCastName(lower, name)) {
+          return true;
+        }
+      }
+    }
+
+    if (_textContainsCastName(lower, focus)) {
+      const oblivious = [
+        'has no idea',
+        'had no idea',
+        "doesn't know",
+        'does not know',
+        'did not know',
+        "didn't know",
+        'never knew',
+        'is unaware',
+        'was unaware',
+        "doesn't realize",
+        'does not realize',
+        "hasn't noticed",
+        'had not noticed',
+        'slept through',
+        'was sleeping',
+        'was asleep',
+      ];
+      for (final phrase in oblivious) {
+        if (!lower.contains(phrase)) continue;
+        final pattern = RegExp(
+          '\\b${RegExp.escape(_firstToken(focus))}\\b[^.!?\\n]{0,40}$phrase',
+          caseSensitive: false,
+        );
+        if (pattern.hasMatch(lower)) return true;
+        if (_namesEquivalent(_firstToken(focus), focus) &&
+            RegExp(
+              '\\b${RegExp.escape(focus)}\\b[^.!?\\n]{0,40}$phrase',
+              caseSensitive: false,
+            ).hasMatch(lower)) {
+          return true;
+        }
+      }
+    }
+
+    final obliviousThat = RegExp(
+      r"\b(?:has|had) no idea that\b|\b(?:doesn't|does not|didn't|did not|never) know that\b|\b(?:is|was) unaware that\b",
+      caseSensitive: false,
+    );
+    if (!obliviousThat.hasMatch(lower)) return false;
+
+    final thatIndex = lower.indexOf(' that ');
+    if (thatIndex < 0) return true;
+    final secretClause = lower.substring(thatIndex + ' that '.length);
+    if (_textContainsCastName(secretClause, focus)) {
+      return false;
+    }
+    return true;
+  }
+
+  String _firstToken(String name) {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    return parts.isEmpty ? name : parts.first.toLowerCase();
+  }
 }
 
 /// Who is in-scene and who moved per a narrator beat.

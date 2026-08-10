@@ -1,10 +1,13 @@
 import '../models/chat_message.dart';
+import 'presence_service.dart';
 import 'settings_service.dart';
 
 /// Builds prompts for the universal chat Narrator and formats narrator lines
 /// for the roleplay API payload.
 class NarratorService {
-  const NarratorService();
+  const NarratorService({this.presence = const PresenceService()});
+
+  final PresenceService presence;
 
   static const defaultNote = CollaboratorSettings.defaultNarratorNote;
 
@@ -70,15 +73,22 @@ class NarratorService {
     String speakingAsName = '',
     bool narratorAlreadyAddressed = false,
     bool sceneContinuedInChat = false,
+    Iterable<String> castNames = const [],
   }) {
-    final body = text.trim();
+    final rawBody = text.trim();
+    if (rawBody.isEmpty) return '';
+    final speaker = speakingAsName.trim().isEmpty ? charName.trim() : speakingAsName.trim();
+    final body = presence.sanitizeStagingTextForCharacter(
+      text: rawBody,
+      focusCharacterName: speaker,
+      castNames: castNames,
+    );
     if (body.isEmpty) return '';
     final user = userName.trim().isEmpty ? 'User' : userName.trim();
     final char = charName.trim().isEmpty ? 'Character' : charName.trim();
     final cast = isGroup
         ? 'Every character in this scene'
         : char;
-    final speaker = speakingAsName.trim().isEmpty ? char : speakingAsName.trim();
     final continueFromChat = narratorAlreadyAddressed || sceneContinuedInChat;
     final namedInBeat = _narratorNamesCharacter(body, speaker);
     final beatLine = continueFromChat
@@ -97,7 +107,8 @@ PLAYER NARRATOR — SCENE LAW (MANDATORY):
 $body
 
 ${beatLine}This is authoritative scene fact from the player — NOT optional flavor, NOT a suggestion, NOT mood you may ignore.
-$cast and $user (when present) MUST treat this as true: who is here, where they are, positions, sensory facts, and what just happened are law.
+$cast and $user (when present) MUST treat location and who is present as true.
+Secrets explicitly marked as unknown to you are NOT your knowledge — never speak them or act as if you witnessed them.
 ${continueFromChat ? 'Honor the narrator as ongoing scene backdrop only — new actions come from chat history, not a fresh entrance or surprise reaction.' : 'React and reply as if these facts already happened. Do not ignore, soften, reinterpret, or contradict this narrator beat.'}
 Do not speak as the Narrator. Do not repeat this passage verbatim or attribute it to $user or $char as dialogue.
 '''
@@ -118,8 +129,15 @@ Do not speak as the Narrator. Do not repeat this passage verbatim or attribute i
     bool userSpokeAfterNarratorBeat = false,
     bool sceneContinuedInChat = false,
     Set<String> castWhoContinuedScene = const {},
+    Iterable<String> castNames = const [],
   }) {
-    final body = text.trim();
+    final rawBody = text.trim();
+    if (rawBody.isEmpty) return '';
+    final body = presence.sanitizeStagingTextForCharacter(
+      text: rawBody,
+      focusCharacterName: speakingAsName,
+      castNames: castNames,
+    );
     if (body.isEmpty) return '';
     final user = userName.trim().isEmpty ? 'User' : userName.trim();
     final speaker = speakingAsName.trim().isEmpty
@@ -202,10 +220,11 @@ $body
 $presentLine
 ${absentLine.isEmpty ? '' : '$absentLine\n'}$roleLine
 
-$beatOwnerLine${beatLine}ALL cast treat the narrator as authoritative scene fact — NOT a suggestion.
-Location, who is physically present, and what is happening are law for the story.
+$beatOwnerLine${beatLine}ALL cast treat the narrator as authoritative scene fact for location and who is physically present — NOT a suggestion.
+Location, who is physically present, and what is happening in the room are law for the story.
+Secrets or events explicitly marked as unknown to you ($speaker) in the narrator text are NOT your knowledge — never speak them or react as if you heard them.
 ${departedPresent.isNotEmpty ? 'Characters who left are GONE — do not speak to them as if they are still in the room.\n' : ''}${continueFromChat ? 'Do not replay entrances, hugs, or first reactions already shown in chat.' : 'Characters physically present MUST react as if these facts already happened.'}
-Off-screen characters know the scene brief but must not reference dialogue they did not witness.
+Off-screen characters know only the sanitized scene brief below — not private dialogue or secrets from this scene.
 Do not speak as the Narrator. Do not repeat this passage verbatim.
 Do not attribute narrator prose to $user or cast as dialogue.
 '''
@@ -253,9 +272,21 @@ Do not attribute narrator prose to $user or cast as dialogue.
   }
 
   /// Older narrator beats already addressed — weak context only.
-  String formatHistoricalNote({required String text}) {
-    final body = text.trim();
+  String formatHistoricalNote({
+    required String text,
+    String focusCharacterName = '',
+    Iterable<String> castNames = const [],
+  }) {
+    var body = text.trim();
     if (body.isEmpty) return '';
+    if (focusCharacterName.trim().isNotEmpty) {
+      body = presence.sanitizeStagingTextForCharacter(
+        text: body,
+        focusCharacterName: focusCharacterName,
+        castNames: castNames,
+      );
+      if (body.isEmpty) return '';
+    }
     return '''
 Earlier narrator beat (superseded by any newer narrator line — do not contradict the latest narrator):
 $body
@@ -432,10 +463,16 @@ $body
   Map<String, String>? historyBlockFor({
     required ChatMessage message,
     required String? activeNarratorId,
+    String focusCharacterName = '',
+    Iterable<String> castNames = const [],
   }) {
     if (!message.isNarrator) return null;
     if (message.id == activeNarratorId) return null;
-    final block = formatHistoricalNote(text: message.text);
+    final block = formatHistoricalNote(
+      text: message.text,
+      focusCharacterName: focusCharacterName,
+      castNames: castNames,
+    );
     if (block.isEmpty) return null;
     return {'role': 'system', 'content': block};
   }
@@ -454,6 +491,7 @@ $body
     bool userSpokeAfterNarratorBeat = false,
     int? endExclusive,
     int? excludeMessageIndex,
+    Iterable<String> castNames = const [],
   }) {
     if (activeNarratorId == null) return null;
     for (final message in messages) {
@@ -497,6 +535,7 @@ $body
           userSpokeAfterNarratorBeat: userSpoke,
           sceneContinuedInChat: continuation.continued,
           castWhoContinuedScene: continuation.castWhoSpoke,
+          castNames: castNames,
         );
       } else {
         block = formatActiveSceneLaw(
@@ -507,6 +546,7 @@ $body
           speakingAsName: speaker,
           narratorAlreadyAddressed: alreadyAddressed,
           sceneContinuedInChat: continuation.continued,
+          castNames: castNames,
         );
       }
       return block.isEmpty ? null : block;

@@ -183,9 +183,7 @@ class PersonaService {
       }
     }
     all.removeWhere((p) => p.id == id);
-    if (removed?.avatarFileName != null) {
-      await _avatarService.delete(removed!.avatarFileName);
-    }
+    await _avatarService.deleteAllForStem(id);
     final active = await getActivePersonaId();
     if (active == id) {
       if (all.isEmpty) {

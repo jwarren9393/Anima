@@ -1326,8 +1326,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         bound != targetAssistantId) {
       return null;
     }
-    return _director.formatActiveInstruction(
+    final sanitized = _presence.sanitizeStagingTextForCharacter(
       text: text,
+      focusCharacterName: character.name,
+      castNames: _participants.map((c) => c.name),
+    );
+    if (sanitized.trim().isEmpty) return null;
+    return _director.formatActiveInstruction(
+      text: sanitized,
       charName: character.name,
       userName: _userName,
       isGroup: _isGroup,
@@ -1370,19 +1376,44 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       narratorBeatFor: sceneSnapshot.arriving,
       endExclusive: endExclusive,
       excludeMessageIndex: excludeMessageIndex,
+      castNames: _participants.map((c) => c.name),
     );
   }
 
   void _appendNarratorHistoryBlock(
     List<Map<String, String>> msgs,
     ChatMessage message,
-    String? activeNarratorId,
-  ) {
+    String? activeNarratorId, {
+    required String focusCharacterName,
+  }) {
     final block = _narrator.historyBlockFor(
       message: message,
       activeNarratorId: activeNarratorId,
+      focusCharacterName: focusCharacterName,
+      castNames: _participants.map((c) => c.name),
     );
     if (block != null) msgs.add(block);
+  }
+
+  String _historyBodyForMessage({
+    required ChatMessage message,
+    required Character observer,
+  }) {
+    var body = stripLeadingSpeakerPrefix(
+      message.text,
+      message.speakerName,
+    );
+    if (_isGroup &&
+        !message.isUser &&
+        message.speakerName != null &&
+        message.speakerName!.trim().isNotEmpty) {
+      body = _presence.observableMessageTextForCharacter(
+        text: body,
+        messageSpeakerName: message.speakerName!,
+        observerCharacterName: observer.name,
+      );
+    }
+    return body;
   }
 
   Future<void> _openNarratorSheet({String initialText = ''}) async {
@@ -2054,6 +2085,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _messages,
       endExclusive: historyEndExclusive ?? _messages.length,
     );
+    final primary = speakers.first;
 
     for (final message in visibleHistory) {
       if (message.isNarrator) {
@@ -2061,6 +2093,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           historyApi,
           message,
           activeNarratorId,
+          focusCharacterName: primary.name,
         );
         continue;
       }
@@ -2080,9 +2113,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       if (!message.isUser &&
           message.speakerName != null &&
           message.speakerName!.trim().isNotEmpty) {
-        final body = stripLeadingSpeakerPrefix(
-          message.text,
-          message.speakerName,
+        final body = _historyBodyForMessage(
+          message: message,
+          observer: primary,
         );
         historyApi.add({
           'role': 'assistant',
@@ -2100,7 +2133,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     final globalPrompts =
         await widget.settingsService.getGlobalChatPromptSettings();
-    final primary = speakers.first;
 
     var memoryBlock = '';
     final memory = (_session?.memorySummary ?? '').trim();
@@ -3501,6 +3533,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           msgs,
           message,
           activeNarratorId,
+          focusCharacterName: character.name,
         );
         continue;
       }
@@ -3527,9 +3560,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           message.speakerName != null &&
           message.speakerName!.trim().isNotEmpty &&
           _isGroup) {
-        final body = stripLeadingSpeakerPrefix(
-          message.text,
-          message.speakerName,
+        final body = _historyBodyForMessage(
+          message: message,
+          observer: character,
         );
         msgs.add({
           'role': 'assistant',

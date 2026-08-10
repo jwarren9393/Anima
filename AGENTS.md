@@ -61,8 +61,8 @@ High-value SillyTavern concepts to aim for over time:
 
 **Phase:** Post-roadmap tweaks
 
-**Last updated:** 2026-08-07  
-**Last agent action:** Narrator **scene continuation** — when another cast member (or you) already spoke after a narrator card, later replies follow chat instead of re-playing surprise entrances/hugs.
+**Last updated:** 2026-08-09  
+**Last agent action:** Build **58** — presence knowledge fixes, avatar history + Gallery/Downloads export.
 
 ### What works today
 
@@ -85,7 +85,9 @@ High-value SillyTavern concepts to aim for over time:
 - **Generation parameters** — detailed help + many sampling presets; **context size in tokens** + presets (1K–24K); **auto-summarize** every N messages
 - **Memory summary** — per chat (⋮ → Memory summary to edit; Summarize now); **clinical bullet facts only** (no RP voice/metaphors); **witness tags** on private facts (`Secret (known by …)`, `Event (witnesses: …)`); filtered per speaking character before injection; auto-updates in background when enabled
 - **Presence / scene law** — **always on for group chats** (solo skips history filtering) — knowledge boundaries:
-  - **Narrator** resets who is **physically present**; only those names (+ you) hear private dialogue; **latest narrator scene brief is broadcast to all cast** (off-screen characters know location/situation but not whispered lines); supports "alone with Mira", exclusions, **everyone** for full cast
+  - **Narrator** resets who is **physically present**; only those names (+ you) hear private dialogue; **latest narrator scene brief is broadcast to all cast** (off-screen characters know location/situation but not whispered lines); **omniscient secret clauses** (“has no idea that…”, “neither does Ashley”) are **stripped per character** before injection so unaware cast never see the secret in the prompt
+  - **Director** — active note sanitized the same way; mandatory direction includes **do not confess secrets** to unaware characters in dialogue
+  - **Other characters' *asterisk* blocks** — **visible actions** (handshakes, groans, movement toward someone) stay in history for present cast; segments that read like **private internal monologue** are stripped; supports "alone with Mira", exclusions, **everyone** for full cast
   - **Narrator entrance once** — hard-coded: if a character **already spoke after** the latest narrator card, their next reply is told to **continue from chat** (no re-walk-in / replay entrance); narrator still defines location and who's present as backdrop — use **Director** for beat-by-beat guidance within a scene
   - **Narrator movement deltas** — "Jay leaves" / "Jaisha comes back downstairs" apply on top of the previous scene (other cast stay unless they left); leavers are marked **NOT present**; arrival verbs assign the beat to that character so others must not steal it (e.g. Ashley reacts, Jaisha enacts the return)
   - **Your messages** — naming someone (`Mira, …`) → only they hear it; no names → only whoever is **currently present** in the scene (not the whole cast)
@@ -116,14 +118,14 @@ High-value SillyTavern concepts to aim for over time:
 - **Per-chat World Info** — ⋮ menu → **World Info: …** to use Settings default, pick specific global lorebooks, or turn global lore off for this thread (character card lore still applies)
 - **Group chat controls** — **manual mode (default):** your message only; **Continue** and implicit generation pick the speaker from scene context (last reply, name in your text, etc.) — **no** round-robin “next in order” chip highlight; tap a name chip to **force** that character’s reply; **Group react** chip / ⋮ menu / long-press — one AI call → **one centered group-react card** with each character’s line + avatar; long-press for Delete/Rewind/etc.; regenerate avoids copying prior beats verbatim; auto-reply (optional, long-press toggle) still round-robins when on; leading `Name:` is stripped from solo replies
 - **Manage cast (mid-chat)** — ⋮ → **Rename chat** (groups) or **Manage cast** adds/removes characters; **+ menu → Add temporary character** (quick NPC) or full character; ⋮ → **Add temporary character**; group setup same; ⋮ → **New character** / **Update character from chat**; manage screen **+** uses full or temporary flow
-- **Avatars** — persona + character photos; **Generate avatar** on character and persona create/edit (and Creation Center character review) uses NanoGPT image models + an **auto prompt** that keeps the portrait framing but pulls only appearance-relevant lines from the card (skips scenario, backstory, and long personality blocks; stays under ~1,150 chars); prompt is still editable in the sheet; **tap any avatar** (chat, character list, editor, home) for a **full-screen portrait** — tap again (or ✕) to close; in chat, **long-press** an avatar to edit persona / character card; PNG card import still grabs the card image; chat bubble shape/size via Appearance
+- **Avatars** — persona + character photos; **Generate avatar** saves each accept as history (`{id}_{timestamp}.png`) — **Avatar history…** (⋮ menu / History button) to reuse; changing avatar no longer deletes older files; accept also **exports a copy** (Gallery on Android · `Downloads/Anima Avatars` on desktop); long-press history tile to export/delete; **tap avatar** for fullscreen
 - **Context estimate** — chat ⋮ → **Context estimate** shows full next-reply breakdown (speaker card, group snippets, World Info hits, persona/globals, memory, history) plus model window; Creation Center shows a live banner estimate
 - **Character token badges** — ~token count beside names in **Characters**, character editor (live), group setup, and Creation Center cast pickers (≈1 token per 4 chars; color hints when large)
 - **Persona + lorebook token badges** — same style on **Personas** list + editor; **global lorebooks** list; lorebook editor shows enabled-book total and per-entry content size
 - **AI Compact** — character card, **persona**, whole lorebook, and individual lore entries; review sheet before apply
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar; **Scene moods** (mood icon + ⋮ menu) — includes **Intimate build-up**, **Explicit / graphic**, **Afterglow** with hard-coded **vocabulary law** (plain adult words; bans LLM euphemisms/tropes when those moods are on); **Chat copies** — per-chat character/persona overrides + **Chat lore** (thread-only World Info merged with global picks); long-press avatar edits chat copy (library unchanged)
 - **Linux install/update** — `./scripts/update_linux.sh` builds and installs the desktop app; add `--pull` to download GitHub changes first
-- **Smoke:** `flutter test` (297) + `flutter analyze` pass; Android + Windows + Linux desktop debug work
+- **Smoke:** `flutter test` (324) + `flutter analyze` pass; Android + Windows + Linux desktop debug work
 
 ### What does NOT work yet / limits
 
@@ -296,6 +298,7 @@ lib/
     chat_image_background.dart Cached blurred image behind chat messages
     chat_composer_field.dart      Chat composer with optional Enter-to-send (Shift+Enter newline)
     chat_composer_tools_sheet.dart Mobile composer + sheet (moods, narrator, director, continue, …)
+    avatar_history_sheet.dart     Grid picker for past portrait generations
     generate_avatar_sheet.dart    Shared NanoGPT Generate avatar sheet (characters + personas)
     keyboard_inset.dart           Lift UI above keyboard (chat composers)
     rp_rich_text.dart             *action* / "dialogue" styled message text
@@ -325,6 +328,7 @@ lib/
   utils/
     platform_utils.dart           Desktop platform detection (Windows / Linux / macOS)
     composer_markup.dart          Auto-wrap dialogue on send (*actions* + "quotes")
+    rp_observable_text.dart       Visible vs private *asterisk* filtering for other characters' history
     scroll_to_end.dart            Retry scroll-to-bottom for lazy chat lists
     windows_paste_handler.dart    Windows Ctrl+V / Shift+Insert paste + modifier cleanup
   services/
@@ -333,7 +337,8 @@ lib/
     settings_service.dart         Model, image model, sampling, context, lore, Theme Studio, collaborator (+ legacy persona migrate)
     appearance_controller.dart    Root appearance state — save/reload notifies MaterialApp
     persona_service.dart          Multi-persona load/save + default active id
-    avatar_service.dart           Local avatar files under documents/avatars
+    avatar_service.dart           Local avatar files under documents/avatars (+ history per stem)
+    avatar_export_service.dart    Export portrait copies to Gallery / Downloads
     avatar_prompt_builder.dart    Text prompt for NanoGPT character/persona avatar generation
     character_service.dart        Load/save characters JSON on device
     character_category_service.dart Anima-only category lists (multi-membership)
@@ -351,7 +356,7 @@ lib/
     group_speaker_inference.dart  Manual group Continue — infer speaker from last reply / mentions
     group_beat_codec.dart         Flatten / prompt format / swipe JSON for group-react messages
     director_service.dart         Director notes — mandatory next-reply scene control
-    presence_service.dart         Automatic scene presence + per-character memory/history filtering
+    presence_service.dart         Automatic scene presence + memory/history filtering + staging sanitization
     chat_style_rules.dart         Hard-coded modern chat tone (slang/emoji as reactions, not dialogue)
     temporary_character_sheet.dart Quick NPC create sheet + Temporary badge widget
     narrator_service.dart       Universal chat Narrator — generate + prompt injection
@@ -377,7 +382,7 @@ scripts/
   upload_github_release.ps1       Upload APK + Windows zip; deletes stale .apk assets first
 ```
 
-**Dependencies in use:** `flutter_secure_storage`, `http`, `path_provider`, `file_picker`, `share_plus`, `path`, `google_fonts`, `saf` (Android sync file access)  
+**Dependencies in use:** `flutter_secure_storage`, `http`, `path_provider`, `file_picker`, `share_plus`, `path`, `google_fonts`, `saf` (Android sync file access), `gal` (export portraits to Gallery)  
 **Dev / branding:** `flutter_launcher_icons` (Android + Windows from `assets/branding/anima_icon.png`; Linux bundles the same PNG beside `data/`); master icon at `assets/branding/anima_icon.png`. Release scripts run icon generation before desktop builds.
 
 ---
@@ -453,7 +458,7 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. On phone: download **Anima-1.0.0.apk** from [v1.0.0 release](https://github.com/jwarren9393/Anima/releases/tag/v1.0.0) — build **56** (installs over prior 1.0.0 builds).
+1. On phone: download **Anima-1.0.0.apk** from [v1.0.0 release](https://github.com/jwarren9393/Anima/releases/tag/v1.0.0) — build **57** (installs over prior 1.0.0 builds).
 2. Run the app locally if needed: `cd F:\AI\Anima` then `flutter run -d windows` (or plug in phone and `flutter run`).
 3. **Release rule:** keep `pubspec.yaml` at **`1.0.0+<build>`** — never bump the `1.0.0` name; only increment the number after `+`. Upload to the existing **`v1.0.0`** GitHub release (not a new tag per build).
 

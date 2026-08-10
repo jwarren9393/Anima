@@ -336,7 +336,7 @@ class _CharactersScreenState extends State<CharactersScreen> {
       var character = imported;
       // SillyTavern PNG cards *are* the avatar image — save a copy.
       if (_codec.looksLikePng(bytes)) {
-        final avatarName = await _avatarService.saveBytes(
+        final avatarName = await _avatarService.saveHistoryBytes(
           stem: imported.id,
           bytes: bytes,
           extension: '.png',

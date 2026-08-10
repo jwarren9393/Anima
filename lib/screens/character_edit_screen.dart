@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../models/character.dart';
 import '../models/lorebook.dart';
 import '../services/avatar_prompt_builder.dart';
+import '../services/avatar_export_service.dart';
 import '../services/avatar_service.dart';
 import '../services/character_collaborator.dart';
 import '../services/character_service.dart';
@@ -17,6 +18,7 @@ import '../services/settings_service.dart';
 import '../services/world_workshop_builder.dart';
 import '../widgets/anima_avatar.dart';
 import '../widgets/ai_field_changes_sheet.dart';
+import '../widgets/avatar_history_sheet.dart';
 import '../widgets/generate_avatar_sheet.dart';
 import '../widgets/keyboard_inset.dart';
 import '../widgets/minimal_chip_button.dart';
@@ -78,6 +80,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
   static final _workshopBuilder = WorldWorkshopBuilder();
 
   final _avatarService = AvatarService();
+  final _avatarExportService = AvatarExportService();
   final _name = TextEditingController();
   final _aiBrief = TextEditingController();
   final _description = TextEditingController();
@@ -858,6 +861,65 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
     }
   }
 
+  Future<void> _openAvatarHistory() async {
+    final picked = await showAvatarHistorySheet(
+      context: context,
+      avatarService: _avatarService,
+      exportService: _avatarExportService,
+      stem: _characterId,
+      currentFileName: _avatarFileName,
+    );
+    if (!mounted || picked == null) return;
+    if (picked.isEmpty) {
+      setState(() => _avatarFileName = null);
+      return;
+    }
+    if (picked != _avatarFileName) {
+      setState(() => _avatarFileName = picked);
+    }
+  }
+
+  Future<void> _applyAvatarBytes(
+    Uint8List bytes,
+    String extension, {
+    required bool exportCopy,
+  }) async {
+    final saved = await _avatarService.saveHistoryBytes(
+      stem: _characterId,
+      bytes: bytes,
+      extension: extension,
+    );
+    if (exportCopy) {
+      try {
+        final msg = await _avatarExportService.exportAvatar(
+          bytes: bytes,
+          suggestedName: saved,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Avatar updated. $msg')),
+          );
+        }
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Avatar saved in Anima; could not export copy: $error',
+              ),
+            ),
+          );
+        }
+      }
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Avatar updated.')),
+      );
+    }
+    if (!mounted) return;
+    setState(() => _avatarFileName = saved);
+  }
+
   Future<void> _pickAvatar() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.image,
@@ -889,24 +951,16 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
       ext = '.gif';
     }
 
-    final previous = _avatarFileName;
-    final saved = await _avatarService.saveBytes(
+    final saved = await _avatarService.saveHistoryBytes(
       stem: id,
       bytes: bytes,
       extension: ext,
     );
-    if (previous != null && previous != saved) {
-      await _avatarService.delete(previous);
-    }
     if (!mounted) return;
     setState(() => _avatarFileName = saved);
   }
 
   Future<void> _clearAvatar() async {
-    final previous = _avatarFileName;
-    if (previous != null) {
-      await _avatarService.delete(previous);
-    }
     if (!mounted) return;
     setState(() => _avatarFileName = null);
   }
@@ -937,19 +991,10 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
             onAccepted: (image) async {
               setState(() => _avatarBusy = true);
               try {
-                final previous = _avatarFileName;
-                final saved = await _avatarService.saveBytes(
-                  stem: _characterId,
-                  bytes: image.bytes,
-                  extension: image.fileExtension,
-                );
-                if (previous != null && previous != saved) {
-                  await _avatarService.delete(previous);
-                }
-                if (!mounted) return;
-                setState(() => _avatarFileName = saved);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Avatar updated from NanoGPT.')),
+                await _applyAvatarBytes(
+                  image.bytes,
+                  image.fileExtension,
+                  exportCopy: true,
                 );
               } finally {
                 if (mounted) setState(() => _avatarBusy = false);
@@ -1158,6 +1203,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
               if (value == 'compact') _runCompactCard();
               if (value == 'avatar_pick') _pickAvatar();
               if (value == 'avatar_gen') _generateAvatar();
+              if (value == 'avatar_history') _openAvatarHistory();
               if (value == 'avatar_clear') _clearAvatar();
             },
             itemBuilder: (context) => [
@@ -1177,6 +1223,10 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
               const PopupMenuItem(
                 value: 'avatar_gen',
                 child: Text('Generate avatar'),
+              ),
+              const PopupMenuItem(
+                value: 'avatar_history',
+                child: Text('Avatar history…'),
               ),
               if (_avatarFileName != null)
                 const PopupMenuItem(
@@ -1403,7 +1453,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Avatar: ⋮ menu → pick or generate.',
+                  'Avatar: ⋮ menu → pick, generate, or history. Generations export to Gallery / Downloads.',
                   style: Theme.of(context).textTheme.bodySmall,
                   textAlign: TextAlign.center,
                 ),

@@ -30,7 +30,7 @@ void main() {
     expect(block, contains('MANDATORY'));
     expect(block, contains('The door creaks open.'));
     expect(block, contains('NOT a suggestion'));
-    expect(block, contains('MUST treat this as true'));
+    expect(block, contains('MUST treat location and who is present as true'));
   });
 
   test('latestNarratorId returns most recent narrator before end', () {

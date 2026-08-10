@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../models/persona.dart';
 import '../services/avatar_prompt_builder.dart';
+import '../services/avatar_export_service.dart';
 import '../services/avatar_service.dart';
 import '../services/nanogpt_service.dart';
 import '../services/persona_collaborator.dart';
@@ -17,6 +18,7 @@ import '../widgets/character_token_badge.dart';
 import '../widgets/ai_field_changes_sheet.dart';
 import '../services/world_workshop_builder.dart';
 import '../widgets/anima_avatar.dart';
+import '../widgets/avatar_history_sheet.dart';
 import '../widgets/generate_avatar_sheet.dart';
 import '../widgets/keyboard_inset.dart';
 import '../models/field_wand_options.dart';
@@ -59,6 +61,7 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
   final _workshopBuilder = WorldWorkshopBuilder();
 
   final _avatarService = AvatarService();
+  final _avatarExportService = AvatarExportService();
   final _aiBrief = TextEditingController();
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -530,6 +533,65 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
     await _runWand(field, choice: choice);
   }
 
+  Future<void> _openAvatarHistory() async {
+    final picked = await showAvatarHistorySheet(
+      context: context,
+      avatarService: _avatarService,
+      exportService: _avatarExportService,
+      stem: _personaId,
+      currentFileName: _avatarFileName,
+    );
+    if (!mounted || picked == null) return;
+    if (picked.isEmpty) {
+      setState(() => _avatarFileName = null);
+      return;
+    }
+    if (picked != _avatarFileName) {
+      setState(() => _avatarFileName = picked);
+    }
+  }
+
+  Future<void> _applyAvatarBytes(
+    Uint8List bytes,
+    String extension, {
+    required bool exportCopy,
+  }) async {
+    final saved = await _avatarService.saveHistoryBytes(
+      stem: _personaId,
+      bytes: bytes,
+      extension: extension,
+    );
+    if (exportCopy) {
+      try {
+        final msg = await _avatarExportService.exportAvatar(
+          bytes: bytes,
+          suggestedName: saved,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Avatar updated. $msg')),
+          );
+        }
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Avatar saved in Anima; could not export copy: $error',
+              ),
+            ),
+          );
+        }
+      }
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Avatar updated.')),
+      );
+    }
+    if (!mounted) return;
+    setState(() => _avatarFileName = saved);
+  }
+
   Future<void> _pickAvatar() async {
     if (_busy) return;
 
@@ -560,25 +622,17 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
       ext = '.webp';
     }
 
-    final previous = _avatarFileName;
-    final saved = await _avatarService.saveBytes(
+    final saved = await _avatarService.saveHistoryBytes(
       stem: _personaId,
       bytes: bytes,
       extension: ext,
     );
-    if (previous != null && previous != saved) {
-      await _avatarService.delete(previous);
-    }
     if (!mounted) return;
     setState(() => _avatarFileName = saved);
   }
 
   Future<void> _clearAvatar() async {
     if (_busy) return;
-    final previous = _avatarFileName;
-    if (previous != null) {
-      await _avatarService.delete(previous);
-    }
     if (!mounted) return;
     setState(() => _avatarFileName = null);
   }
@@ -608,19 +662,10 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
             onAccepted: (image) async {
               setState(() => _avatarBusy = true);
               try {
-                final previous = _avatarFileName;
-                final saved = await _avatarService.saveBytes(
-                  stem: _personaId,
-                  bytes: image.bytes,
-                  extension: image.fileExtension,
-                );
-                if (previous != null && previous != saved) {
-                  await _avatarService.delete(previous);
-                }
-                if (!mounted) return;
-                setState(() => _avatarFileName = saved);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Avatar updated from NanoGPT.')),
+                await _applyAvatarBytes(
+                  image.bytes,
+                  image.fileExtension,
+                  exportCopy: true,
                 );
               } finally {
                 if (mounted) setState(() => _avatarBusy = false);
@@ -853,6 +898,11 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
                             )
                           : const Icon(Icons.auto_awesome),
                       label: const Text('Generate avatar'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _busy ? null : _openAvatarHistory,
+                      icon: const Icon(Icons.collections_outlined),
+                      label: const Text('History'),
                     ),
                     if (_avatarFileName != null)
                       TextButton(
