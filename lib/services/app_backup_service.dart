@@ -263,7 +263,7 @@ class AppBackupService {
       if (utf8.encode(text).length > _maxJsonFileBytes) {
         throw AppBackupException('Backup file “$name” is too large.');
       }
-      if (text.trim().isNotEmpty) {
+      if (text.trim().isNotEmpty && name.toLowerCase().endsWith('.json')) {
         try {
           jsonDecode(text);
         } catch (_) {

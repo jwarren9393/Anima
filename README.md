@@ -10,12 +10,13 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **Also builds** | Linux desktop (works); Windows desktop (needs a Windows host) |
 | **Distribution** | Personal use only — **not** published to app stores |
 | **Repo** | https://github.com/jwarren9393/Anima (private) |
-| **Version** | **1.0.0** build **59** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
+| **Version** | **1.0.0** build **60** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
 
 ### What’s new in recent builds (1.0.0)
 
 | Build | Highlights |
 |-------|------------|
+| **60** | **Sync/restore fix** — `.anima-backup` may include plain-text library files; phone pull no longer rejects `anima_active_persona_id.txt` as “not valid JSON”. |
 | **59** | **Portable data folder** — characters, chats, avatars, settings, and API key live in one visible folder (`Documents/Anima` by default). First-run picker + **Settings → Data folder**. Android uses public Documents instead of locked app storage. |
 | **47** | **Presence / scene law** — always-on knowledge boundaries: narrator resets who’s present; opening scene seeds initial cast; unnamed messages only reach **present** characters (not whole cast); memory **witness tags**; per-character history/lore filtering. **Director mode** — replaces OOC; mandatory command for the **next** AI reply (centered card; tap edit, long-press delete). **Temporary characters** — quick NPC (name + note) from chat ⋮ or Manage cast; **Temporary** badge; promote to full card; **Full cards only** filter in Characters and group setup. **Consistency fix** — after AI consistency check on character cards or lorebooks, review changed fields and apply in one tap |
 | **46** | **Android keyboard fix** — send dismisses on-screen keyboard so replies stay readable; composer refocus / empty-Enter-continue stay **desktop-only** |

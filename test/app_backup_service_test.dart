@@ -154,6 +154,22 @@ void main() {
     );
   });
 
+  test('plain-text library files round-trip without JSON validation', () async {
+    await seedDocs();
+    await File(p.join(tempDir.path, 'anima_active_persona_id.txt'))
+        .writeAsString('persona_1');
+
+    final bundle = await service.createBackup();
+    await File(p.join(tempDir.path, 'anima_active_persona_id.txt')).delete();
+
+    await service.restoreBackup(bundle.bytes);
+    expect(
+      await File(p.join(tempDir.path, 'anima_active_persona_id.txt'))
+          .readAsString(),
+      'persona_1',
+    );
+  });
+
   test('invalid JSON document content is rejected', () async {
     final bad = Uint8List.fromList(
       utf8.encode(

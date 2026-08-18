@@ -62,7 +62,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-08-18  
-**Last agent action:** Build **59** — portable library folder shipped; source pushed to GitHub; APK uploaded to `v1.0.0`.
+**Last agent action:** Build **60** — sync/restore accepts plain-text library files (`anima_active_persona_id.txt`); phone pull no longer fails JSON validation.
 
 ### What works today
 
