@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:path_provider/path_provider.dart';
+import 'app_paths.dart';
 
 /// Per-chat composer text that survives leaving the chat or killing the app.
 ///
@@ -10,7 +10,7 @@ import 'package:path_provider/path_provider.dart';
 class ComposerDraftService {
   ComposerDraftService({Future<Directory> Function()? documentsDirectory})
       : _documentsDirectory =
-            documentsDirectory ?? getApplicationDocumentsDirectory;
+            documentsDirectory ?? appDocumentsDirectory;
 
   static const _fileName = 'anima_composer_drafts.json';
 

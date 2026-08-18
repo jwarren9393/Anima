@@ -3,8 +3,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
+import 'app_paths.dart';
 import 'persona_service.dart';
 import 'settings_service.dart';
 
@@ -21,7 +21,7 @@ class AppBackupService {
     this.loadPreferences,
     this.savePreferences,
   })  : _documentsDirectory =
-            documentsDirectory ?? getApplicationDocumentsDirectory,
+            documentsDirectory ?? appDocumentsDirectory,
         _settingsService = settingsService ?? SettingsService();
 
   static const formatId = 'anima_backup_v1';
@@ -38,6 +38,8 @@ class AppBackupService {
     'anima_world_workshops.json',
     'anima_composer_drafts.json',
     'anima_roadway_cache.json',
+    'anima_settings.json',
+    'anima_active_persona_id.txt',
   ];
 
   static const _maxAvatarBytes = 8 * 1024 * 1024; // 8 MB per image

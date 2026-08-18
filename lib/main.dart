@@ -3,8 +3,10 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
+import 'screens/data_folder_setup_screen.dart';
 import 'screens/home_screen.dart';
 import 'services/api_key_service.dart';
+import 'services/app_data_root.dart';
 import 'services/appearance_controller.dart';
 import 'services/character_category_service.dart';
 import 'services/character_service.dart';
@@ -24,21 +26,69 @@ void main() {
     WindowsPasteHandler.install();
   }
 
-  final apiKeyService = ApiKeyService();
-  final settingsService = SettingsService();
-  final characterService = CharacterService();
-  final characterCategoryService = CharacterCategoryService();
-  final personaService = PersonaService(settingsService: settingsService);
-  final chatService = ChatService();
-  final nanoGptService = NanoGptService(apiKeyService: apiKeyService);
-  final worldInfoService = WorldInfoService();
-  final worldWorkshopService = WorldWorkshopService();
-  final appearanceController = AppearanceController(
-    settingsService: settingsService,
-  );
+  runApp(const AnimaBootstrap());
+}
 
-  runApp(
-    AnimaApp(
+/// Chooses the visible data folder, then starts the real app.
+class AnimaBootstrap extends StatefulWidget {
+  const AnimaBootstrap({super.key});
+
+  @override
+  State<AnimaBootstrap> createState() => _AnimaBootstrapState();
+}
+
+class _AnimaBootstrapState extends State<AnimaBootstrap> {
+  late final AppDataRoot _dataRoot;
+  Widget? _app;
+  bool _ready = false;
+  bool _needsSetup = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _dataRoot = AppDataRoot.platform();
+    AppDataRoot.instance = _dataRoot;
+    _boot();
+  }
+
+  Future<void> _boot() async {
+    final configured = await _dataRoot.load();
+    if (!mounted) return;
+    setState(() {
+      if (configured) {
+        _app = _createApp();
+        _needsSetup = false;
+      } else {
+        _needsSetup = true;
+      }
+      _ready = true;
+    });
+  }
+
+  void _onFolderReady() {
+    setState(() {
+      _app = _createApp();
+      _needsSetup = false;
+    });
+  }
+
+  Widget _createApp() {
+    final apiKeyService = ApiKeyService();
+    final settingsService = SettingsService(
+      documentsDirectory: _dataRoot.directory,
+    );
+    final characterService = CharacterService();
+    final characterCategoryService = CharacterCategoryService();
+    final personaService = PersonaService(settingsService: settingsService);
+    final chatService = ChatService();
+    final nanoGptService = NanoGptService(apiKeyService: apiKeyService);
+    final worldInfoService = WorldInfoService();
+    final worldWorkshopService = WorldWorkshopService();
+    final appearanceController = AppearanceController(
+      settingsService: settingsService,
+    );
+
+    return AnimaApp(
       apiKeyService: apiKeyService,
       settingsService: settingsService,
       characterService: characterService,
@@ -49,8 +99,35 @@ void main() {
       worldInfoService: worldInfoService,
       worldWorkshopService: worldWorkshopService,
       appearanceController: appearanceController,
-    ),
-  );
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = AnimaTheme.dark();
+    if (!_ready) {
+      return MaterialApp(
+        title: 'Anima',
+        debugShowCheckedModeBanner: false,
+        theme: theme,
+        home: const Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
+    if (_needsSetup) {
+      return MaterialApp(
+        title: 'Anima',
+        debugShowCheckedModeBanner: false,
+        theme: theme,
+        home: DataFolderSetupScreen(
+          dataRoot: _dataRoot,
+          onReady: _onFolderReady,
+        ),
+      );
+    }
+    return _app ?? const SizedBox.shrink();
+  }
 }
 
 class AnimaApp extends StatefulWidget {

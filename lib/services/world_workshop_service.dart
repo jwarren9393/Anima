@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:path_provider/path_provider.dart';
+import 'app_paths.dart';
 
 import '../models/world_workshop.dart';
 
@@ -12,7 +12,7 @@ class WorldWorkshopService {
   WorldWorkshopService({
     Future<Directory> Function()? documentsDirectory,
   }) : _documentsDirectory =
-            documentsDirectory ?? getApplicationDocumentsDirectory;
+            documentsDirectory ?? appDocumentsDirectory;
 
   static const _fileName = 'anima_world_workshops.json';
   static const _metaFileName = 'anima_workshop_meta.json';

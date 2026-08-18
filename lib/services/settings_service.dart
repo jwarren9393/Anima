@@ -1,10 +1,12 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import '../utils/platform_utils.dart';
+import 'settings_store.dart';
 
 import '../models/ui_style_settings.dart';
+import '../utils/platform_utils.dart';
 
 export '../models/ui_style_settings.dart'
     show AvatarShape, AvatarSizeTier, AvatarStyleSettings;
@@ -360,10 +362,16 @@ class CollaboratorSettings {
   }
 }
 
-/// Non-secret app preferences stored on this device only.
+/// App preferences. When a data folder is set, these live in `anima_settings.json`.
 class SettingsService {
-  SettingsService({FlutterSecureStorage? storage})
-      : _storage = storage ?? const FlutterSecureStorage();
+  SettingsService({
+    FlutterSecureStorage? storage,
+    Future<Directory> Function()? documentsDirectory,
+  }) : _storage = createSettingsKv(
+          storage: storage,
+          documentsDirectory: documentsDirectory,
+          migrateKeys: storedKeys,
+        );
 
   /// A sensible default NanoGPT model id. Change it anytime in Settings.
   static const defaultModel = 'openai/gpt-4o-mini';
@@ -432,7 +440,6 @@ class SettingsService {
   static const _syncContentUriKey = 'sync_content_uri';
   static const _syncLastPushKey = 'sync_last_push_at';
   static const _syncLastPullKey = 'sync_last_pull_at';
-  /// Legacy message-count context (migrated once to a token budget).
   static const _legacyContextMaxHistoryKey = 'context_max_history_messages';
 
   /// Preference keys included in a full-app backup (never the API key).
@@ -477,7 +484,16 @@ class SettingsService {
     _contextKeepRecentKey,
   ];
 
-  final FlutterSecureStorage _storage;
+  static const storedKeys = <String>[
+    ...backupPreferenceKeys,
+    _syncFilePathKey,
+    _syncContentUriKey,
+    _syncLastPushKey,
+    _syncLastPullKey,
+    'active_persona_id',
+  ];
+
+  final SettingsKv _storage;
 
   /// Snapshot of non-secret preferences for a full-app backup.
   Future<Map<String, String>> exportForBackup() async {

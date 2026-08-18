@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:path_provider/path_provider.dart';
+import 'app_paths.dart';
 
 import '../models/character.dart';
 import '../models/character_category.dart';
@@ -13,7 +13,7 @@ class CharacterCategoryService {
   CharacterCategoryService({
     Future<Directory> Function()? documentsDirectory,
   }) : _documentsDirectory =
-            documentsDirectory ?? getApplicationDocumentsDirectory;
+            documentsDirectory ?? appDocumentsDirectory;
 
   static const _fileName = 'anima_character_categories.json';
 

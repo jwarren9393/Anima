@@ -139,7 +139,6 @@ void main() {
 
     test('solo chat keeps full history without filtering', () {
       final luna = char('l1', 'Luna');
-      final mira = char('m1', 'Mira');
       final messages = [
         ChatMessage(
           id: 'n1',

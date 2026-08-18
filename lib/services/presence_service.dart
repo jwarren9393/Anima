@@ -794,19 +794,6 @@ Do NOT use facts from scenes $char did not witness. If a fact is not listed, $ch
     present.addAll(_mentionedCastFromText(text, castNames));
   }
 
-  /// "Ashley walks into…" — arriving cast witness their entrance beat.
-  void _addArrivingCastFromNarrator(
-    String text,
-    Set<String> castNames,
-    Set<String> present,
-  ) {
-    final lower = text.toLowerCase();
-    for (final name in castNames) {
-      if (name.isEmpty) continue;
-      if (_narratorCastArrives(lower, name)) present.add(name);
-    }
-  }
-
   Iterable<String> _nameMatchTokens(String normalizedName) sync* {
     if (normalizedName.isEmpty) return;
     yield normalizedName;

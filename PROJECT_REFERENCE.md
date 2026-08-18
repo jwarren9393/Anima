@@ -106,10 +106,10 @@
 
 | Rule | Detail |
 |------|--------|
-| API key | **Never** in source, README examples, screenshots in git, or `.anima-backup` |
-| Storage | `ApiKeyService` → secure storage |
-| Backup | Whitelist JSON export **excludes** API key on purpose |
-| Git | `android/local.properties` gitignored |
+| API key | **Never** in source, README examples, screenshots in git, or `.anima-backup`. Lives in the user library folder as `api_key.txt`. |
+| Storage | User-owned Anima folder (`AppDataRoot`); default `Documents/Anima`. Hidden app storage only keeps a pointer to that folder. |
+| Backup | Whitelist JSON export **excludes** API key on purpose (copy the folder if you want the key too) |
+| Git | `android/local.properties` gitignored; never commit the Anima library folder |
 
 If a key is ever committed: rotate NanoGPT key immediately and purge git history.
 
@@ -233,9 +233,10 @@ Anima/
 
 `lib/main.dart`:
 
-1. Loads `AppearanceController` / `UiStyleSettings` from secure storage.
-2. Builds `ThemeData` via `anima_theme.dart`.
-3. `MaterialApp` → `HomeScreen` with injected services (API key, chat, characters, etc.).
+1. `AnimaBootstrap` loads `AppDataRoot` (user-owned library folder). First launch shows `DataFolderSetupScreen` if none is chosen.
+2. Loads `AppearanceController` / `UiStyleSettings` from `anima_settings.json` in that folder.
+3. Builds `ThemeData` via `anima_theme.dart`.
+4. `MaterialApp` → `HomeScreen` with injected services (API key, chat, characters, etc.).
 
 No global state management package — services passed as constructor args.
 
@@ -294,24 +295,26 @@ Workshop chat messages, world summary, linked lorebook, opening scene, hub field
 
 ## 8. Persistence and local files
 
-All under **app documents directory** (`path_provider`).
+All library files live in **one user-owned folder** (`AppDataRoot`, default `Documents/Anima`). Services resolve it through `appDocumentsDirectory()`. A pointer file in app-support storage remembers the path.
 
 | File / folder | Contents |
 |---------------|----------|
-| Secure storage | API key, model ids, sampling, theme JSON, collaborator notes, sync URIs, etc. |
+| `api_key.txt` | NanoGPT API key |
+| `anima_settings.json` | Model ids, sampling, theme JSON, collaborator notes, sync URIs, etc. |
+| `anima_active_persona_id.txt` | Default persona id |
 | `anima_characters.json` | Character cards |
 | `anima_character_categories.json` | Category lists |
 | `anima_personas.json` | Personas |
 | `anima_chats.json` | All chat sessions + messages |
 | `anima_lorebooks.json` | Global lorebooks |
 | `anima_world_workshops.json` | Creation Center workshops |
-| `anima_opening_scenes.json` | Opening scenes library |
 | `anima_composer_drafts.json` | Unsent composer text per chat id |
 | `anima_roadway_cache.json` | Cached Paths options per chat |
 | `avatars/` | Local avatar images |
 | `chat_backgrounds/` | User-picked chat backgrounds |
+| `README.txt` | Explains that this folder is the library |
 
-**Backup** (`AppBackupService`): single `.anima-backup` JSON with whitelist above + settings keys + base64 avatars. **No API key.**
+**Backup** (`AppBackupService`): single `.anima-backup` JSON with whitelist above + settings keys + base64 avatars. **No API key.** Copy the whole Anima folder to move the key too.
 
 **Sync** (`SyncService`): one user-chosen file (Google Drive on Android; path on desktop); push overwrites, pull restores.
 

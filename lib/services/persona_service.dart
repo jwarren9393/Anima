@@ -2,16 +2,18 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 
 import '../models/persona.dart';
+import 'app_data_root.dart';
+import 'app_paths.dart';
 import 'avatar_service.dart';
 import 'settings_service.dart';
 
 /// Saves multiple personas on this device and tracks the default active one.
 ///
-/// File: app documents / `anima_personas.json`
-/// Default id: secure storage key `active_persona_id`
+/// File: Anima library folder / `anima_personas.json`
+/// Default id: `anima_active_persona_id.txt` in that folder
 class PersonaService {
   PersonaService({
     Future<Directory> Function()? documentsDirectory,
@@ -19,11 +21,15 @@ class PersonaService {
     AvatarService? avatarService,
     SettingsService? settingsService,
   })  : _documentsDirectory =
-            documentsDirectory ?? getApplicationDocumentsDirectory,
+            documentsDirectory ?? appDocumentsDirectory,
         _storage = storage ?? const FlutterSecureStorage(),
         _avatarService = avatarService ??
             AvatarService(documentsDirectory: documentsDirectory),
-        _settingsService = settingsService ?? SettingsService(storage: storage);
+        _settingsService = settingsService ??
+            SettingsService(
+              storage: storage,
+              documentsDirectory: documentsDirectory,
+            );
 
   static const _fileName = 'anima_personas.json';
   static const _activeIdKey = 'active_persona_id';
@@ -96,17 +102,37 @@ class PersonaService {
   }
 
   Future<String?> getActivePersonaId() async {
+    try {
+      final file = await _activeIdFile();
+      if (await file.exists()) {
+        final value = (await file.readAsString()).trim();
+        if (value.isNotEmpty) return value;
+      }
+    } catch (_) {}
     final value = await _storage.read(key: _activeIdKey);
     if (value == null || value.trim().isEmpty) return null;
+    await setActivePersonaId(value.trim());
     return value.trim();
   }
 
   Future<void> setActivePersonaId(String? id) async {
+    final file = await _activeIdFile();
     if (id == null || id.trim().isEmpty) {
+      if (await file.exists()) {
+        try {
+          await file.delete();
+        } catch (_) {}
+      }
       await _storage.delete(key: _activeIdKey);
       return;
     }
+    await file.writeAsString(id.trim(), flush: true);
     await _storage.write(key: _activeIdKey, value: id.trim());
+  }
+
+  Future<File> _activeIdFile() async {
+    final dir = await _documentsDirectory();
+    return File(p.join(dir.path, AppDataRoot.activePersonaFileName));
   }
 
   /// Saved default persona, or null when the list is empty.
@@ -175,13 +201,6 @@ class PersonaService {
   /// Deletes a persona. The list may end up empty.
   Future<List<Persona>> delete(String id) async {
     final all = await loadPersonas();
-    Persona? removed;
-    for (final p in all) {
-      if (p.id == id) {
-        removed = p;
-        break;
-      }
-    }
     all.removeWhere((p) => p.id == id);
     await _avatarService.deleteAllForStem(id);
     final active = await getActivePersonaId();

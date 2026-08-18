@@ -50,7 +50,7 @@ High-value SillyTavern concepts to aim for over time:
 1. Use Flutter.
 2. Keep architecture **simple** and Android-friendly — no heavy frameworks unless asked.
 3. Act as a **patient mentor**: write the code, explain in plain English, avoid jargon.
-4. API keys must be entered in-app Settings and stored with **secure storage** — never committed to Git.
+4. API keys must be entered in-app Settings and stored in the user **Anima folder** (`api_key.txt`) — never committed to Git.
 5. Do **not** invent app-store / Play Store requirements; this app stays private.
 6. After completing work, **update this file** (status, done, next).
 7. Prefer **SillyTavern-inspired** features that fit mobile; do not chase full ST feature parity.
@@ -61,12 +61,12 @@ High-value SillyTavern concepts to aim for over time:
 
 **Phase:** Post-roadmap tweaks
 
-**Last updated:** 2026-08-09  
-**Last agent action:** Build **58** — presence knowledge fixes, avatar history + Gallery/Downloads export.
+**Last updated:** 2026-08-18  
+**Last agent action:** Build **59** — portable library folder shipped; source pushed to GitHub; APK uploaded to `v1.0.0`.
 
 ### What works today
 
-- **Home screen** — chat history; **Creation Center** row (continue tile merged into horizontal world tiles); **New** FAB opens sheet (solo / group / workshop); chat rows show preview + date when available
+- **Data folder** — one visible library folder for characters, chats, avatars, lore, settings, and the API key (`Documents/Anima` by default; change anytime in Settings). Android uses public Documents (My Files), not locked app storage; desktop can also keep `AnimaData` next to the app for a portable zip. First launch copies any older hidden files into that folder.
 - **Chat screen** — **minimal chrome**: Close · title · ⋮; composer row (**Narrator** · **Director** · field · ✨ · ▶ · send/stop); **Narrator** / **Director** centered cards — tap to edit, **long-press to delete**; Director commands the next AI reply; solo/group chats only (not Creation Center)
 - **Group chat setup** — cast + order on main form; **Lore / Note / Auto-reply** chips open sheets (no inline lore checkboxes or long prose fields)
 - **New chat** — choose **Solo** or **Group**; **Solo:** pick character **and persona** on one screen (persona bar at top — tap to change); if the character has several greetings, a **Choose opening** sheet picks which one starts (others stay as swipes); **Group:** cast + lore + note as before
@@ -79,7 +79,7 @@ High-value SillyTavern concepts to aim for over time:
   - **Character builds** — model, max tokens, temperature, top P, and prompt for **slim card JSON** generation (description, personality, mes_example, tags only — no scenario, greetings, or per-card system/post-history; Creation Center + New character from chat); separate from main chat model
   - **Global chat prompts** — app-wide **system prompt** + **post-history** merged into every chat (on top of each card; per-chat Author's Note still applies); preset pickers; `{{user}}` / `{{char}}`
   - **Appearance (Theme Studio)** — live preview + **category chips** (Presets / Layout / Colors / Fonts / Chat / Avatars); one section visible at a time
-  - **Backup & restore** — one `.anima-backup` JSON file (chats, characters, personas, categories, lorebooks, workshops, drafts, roadway cache, avatars, settings); **API key is not included** — re-enter after restore; on Linux/Windows Create backup opens a **Save** dialog (Downloads suggested); Android still uses the share sheet; restore replaces Anima data only (whitelist), then returns to Home; **Cross-device sync** — pick one sync file in Google Drive (or a synced folder on desktop); **Push to cloud** overwrites that file in place; **Pull from cloud** restores from it when switching phone ↔ PC (no delete-and-reupload)
+  - **Backup & restore** — one `.anima-backup` JSON file (chats, characters, personas, categories, lorebooks, workshops, drafts, roadway cache, avatars, settings); **API key is not included in that share file** (it already lives in your Anima folder as `api_key.txt`); on Linux/Windows Create backup opens a **Save** dialog (Downloads suggested); Android still uses the share sheet; restore replaces Anima data only (whitelist), then returns to Home; **Cross-device sync** — pick one sync file in Google Drive (or a synced folder on desktop); **Push to cloud** overwrites that file in place; **Pull from cloud** restores from it when switching phone ↔ PC (no delete-and-reupload)
   - API, Generation parameters
 - **Look** — Theme Studio with glass and solid presets (default Obsidian Gold soft-glow, no sparkle texture); Ivory Ink light preset + full color/font customization
 - **Generation parameters** — detailed help + many sampling presets; **context size in tokens** + presets (1K–24K); **auto-summarize** every N messages
@@ -125,7 +125,7 @@ High-value SillyTavern concepts to aim for over time:
 - **AI Compact** — character card, **persona**, whole lorebook, and individual lore entries; review sheet before apply
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar; **Scene moods** (mood icon + ⋮ menu) — includes **Intimate build-up**, **Explicit / graphic**, **Afterglow** with hard-coded **vocabulary law** (plain adult words; bans LLM euphemisms/tropes when those moods are on); **Chat copies** — per-chat character/persona overrides + **Chat lore** (thread-only World Info merged with global picks); long-press avatar edits chat copy (library unchanged)
 - **Linux install/update** — `./scripts/update_linux.sh` builds and installs the desktop app; add `--pull` to download GitHub changes first
-- **Smoke:** `flutter test` (324) + `flutter analyze` pass; Android + Windows + Linux desktop debug work
+- **Smoke:** `flutter test` (332) + `flutter analyze` pass; Android + Windows + Linux desktop debug work
 
 ### What does NOT work yet / limits
 
@@ -279,7 +279,9 @@ lib/
     lorebooks_screen.dart         Global lorebook list / create / import / export
     world_workshop_list_screen.dart Creation Center list + import chat / lorebook (file / World Info)
     world_workshop_chat_screen.dart Workshop chat + lorebook/characters/persona + start roleplay
-    settings_screen.dart          Settings hub (Personas + Characters + Creation Center + AI collaborator + Backup)
+    settings_screen.dart          Settings hub (Data folder + Personas + Characters + Creation Center + AI collaborator + Backup)
+    data_folder_setup_screen.dart First-run visible library folder picker
+    data_folder_settings_screen.dart View / move the Anima library folder
     api_settings_screen.dart      API key, model catalog, subscription URL + remaining credits
     lore_settings_screen.dart     Global books + scan/budget + character books link
     sampling_settings_screen.dart ST-style generation parameters
@@ -375,14 +377,20 @@ lib/
     world_workshop_builder.dart   Workshop prompts + hub JSON parsers
     chat_transcript_codec.dart    Chat JSON / plain-text import/export
     app_backup_service.dart       Full-app backup/restore (whitelist JSON + avatars; no API key)
+    app_data_root.dart            User-owned library folder (Documents/Anima or next to the app)
+    app_paths.dart                Resolves the active library directory for all services
+    android_storage.dart          Android public Documents + All files access
+    settings_store.dart           Settings JSON in the library folder (migrates from secure storage)
     nanogpt_service.dart          Streaming + text/image model catalogs + image generate + credit usage + sampling + plain-English errors
 scripts/
   update_linux.sh                 One-command Linux build/install + launcher; optional Git pull
   update_windows.ps1              Windows build + optional zip / GitHub Release upload (`-Zip`, `-Release`)
   upload_github_release.ps1       Upload APK + Windows zip; deletes stale .apk assets first
+  setup_windows_dev.ps1           Fresh-PC install: Flutter, JDK 17, Android SDK, VS Build Tools, env vars
+  install_windows_atl.ps1         Add C++ ATL to existing VS Build Tools (Windows desktop builds)
 ```
 
-**Dependencies in use:** `flutter_secure_storage`, `http`, `path_provider`, `file_picker`, `share_plus`, `path`, `google_fonts`, `saf` (Android sync file access), `gal` (export portraits to Gallery)  
+**Dependencies in use:** `flutter_secure_storage` (legacy migration), `http`, `path_provider`, `path`, `file_picker`, `share_plus`, `google_fonts`, `saf` (Android sync file access), `gal` (export portraits to Gallery), `permission_handler` (Android All files access for Documents/Anima)  
 **Dev / branding:** `flutter_launcher_icons` (Android + Windows from `assets/branding/anima_icon.png`; Linux bundles the same PNG beside `data/`); master icon at `assets/branding/anima_icon.png`. Release scripts run icon generation before desktop builds.
 
 ---
@@ -390,7 +398,7 @@ scripts/
 ## Security checklist for agents
 
 - [ ] Never write API keys into source, README examples with real keys, screenshots committed to git, or `.env` files that get committed
-- [ ] Prefer device secure storage (`ApiKeyService`) over SharedPreferences for secrets
+- [ ] The NanoGPT key lives in the user Anima folder as `api_key.txt` so the library is portable — never copy that folder into the git repo
 - [ ] If a secret is ever committed by mistake: rotate the NanoGPT key immediately and purge it from git history
 - [ ] `android/local.properties` stays gitignored (machine-specific SDK path)
 
@@ -402,33 +410,36 @@ scripts/
 
 | Tool | Status |
 |------|--------|
-| Flutter | ✅ 3.44.8 stable at `C:\src\flutter` |
+| Flutter | ✅ 3.44.9 stable at `C:\src\flutter` |
 | Dart | ✅ 3.12.2 |
 | JDK | ✅ Temurin 17 at `C:\Program Files\Eclipse Adoptium\jdk-17.0.20.8-hotspot` |
-| Android SDK | ✅ `%LOCALAPPDATA%\Android\Sdk` (platform 36, build-tools 36.0.0, NDK 28.2) — licenses accepted |
+| Android SDK | ✅ `%LOCALAPPDATA%\Android\Sdk` (platform 36, build-tools 36.0.0) — licenses accepted |
 | Android Studio | ❌ Not installed (SDK via cmdline-tools only — enough for `flutter build apk`) |
-| Visual Studio | ✅ Build Tools 2022 + C++ + ATLMFC |
+| Visual Studio | ✅ Build Tools 2022 17.14 + C++ + ATLMFC |
 | Git | ✅ `C:\Program Files\Git\cmd\git.exe` — repo linked to `origin` `https://github.com/jwarren9393/Anima.git` |
-| GitHub CLI (`gh`) | ✅ installed — **not signed in yet** (`gh auth login`) |
+| GitHub CLI (`gh`) | ✅ installed — run `gh auth login` once after a PC reset |
 | Chrome | ❌ Not required for this app |
 | Developer Mode | ✅ Enabled (required for Flutter plugin symlinks on Windows) |
 | Physical Android phone | Plug in + USB debugging → `flutter devices` / `flutter run` |
 
-User env (set for this account): `JAVA_HOME`, `ANDROID_HOME`, `ANDROID_SDK_ROOT`, and `PATH` include Flutter, JDK, and Android tools. **Restart Cursor / open a new terminal** after setup.
+User env (set for this account): `JAVA_HOME`, `ANDROID_HOME`, `ANDROID_SDK_ROOT`, and `PATH` include Flutter, JDK, Android tools, and GitHub CLI. **Restart Cursor / open a new terminal** after setup so PATH updates apply.
+
+Fresh install / re-run anytime:
 
 ```powershell
-cd F:\AI\Anima
+cd D:\AI\Anima
+powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows_dev.ps1
 flutter doctor
 flutter pub get
-flutter run -d windows   # after Developer Mode is on
+flutter run -d windows
 ```
 
 ### Linux (alternate host)
 
 | Tool | Status |
 |------|--------|
-| Flutter | ✅ 3.44.6 stable at `~/development/flutter` |
-| Dart | ✅ 3.12.2 |
+| Flutter | ✅ 3.47.0 stable at `~/development/flutter` |
+| Dart | ✅ 3.13.0 |
 | JDK | ✅ Temurin 17 at `~/development/jdk-17` |
 | Android SDK | ✅ `~/Android/Sdk` (platform 36, build-tools 36.0.0) |
 | Linux desktop toolchain | ✅ cmake/ninja/clang/GTK + `libsecret-1-dev`; F5 (device: Linux) |
@@ -458,14 +469,11 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. **GitHub:** code for **build 58** is on `main`. Run `gh auth login`, then upload release assets:
-   ```powershell
-   cd D:\AI\Anima
-   .\scripts\upload_github_release.ps1
-   ```
-   (Windows zip is already built on this PC; APK still needs `flutter build apk --release` on a machine with Android SDK.)
-2. On phone: install **Anima-1.0.0.apk** from [v1.0.0 release](https://github.com/jwarren9393/Anima/releases/tag/v1.0.0) after upload — build **58**.
-3. **Release rule:** keep `pubspec.yaml` at **`1.0.0+<build>`** — only increment the number after `+`. Upload to the existing **`v1.0.0`** GitHub release (not a new tag per build).
+1. Run the app: **`flutter run -d linux`** (desktop) or plug in your Android phone + **`flutter run`**.
+2. First launch: use **Documents/Anima** (or pick a folder). On Android, allow **All files access** so My Files can open it.
+3. Enter your NanoGPT API key in **Settings → API** (saved in that folder as `api_key.txt`).
+4. Optional on Windows: if Dart extension can't find Flutter, set user-level `"dart.flutterSdkPath": "C:\\src\\flutter"` (workspace no longer hardcodes a path).
+5. **Release rule:** keep `pubspec.yaml` at **`1.0.0+<build>`** — only increment the number after `+`. Upload to the existing **`v1.0.0`** GitHub release (not a new tag per build).
 
 ---
 

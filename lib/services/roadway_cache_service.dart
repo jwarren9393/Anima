@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:path_provider/path_provider.dart';
+import 'app_paths.dart';
 
 /// Cached Path options for one chat, tied to the message they were generated for.
 class RoadwayCacheEntry {
@@ -44,7 +44,7 @@ class RoadwayCacheEntry {
 class RoadwayCacheService {
   RoadwayCacheService({Future<Directory> Function()? documentsDirectory})
       : _documentsDirectory =
-            documentsDirectory ?? getApplicationDocumentsDirectory;
+            documentsDirectory ?? appDocumentsDirectory;
 
   static const _fileName = 'anima_roadway_cache.json';
 

@@ -1,21 +1,20 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:path_provider/path_provider.dart';
-
 import '../models/character.dart';
+import 'app_paths.dart';
 import 'avatar_service.dart';
 
 /// Saves and loads your characters as a JSON file on this device.
 ///
-/// File location (typical Android): app documents folder / `anima_characters.json`
+/// File: Anima library folder / `anima_characters.json`
 /// Nothing here is uploaded to GitHub.
 class CharacterService {
   CharacterService({
     Future<Directory> Function()? documentsDirectory,
     AvatarService? avatarService,
   })  : _documentsDirectory =
-            documentsDirectory ?? getApplicationDocumentsDirectory,
+            documentsDirectory ?? appDocumentsDirectory,
         _avatarService = avatarService ??
             AvatarService(documentsDirectory: documentsDirectory);
 
@@ -94,13 +93,6 @@ class CharacterService {
   /// Deletes a character. The list may end up empty.
   Future<List<Character>> delete(String id) async {
     final all = await loadCharacters();
-    Character? removed;
-    for (final c in all) {
-      if (c.id == id) {
-        removed = c;
-        break;
-      }
-    }
     all.removeWhere((c) => c.id == id);
     await _avatarService.deleteAllForStem(id);
     await saveCharacters(all);

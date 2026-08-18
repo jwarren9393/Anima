@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/api_key_service.dart';
+import '../services/app_data_root.dart';
 import '../services/appearance_controller.dart';
 import '../services/character_category_service.dart';
 import '../services/character_service.dart';
@@ -16,6 +17,7 @@ import 'backup_restore_screen.dart';
 import 'characters_screen.dart';
 import 'collaborator_settings_screen.dart';
 import 'character_build_settings_screen.dart';
+import 'data_folder_settings_screen.dart';
 import 'global_chat_prompts_screen.dart';
 import 'lore_settings_screen.dart';
 import 'personas_screen.dart';
@@ -264,6 +266,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const _SettingsSectionHeader('App'),
           _SettingsTile(
+            icon: Icons.folder_open,
+            title: 'Data folder',
+            onTap: () {
+              final root = AppDataRoot.instance;
+              if (root == null) return;
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => DataFolderSettingsScreen(dataRoot: root),
+                ),
+              );
+            },
+          ),
+          _SettingsTile(
             icon: Icons.palette,
             title: 'Appearance',
             onTap: _openAppearance,
@@ -284,7 +299,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
             child: Text(
-              'NanoGPT key at nano-gpt.com — stored on this device only.',
+              'NanoGPT key is stored in your Anima folder (api_key.txt). '
+              'Copy that folder to move the whole library.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),

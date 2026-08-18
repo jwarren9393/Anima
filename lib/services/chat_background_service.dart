@@ -2,7 +2,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
+
+import 'app_paths.dart';
 
 /// Stores chat background images under the app documents folder.
 ///
@@ -10,7 +11,7 @@ import 'package:path_provider/path_provider.dart';
 class ChatBackgroundService {
   ChatBackgroundService({Future<Directory> Function()? documentsDirectory})
       : _documentsDirectory =
-            documentsDirectory ?? getApplicationDocumentsDirectory;
+            documentsDirectory ?? appDocumentsDirectory;
 
   final Future<Directory> Function() _documentsDirectory;
 

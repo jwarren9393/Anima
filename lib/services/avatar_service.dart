@@ -2,9 +2,9 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
 import '../models/avatar_history_entry.dart';
+import 'app_paths.dart';
 
 /// Saves avatar images under the app documents folder (device only).
 ///
@@ -15,7 +15,7 @@ import '../models/avatar_history_entry.dart';
 class AvatarService {
   AvatarService({Future<Directory> Function()? documentsDirectory})
       : _documentsDirectory =
-            documentsDirectory ?? getApplicationDocumentsDirectory;
+            documentsDirectory ?? appDocumentsDirectory;
 
   final Future<Directory> Function() _documentsDirectory;
 

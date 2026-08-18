@@ -1,21 +1,20 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:path_provider/path_provider.dart';
-
 import '../models/chat_message.dart';
 import '../models/chat_session.dart';
 import '../models/character.dart';
+import 'app_paths.dart';
 import 'prompt_builder.dart';
 
 /// Saves chat threads on this device, grouped by character.
 ///
-/// File: app documents / `anima_chats.json`
+/// File: Anima library folder / `anima_chats.json`
 /// Nothing here is uploaded to GitHub.
 class ChatService {
   ChatService({Future<Directory> Function()? documentsDirectory})
       : _documentsDirectory =
-            documentsDirectory ?? getApplicationDocumentsDirectory;
+            documentsDirectory ?? appDocumentsDirectory;
 
   static const _fileName = 'anima_chats.json';
 

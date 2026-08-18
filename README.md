@@ -10,13 +10,13 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **Also builds** | Linux desktop (works); Windows desktop (needs a Windows host) |
 | **Distribution** | Personal use only — **not** published to app stores |
 | **Repo** | https://github.com/jwarren9393/Anima (private) |
-| **Version** | **1.0.0** build **48** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
+| **Version** | **1.0.0** build **59** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
 
 ### What’s new in recent builds (1.0.0)
 
 | Build | Highlights |
 |-------|------------|
-| **48** | **Consistency check/fix** — higher token floor so reports finish; **Fix inconsistencies** opens a before/after review sheet (characters + lorebooks) — nothing applies until you confirm. **AI card builder** — description/personality split + review sheet on generate/update; plain-English can target one field. **Creation Center** — lorebooks world-only (no cast bio dupes); character export dedupes description/personality |
+| **59** | **Portable data folder** — characters, chats, avatars, settings, and API key live in one visible folder (`Documents/Anima` by default). First-run picker + **Settings → Data folder**. Android uses public Documents instead of locked app storage. |
 | **47** | **Presence / scene law** — always-on knowledge boundaries: narrator resets who’s present; opening scene seeds initial cast; unnamed messages only reach **present** characters (not whole cast); memory **witness tags**; per-character history/lore filtering. **Director mode** — replaces OOC; mandatory command for the **next** AI reply (centered card; tap edit, long-press delete). **Temporary characters** — quick NPC (name + note) from chat ⋮ or Manage cast; **Temporary** badge; promote to full card; **Full cards only** filter in Characters and group setup. **Consistency fix** — after AI consistency check on character cards or lorebooks, review changed fields and apply in one tap |
 | **46** | **Android keyboard fix** — send dismisses on-screen keyboard so replies stay readable; composer refocus / empty-Enter-continue stay **desktop-only** |
 | **45** | **Manual group chat** — Continue uses scene context (last speaker / name mentions), not round-robin chip order; no “next speaker” chip highlight. **Group react** — long-press menu; regenerate avoids copying prior beats verbatim; retries missing cast lines. **Keyboard flow (desktop)** — Enter sends, empty Enter continues; composer stays focused after send. **Creation Center** — character detect rejects JSON template placeholders |
@@ -62,7 +62,7 @@ Optional subscription base: `https://nano-gpt.com/api/subscription/v1`
 
 ## Installation and updates
 
-Anima is a personal app, so it is installed directly rather than through an app store. The NanoGPT API key is never included in a build or backup. On the first launch of each device, open **Settings → API & connection**, enter the key, and tap **Save**.
+Anima is a personal app, so it is installed directly rather than through an app store. The NanoGPT API key is never included in a GitHub build. On first launch, pick (or accept) your **Anima folder**, then open **Settings → API & connection**, enter the key, and tap **Save**. The key is stored as `api_key.txt` inside that folder.
 
 ### Android — easiest installation
 
@@ -72,9 +72,10 @@ Official Android builds are on the private repo’s **[Releases](https://github.
 2. Download **`Anima-1.0.0.apk`**.
 3. Open the downloaded APK. If Android asks, allow your browser or file manager to **install unknown apps**.
 4. Tap **Install**, then open Anima.
-5. Enter the NanoGPT key under **Settings → API & connection**.
+5. Allow **All files access** if Android asks, then use **Documents/Anima** (or pick another folder).
+6. Enter the NanoGPT key under **Settings → API & connection**.
 
-To update Android later, download the newly refreshed APK and install it over the existing app. **Do not uninstall first** — installing over it preserves local data. Backup before important updates is still recommended.
+To update Android later, download the newly refreshed APK and install it over the existing app. Your library lives in **Documents/Anima** (or the folder you chose), so it survives app updates. Uninstalling the APK also leaves that folder in place — copy it if you want a spare.
 
 ```bash
 flutter pub get
@@ -345,6 +346,7 @@ Opened from Home or Chat ⋮ → **Settings**. Top banner: **API & connection** 
 | **AI** | **Global chat prompts** | App-wide system + post-history |
 | **AI** | **AI collaborator** | Wand, Format, Paths, **Narrator** notes; Enter-to-send (desktop) |
 | **AI** | **Character builds** | Model + sampling for slim card JSON generation |
+| **App** | **Data folder** | Visible library location (open / copy / move) |
 | **App** | **Appearance** | Theme Studio — presets, layout, colors, fonts, chat experience, avatars |
 | **App** | **Backup, restore & sync** | `.anima-backup` export + cross-device sync file |
 
@@ -355,7 +357,7 @@ Detailed sections below follow this order where possible.
 **NanoGPT API key**
 
 - Enter / replace / show-hide / save / remove.
-- Stored in secure storage only; field never shows the saved secret again.
+- Stored as `api_key.txt` in your Anima folder so the library stays portable.
 
 **See remaining credits**
 
@@ -769,23 +771,29 @@ Streaming SSE; Stop cancels but keeps partial. Sampling from Generation paramete
 
 ## 7. Local data & background services
 
-Data under app documents directory. **Nothing uploaded to GitHub.**
+Everything lives in **one folder you can open** (default: `Documents/Anima` on Android, Linux, and Windows). First launch asks where to put it; **Settings → Data folder** can move it later. Copy that whole folder to back up or move Anima.
+
+A tiny pointer file still sits in hidden app storage so the next launch knows which folder you chose. The library itself is not locked in Samsung app storage.
+
+**Nothing uploaded to GitHub.** Do not put the Anima folder inside this git repo — `api_key.txt` is your NanoGPT key.
 
 | Store | Contents |
 |--------|----------|
-| Secure storage | API key, most settings, default persona id |
-| `anima_characters.json` | Character cards, embedded lorebooks, avatars |
+| `api_key.txt` | NanoGPT API key |
+| `anima_settings.json` | Model, sampling, theme, lore scan, collaborator notes, etc. |
+| `anima_active_persona_id.txt` | Default persona id |
+| `anima_characters.json` | Character cards, embedded lorebooks |
 | `anima_character_categories.json` | Category lists + memberships |
-| `anima_personas.json` | Personas + avatars |
-| `anima_chats.json` | Sessions, messages, swipes, notes, persona, auto-reply, lore picks, memory, opening scene |
+| `anima_personas.json` | Personas |
+| `anima_chats.json` | Sessions, messages, swipes, notes, persona, auto-reply, lore picks, memory |
 | `anima_composer_drafts.json` | Unsent composer text per chat |
 | `anima_roadway_cache.json` | Cached Paths per chat |
 | `anima_lorebooks.json` | Global lorebooks |
 | `anima_world_workshops.json` | Creation Center workshops + hub fields |
-| `anima_opening_scenes.json` | Opening scenes library |
-| `avatars/` | Local image files |
+| `avatars/` | Local portrait files |
 | `chat_backgrounds/` | User-picked chat backgrounds |
-| `.anima-backup` / sync file | Full-library export (no API key) |
+| `README.txt` | Short note that this folder is the library |
+| `.anima-backup` / sync file | Optional shareable export (**no** API key) |
 
 ---
 
@@ -808,7 +816,7 @@ Data under app documents directory. **Nothing uploaded to GitHub.**
 ## 9. Security
 
 - Never commit API keys or secrets to Git.
-- Use in-app **API & connection** + secure storage only.
+- Use in-app **API & connection**. The key is saved as `api_key.txt` inside your Anima folder.
 - `android/local.properties` stays gitignored.
 
 ---

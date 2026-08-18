@@ -1795,7 +1795,7 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         );
         return const [];
       }
-      return showLorebookGapFillSheet(
+      return await showLorebookGapFillSheet(
         context: context,
         suggestions: suggestions,
       );

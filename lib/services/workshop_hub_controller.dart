@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models/character.dart';
@@ -17,6 +16,7 @@ import '../models/workshop_chat_import_options.dart';
 import '../models/workshop_hub_models.dart';
 import 'nanogpt_service.dart';
 import 'settings_service.dart';
+import 'app_paths.dart';
 import 'world_workshop_builder.dart';
 import 'workshop_hub_service.dart';
 
@@ -290,7 +290,7 @@ class WorkshopHubController {
       persona: persona,
     );
     final text = _hub.encodeBundle(bundle);
-    final dir = await getApplicationDocumentsDirectory();
+    final dir = await appDocumentsDirectory();
     final safeTitle = workshop.title
         .replaceAll(RegExp(r'[^\w\s-]'), '')
         .trim()

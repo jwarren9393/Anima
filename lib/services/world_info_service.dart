@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:path_provider/path_provider.dart';
+import 'app_paths.dart';
 
 import '../models/global_lorebook.dart';
 import '../models/lorebook.dart';
@@ -14,7 +14,7 @@ class WorldInfoService {
   WorldInfoService({
     Future<Directory> Function()? documentsDirectory,
   }) : _documentsDirectory =
-            documentsDirectory ?? getApplicationDocumentsDirectory;
+            documentsDirectory ?? appDocumentsDirectory;
 
   static const _fileName = 'anima_lorebooks.json';
 
