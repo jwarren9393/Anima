@@ -62,7 +62,7 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Post-roadmap tweaks
 
 **Last updated:** 2026-08-18  
-**Last agent action:** Build **60** — sync/restore accepts plain-text library files (`anima_active_persona_id.txt`); phone pull no longer fails JSON validation.
+**Last agent action:** Shipped **build 61** (`1.0.0+61`) to GitHub `v1.0.0` — Scene/Ledger memory merge + pins, narrator scene lock.
 
 ### What works today
 
@@ -83,12 +83,12 @@ High-value SillyTavern concepts to aim for over time:
   - API, Generation parameters
 - **Look** — Theme Studio with glass and solid presets (default Obsidian Gold soft-glow, no sparkle texture); Ivory Ink light preset + full color/font customization
 - **Generation parameters** — detailed help + many sampling presets; **context size in tokens** + presets (1K–24K); **auto-summarize** every N messages
-- **Memory summary** — per chat (⋮ → Memory summary to edit; Summarize now); **clinical bullet facts only** (no RP voice/metaphors); **witness tags** on private facts (`Secret (known by …)`, `Event (witnesses: …)`); filtered per speaking character before injection; auto-updates in background when enabled
+- **Memory summary** — per chat (⋮ → Memory summary); **Scene** (current place/cast, replaced each run) + **Ledger** (durable threads/promises/secrets — merged, not rewritten); **pin** ledger lines so summarize never drops them; unresolved **Thread:** kept until closed; **witness tags** on private facts; filtered per speaking character; auto-updates in background when enabled
 - **Presence / scene law** — **always on for group chats** (solo skips history filtering) — knowledge boundaries:
   - **Narrator** resets who is **physically present**; only those names (+ you) hear private dialogue; **latest narrator scene brief is broadcast to all cast** (off-screen characters know location/situation but not whispered lines); **omniscient secret clauses** (“has no idea that…”, “neither does Ashley”) are **stripped per character** before injection so unaware cast never see the secret in the prompt
   - **Director** — active note sanitized the same way; mandatory direction includes **do not confess secrets** to unaware characters in dialogue
   - **Other characters' *asterisk* blocks** — **visible actions** (handshakes, groans, movement toward someone) stay in history for present cast; segments that read like **private internal monologue** are stripped; supports "alone with Mira", exclusions, **everyone** for full cast
-  - **Narrator entrance once** — hard-coded: if a character **already spoke after** the latest narrator card, their next reply is told to **continue from chat** (no re-walk-in / replay entrance); narrator still defines location and who's present as backdrop — use **Director** for beat-by-beat guidance within a scene
+  - **Narrator entrance once** — if anyone already spoke after the latest narrator card, the prompt switches to a **short backdrop** (location / who’s present) instead of re-injecting the full passage as mandatory scene law; older narrator and director cards are **omitted from API history** so long chats don’t rewind to a kitchen from 40 messages ago — use **Director** for beat-by-beat guidance within a scene
   - **Narrator movement deltas** — "Jay leaves" / "Jaisha comes back downstairs" apply on top of the previous scene (other cast stay unless they left); leavers are marked **NOT present**; arrival verbs assign the beat to that character so others must not steal it (e.g. Ashley reacts, Jaisha enacts the return)
   - **Your messages** — naming someone (`Mira, …`) → only they hear it; no names → only whoever is **currently present** in the scene (not the whole cast)
   - **Character lines** — only visible to those present when the line was sent
@@ -125,7 +125,7 @@ High-value SillyTavern concepts to aim for over time:
 - **AI Compact** — character card, **persona**, whole lorebook, and individual lore entries; review sheet before apply
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar; **Scene moods** (mood icon + ⋮ menu) — includes **Intimate build-up**, **Explicit / graphic**, **Afterglow** with hard-coded **vocabulary law** (plain adult words; bans LLM euphemisms/tropes when those moods are on); **Chat copies** — per-chat character/persona overrides + **Chat lore** (thread-only World Info merged with global picks); long-press avatar edits chat copy (library unchanged)
 - **Linux install/update** — `./scripts/update_linux.sh` builds and installs the desktop app; add `--pull` to download GitHub changes first
-- **Smoke:** `flutter test` (332) + `flutter analyze` pass; Android + Windows + Linux desktop debug work
+- **Smoke:** `flutter test` (341) + `flutter analyze` pass; Android + Windows + Linux desktop debug work
 
 ### What does NOT work yet / limits
 
@@ -136,7 +136,7 @@ High-value SillyTavern concepts to aim for over time:
 - No TTS (removed — Speak was not useful enough to keep)
 - Paths open from the long-press menu (not always on the composer chrome)
 - Full-app backup is plain JSON (not encrypted) and skips the API key on purpose
-- Back-burner QoL not started: undo send, last-chat resume, pinned Author’s Note / mood chips, memory preview, etc.
+- Back-burner QoL not started: undo send, last-chat resume, pinned Author’s Note / mood chips, etc.
 - Presence filtering uses narrator name mentions; very old memory without witness tags may leak until re-summarized; honorifics ("Your Majesty") don't match names — use narrator to establish who's present
 
 ---
@@ -247,6 +247,7 @@ lib/
     chat_message.dart             Bubble + swipes + optional speaker + groupBeat lines
     group_beat_part.dart          One character line inside a group-react card
     chat_session.dart             Thread + authorsNote + group + lorebookIds + autoReply + memorySummary + activeSceneMoodIds + characterOverrides + personaOverride + chatLorebook
+    memory_summary.dart           Scene + Ledger parse/encode + [pin] restore after summarize
     character.dart                ST-compatible card fields (+ Anima id)
     character_category.dart       Anima-only category lists + memberships
     new_chat_pick.dart            Character + persona bundle for solo new chat
@@ -326,6 +327,7 @@ lib/
     create_character_from_chat_sheet.dart Scan/generate character card from live chat context
     update_character_from_chat_sheet.dart Pick saved card + optional notes → merge update from chat
     scene_mood_sheet.dart         Per-chat scene mood toggle sheet (composer mood icon + ⋮ menu)
+    memory_summary_sheet.dart     Scene/Ledger editor with pin toggles (chat ⋮ → Memory summary)
     reply_rewrite_sheet.dart      Rewrite reply mode picker (custom first + moods / style options)
   utils/
     platform_utils.dart           Desktop platform detection (Windows / Linux / macOS)
@@ -366,7 +368,7 @@ lib/
   composer_draft_service.dart   Per-chat composer draft autosave
   speaker_prefix.dart           Strip leading "Name:" from AI replies (group immersion)
   chat_service.dart             Chats per character + group bucket (+ personaId, autoReply, lorebookIds)
-    chat_context_service.dart     History trim + memory summarize helpers
+    chat_context_service.dart     History trim + Scene/Ledger memory merge helpers
     prompt_builder.dart           System prompt, modes, group, authors note
     lorebook_service.dart         Keyword scan, budget, merge global + character books
     world_info_service.dart       Persist global lorebooks (anima_lorebooks.json)
@@ -473,7 +475,7 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 2. First launch: use **Documents/Anima** (or pick a folder). On Android, allow **All files access** so My Files can open it.
 3. Enter your NanoGPT API key in **Settings → API** (saved in that folder as `api_key.txt`).
 4. Optional on Windows: if Dart extension can't find Flutter, set user-level `"dart.flutterSdkPath": "C:\\src\\flutter"` (workspace no longer hardcodes a path).
-5. **Release rule:** keep `pubspec.yaml` at **`1.0.0+<build>`** — only increment the number after `+`. Upload to the existing **`v1.0.0`** GitHub release (not a new tag per build).
+5. **Release rule:** keep `pubspec.yaml` at **`1.0.0+<build>`** — only increment the number after `+`. Upload to the existing **`v1.0.0`** GitHub release (not a new tag per build). Current phone APK is **build 61**.
 
 ---
 

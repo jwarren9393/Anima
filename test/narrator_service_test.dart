@@ -53,7 +53,7 @@ void main() {
     expect(id, 'n2');
   });
 
-  test('historyBlockFor skips active narrator', () {
+  test('historyBlockFor omits superseded narrator cards from the API prompt', () {
     final message = ChatMessage(
       id: 'n2',
       role: ChatRole.narrator,
@@ -63,12 +63,10 @@ void main() {
       service.historyBlockFor(message: message, activeNarratorId: 'n2'),
       isNull,
     );
-    final historical = service.historyBlockFor(
-      message: message,
-      activeNarratorId: 'n1',
+    expect(
+      service.historyBlockFor(message: message, activeNarratorId: 'n1'),
+      isNull,
     );
-    expect(historical, isNotNull);
-    expect(historical!['content'], contains('Earlier narrator beat'));
   });
 
   test('activeSceneLawBlock adds entrance line when speaker is named', () {
@@ -124,8 +122,37 @@ void main() {
     expect(block!, contains('already moved on'));
     expect(block, contains('Do NOT'));
     expect(block, contains('re-walk-in'));
+    expect(block, contains('NARRATOR BACKDROP'));
+    expect(block, contains('current moment'));
     expect(block, isNot(contains('enact your entrance')));
-    expect(block, isNot(contains('You are Ashley Diamond — enact')));
+    expect(block, isNot(contains('MANDATORY FOR THIS BEAT')));
+  });
+
+  test('continued narrator uses a short backdrop instead of the full passage', () {
+    final long =
+        'Everyone is still in the living room from hours ago. ${'The old beat repeats. ' * 40}';
+    final block = service.activeSceneLawBlock(
+      messages: [
+        ChatMessage(id: 'n1', role: ChatRole.narrator, text: long),
+        ChatMessage(id: 'u1', role: ChatRole.user, text: 'Stay with me.'),
+        ChatMessage(
+          id: 'a1',
+          role: ChatRole.assistant,
+          speakerName: 'Luna',
+          text: '"I am right here."',
+        ),
+      ],
+      activeNarratorId: 'n1',
+      userName: 'Jay',
+      charName: 'Luna',
+      speakingAsName: 'Luna',
+      endExclusive: 3,
+    );
+    expect(block, isNotNull);
+    expect(block!, contains('NARRATOR BACKDROP'));
+    expect(block, contains('living room'));
+    expect(block.length, lessThan(long.length));
+    expect(block, isNot(contains('MANDATORY FOR THIS BEAT')));
   });
 
   test('activeSceneLawBlock tells cast not to steal another arrival beat', () {
@@ -210,8 +237,9 @@ void main() {
       endExclusive: 2,
     );
     expect(block, isNotNull);
-    expect(block!, contains('Jay already spoke'));
-    expect(block, contains('respond to their last line'));
+    expect(block!, contains('NARRATOR BACKDROP'));
+    expect(block, contains('already moved on'));
+    expect(block, contains('latest chat'));
   });
 
   test('activeSceneLawBlock tells Ashley to follow Jaisha after she already spoke', () {
@@ -241,8 +269,9 @@ void main() {
       endExclusive: 2,
     );
     expect(block, isNotNull);
-    expect(block!, contains('already enacted this narrator beat in chat'));
-    expect(block, contains('do NOT act surprised'));
+    expect(block!, contains('NARRATOR BACKDROP'));
+    expect(block, contains('already moved on'));
+    expect(block, contains('Follow the latest chat'));
     expect(block, isNot(contains('MUST react as if these facts already happened')));
   });
 

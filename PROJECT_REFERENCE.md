@@ -503,15 +503,19 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 
 ## 15. Memory summary and auto-summarize
 
-- **Manual:** ⋮ → Memory summary (edit) or Summarize now.
+- **Manual:** ⋮ → Memory summary (Scene + Ledger editor with pins) or Summarize now.
+- **Two layers** (one stored string `memorySummary`):
+  - **Scene** — Location / Present / Time. Replaced each summarize from the newest chunk (carried forward if the chunk does not mention a new place).
+  - **Ledger** — durable Thread / Promise / Secret / Relationship / Goal / Item / Injury / Event. **Merged**, not rewritten. Newest does **not** win. Threads stay until explicitly resolved.
+  - **Pins** — `[pin]` ledger lines; editor pin toggle; restored after AI if the model drops them.
+- **Parser:** `MemorySummaryDocument` in `lib/models/memory_summary.dart`. Unlabeled old bullets: Location/Present → Scene, everything else → Ledger.
 - **Auto:** Settings → summarize every N messages.
-- **Injection:** `formatMemoryForPrompt()` wraps stored bullets as a **reference-only** system block before history — explicitly tells the model not to mimic summary tone/style.
-- **Summarize prompt:** hard-coded `memorySummarizeSystemPrompt` — clinical objective bullets only; target 15–35 bullets; must finish last bullet (no mid-line cutoffs).
-- **Summarize sampling:** `summarizeSampling()` — **768–2048** token budget (defaults **1536** when chat max_tokens unset/low); temperature ≤ **0.25**.
-- **Fold:** older messages (keep recent N raw) via `buildSummarizeMessages()`.
-- **First summarize:** also folds opening scene into memory when set (converted to clinical bullets).
+- **Injection:** `formatMemoryForPrompt()` wraps stored text as a **reference-only** system block before history — explicitly tells the model not to mimic summary tone/style. Presence filter keeps `##` headers and strips `[pin]` when matching witness tags.
+- **Summarize prompt:** `memorySummarizeSystemPrompt` — two-section merge; protect `[pin]` and unresolved `Thread:`; must finish last bullet.
+- **Caps:** ledger target grows with covered length (35–90 bullets); Scene ≤ 10. Sampling **1024–4096** (defaults **2048** when chat max_tokens unset/low); temperature ≤ **0.25**.
+- **Fold:** older messages (keep recent N raw) via `buildSummarizeMessages()` + `finalizeSummarizeOutput()` (pin restore). Empty model output does **not** advance `memoryCoveredCount`.
 - **Background:** does not block chat UI (`_summarizing` vs `_busy`).
-- **Existing chats:** old fluffy summaries stay until you run **Summarize now** (or wait for auto-summarize) to rewrite in the new format.
+- **Existing chats:** old flat bullets are classified on the next parse/summarize; run **Summarize now** to convert to Scene/Ledger.
 
 ---
 

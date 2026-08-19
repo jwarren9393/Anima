@@ -403,11 +403,15 @@ Knowledge boundaries (absolute — never break these):
     for (final rawLine in body.split('\n')) {
       final line = rawLine.trim();
       if (line.isEmpty) continue;
+      if (_isMemorySectionHeader(line)) {
+        kept.add(line);
+        continue;
+      }
       if (_memoryLineVisibleTo(line, focus: focus, cast: cast)) {
         kept.add(line);
       }
     }
-    return kept.join('\n');
+    return _dropOrphanMemoryHeaders(kept.join('\n'));
   }
 
   /// Union memory filter for coordinated group beats.
@@ -444,7 +448,7 @@ Knowledge boundaries (absolute — never break these):
     if (body.isEmpty) return '';
     final char = charName.trim().isEmpty ? 'Character' : charName.trim();
     return '''
-Memory summary (facts $char personally knows — reference only):
+Memory index (facts $char personally knows — reference only):
 $body
 
 These are the ONLY story facts $char may treat as known. Do NOT mimic this summary's tone.
@@ -558,7 +562,45 @@ Do NOT use facts from scenes $char did not witness. If a fact is not listed, $ch
         body.startsWith('• ')) {
       body = body.substring(2).trim();
     }
+    if (body.startsWith('[pin]')) {
+      body = body.substring(5).trim();
+    } else if (body.startsWith('[pinned]')) {
+      body = body.substring(8).trim();
+    }
     return body;
+  }
+
+  bool _isMemorySectionHeader(String line) {
+    var body = line.trim();
+    if (body.startsWith('#')) {
+      body = body.replaceFirst(RegExp(r'^#+\s*'), '');
+    }
+    body = body.replaceAll('*', '').replaceAll('_', '').trim();
+    if (body.endsWith(':')) body = body.substring(0, body.length - 1).trim();
+    final lower = body.toLowerCase();
+    return lower == 'scene' ||
+        lower == 'current scene' ||
+        lower == 'ledger' ||
+        lower == 'facts' ||
+        lower == 'durable' ||
+        lower == 'memory ledger';
+  }
+
+  String _dropOrphanMemoryHeaders(String body) {
+    final lines = [
+      for (final line in body.split('\n'))
+        if (line.trim().isNotEmpty) line.trim(),
+    ];
+    final kept = <String>[];
+    for (var i = 0; i < lines.length; i++) {
+      if (_isMemorySectionHeader(lines[i])) {
+        final hasBody = i + 1 < lines.length &&
+            !_isMemorySectionHeader(lines[i + 1]);
+        if (!hasBody) continue;
+      }
+      kept.add(lines[i]);
+    }
+    return kept.join('\n');
   }
 
   Set<String> _presentFromNarrator(
@@ -730,6 +772,8 @@ Do NOT use facts from scenes $char did not witness. If a fact is not listed, $ch
   bool _isPublicMemoryLabel(String lower) {
     const publicPrefixes = [
       'location:',
+      'present:',
+      'time:',
       'world:',
       'item:',
       'faction:',

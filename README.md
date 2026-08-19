@@ -10,12 +10,13 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **Also builds** | Linux desktop (works); Windows desktop (needs a Windows host) |
 | **Distribution** | Personal use only — **not** published to app stores |
 | **Repo** | https://github.com/jwarren9393/Anima (private) |
-| **Version** | **1.0.0** build **60** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
+| **Version** | **1.0.0** build **61** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
 
 ### What’s new in recent builds (1.0.0)
 
 | Build | Highlights |
 |-------|------------|
+| **61** | **Memory overhaul** — Scene (current place/cast) vs Ledger (durable plot); summarize **merges** instead of newest-wins; **pin** ledger lines; open threads kept until resolved. **Narrator scene lock** — old narrator/director cards stay out of API history so long chats don’t rewind. |
 | **60** | **Sync/restore fix** — `.anima-backup` may include plain-text library files; phone pull no longer rejects `anima_active_persona_id.txt` as “not valid JSON”. |
 | **59** | **Portable data folder** — characters, chats, avatars, settings, and API key live in one visible folder (`Documents/Anima` by default). First-run picker + **Settings → Data folder**. Android uses public Documents instead of locked app storage. |
 | **47** | **Presence / scene law** — always-on knowledge boundaries: narrator resets who’s present; opening scene seeds initial cast; unnamed messages only reach **present** characters (not whole cast); memory **witness tags**; per-character history/lore filtering. **Director mode** — replaces OOC; mandatory command for the **next** AI reply (centered card; tap edit, long-press delete). **Temporary characters** — quick NPC (name + note) from chat ⋮ or Manage cast; **Temporary** badge; promote to full card; **Full cards only** filter in Characters and group setup. **Consistency fix** — after AI consistency check on character cards or lorebooks, review changed fields and apply in one tap |
@@ -233,8 +234,8 @@ Minimal chrome: **Close** · title · **⋮** menu. Composer icon row: **Narrato
 | **World Info: …** | Use Settings default, pick specific global lorebooks, or turn global lore **off** for this thread (character card lore still applies) |
 | **Opening scene** / **Add opening scene** | Edit narrator opening prose |
 | **Stop injecting opening scene** / **Inject opening scene in prompts** | Toggle whether opening scene text is sent every turn |
-| **Memory summary** / **Memory summary (set)** | View/edit the running summary injected into prompts |
-| **Summarize now** | Force a NanoGPT memory update |
+| **Memory summary** / **Memory summary (set)** | Scene (now) + Ledger (durable plot); pin facts so summarize never drops them |
+| **Summarize now** | Merge older messages into Scene/Ledger (does not wipe pinned lines or open threads) |
 | **Context estimate** | Rough token/message gauge vs history budget and model window |
 | **Characters** | Pick/switch character (pick mode) |
 | **Rename chat** | Groups only — custom name on Home |
@@ -639,7 +640,7 @@ Deleting a workshop does **not** delete an already-created lorebook.
 - Built-in presets (Balanced, Creative, Focused, Short, Long prose, Anti-repeat, Deterministic, Chaotic, Chatty, Mystery, Cozy, …).
 - **Context size** in tokens (presets 1K–24K; range ~512–32K) — recent history packed per prompt; full history stays on device.
 - **Auto-summarize long chats** — every N messages, keep N recent raw messages.
-- Memory summarize uses **clinical bullet facts** (no RP voice/metaphors), lower temperature, **768–2048** token budget (defaults 1536 when chat max is low); revises stale facts; **first summarize** folds opening scene when set; auto-tags **witnesses** on private facts (`Secret (known by …)`, `Event (witnesses: …)`); injection wrapper tells the model not to mimic summary style.
+- Memory is a **Scene** (current place/cast, replaced each run) plus a **Ledger** (durable threads, promises, secrets — merged, not rewritten). Pin ledger lines in ⋮ → Memory summary so summarize never drops them. Open **Thread:** lines stay until the story resolves them. Lower temperature, **1024–4096** token budget (defaults 2048 when chat max is low); auto-tags **witnesses** on private facts; injection wrapper tells the model not to mimic summary style.
 
 ### 4.8 Global chat prompts
 

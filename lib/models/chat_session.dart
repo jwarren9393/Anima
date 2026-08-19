@@ -68,7 +68,8 @@ class ChatSession {
   /// A list (even empty) = only those books (chat override).
   final List<String>? lorebookIds;
 
-  /// Running memory of older turns (editable). Injected into prompts when set.
+  /// Running Scene + Ledger memory of older turns (editable, pin-safe).
+  /// Injected into prompts when set.
   final String memorySummary;
 
   /// How many leading messages from [messages] are already folded into

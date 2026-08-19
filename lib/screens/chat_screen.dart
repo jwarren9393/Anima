@@ -72,6 +72,7 @@ import '../widgets/narrator_sheet.dart';
 import '../widgets/preset_picker.dart';
 import '../widgets/reply_rewrite_sheet.dart';
 import '../widgets/rp_rich_text.dart';
+import '../widgets/memory_summary_sheet.dart';
 import '../widgets/scene_mood_sheet.dart';
 import 'characters_screen.dart';
 import 'character_edit_screen.dart';
@@ -2456,56 +2457,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Future<void> _editMemorySummary() async {
     final session = _session;
     if (session == null || _busy) return;
-    final controller = TextEditingController(text: session.memorySummary);
-    final result = await showDialog<String>(
+    final result = await showMemorySummarySheet(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Memory summary'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Older story beats the AI should remember. Sent with each '
-                  'reply. Covered messages: ${session.memoryCoveredCount}. '
-                  'Edit anytime, or clear to start fresh.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: controller,
-                  minLines: 6,
-                  maxLines: 14,
-                  autofocus: true,
-                  decoration: const InputDecoration(
-                    hintText: 'Story so far…',
-                    border: OutlineInputBorder(),
-                    alignLabelWithHint: true,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, ''),
-              child: const Text('Clear'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, controller.text),
-              child: const Text('Save'),
-            ),
-          ],
-        );
-      },
+      initialText: session.memorySummary,
+      memoryCoveredCount: session.memoryCoveredCount,
     );
-    WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
     if (result == null || !mounted) return;
     final trimmed = normalizeEmDashes(result.trim());
     setState(() {
@@ -2868,14 +2824,29 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           existingSummary: session.memorySummary,
           userName: _userName,
           charName: _character!.name,
+          coveredMessageCount: cut,
         ),
         baseUrl: baseUrl,
         sampling: ChatContextService.summarizeSampling(sampling),
       );
       if (!mounted) return;
+      final merged = normalizeEmDashes(
+        ChatContextService.finalizeSummarizeOutput(
+          existingSummary: session.memorySummary,
+          generated: updated,
+        ),
+      );
+      if (merged.isEmpty) {
+        setState(() {
+          _summarizing = false;
+          _error =
+              'Summarize returned no facts. Nothing was folded — try again.';
+        });
+        return;
+      }
       setState(() {
         _session = session.copyWith(
-          memorySummary: updated.trim(),
+          memorySummary: merged,
           memoryCoveredCount: cut,
         );
         _summarizing = false;

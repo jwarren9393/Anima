@@ -317,8 +317,8 @@ class _SamplingSettingsScreenState extends State<SamplingSettingsScreen> {
                   decimal: false,
                 ),
                 Text(
-                  'In a chat: ⋮ → Memory summary to read/edit, or Summarize now '
-                  'to run one update manually.',
+                  'In a chat: ⋮ → Memory summary to edit Scene/Ledger and pin '
+                  'facts, or Summarize now to merge older messages.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 24),

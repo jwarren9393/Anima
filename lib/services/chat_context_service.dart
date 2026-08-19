@@ -1,4 +1,5 @@
 import '../models/chat_message.dart';
+import '../models/memory_summary.dart';
 import 'settings_service.dart';
 
 /// Picks which chat bubbles to send and builds memory-summary prompts.
@@ -94,56 +95,82 @@ class ChatContextService {
 
   /// Summarize calls need enough room for a careful memory rewrite.
   static const memorySummarizeSystemPrompt = '''
-You maintain the MEMORY SUMMARY for a private roleplay chat app (Anima).
+You maintain the MEMORY INDEX for a private roleplay chat app (Anima).
 This text is injected into live character prompts as a FACT INDEX only — not as
 writing samples. Your output must NEVER influence how characters speak.
 
-TASK: UPDATE the running memory so older chat turns can leave the live prompt.
+TASK: MERGE the new chat segment into the running memory. Do not rewrite the
+whole index from scratch. Older durable facts must survive.
 
-OUTPUT FORMAT (mandatory):
-- Plain bullet list only. One fact per line. Start each line with "- ".
-- Optional short labels: Location:, Present:, Relationship:, Event:, Secret:,
-  Item:, Goal:, Thread:, Injury:, Promise:, Change:
-- For private or scene-specific facts, ALWAYS tag who witnessed or knows them using
-  character names (not "User"):
-  - Secret (known by Mira, Aedric): …
-  - Event (witnesses: Mira, King Aethlor): …
-  - Or (Mira only): … when literally one person knows
-- NEVER write scene-specific Event/Secret/Relationship bullets without a witness tag.
-- If only some cast were present, name ONLY those witnesses — never the whole group.
-- Public world facts (Location, Item, Faction, World, Rule, Lore, Setting) need no witness tag.
-- Clinical, objective, telegraphic facts. Past tense for completed events.
-- NO metaphors, poetry, atmosphere, sensory prose, dialogue quotes, or RP voice.
-- NO narrative paragraphs. NO reenacting scenes. NO character speech patterns.
-- State what happened in plain terms (e.g. "Event: Jay and Edric entered the
-  tower" not "*they slipped into the tower like shadows*").
+OUTPUT FORMAT (mandatory — two sections, then bullets):
 
-CONTENT RULES:
-- Revise the existing memory — remove facts contradicted or superseded by newer chat.
-- Prefer the NEWEST information. Do not keep stale facts beside updated ones.
-- Track only what matters later: who is present, locations, relationships, secrets
-  revealed, injuries, inventory, promises, goals, and open plot threads.
-- Tag secrets and private events with who witnessed or knows them (see format above).
+## Scene
+- Location: …
+- Present: …
+(optional Time: …)
+
+## Ledger
+- [pin] Promise: …     (copy every [pin] line verbatim)
+- Thread: …
+- Promise: …
+- Secret (known by Mira): …
+- Event (witnesses: Mira, Jay): …
+- Relationship: …
+- Item: …
+- Goal: …
+- Injury: …
+
+Labels: Location, Present, Time, Relationship, Event, Secret, Item, Goal,
+Thread, Injury, Promise, Change.
+
+Witness tags for private facts (use character names, never "User"):
+- Secret (known by Mira, Aedric): …
+- Event (witnesses: Mira, King Aethlor): …
+- Or (Mira only): … when literally one person knows
+NEVER write scene-specific Event/Secret/Relationship bullets without a witness tag.
+If only some cast were present, name ONLY those witnesses — never the whole group.
+Public world facts (Location, Present, Time, Item, Faction, World, Rule, Lore,
+Setting) need no witness tag.
+
+Clinical, objective, telegraphic facts. Past tense for completed events.
+NO metaphors, poetry, atmosphere, sensory prose, dialogue quotes, or RP voice.
+NO narrative paragraphs. NO reenacting scenes. NO character speech patterns.
+Example: "Event (witnesses: Jay, Edric): They entered the tower" — not
+"*they slipped into the tower like shadows*".
+
+SCENE RULES (replace each run):
+- Scene is ONLY the current physical situation (where / who is there / time).
+- Newest Location/Present/Time wins. Do not keep old rooms beside the current one.
+- If the new segment does not mention a new location or who is present, keep the
+  previous Scene Location/Present.
+
+LEDGER RULES (merge — newest does NOT win):
+- Ledger is the durable fact index. KEEP existing ledger bullets unless:
+  (a) the new chat CONTRADICTS that fact — then replace it with the updated fact, or
+  (b) that Thread/Goal/Promise is explicitly RESOLVED or closed in the new chat, or
+  (c) it is an exact duplicate of another ledger bullet.
+- NEVER drop a line that starts with "- [pin]". Copy those lines verbatim.
+- NEVER drop a Thread: unless the new chat clearly resolves that thread.
+- Do not delete old promises, secrets, injuries, relationships, inventory, or
+  open plots just because the scene moved on.
 - Do not sanitize, moralize, or omit uncomfortable facts.
-- Merge duplicate bullets. Delete obsolete bullets entirely.
+- Merge wording of true duplicates. Prefer more bullets over losing plot.
 
 LENGTH:
-- Stay concise. Target 15–35 bullets for typical arcs; up to ~45 only if the story
-  is very complex.
-- If the existing summary is bloated, compress while preserving facts.
-- Always finish the last bullet — never truncate mid-line or mid-sentence.
-- Output ONLY the bullet list — no title, preamble, markdown fences, or commentary.
+- Scene: at most 10 bullets.
+- Ledger: keep durable facts. Do not shrink the ledger just to look tidy.
+- Always finish the last bullet — never truncate mid-line.
+- Output ONLY the two sections and bullets — no preamble, fences, or commentary.
 ''';
 
   /// Default output budget when chat max_tokens is unset or very low.
-  static const summarizeDefaultMaxTokens = 1536;
+  static const summarizeDefaultMaxTokens = 2048;
 
   /// Floor so short user max_tokens settings do not truncate memory rewrites.
-  static const summarizeMinTokens = 768;
+  static const summarizeMinTokens = 1024;
 
-  /// Cap — clinical bullets stay shorter than old prose summaries; this only
-  /// prevents mid-line cutoffs on dense chats.
-  static const summarizeMaxCap = 2048;
+  /// Cap so long-chat ledgers can finish without mid-line cutoffs.
+  static const summarizeMaxCap = 4096;
 
   static SamplingSettings summarizeSampling(SamplingSettings base) {
     final user = base.maxTokens;
@@ -161,6 +188,7 @@ LENGTH:
     required String existingSummary,
     required String userName,
     required String charName,
+    int coveredMessageCount = 0,
   }) {
     final transcript = StringBuffer();
     for (final message in chunk) {
@@ -193,29 +221,68 @@ LENGTH:
       transcript.writeln();
     }
 
-    final system = memorySummarizeSystemPrompt.trim();
+    final parsed = MemorySummaryDocument.parse(existingSummary);
+    final existingCanonical = parsed.encode();
+    final ledgerTarget = MemorySummaryDocument.ledgerBulletTarget(
+      coveredMessageCount,
+    );
+    final system = StringBuffer()
+      ..writeln(memorySummarizeSystemPrompt.trim())
+      ..writeln()
+      ..writeln(
+        'This chat has folded about $coveredMessageCount older messages. '
+        'Ledger may use up to $ledgerTarget bullets. Scene stays at most '
+        '${MemorySummaryDocument.sceneBulletMax}. Prefer keeping ledger facts '
+        'over cutting them to hit a smaller number.',
+      );
 
     final user = StringBuffer();
     if (existingSummary.trim().isNotEmpty) {
-      user.writeln('Existing memory summary (revise — do not blindly append):');
-      user.writeln(existingSummary.trim());
+      user.writeln(
+        'Existing memory (MERGE into this — do not rewrite from scratch):',
+      );
+      user.writeln(
+        existingCanonical.isEmpty ? existingSummary.trim() : existingCanonical,
+      );
       user.writeln();
+      final pins = parsed.pinnedFacts;
+      if (pins.isNotEmpty) {
+        user.writeln(
+          'PINNED FACTS (copy into ## Ledger verbatim; never drop or rewrite):',
+        );
+        for (final pin in pins) {
+          user.writeln(pin.encodeLine());
+        }
+        user.writeln();
+      }
     } else {
-      user.writeln('No existing memory summary yet.');
+      user.writeln('No existing memory yet. Create ## Scene and ## Ledger.');
       user.writeln();
     }
-    user.writeln('New chat segment to fold in:');
+    user.writeln('New chat segment to fold in (extract new facts, then merge):');
     user.writeln(transcript.toString().trim());
     user.writeln();
     user.writeln(
-      'Write the full updated memory summary now as a clinical bullet list only. '
-      'Merge opening facts (if any) and the new segment; remove outdated facts.',
+      'Write the full updated memory now with ## Scene and ## Ledger. '
+      'Replace Scene if the location/cast changed; MERGE the Ledger; keep every '
+      '[pin] line and every unresolved Thread.',
     );
 
     return [
-      {'role': 'system', 'content': system},
+      {'role': 'system', 'content': system.toString().trim()},
       {'role': 'user', 'content': user.toString().trim()},
     ];
+  }
+
+  /// Normalize a model rewrite and restore any dropped pins.
+  static String finalizeSummarizeOutput({
+    required String existingSummary,
+    required String generated,
+  }) {
+    return MemorySummaryDocument.finalize(
+      existing: existingSummary,
+      generated: generated,
+    );
   }
 
   /// Wraps stored memory for injection into live chat prompts.
@@ -223,10 +290,11 @@ LENGTH:
     final body = memory.trim();
     if (body.isEmpty) return '';
     return '''
-Memory summary (canonical facts from older story — reference only):
+Memory index (canonical facts from older story — reference only):
 $body
 
 Use only for continuity of facts, locations, relationships, and plot state.
+Scene = current place/cast. Ledger = durable plot (do not forget older ledger facts).
 Do NOT mimic this summary's tone, wording, or style in character replies.
 Character voice comes from the character card and live chat only.
 '''

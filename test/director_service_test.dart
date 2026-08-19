@@ -18,6 +18,8 @@ void main() {
       expect(block, contains('Mira looks suspicious'));
       expect(block, contains('Mira MUST follow'));
       expect(block, contains('NOT dialogue from Alex'));
+      expect(block, contains('THIS reply only'));
+      expect(block, contains('Do not rewind'));
     });
 
     test('pendingText resolves from session id', () {

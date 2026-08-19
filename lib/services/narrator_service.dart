@@ -91,11 +91,19 @@ class NarratorService {
         : char;
     final continueFromChat = narratorAlreadyAddressed || sceneContinuedInChat;
     final namedInBeat = _narratorNamesCharacter(body, speaker);
-    final beatLine = continueFromChat
-        ? 'The scene has already moved on — continue from the latest chat '
-            'messages. Do NOT re-walk-in, re-arrive, or replay entrances or '
-            'first reactions that already happened in chat.\n'
-        : namedInBeat
+    if (continueFromChat) {
+      return _continuedSceneBackdrop(
+        excerpt: _backdropExcerpt(body),
+        user: user,
+        speaker: speaker,
+        char: char,
+        presentLine: '',
+        absentLine: '',
+        roleLine:
+            'You ($speaker) stay in this scene. Follow the latest chat — not this older narrator passage.',
+      );
+    }
+    final beatLine = namedInBeat
             ? 'You are $speaker — this reply MUST enact the narrator beat from your '
                 'perspective (your entrance, what you see, your first reaction). '
                 'Do NOT behave as if you were already doing something unrelated '
@@ -103,13 +111,14 @@ class NarratorService {
             : '';
 
     return '''
-PLAYER NARRATOR — SCENE LAW (MANDATORY):
+PLAYER NARRATOR — SCENE LAW (MANDATORY FOR THIS BEAT):
 $body
 
 ${beatLine}This is authoritative scene fact from the player — NOT optional flavor, NOT a suggestion, NOT mood you may ignore.
 $cast and $user (when present) MUST treat location and who is present as true.
 Secrets explicitly marked as unknown to you are NOT your knowledge — never speak them or act as if you witnessed them.
-${continueFromChat ? 'Honor the narrator as ongoing scene backdrop only — new actions come from chat history, not a fresh entrance or surprise reaction.' : 'React and reply as if these facts already happened. Do not ignore, soften, reinterpret, or contradict this narrator beat.'}
+React and reply as if these facts already happened. Do not ignore, soften, reinterpret, or contradict this narrator beat.
+$_currentMomentRule
 Do not speak as the Narrator. Do not repeat this passage verbatim or attribute it to $user or $char as dialogue.
 '''
         .trim();
@@ -146,12 +155,26 @@ Do not speak as the Narrator. Do not repeat this passage verbatim or attribute i
     final continueFromChat = narratorAlreadyAddressed || sceneContinuedInChat;
 
     final presentLine = physicallyPresent.isEmpty
-        ? 'Physically present: (see narrator text)'
+        ? 'Physically present: (see latest chat)'
         : 'Physically present: ${physicallyPresent.join(', ')}';
 
     final absentLine = departedPresent.isEmpty
         ? ''
         : 'NOT physically present (left / away): ${departedPresent.join(', ')}';
+
+    if (continueFromChat) {
+      return _continuedSceneBackdrop(
+        excerpt: _backdropExcerpt(body),
+        user: user,
+        speaker: speaker,
+        char: speaker,
+        presentLine: presentLine,
+        absentLine: absentLine,
+        roleLine:
+            'You ($speaker) ${inScene ? 'are physically in this scene' : 'are not physically in this scene'}. '
+            'Follow the latest chat. Do not rewind to the narrator passage below.',
+      );
+    }
 
     final enactedBeatOwners = narratorBeatFor
         .where(
@@ -191,21 +214,13 @@ Do not speak as the Narrator. Do not repeat this passage verbatim or attribute i
                     : '';
 
     final namedInBeat = _narratorNamesCharacter(body, speaker);
-    final beatLine = continueFromChat
-        ? 'The scene has already moved on — continue from the latest chat '
-            'messages. Do NOT re-walk-in, re-arrive, or replay entrances or '
-            'first reactions that already happened in chat.\n'
-        : namedInBeat && inScene && narratorBeatFor.isEmpty
+    final beatLine = namedInBeat && inScene && narratorBeatFor.isEmpty
             ? 'You are $speaker — enact your entrance / first reaction exactly as '
                 'the narrator describes. Do NOT default to unrelated activities '
                 '(phone, script, reading, etc.) unless the narrator says so.\n'
             : '';
 
-    final roleLine = continueFromChat
-        ? 'You ($speaker) are in this scene. The narrator still defines location '
-            'and who is physically present — honor that backdrop. Your next '
-            'line must follow what just happened in chat, not restart the beat.'
-        : inScene
+    final roleLine = inScene
             ? 'You ($speaker) ARE physically in this scene. React from inside it — '
                 'positions, sights, and beats are immediate.'
             : 'You ($speaker) are NOT physically in this scene yet. You still know '
@@ -214,7 +229,7 @@ Do not speak as the Narrator. Do not repeat this passage verbatim or attribute i
                 'Do not invent a conflicting location or unrelated activity.';
 
     return '''
-PLAYER NARRATOR — SCENE LAW (MANDATORY):
+PLAYER NARRATOR — SCENE LAW (MANDATORY FOR THIS BEAT):
 $body
 
 $presentLine
@@ -223,7 +238,8 @@ ${absentLine.isEmpty ? '' : '$absentLine\n'}$roleLine
 $beatOwnerLine${beatLine}ALL cast treat the narrator as authoritative scene fact for location and who is physically present — NOT a suggestion.
 Location, who is physically present, and what is happening in the room are law for the story.
 Secrets or events explicitly marked as unknown to you ($speaker) in the narrator text are NOT your knowledge — never speak them or react as if you heard them.
-${departedPresent.isNotEmpty ? 'Characters who left are GONE — do not speak to them as if they are still in the room.\n' : ''}${continueFromChat ? 'Do not replay entrances, hugs, or first reactions already shown in chat.' : 'Characters physically present MUST react as if these facts already happened.'}
+${departedPresent.isNotEmpty ? 'Characters who left are GONE — do not speak to them as if they are still in the room.\n' : ''}Characters physically present MUST react as if these facts already happened.
+$_currentMomentRule
 Off-screen characters know only the sanitized scene brief below — not private dialogue or secrets from this scene.
 Do not speak as the Narrator. Do not repeat this passage verbatim.
 Do not attribute narrator prose to $user or cast as dialogue.
@@ -271,25 +287,51 @@ Do not attribute narrator prose to $user or cast as dialogue.
     }
   }
 
-  /// Older narrator beats already addressed — weak context only.
-  String formatHistoricalNote({
-    required String text,
+  static const _currentMomentRule =
+      'The current moment is the most recent user and character messages. '
+      'Do not jump back to an earlier narrator or director card. '
+      'Do not invent a new unrelated scene or location.';
+
+  /// Older narrator cards are omitted from API history — they steal focus
+  /// from the live scene. The latest beat is injected separately.
+  Map<String, String>? historyBlockFor({
+    required ChatMessage message,
+    required String? activeNarratorId,
     String focusCharacterName = '',
     Iterable<String> castNames = const [],
   }) {
-    var body = text.trim();
-    if (body.isEmpty) return '';
-    if (focusCharacterName.trim().isNotEmpty) {
-      body = presence.sanitizeStagingTextForCharacter(
-        text: body,
-        focusCharacterName: focusCharacterName,
-        castNames: castNames,
-      );
-      if (body.isEmpty) return '';
+    return null;
+  }
+
+  String _backdropExcerpt(String body, {int maxChars = 280}) {
+    final trimmed = body.trim();
+    if (trimmed.length <= maxChars) return trimmed;
+    final sentence = RegExp(r'.*?[.!?](\s|$)').firstMatch(trimmed);
+    if (sentence != null && sentence.end <= maxChars + 40) {
+      return sentence.group(0)!.trim();
     }
+    return _trimCharCap(trimmed, maxChars);
+  }
+
+  String _continuedSceneBackdrop({
+    required String excerpt,
+    required String user,
+    required String speaker,
+    required String char,
+    required String presentLine,
+    required String absentLine,
+    required String roleLine,
+  }) {
     return '''
-Earlier narrator beat (superseded by any newer narrator line — do not contradict the latest narrator):
-$body
+NARRATOR BACKDROP (already played — do not rewind):
+$excerpt
+
+${presentLine.isEmpty ? '' : '$presentLine\n'}${absentLine.isEmpty ? '' : '$absentLine\n'}$roleLine
+
+The scene has already moved on — continue from the latest chat messages. Do NOT re-walk-in, re-arrive, or replay entrances or first reactions that already happened in chat.
+Honor location and who is present only as backdrop. New actions come from chat history, not this narrator passage.
+$_currentMomentRule
+Do not speak as the Narrator. Do not repeat this passage. Do not attribute it to $user or $char as dialogue.
 '''
         .trim();
   }
@@ -457,24 +499,6 @@ $body
     return leftFirst.length >= 3 &&
         rightFirst.length >= 3 &&
         leftFirst == rightFirst;
-  }
-
-  /// Chronological history block — skips the active narrator (injected later).
-  Map<String, String>? historyBlockFor({
-    required ChatMessage message,
-    required String? activeNarratorId,
-    String focusCharacterName = '',
-    Iterable<String> castNames = const [],
-  }) {
-    if (!message.isNarrator) return null;
-    if (message.id == activeNarratorId) return null;
-    final block = formatHistoricalNote(
-      text: message.text,
-      focusCharacterName: focusCharacterName,
-      castNames: castNames,
-    );
-    if (block.isEmpty) return null;
-    return {'role': 'system', 'content': block};
   }
 
   /// Active narrator beat — place late in the prompt (before Director if any).

@@ -61,6 +61,7 @@ $target MUST follow this direction exactly for this one generation — actions, 
 This note may include omniscient staging. Secrets or events other characters did not witness are NOT common knowledge — do NOT speak them aloud, confess them, or confirm them to unaware characters. Play subtle; keep private facts private in dialogue.
 Do not ignore, soften, reinterpret, or contradict this instruction.
 Do not default to unrelated habits or props from your character card if they contradict this direction.
+This direction is for THIS reply only. Do not rewind to an older director note. Do not invent a new unrelated scene.
 ${isGroup && !groupBeat ? 'Only $char is speaking in this reply — obey the direction for $char.' : ''}
 Do not speak for $user.
 Stay in character while obeying the direction.
@@ -79,15 +80,12 @@ $body
         .trim();
   }
 
-  /// How to fold a director line into chat history for API calls.
+  /// Older director notes are omitted from API history — they steal focus
+  /// from the live scene. Only the pending note is injected late.
   Map<String, String>? historyBlockFor({
     required ChatMessage message,
     required String? pendingDirectorId,
   }) {
-    if (!message.isDirector) return null;
-    if (message.id == pendingDirectorId) return null;
-    final block = formatHistoricalNote(text: message.text);
-    if (block.isEmpty) return null;
-    return {'role': 'system', 'content': block};
+    return null;
   }
 }

@@ -241,10 +241,12 @@ void main() {
   });
 
   group('PresenceService memory', () {
-    test('filters secret known by tag', () {
+    test('filters secret known by tag including pin marker', () {
       final memory = '''
+## Scene
 - Location: The tower
-- Secret (known by Mira, Aedric): The hidden key
+## Ledger
+- [pin] Secret (known by Mira, Aedric): The hidden key
 - Secret (known by Edric): He saw the letter
 ''';
 
@@ -256,6 +258,8 @@ void main() {
       );
       expect(miraMemory, contains('hidden key'));
       expect(miraMemory, isNot(contains('saw the letter')));
+      expect(miraMemory, contains('## Scene'));
+      expect(miraMemory, contains('[pin]'));
 
       final edricMemory = presence.filterMemoryForCharacter(
         memory: memory,

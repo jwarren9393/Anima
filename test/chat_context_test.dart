@@ -164,7 +164,7 @@ void main() {
       expect(ContextEstimate.formatTokenCount(16000), '16K');
     });
 
-    test('summarizeSampling uses generous defaults and caps at 2048', () {
+    test('summarizeSampling uses generous defaults and caps at 4096', () {
       const unset = SamplingSettings(
         maxTokens: null,
         temperature: 0.9,
@@ -194,7 +194,7 @@ void main() {
       expect(fromHigh.temperature, lessThanOrEqualTo(0.3));
     });
 
-    test('buildSummarizeMessages uses clinical bullet system prompt', () {
+    test('buildSummarizeMessages uses clinical two-layer memory prompt', () {
       final messages = service.buildSummarizeMessages(
         chunk: [msg('1', 'We enter the throne room.')],
         existingSummary: '',
@@ -203,9 +203,11 @@ void main() {
       );
       final system = messages.first['content'] ?? '';
       expect(system, contains('FACT INDEX only'));
-      expect(system, contains('bullet list only'));
+      expect(system, contains('## Scene'));
+      expect(system, contains('## Ledger'));
       expect(system, contains('NO metaphors'));
       expect(system, isNot(contains('emotional tone and character voice')));
+      expect(system, isNot(contains('Prefer the NEWEST')));
     });
 
     test('formatMemoryForPrompt discourages style mimicry', () {

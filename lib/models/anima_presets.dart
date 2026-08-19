@@ -129,9 +129,10 @@ class AnimaPresets {
       'when history is trimmed.';
 
   static const autoSummarizeHelp =
-      'When on, after enough new messages Anima asks NanoGPT to update this '
-      'chat’s Memory summary (clinical bullet facts — not RP prose). Older '
-      'turns can then be skipped in the live prompt while the summary keeps facts.';
+      'When on, after enough new messages Anima asks NanoGPT to merge this '
+      'chat’s Memory (Scene = current place/cast; Ledger = durable plot). '
+      'Pinned ledger lines and open threads are kept. Older turns can then be '
+      'skipped in the live prompt while the ledger keeps facts.';
 
   static const summarizeEveryHelp =
       'Auto-summarize runs when this many new messages have piled up since '
