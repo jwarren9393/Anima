@@ -3,19 +3,25 @@ class SyncTarget {
   const SyncTarget({
     this.filePath,
     this.contentUri,
+    this.friendlyName,
   });
 
-  /// Desktop path (e.g. Google Drive synced folder on Windows).
+  /// Desktop path (e.g. Google Drive synced folder, or a GNOME Drive mount).
   final String? filePath;
 
   /// Android Storage Access Framework document URI (e.g. Google Drive file).
   final String? contentUri;
+
+  /// Human name when the filesystem name is a Drive ID (GNOME gvfs).
+  final String? friendlyName;
 
   bool get isConfigured =>
       (filePath != null && filePath!.trim().isNotEmpty) ||
       (contentUri != null && contentUri!.trim().isNotEmpty);
 
   String get displayLabel {
+    final friendly = friendlyName?.trim();
+    if (friendly != null && friendly.isNotEmpty) return friendly;
     final path = filePath?.trim();
     if (path != null && path.isNotEmpty) {
       final parts = path.replaceAll('\\', '/').split('/');
@@ -34,12 +40,16 @@ class SyncTarget {
   SyncTarget copyWith({
     String? filePath,
     String? contentUri,
+    String? friendlyName,
     bool clearFilePath = false,
     bool clearContentUri = false,
+    bool clearFriendlyName = false,
   }) {
     return SyncTarget(
       filePath: clearFilePath ? null : (filePath ?? this.filePath),
       contentUri: clearContentUri ? null : (contentUri ?? this.contentUri),
+      friendlyName:
+          clearFriendlyName ? null : (friendlyName ?? this.friendlyName),
     );
   }
 }

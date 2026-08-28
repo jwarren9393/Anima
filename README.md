@@ -221,32 +221,31 @@ Then: greeting picker for the first character → opens the chat.
 
 ## 3. Chat screen
 
-Minimal chrome: **Close** · title · **⋮** menu. Composer icon row: **Narrator** (theater) · **Director** (control-camera) · text field · **✨ Format** · **▶ Continue** · **Send** / **Stop**.
+Minimal chrome: **Close** · title · **⋮** menu. **Android:** **Director** and **Continue** sit in a row **above** the composer (still visible with the keyboard). The typing row is **+** (Narrator / moods) · field · **Send** / **Stop**. **Desktop:** moods · Narrator · Director · field · **▶ Continue** · **Send** / **Stop**.
 
 ### App bar ⋮ menu
 
 | Item | What it does |
 |------|----------------|
-| **Saved chats** | Switch among chats for this character/group bucket |
-| **New chat** | Start another chat (same character or new flow) |
 | **Persona: …** / **Switch persona** | Who {{user}} is for **this thread only** (saved on the chat) |
 | **Author’s Note** | Per-chat instructions injected after history every turn (+ presets, macros) |
 | **World Info: …** | Use Settings default, pick specific global lorebooks, or turn global lore **off** for this thread (character card lore still applies) |
-| **Opening scene** / **Add opening scene** | Edit narrator opening prose |
-| **Stop injecting opening scene** / **Inject opening scene in prompts** | Toggle whether opening scene text is sent every turn |
+| **Chat lore (this thread)** | Thread-only lorebook (starts empty — not your Settings books) |
+| **Chat copies…** | Reset per-chat character/persona/lore overrides (only shows when you have some) |
 | **Memory summary** / **Memory summary (set)** | Scene (now) + Ledger (durable plot); pin facts so summarize never drops them |
 | **Summarize now** | Merge older messages into Scene/Ledger (does not wipe pinned lines or open threads) |
 | **Context estimate** | Rough token/message gauge vs history budget and model window |
-| **Characters** | Pick/switch character (pick mode) |
-| **Rename chat** | Groups only — custom name on Home |
-| **Manage cast** | Add/remove characters in the **current** chat without starting over; **Add temporary character** (quick NPC) or full character |
+| **Characters** | Open Characters list |
+| **Manage cast** | Rename group, add/remove cast, lore, note — **Close** (X) returns Home for new/saved chats |
 | **New character** | Sheet: type a name + **generate from chat** or start blank |
-| **Update character from chat** | Revise one saved card from thread context (cast listed first; optional change notes) |
-| **Start new group chat** | New group setup from here |
+| **Add temporary character** | Quick NPC for this chat |
+| **Update character from chat** | Revise one saved card from thread context |
 | **Open in Creation Center** | Seed or open a workshop from this chat |
 | **Export chat** | Anima JSON (keeps swipes) or plain text |
 | **Import chat** | Anima JSON or best-effort `Name: message` text |
 | **Settings** | Settings hub |
+
+**Not in ⋮ (use composer or Home):** Scene moods and Group react live in the **+** menu / cast row; **New chat** and **Saved chats** are on **Home** (tap **Close**).
 
 ### Composer chips & shortcuts
 
@@ -325,8 +324,8 @@ Scrollable sheet (~55% screen height on wide displays).
 
 ### Toasts / overlays
 
-- **Lore Triggered: …** — top overlay when World Info entries match and fit the budget.
-- **Memory summary optimized** — after successful auto-summarize.
+- **Lore Triggered: …** — top overlay when World Info entries match and fit the budget (does not cover the composer).
+- Chat does **not** show bottom toasts for Director, memory, delete, or other routine actions. Real errors use the red banner above the composer.
 
 ---
 
@@ -725,7 +724,8 @@ Live preview; **Save** applies app-wide immediately via `AppearanceController`.
 
 **Cross-device sync**
 
-- Pick one sync file (Google Drive on Android; file path on desktop).
+- Pick one sync file (Google Drive on Android; file path on desktop, including **Files → Google Drive** on Linux).
+- Linux: GNOME Drive stores the file under a hidden ID; Anima maps that so Push/Pull work.
 - **Create sync file** / **Choose sync folder/file**.
 - **Push to cloud** — overwrites sync file in place.
 - **Pull from cloud** — restore from sync file when switching phone ↔ PC.

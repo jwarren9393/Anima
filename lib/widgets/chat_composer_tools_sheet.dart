@@ -5,22 +5,17 @@ class ChatComposerToolsActions {
   const ChatComposerToolsActions({
     required this.onSceneMoods,
     required this.onNarrator,
-    required this.onToggleDirector,
-    required this.onContinue,
     this.onGroupReact,
   });
 
   final VoidCallback? onSceneMoods;
   final VoidCallback? onNarrator;
-  final VoidCallback? onToggleDirector;
-  final VoidCallback? onContinue;
   final VoidCallback? onGroupReact;
 }
 
 /// Opens the compact composer toolbox (mobile — keeps the typing row uncluttered).
 Future<void> showChatComposerToolsSheet({
   required BuildContext context,
-  required bool directorMode,
   required int activeMoodCount,
   required bool showGroupReact,
   required ChatComposerToolsActions actions,
@@ -79,21 +74,6 @@ Future<void> showChatComposerToolsSheet({
               icon: Icons.theater_comedy_outlined,
               label: 'Narrator',
               onTap: actions.onNarrator,
-            ),
-            tile(
-              icon: directorMode
-                  ? Icons.control_camera
-                  : Icons.control_camera_outlined,
-              label: directorMode ? 'Director on' : 'Director off',
-              subtitle: 'Your next send commands the scene',
-              onTap: actions.onToggleDirector,
-              highlight: directorMode,
-            ),
-            const Divider(height: 1),
-            tile(
-              icon: Icons.play_arrow,
-              label: 'Continue scene',
-              onTap: actions.onContinue,
             ),
             if (showGroupReact)
               tile(

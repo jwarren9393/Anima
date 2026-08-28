@@ -17,5 +17,22 @@ String stripLeadingSpeakerPrefix(String text, String? speakerName) {
     caseSensitive: false,
   );
   final stripped = text.replaceFirst(pattern, '');
-  return stripped.isEmpty ? text : stripped;
+  if (stripped.isEmpty) {
+    // During streaming the model often sends "Name:" before the body — hide
+    // the label until real reply text arrives (bubble already shows the name).
+    if (pattern.hasMatch(text)) return '';
+    return text;
+  }
+  return stripped;
+}
+
+/// Strips a leading `Name:` label from any cast member (group chats).
+String stripLeadingCastPrefix(String text, Iterable<String> castNames) {
+  for (final name in castNames) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) continue;
+    final stripped = stripLeadingSpeakerPrefix(text, trimmed);
+    if (stripped != text) return stripped;
+  }
+  return text;
 }

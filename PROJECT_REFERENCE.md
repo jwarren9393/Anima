@@ -316,7 +316,7 @@ All library files live in **one user-owned folder** (`AppDataRoot`, default `Doc
 
 **Backup** (`AppBackupService`): single `.anima-backup` JSON with whitelist above + settings keys + base64 avatars. **No API key.** Copy the whole Anima folder to move the key too.
 
-**Sync** (`SyncService`): one user-chosen file (Google Drive on Android; path on desktop); push overwrites, pull restores.
+**Sync** (`SyncService`): one user-chosen file (Google Drive on Android; path on desktop, including GNOME Files Google Drive). Linux gvfs uses Drive IDs — `resolveExistingSyncPath()` strips a picker-added `.anima-backup` suffix and remounts Drive with `gio mount` when the mount went idle. Push overwrites, pull restores.
 
 ---
 
@@ -436,7 +436,8 @@ Special tuned sampling for: memory summarize, narrator generate, composer format
 ### Chrome
 
 - App bar: Close · title · ⋮ menu
-- Composer row: **Narrator** (theater) · **OOC** · text field · **✨ Format** · **▶ Continue** · Send/Stop
+- **Android:** Director + Continue buttons **above** the composer (stay visible with keyboard); typing row is **+** (Narrator / moods) · field · Send/Stop. No delete-confirm dialogs or bottom SnackBars in chat (errors use the banner above the composer).
+- **Desktop:** moods · Narrator · Director · field · ▶ Continue · Send/Stop
 - Chips: Memory, Note (when set); group speaker chips (hidden when keyboard open)
 
 ### Message actions

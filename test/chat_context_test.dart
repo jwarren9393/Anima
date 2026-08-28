@@ -96,6 +96,15 @@ void main() {
         ),
         5,
       );
+      expect(
+        service.summarizeCutIndex(
+          messageCount: 30,
+          memoryCoveredCount: 0,
+          summarizeKeepRecent: 10,
+          extraKeepRecent: 1,
+        ),
+        19,
+      );
     });
 
     test('estimateTokens matches lore rule of thumb', () {

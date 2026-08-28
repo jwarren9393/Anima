@@ -131,4 +131,33 @@ void main() {
         await File(p.join(tempDir.path, 'anima_chats.json')).readAsString();
     expect(chats, contains('s1'));
   });
+
+  test('resolveExistingSyncPath strips a fake .anima-backup suffix', () async {
+    final real = File(p.join(syncDir.path, 'DriveFileIdWithoutExt'));
+    await real.writeAsString('{"format":"anima_backup_v1"}');
+    final picked = '${real.path}.anima-backup';
+    expect(await File(picked).exists(), isFalse);
+
+    final resolved = await SyncService.resolveExistingSyncPath(picked);
+    expect(resolved, real.path);
+  });
+
+  test('resolveExistingSyncPath keeps a real .anima-backup file', () async {
+    final real = File(p.join(syncDir.path, 'anima-sync.anima-backup'));
+    await real.writeAsString('{"format":"anima_backup_v1"}');
+
+    final resolved = await SyncService.resolveExistingSyncPath(real.path);
+    expect(resolved, real.path);
+  });
+
+  test('googleDriveMountUriFromPath builds a gio mount URI', () {
+    const path =
+        '/run/user/1000/gvfs/google-drive:host=gmail.com,user=wjakwan/'
+        '0ABT1xvYnwo7lUk9PVA/fileId';
+    expect(
+      SyncService.googleDriveMountUriFromPath(path),
+      'google-drive://wjakwan@gmail.com/',
+    );
+    expect(SyncService.googleDriveMountUriFromPath('/tmp/local.backup'), isNull);
+  });
 }

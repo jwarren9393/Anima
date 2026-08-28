@@ -510,13 +510,16 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            _useDesktopSaveDialog
-                ? 'On Windows, pick a file inside your Google Drive folder '
-                    '(e.g. anima-sync.anima-backup). Push updates it in place — '
-                    'no delete-and-reupload.'
-                : 'On your phone, choose the Google Drive folder for sync '
-                    '(Create sync file makes anima-sync.anima-backup there). '
-                    'Push overwrites that file; Pull when you switch devices.',
+            Platform.isLinux
+                ? 'Files → Google Drive works. Anima reconnects Drive when it '
+                    'was idle. Pick anima-sync.anima-backup once, then Push / Pull.'
+                : Platform.isAndroid
+                    ? 'On your phone, choose the Google Drive folder for sync '
+                        '(Create sync file makes anima-sync.anima-backup there). '
+                        'Push overwrites that file; Pull when you switch devices.'
+                    : 'On Windows, pick a file inside your Google Drive folder '
+                        '(e.g. anima-sync.anima-backup). Push updates it in place — '
+                        'no delete-and-reupload.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),

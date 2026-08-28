@@ -97,4 +97,52 @@ class GroupSpeakerInference {
     }
     return best;
   }
+
+  /// Late user nudge when the last visible line was another cast member — keeps
+  /// the model from mimicking whoever just spoke in group chats.
+  Map<String, String>? buildHandoffNudge({
+    required List<ChatMessage> messages,
+    required int endExclusive,
+    required Character target,
+  }) {
+    if (endExclusive <= 0 || endExclusive > messages.length) return null;
+    final last = messages[endExclusive - 1];
+    final targetName =
+        target.name.trim().isEmpty ? 'Character' : target.name.trim();
+
+    if (last.isUser) return null;
+
+    if (last.isAssistant) {
+      final id = last.speakerId?.trim() ?? '';
+      if (id.isNotEmpty && id == target.id) return null;
+      final name = last.speakerName?.trim() ?? '';
+      if (name.isNotEmpty &&
+          name.toLowerCase() == targetName.toLowerCase()) {
+        return null;
+      }
+      final prev = name.isNotEmpty ? name : 'Another character';
+      return {
+        'role': 'user',
+        'content':
+            '($prev just spoke. Write ONLY $targetName\'s next reply now — '
+            'in $targetName\'s voice and perspective. Do not continue as $prev '
+            'or any other cast member. Do not speak for the user. Do not '
+            'prefix your reply with "$targetName:" — the app labels the speaker.)',
+      };
+    }
+
+    if (last.isGroupBeat &&
+        last.beatLines != null &&
+        last.beatLines!.isNotEmpty) {
+      return {
+        'role': 'user',
+        'content':
+            '(A group moment just happened. Write ONLY $targetName\'s next '
+            'single reply — in their voice. Do not write for other cast '
+            'members. Do not prefix with "$targetName:".)',
+      };
+    }
+
+    return null;
+  }
 }

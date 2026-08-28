@@ -25,9 +25,20 @@ class SyncService {
   final AppBackupService backupService;
 
   Future<SyncTarget> loadTarget() async {
+    var path = await settingsService.getSyncFilePath();
+    if (path != null && path.trim().isNotEmpty) {
+      final resolved = await resolveExistingSyncPath(path.trim());
+      if (resolved != null && resolved != path) {
+        await settingsService.saveSyncFilePath(resolved);
+        path = resolved;
+      }
+    }
     return SyncTarget(
-      filePath: await settingsService.getSyncFilePath(),
+      filePath: path,
       contentUri: await settingsService.getSyncContentUri(),
+      friendlyName: path == null || path.trim().isEmpty
+          ? null
+          : await friendlyNameForPath(path),
     );
   }
 
@@ -60,10 +71,19 @@ class SyncService {
         'Could not read that file path. Try again or create a new sync file.',
       );
     }
-    final normalized = _ensureBackupExtension(path.trim());
-    await settingsService.saveSyncFilePath(normalized);
+    final resolved = await resolveExistingSyncPath(path.trim());
+    if (resolved == null) {
+      throw SyncException(
+        'Could not open that Google Drive file. Open Files → Google Drive '
+        'once so it connects, then pick anima-sync.anima-backup again.',
+      );
+    }
+    await settingsService.saveSyncFilePath(resolved);
     await settingsService.saveSyncContentUri(null);
-    return SyncTarget(filePath: normalized);
+    return SyncTarget(
+      filePath: resolved,
+      friendlyName: await friendlyNameForPath(resolved),
+    );
   }
 
   /// Desktop: create a new sync file (writes an initial backup).
@@ -105,9 +125,13 @@ class SyncService {
     final savedPath = _ensureBackupExtension(pickedPath);
     final file = File(savedPath);
     await file.writeAsBytes(bundle.bytes, flush: true);
-    await settingsService.saveSyncFilePath(savedPath);
+    final resolved = await resolveExistingSyncPath(savedPath) ?? savedPath;
+    await settingsService.saveSyncFilePath(resolved);
     await settingsService.saveSyncContentUri(null);
-    return SyncTarget(filePath: savedPath);
+    return SyncTarget(
+      filePath: resolved,
+      friendlyName: await friendlyNameForPath(resolved),
+    );
   }
 
   Future<void> clearSyncTarget() async {
@@ -153,11 +177,14 @@ class SyncService {
   Future<Uint8List> _readSyncBytes(SyncTarget target) async {
     final path = target.filePath?.trim();
     if (path != null && path.isNotEmpty) {
-      final file = File(path);
-      if (!await file.exists()) {
-        throw SyncException('Sync file not found at:\n$path');
+      final resolved = await resolveExistingSyncPath(path);
+      if (resolved == null) {
+        throw SyncException(_missingDesktopFileMessage(path));
       }
-      return file.readAsBytes();
+      if (resolved != path) {
+        await settingsService.saveSyncFilePath(resolved);
+      }
+      return File(resolved).readAsBytes();
     }
 
     final uri = target.contentUri?.trim();
@@ -174,8 +201,14 @@ class SyncService {
   Future<void> _writeSyncBytes(SyncTarget target, Uint8List bytes) async {
     final path = target.filePath?.trim();
     if (path != null && path.isNotEmpty) {
-      final file = File(path);
-      await file.writeAsBytes(bytes, flush: true);
+      final resolved = await resolveExistingSyncPath(path);
+      if (resolved == null) {
+        throw SyncException(_missingDesktopFileMessage(path));
+      }
+      if (resolved != path) {
+        await settingsService.saveSyncFilePath(resolved);
+      }
+      await File(resolved).writeAsBytes(bytes, flush: true);
       return;
     }
 
@@ -260,7 +293,145 @@ class SyncService {
     return '$path$extension';
   }
 
+  /// GNOME Google Drive (gvfs) stores files under a Drive ID with no
+  /// `.anima-backup` suffix. The file picker often appends that suffix anyway.
+  /// Drive also unmounts when idle — we remount before looking for the file.
+  static Future<String?> resolveExistingSyncPath(String path) async {
+    final trimmed = path.trim();
+    if (trimmed.isEmpty) return null;
+
+    await ensureGoogleDriveMounted(trimmed);
+
+    if (await File(trimmed).exists()) return trimmed;
+
+    const suffix = '.anima-backup';
+    if (trimmed.toLowerCase().endsWith(suffix)) {
+      final stripped = trimmed.substring(0, trimmed.length - suffix.length);
+      if (stripped.isNotEmpty && await File(stripped).exists()) {
+        return stripped;
+      }
+    }
+
+    final dir = Directory(p.dirname(trimmed));
+    if (!await dir.exists()) return null;
+
+    final wanted = p.basename(trimmed);
+    final strippedName = wanted.toLowerCase().endsWith(suffix)
+        ? wanted.substring(0, wanted.length - suffix.length)
+        : wanted;
+
+    try {
+      await for (final entity in dir.list(followLinks: false)) {
+        if (entity is! File) continue;
+        final name = p.basename(entity.path);
+        if (name == wanted || name == strippedName) return entity.path;
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  /// Builds `google-drive://user@host/` from a GNOME gvfs local path.
+  ///
+  /// Example path fragment: `google-drive:host=gmail.com,user=wjakwan`
+  static String? googleDriveMountUriFromPath(String path) {
+    final match = RegExp(
+      r'google-drive:host=([^,/]+),user=([^/]+)',
+    ).firstMatch(path);
+    if (match == null) return null;
+    final host = match.group(1)?.trim();
+    final user = match.group(2)?.trim();
+    if (host == null || host.isEmpty || user == null || user.isEmpty) {
+      return null;
+    }
+    return 'google-drive://$user@$host/';
+  }
+
+  /// Remounts GNOME Files → Google Drive when the gvfs folder is idle/unmounted.
+  static Future<bool> ensureGoogleDriveMounted(String path) async {
+    if (!Platform.isLinux) return false;
+    final uri = googleDriveMountUriFromPath(path);
+    if (uri == null) return false;
+
+    // Already reachable — nothing to do.
+    if (await File(path).exists()) return true;
+    final parent = Directory(p.dirname(path));
+    if (await parent.exists()) return true;
+
+    try {
+      final result = await Process.run('gio', ['mount', uri]).timeout(
+        const Duration(seconds: 25),
+      );
+      final out = '${result.stdout}\n${result.stderr}'.toLowerCase();
+      final ok = result.exitCode == 0 ||
+          out.contains('already mounted') ||
+          out.contains('location is already mounted');
+      if (!ok) return false;
+
+      // gvfs can take a moment after mount before the path appears.
+      for (var i = 0; i < 10; i++) {
+        if (await File(path).exists() || await parent.exists()) return true;
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      }
+      return await File(path).exists() || await parent.exists();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<String?> friendlyNameForPath(String path) async {
+    if (!Platform.isLinux) return null;
+    await ensureGoogleDriveMounted(path);
+    try {
+      final result = await Process.run('gio', [
+        'info',
+        '-a',
+        'standard::display-name',
+        path,
+      ]);
+      if (result.exitCode != 0) return null;
+      final match = RegExp(
+        r'standard::display-name:\s*(.+)',
+      ).firstMatch(result.stdout.toString());
+      final name = match?.group(1)?.trim();
+      if (name == null || name.isEmpty) return null;
+      return name;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _missingDesktopFileMessage(String path) {
+    final gvfs = path.contains('/gvfs/') || path.contains('google-drive');
+    if (gvfs) {
+      return 'Google Drive is not connected right now. Open Files → '
+          'Google Drive once (or wait a few seconds), then try Push / Pull '
+          'again. You usually do not need to re-pick the sync file.';
+    }
+    return 'Sync file not found at:\n$path';
+  }
+
   Future<String?> _guessGoogleDriveFolder() async {
+    if (Platform.isLinux) {
+      final runtime = Platform.environment['XDG_RUNTIME_DIR'];
+      if (runtime != null && runtime.isNotEmpty) {
+        final gvfs = Directory(p.join(runtime, 'gvfs'));
+        if (await gvfs.exists()) {
+          try {
+            await for (final mount in gvfs.list()) {
+              if (!p.basename(mount.path).startsWith('google-drive')) {
+                continue;
+              }
+              if (mount is! Directory) continue;
+              await for (final child in mount.list()) {
+                if (p.basename(child.path) == 'GVfsSharedWithMe') continue;
+                return child.path;
+              }
+            }
+          } catch (_) {}
+        }
+      }
+    }
     if (!Platform.isWindows) return null;
     final user = Platform.environment['USERPROFILE'];
     if (user == null || user.isEmpty) return null;

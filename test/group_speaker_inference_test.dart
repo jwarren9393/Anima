@@ -73,4 +73,47 @@ void main() {
     );
     expect(pick.id, 'e');
   });
+
+  test('buildHandoffNudge after another assistant spoke', () {
+    final emma = char('e', 'Emma');
+    final madison = char('m', 'Madison');
+    final messages = [
+      ChatMessage(
+        id: '1',
+        role: ChatRole.assistant,
+        text: 'Hey',
+        speakerId: emma.id,
+        speakerName: emma.name,
+      ),
+    ];
+    final nudge = inference.buildHandoffNudge(
+      messages: messages,
+      endExclusive: messages.length,
+      target: madison,
+    );
+    expect(nudge, isNotNull);
+    expect(nudge!['content'], contains('Emma'));
+    expect(nudge['content'], contains('Madison'));
+  });
+
+  test('buildHandoffNudge skips when target already spoke last', () {
+    final emma = char('e', 'Emma');
+    final messages = [
+      ChatMessage(
+        id: '1',
+        role: ChatRole.assistant,
+        text: 'Hey',
+        speakerId: emma.id,
+        speakerName: emma.name,
+      ),
+    ];
+    expect(
+      inference.buildHandoffNudge(
+        messages: messages,
+        endExclusive: messages.length,
+        target: emma,
+      ),
+      isNull,
+    );
+  });
 }

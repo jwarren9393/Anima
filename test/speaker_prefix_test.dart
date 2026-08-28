@@ -45,5 +45,45 @@ void main() {
         'Morwenna: hi',
       );
     });
+
+    test('hides prefix-only partial during streaming', () {
+      expect(
+        stripLeadingSpeakerPrefix('Morwenna Blackwood:', 'Morwenna Blackwood'),
+        '',
+      );
+      expect(
+        stripLeadingSpeakerPrefix('**Elara Vance:**', 'Elara Vance'),
+        '',
+      );
+    });
+  });
+
+  group('stripLeadingCastPrefix', () {
+    test('strips any cast member prefix', () {
+      expect(
+        stripLeadingCastPrefix(
+          'Ashley: *steps forward*',
+          ['Mira', 'Ashley', 'Jay'],
+        ),
+        '*steps forward*',
+      );
+      expect(
+        stripLeadingCastPrefix(
+          'Mira: Hello.',
+          ['Mira', 'Ashley'],
+        ),
+        'Hello.',
+      );
+    });
+
+    test('leaves text alone when no cast prefix matches', () {
+      expect(
+        stripLeadingCastPrefix(
+          'The room is quiet.',
+          ['Mira', 'Ashley'],
+        ),
+        'The room is quiet.',
+      );
+    });
   });
 }

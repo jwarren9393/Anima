@@ -81,13 +81,14 @@ class ChatContextService {
   }
 
   /// Index up to which messages should be folded into memory (exclusive end).
-  /// Newest [summarizeKeepRecent] stay as raw chat.
+  /// Newest [summarizeKeepRecent] (+ optional [extraKeepRecent]) stay as raw chat.
   int summarizeCutIndex({
     required int messageCount,
     required int memoryCoveredCount,
     required int summarizeKeepRecent,
+    int extraKeepRecent = 0,
   }) {
-    final keep = summarizeKeepRecent.clamp(1, 80);
+    final keep = (summarizeKeepRecent + extraKeepRecent).clamp(1, 80);
     final cut = messageCount - keep;
     if (cut <= memoryCoveredCount) return memoryCoveredCount;
     return cut;
