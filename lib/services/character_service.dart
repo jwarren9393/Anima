@@ -101,4 +101,41 @@ class CharacterService {
 
   /// Creates a new unique id for a character.
   String newId() => 'char_${DateTime.now().millisecondsSinceEpoch}';
+
+  /// Deep copy of [source] with a new id, name suffix, and avatar file.
+  Future<Character> duplicate(Character source) async {
+    final newId = this.newId();
+    final avatarFileName = await _avatarService.copyAvatarFile(
+      sourceFileName: source.avatarFileName,
+      targetStem: newId,
+    );
+    Map<String, dynamic>? book;
+    if (source.characterBook != null) {
+      book = Map<String, dynamic>.from(
+        jsonDecode(jsonEncode(source.characterBook)) as Map,
+      );
+    }
+    final copy = source.copyWith(
+      id: newId,
+      name: duplicateDisplayName(source.name),
+      avatarFileName: avatarFileName,
+      clearAvatar: avatarFileName == null,
+      characterBook: book,
+      extensions: Map<String, dynamic>.from(
+        jsonDecode(jsonEncode(source.extensions)) as Map,
+      ),
+      alternateGreetings: List<String>.from(source.alternateGreetings),
+      tags: List<String>.from(source.tags),
+    );
+    await upsert(copy);
+    return copy;
+  }
+
+  static String duplicateDisplayName(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return 'Copy';
+    final lower = trimmed.toLowerCase();
+    if (lower.endsWith(' (copy)')) return trimmed;
+    return '$trimmed (copy)';
+  }
 }

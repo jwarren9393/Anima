@@ -216,4 +216,29 @@ class PersonaService {
   }
 
   String newId() => 'persona_${DateTime.now().millisecondsSinceEpoch}';
+
+  /// Deep copy of [source] with a new id, name suffix, and avatar file.
+  Future<Persona> duplicate(Persona source) async {
+    final newId = this.newId();
+    final avatarFileName = await _avatarService.copyAvatarFile(
+      sourceFileName: source.avatarFileName,
+      targetStem: newId,
+    );
+    final copy = source.copyWith(
+      id: newId,
+      name: _duplicateDisplayName(source.name),
+      avatarFileName: avatarFileName,
+      clearAvatar: avatarFileName == null,
+    );
+    await upsert(copy);
+    return copy;
+  }
+
+  static String _duplicateDisplayName(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return 'Copy';
+    final lower = trimmed.toLowerCase();
+    if (lower.endsWith(' (copy)')) return trimmed;
+    return '$trimmed (copy)';
+  }
 }

@@ -271,6 +271,29 @@ class _CharactersScreenState extends State<CharactersScreen> {
     await _load();
   }
 
+  Future<void> _duplicate(Character character) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final copy = await widget.characterService.duplicate(character);
+      final cats = _categoryState.categoriesForCharacter(character.id);
+      if (cats.isNotEmpty) {
+        final next = await widget.categoryService.setCategoriesForCharacter(
+          copy.id,
+          cats,
+        );
+        if (mounted) setState(() => _categoryState = next);
+      }
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Duplicated as “${copy.name}”')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _delete(Character character) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -595,6 +618,9 @@ class _CharactersScreenState extends State<CharactersScreen> {
                                     _editCategories(character);
                                   }
                                   if (value == 'select') _select(character);
+                                  if (value == 'duplicate') {
+                                    _duplicate(character);
+                                  }
                                   if (value == 'export') _exportCard(character);
                                   if (value == 'delete') _delete(character);
                                 },
@@ -617,6 +643,10 @@ class _CharactersScreenState extends State<CharactersScreen> {
                                       value: 'select',
                                       child: Text('Set as selected'),
                                     ),
+                                  const PopupMenuItem(
+                                    value: 'duplicate',
+                                    child: Text('Duplicate'),
+                                  ),
                                   const PopupMenuItem(
                                     value: 'export',
                                     child: Text('Export card'),

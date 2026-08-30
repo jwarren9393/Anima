@@ -113,5 +113,55 @@ void main() {
       expect(await personas.loadPersonas(), isEmpty);
       expect(await personas.getActivePersonaId(), isNull);
     });
+
+    test('duplicate copies fields and assigns new id', () async {
+      await personas.upsert(
+        const Persona(
+          id: 'persona_src',
+          name: 'River',
+          description: 'Scout captain.',
+          personality: 'Bold.',
+        ),
+      );
+      final copy = await personas.duplicate(
+        (await personas.getById('persona_src'))!,
+      );
+      expect(copy.id, isNot('persona_src'));
+      expect(copy.name, 'River (copy)');
+      expect(copy.description, 'Scout captain.');
+      expect((await personas.loadPersonas()).length, 2);
+    });
+  });
+
+  group('CharacterService duplicate', () {
+    test('copies card fields and lorebook', () async {
+      const source = Character(
+        id: 'char_src',
+        name: 'Mira',
+        description: 'Healer.',
+        personality: 'Gentle.',
+        characterBook: {
+          'entries': [
+            {'keys': ['mira'], 'content': 'Runs the clinic.', 'enabled': true},
+          ],
+        },
+        tags: ['fantasy'],
+      );
+      await characters.upsert(source);
+      final copy = await characters.duplicate(source);
+      expect(copy.id, isNot(source.id));
+      expect(copy.name, 'Mira (copy)');
+      expect(copy.lorebook?.entries.length, 1);
+      expect(copy.tags, ['fantasy']);
+      expect((await characters.loadCharacters()).length, 2);
+    });
+
+    test('duplicateDisplayName avoids double suffix', () {
+      expect(CharacterService.duplicateDisplayName('Hero'), 'Hero (copy)');
+      expect(
+        CharacterService.duplicateDisplayName('Hero (copy)'),
+        'Hero (copy)',
+      );
+    });
   });
 }

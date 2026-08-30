@@ -94,6 +94,15 @@ class _PersonasScreenState extends State<PersonasScreen> {
     ).showSnackBar(SnackBar(content: Text('Default persona: ${persona.name}')));
   }
 
+  Future<void> _duplicate(Persona persona) async {
+    final copy = await widget.personaService.duplicate(persona);
+    await _load();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Duplicated as “${copy.name}”')),
+    );
+  }
+
   Future<void> _delete(Persona persona) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -256,6 +265,9 @@ class _PersonasScreenState extends State<PersonasScreen> {
                                   if (value == 'default') {
                                     _setDefault(persona);
                                   }
+                                  if (value == 'duplicate') {
+                                    _duplicate(persona);
+                                  }
                                   if (value == 'delete') _delete(persona);
                                 },
                                 itemBuilder: (context) => [
@@ -268,6 +280,10 @@ class _PersonasScreenState extends State<PersonasScreen> {
                                       value: 'default',
                                       child: Text('Set as default'),
                                     ),
+                                  const PopupMenuItem(
+                                    value: 'duplicate',
+                                    child: Text('Duplicate'),
+                                  ),
                                   const PopupMenuItem(
                                     value: 'delete',
                                     child: Text('Delete'),

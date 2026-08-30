@@ -116,6 +116,20 @@ class AvatarService {
     return File(path).readAsBytes();
   }
 
+  /// Copy one stored portrait to a new character/persona stem.
+  Future<String?> copyAvatarFile({
+    required String? sourceFileName,
+    required String targetStem,
+  }) async {
+    final bytes = await readBytes(sourceFileName);
+    if (bytes == null) return null;
+    var ext = p.extension(p.basename(sourceFileName ?? '')).toLowerCase();
+    if (ext.isEmpty || !imageExtensions.contains(ext)) {
+      ext = '.png';
+    }
+    return saveBytes(stem: targetStem, bytes: bytes, extension: ext);
+  }
+
   /// Copy a picked gallery/file path into avatars/ and return the file name.
   Future<String> saveFromPath({
     required String stem,
