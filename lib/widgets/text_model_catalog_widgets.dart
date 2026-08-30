@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/nanogpt_service.dart';
+import 'minimal_chip_button.dart';
 
 /// Snapshot card for the currently selected chat model.
 class TextModelSummaryCard extends StatelessWidget {
@@ -195,6 +196,8 @@ class _TextModelPickerSheet extends StatefulWidget {
 class _TextModelPickerSheetState extends State<_TextModelPickerSheet> {
   late final TextEditingController _searchController;
   bool _loadingStats = false;
+  NanoGptModelBrowseFilters _browseFilters = const NanoGptModelBrowseFilters();
+  String _sortId = NanoGptModelBrowseFilters.sortDefault;
 
   @override
   void initState() {
@@ -217,11 +220,71 @@ class _TextModelPickerSheetState extends State<_TextModelPickerSheet> {
     if (mounted) setState(() => _loadingStats = false);
   }
 
+  NanoGptModelRuntimeStats _runtimeFor(String modelId) {
+    return widget.nanoGptService.cachedRuntimeStats(modelId);
+  }
+
+  void _toggleLowLatency() {
+    setState(() {
+      if (_browseFilters.maxTtftMs != null) {
+        _browseFilters = _browseFilters.copyWith(clearMaxTtft: true);
+      } else {
+        _browseFilters = _browseFilters.copyWith(
+          maxTtftMs: NanoGptModelBrowseFilters.lowLatencyTtftMs,
+        );
+        if (_sortId == NanoGptModelBrowseFilters.sortDefault) {
+          _sortId = NanoGptModelBrowseFilters.sortLatency;
+        }
+      }
+    });
+  }
+
+  void _toggleFastTps() {
+    setState(() {
+      if (_browseFilters.minTps != null) {
+        _browseFilters = _browseFilters.copyWith(clearMinTps: true);
+      } else {
+        _browseFilters = _browseFilters.copyWith(
+          minTps: NanoGptModelBrowseFilters.fastTpsThreshold,
+        );
+        if (_sortId == NanoGptModelBrowseFilters.sortDefault) {
+          _sortId = NanoGptModelBrowseFilters.sortSpeed;
+        }
+      }
+    });
+  }
+
+  void _toggle128kContext() {
+    setState(() {
+      if (_browseFilters.minContextTokens != null) {
+        _browseFilters = _browseFilters.copyWith(clearMinContext: true);
+      } else {
+        _browseFilters = _browseFilters.copyWith(
+          minContextTokens: NanoGptModelBrowseFilters.context128kTokens,
+        );
+      }
+    });
+  }
+
+  void _toggleIncludedOnly() {
+    setState(() {
+      _browseFilters = _browseFilters.copyWith(
+        includedOnly: !_browseFilters.includedOnly,
+      );
+    });
+  }
+
   List<NanoGptModelInfo> _filteredModels(String query) {
     final lower = query.trim().toLowerCase();
-    if (lower.isEmpty) return widget.models;
+    var list = NanoGptModelBrowseFilters.applyAndSort(
+      models: widget.models,
+      filters: _browseFilters,
+      sortId: _sortId,
+      runtimeFor: _runtimeFor,
+    );
+    if (lower.isEmpty) return list;
     return [
-      for (final model in widget.models)
+      for (final model in list)
         if (model.displayName.toLowerCase().contains(lower) ||
             model.id.toLowerCase().contains(lower) ||
             model.description.toLowerCase().contains(lower) ||
@@ -230,11 +293,30 @@ class _TextModelPickerSheetState extends State<_TextModelPickerSheet> {
     ];
   }
 
+  String _sortLabel(String sortId) {
+    switch (sortId) {
+      case NanoGptModelBrowseFilters.sortLatency:
+        return 'Lowest latency';
+      case NanoGptModelBrowseFilters.sortSpeed:
+        return 'Fastest (TPS)';
+      case NanoGptModelBrowseFilters.sortContext:
+        return 'Largest context';
+      case NanoGptModelBrowseFilters.sortName:
+        return 'Name A–Z';
+      default:
+        return 'Default order';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final query = _searchController.text;
     final visible = _filteredModels(query);
     final height = MediaQuery.sizeOf(context).height * 0.88;
+    final needsStats = _browseFilters.maxTtftMs != null ||
+        _browseFilters.minTps != null ||
+        _sortId == NanoGptModelBrowseFilters.sortLatency ||
+        _sortId == NanoGptModelBrowseFilters.sortSpeed;
 
     return SafeArea(
       child: SizedBox(
@@ -272,57 +354,139 @@ class _TextModelPickerSheetState extends State<_TextModelPickerSheet> {
               ),
             ),
             const SizedBox(height: 8),
-            Expanded(
-              child: ListView.builder(
-                itemCount: visible.length,
-                itemBuilder: (context, index) {
-                  final model = visible[index];
-                  final selected = model.id == widget.selectedId;
-                  final runtime = widget.nanoGptService.cachedRuntimeStats(
-                    model.id,
-                  );
-                  final statLine = model.statChipLine(runtime: runtime);
-                  final description = model.description.trim();
-
-                  return ListTile(
-                    selected: selected,
-                    title: Text(model.displayName),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (statLine.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            statLine,
-                            style: Theme.of(context).textTheme.labelMedium,
-                          ),
-                        ],
-                        if (description.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Text(
-                            description,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                        const SizedBox(height: 4),
-                        Text(
-                          model.id,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
-                    ),
-                    isThreeLine: true,
-                    trailing: selected
-                        ? Icon(
-                            Icons.check_circle,
-                            color: Theme.of(context).colorScheme.primary,
-                          )
-                        : null,
-                    onTap: () => Navigator.pop(context, model.id),
-                  );
-                },
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: MinimalChipRow(
+                children: [
+                  MinimalChipButton(
+                    label: 'Low latency',
+                    icon: Icons.bolt_outlined,
+                    selected: _browseFilters.maxTtftMs != null,
+                    onPressed: _toggleLowLatency,
+                  ),
+                  MinimalChipButton(
+                    label: 'Fast',
+                    icon: Icons.speed_outlined,
+                    selected: _browseFilters.minTps != null,
+                    onPressed: _toggleFastTps,
+                  ),
+                  MinimalChipButton(
+                    label: '128K+ ctx',
+                    icon: Icons.memory_outlined,
+                    selected: _browseFilters.minContextTokens != null,
+                    onPressed: _toggle128kContext,
+                  ),
+                  MinimalChipButton(
+                    label: 'Included',
+                    icon: Icons.card_membership_outlined,
+                    selected: _browseFilters.includedOnly,
+                    onPressed: _toggleIncludedOnly,
+                  ),
+                ],
               ),
+            ),
+            const SizedBox(height: 6),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${visible.length} of ${widget.models.length} models'
+                      '${needsStats && _loadingStats ? ' · loading latency…' : ''}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                  DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _sortId,
+                      isDense: true,
+                      items: [
+                        for (final id in [
+                          NanoGptModelBrowseFilters.sortDefault,
+                          NanoGptModelBrowseFilters.sortLatency,
+                          NanoGptModelBrowseFilters.sortSpeed,
+                          NanoGptModelBrowseFilters.sortContext,
+                          NanoGptModelBrowseFilters.sortName,
+                        ])
+                          DropdownMenuItem(
+                            value: id,
+                            child: Text(_sortLabel(id)),
+                          ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() => _sortId = value);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 4),
+            Expanded(
+              child: visible.isEmpty
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          _loadingStats && needsStats
+                              ? 'Loading speed stats for filters…'
+                              : 'No models match these filters.',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: visible.length,
+                      itemBuilder: (context, index) {
+                        final model = visible[index];
+                        final selected = model.id == widget.selectedId;
+                        final runtime = _runtimeFor(model.id);
+                        final statLine = model.statChipLine(runtime: runtime);
+                        final description = model.description.trim();
+
+                        return ListTile(
+                          selected: selected,
+                          title: Text(model.displayName),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (statLine.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  statLine,
+                                  style:
+                                      Theme.of(context).textTheme.labelMedium,
+                                ),
+                              ],
+                              if (description.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  description,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                              const SizedBox(height: 4),
+                              Text(
+                                model.id,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                          isThreeLine: true,
+                          trailing: selected
+                              ? Icon(
+                                  Icons.check_circle,
+                                  color: Theme.of(context).colorScheme.primary,
+                                )
+                              : null,
+                          onTap: () => Navigator.pop(context, model.id),
+                        );
+                      },
+                    ),
             ),
           ],
         ),

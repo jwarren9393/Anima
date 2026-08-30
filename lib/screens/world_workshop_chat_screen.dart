@@ -45,6 +45,7 @@ import '../widgets/greeting_picker.dart';
 import '../widgets/keyboard_inset.dart';
 import '../utils/text_punctuation.dart';
 import '../widgets/minimal_chip_button.dart';
+import '../widgets/quick_api_connection_sheet.dart';
 import '../widgets/reply_rewrite_sheet.dart';
 import 'character_edit_screen.dart';
 import 'characters_screen.dart';
@@ -3935,6 +3936,14 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
           ),
         ),
         const PopupMenuItem(
+          value: 'api',
+          child: ListTile(
+            leading: Icon(Icons.hub_outlined),
+            title: Text('API & model'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        const PopupMenuItem(
           value: 'play_roleplay',
           child: ListTile(
             leading: Icon(Icons.play_arrow_outlined),
@@ -4034,12 +4043,30 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     );
   }
 
+  Future<void> _openQuickApi() async {
+    final saved = await showQuickApiConnectionSheet(
+      context: context,
+      apiKeyService: widget.apiKeyService,
+      settingsService: widget.settingsService,
+      nanoGptService: widget.nanoGptService,
+    );
+    if (!mounted || saved != true) return;
+    final model = await widget.settingsService.getModel();
+    if (!mounted) return;
+    setState(() => _modelId = model);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Workshop model switched to $model')),
+    );
+  }
+
   void _handleWorkshopMenuAction(String value) {
     switch (value) {
       case 'dashboard':
         _showOverview();
       case 'context':
         _showContextEstimate();
+      case 'api':
+        _openQuickApi();
       case 'play_roleplay':
         _startRoleplay();
       case 'lorebook':

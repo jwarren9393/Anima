@@ -410,6 +410,8 @@ class SettingsService {
     'sampling_mirostat_eta',
   ];
   static const _useSubscriptionKey = 'nanogpt_use_subscription';
+  static const _modelCatalogCategoryFilterKey = 'model_catalog_category_filter';
+  static const _modelCatalogProviderKey = 'model_catalog_provider';
   static const _avatarShapeKey = 'avatar_shape';
   static const _avatarSizeKey = 'avatar_size';
   static const _avatarScaleKey = 'avatar_scale';
@@ -456,6 +458,8 @@ class SettingsService {
     _presencePenaltyKey,
     _repetitionPenaltyKey,
     _useSubscriptionKey,
+    _modelCatalogCategoryFilterKey,
+    _modelCatalogProviderKey,
     _avatarShapeKey,
     _avatarSizeKey,
     _avatarScaleKey,
@@ -530,6 +534,41 @@ class SettingsService {
       return;
     }
     await _storage.write(key: _modelStorageKey, value: trimmed);
+  }
+
+  /// Last category filter on API settings / quick model picker.
+  Future<String> getModelCatalogCategoryFilter() async {
+    final value = await _storage.read(key: _modelCatalogCategoryFilterKey);
+    if (value == null || value.trim().isEmpty) {
+      // Matches [NanoGptTextModelCatalogFilter.allId].
+      return '__all__';
+    }
+    return value.trim();
+  }
+
+  Future<void> saveModelCatalogCategoryFilter(String filterId) async {
+    final trimmed = filterId.trim();
+    if (trimmed.isEmpty) {
+      await _storage.delete(key: _modelCatalogCategoryFilterKey);
+      return;
+    }
+    await _storage.write(key: _modelCatalogCategoryFilterKey, value: trimmed);
+  }
+
+  /// Last provider filter on API settings / quick model picker (nullable).
+  Future<String?> getModelCatalogProvider() async {
+    final value = await _storage.read(key: _modelCatalogProviderKey);
+    if (value == null || value.trim().isEmpty) return null;
+    return value.trim();
+  }
+
+  Future<void> saveModelCatalogProvider(String? provider) async {
+    final trimmed = provider?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      await _storage.delete(key: _modelCatalogProviderKey);
+      return;
+    }
+    await _storage.write(key: _modelCatalogProviderKey, value: trimmed);
   }
 
   /// Image model id for avatar generation (`POST /api/v1/images`).

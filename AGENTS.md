@@ -61,8 +61,8 @@ High-value SillyTavern concepts to aim for over time:
 
 **Phase:** Post-roadmap tweaks
 
-**Last updated:** 2026-08-27  
-**Last agent action:** Group chat handoff fix — after another cast member speaks, forced chip replies get a late “write ONLY as X” nudge so the model stops mimicking the previous speaker.
+**Last updated:** 2026-08-30 
+**Last agent action:** API model picker — browse filters (low latency, fast TPS, 128K+ ctx, included) + sort; category/provider filters persist across visits; **API & model** in chat ⋮ and Creation Center menus.
 
 ### What works today
 
@@ -100,7 +100,7 @@ High-value SillyTavern concepts to aim for over time:
  - **Character AI wand** — sparkle on creative card fields; **tap** = quick expand from card; **long-press** = expansion level + optional **Workshop** or **Chat** transcript source (when opened from Creation Center or chat avatar edit); appends NanoGPT text below what’s already there
  - **Consistency check + fix** — ⋮ menu on character editor: AI report, then **Fix inconsistencies** → review changed fields → **Update card** (all card text fields; lorebook unchanged); **Compact card…** shortens verbose fields with review before apply
 - **World Info entry AI wand** — sparkle on Label / Keywords / Lore content (and Secondary keywords when Selective); uses book + sibling entry context; appends (keywords merge comma-separated); same model + collaborator guidance
-- **API & connection** — live NanoGPT model catalog: **Category** filter (All · **Uncensored & derestricted (broad)** · Roleplay · …) then **provider**; **Browse models** sheet shows context, max output, parameter size, TPS, TTFT, uptime %, description, capabilities, and pricing/Included — stats from `detailed=true` catalog + providers API; filtered count in status line; refresh; custom model id; subscription toggle reloads catalog; **image model** picker; **See remaining credits**
+- **API & connection** — live NanoGPT model catalog: **Category** filter (All · **Uncensored & derestricted (broad)** · Roleplay · …) then **provider**; **category + provider stay saved** when you leave API settings; **Browse models** sheet — **Low latency** / **Fast** / **128K+ ctx** / **Included** chips + sort (latency, TPS, context, name); stats from `detailed=true` catalog + providers API; filtered count in status line; refresh; custom model id; subscription toggle reloads catalog; **image model** picker; **See remaining credits**; chat ⋮ + Creation Center ⋮ → **API & model** quick picker (same saved filters, apply without leaving chat)
 - **Chat stop** — while a reply streams, the send button becomes a red **Stop** button (keeps any partial text); status banner shows “Generating… tap Stop to cancel” in Creation Center; the list does **not** auto-scroll during streaming — scroll freely while a reply types in (regular chat + Creation Center)
 - **Composer shortcuts** — **Android:** Director + Continue above the composer; **+** tools sheet (Narrator, scene moods, group react). **Desktop:** Narrator · Director · field · ▶ Continue · Send/Stop. **Character voice:** long-press cast chip → **Write line** (manual bubble) or **Guide AI** (loose direction → fresh reply for that character). **auto-wrap dialogue on send** (default on) wraps plain text in `"quotes"` between `*actions*` locally — no Format button; Memory/Note/Moods chips hide while the keyboard is open on mobile; **desktop only:** Enter to send; toggle auto-wrap in **Settings → AI collaborator**
 - **Draft autosave** — composer text saved per chat (survives leaving chat/app); cleared on send
@@ -293,7 +293,8 @@ lib/
     settings_ui.dart              Shared settings form helpers
  widgets/
   ai_field_changes_sheet.dart Review sheet for AI-proposed field changes (before/after)
-  text_model_catalog_widgets.dart Model browse sheet + summary card (ctx, TPS, …)
+  text_model_catalog_widgets.dart Model browse sheet + summary card (ctx, TPS, latency filters, sort)
+ quick_api_connection_sheet.dart Chat/Creation Center quick model picker sheet
     anima_avatar.dart             Local-file / initial avatar (circle or rect via style); tap → fullscreen
     avatar_fullscreen.dart        Full-screen portrait viewer (tap to dismiss)
     chat_hero_portrait.dart Tall side portrait with fade into storybook bubbles

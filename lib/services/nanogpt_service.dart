@@ -476,6 +476,175 @@ class NanoGptTextModelCatalogFilter {
   }
 }
 
+/// Optional filters + sort for the browse-models sheet (latency, context, …).
+class NanoGptModelBrowseFilters {
+  const NanoGptModelBrowseFilters({
+    this.minContextTokens,
+    this.maxTtftMs,
+    this.minTps,
+    this.includedOnly = false,
+  });
+
+  /// Minimum context window (e.g. 131072 for 128K+).
+  final int? minContextTokens;
+
+  /// Keep models with TTFT at or below this many milliseconds.
+  final double? maxTtftMs;
+
+  /// Keep models with TPS at or above this value.
+  final double? minTps;
+
+  final bool includedOnly;
+
+  static const sortDefault = 'default';
+  static const sortLatency = 'latency';
+  static const sortSpeed = 'speed';
+  static const sortContext = 'context';
+  static const sortName = 'name';
+
+  static const lowLatencyTtftMs = 1000.0;
+  static const fastTpsThreshold = 40.0;
+  static const context128kTokens = 131072;
+
+  bool get isEmpty =>
+      minContextTokens == null &&
+      maxTtftMs == null &&
+      minTps == null &&
+      !includedOnly;
+
+  NanoGptModelBrowseFilters copyWith({
+    int? minContextTokens,
+    bool clearMinContext = false,
+    double? maxTtftMs,
+    bool clearMaxTtft = false,
+    double? minTps,
+    bool clearMinTps = false,
+    bool? includedOnly,
+  }) {
+    return NanoGptModelBrowseFilters(
+      minContextTokens:
+          clearMinContext ? null : (minContextTokens ?? this.minContextTokens),
+      maxTtftMs: clearMaxTtft ? null : (maxTtftMs ?? this.maxTtftMs),
+      minTps: clearMinTps ? null : (minTps ?? this.minTps),
+      includedOnly: includedOnly ?? this.includedOnly,
+    );
+  }
+
+  static List<NanoGptModelInfo> applyAndSort({
+    required List<NanoGptModelInfo> models,
+    required NanoGptModelBrowseFilters filters,
+    required String sortId,
+    required NanoGptModelRuntimeStats Function(String modelId) runtimeFor,
+  }) {
+    var list = [...models];
+
+    final minCtx = filters.minContextTokens;
+    if (minCtx != null) {
+      list = [
+        for (final model in list)
+          if ((model.contextLength ?? 0) >= minCtx) model,
+      ];
+    }
+
+    if (filters.includedOnly) {
+      list = [for (final model in list) if (model.subscriptionIncluded) model];
+    }
+
+    final maxTtft = filters.maxTtftMs;
+    if (maxTtft != null) {
+      list = [
+        for (final model in list)
+          if (_ttftPasses(runtimeFor(model.id).ttftMs, maxTtft)) model,
+      ];
+    }
+
+    final minTps = filters.minTps;
+    if (minTps != null) {
+      list = [
+        for (final model in list)
+          if (_tpsPasses(runtimeFor(model.id).tps, minTps)) model,
+      ];
+    }
+
+    if (sortId != sortDefault) {
+      list.sort(
+        (a, b) => _compareModels(a, b, sortId, runtimeFor),
+      );
+    }
+
+    return list;
+  }
+
+  static bool _ttftPasses(double? ttftMs, double maxTtftMs) {
+    return ttftMs != null && ttftMs > 0 && ttftMs <= maxTtftMs;
+  }
+
+  static bool _tpsPasses(double? tps, double minTps) {
+    return tps != null && tps >= minTps;
+  }
+
+  static int _compareModels(
+    NanoGptModelInfo a,
+    NanoGptModelInfo b,
+    String sortId,
+    NanoGptModelRuntimeStats Function(String modelId) runtimeFor,
+  ) {
+    switch (sortId) {
+      case sortLatency:
+        return _compareNullableDouble(
+          runtimeFor(a.id).ttftMs,
+          runtimeFor(b.id).ttftMs,
+          ascending: true,
+          nameFallback: a.displayName.compareTo(b.displayName),
+        );
+      case sortSpeed:
+        return _compareNullableDouble(
+          runtimeFor(b.id).tps,
+          runtimeFor(a.id).tps,
+          ascending: true,
+          nameFallback: a.displayName.compareTo(b.displayName),
+        );
+      case sortContext:
+        return _compareNullableInt(
+          a.contextLength,
+          b.contextLength,
+          ascending: false,
+          nameFallback: a.displayName.compareTo(b.displayName),
+        );
+      case sortName:
+        return a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
+      default:
+        return 0;
+    }
+  }
+
+  static int _compareNullableDouble(
+    double? a,
+    double? b, {
+    required bool ascending,
+    required int nameFallback,
+  }) {
+    if (a == null && b == null) return nameFallback;
+    if (a == null) return 1;
+    if (b == null) return -1;
+    final cmp = ascending ? a.compareTo(b) : b.compareTo(a);
+    return cmp != 0 ? cmp : nameFallback;
+  }
+
+  static int _compareNullableInt(
+    int? a,
+    int? b, {
+    required bool ascending,
+    required int nameFallback,
+  }) {
+    if (a == null && b == null) return nameFallback;
+    if (a == null) return 1;
+    if (b == null) return -1;
+    final cmp = ascending ? a.compareTo(b) : b.compareTo(a);
+    return cmp != 0 ? cmp : nameFallback;
+  }
+}
+
 /// One image model from NanoGPT's image-model catalog.
 class NanoGptImageModelInfo {
   const NanoGptImageModelInfo({

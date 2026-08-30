@@ -57,12 +57,18 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
     final model = await widget.settingsService.getModel();
     final imageModel = await widget.settingsService.getImageModel();
     final subscription = await widget.settingsService.getUseSubscriptionApi();
+    final savedCategory =
+        await widget.settingsService.getModelCatalogCategoryFilter();
+    final savedProvider =
+        await widget.settingsService.getModelCatalogProvider();
     if (!mounted) return;
     setState(() {
       _hasKey = key != null;
       _modelController.text = model;
       _imageModelController.text = imageModel;
       _useSubscription = subscription;
+      _selectedCategoryFilter = savedCategory;
+      _selectedProvider = savedProvider;
       _loading = false;
     });
     await Future.wait([_loadModels(), _loadImageModels()]);
@@ -88,9 +94,11 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
         if (!NanoGptTextModelCatalogFilter.categoryFilterIds(models)
             .contains(_selectedCategoryFilter)) {
           _selectedCategoryFilter = NanoGptTextModelCatalogFilter.allId;
+          widget.settingsService.saveModelCatalogCategoryFilter(
+            _selectedCategoryFilter,
+          );
         }
-        _selectedProvider = _providerForCurrentModel();
-        _syncProviderAfterCatalogChange();
+        _restoreProviderFilterAfterCatalogLoad();
       });
       await _refreshSelectedRuntimeStats();
     } on NanoGptException catch (error) {
@@ -158,7 +166,20 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
     return _modelsForCategory.where((m) => m.ownedBy == provider).toList();
   }
 
-  void _syncProviderAfterCatalogChange() {
+  void _restoreProviderFilterAfterCatalogLoad() {
+    final providers = _providers;
+    if (providers.isEmpty) {
+      _selectedProvider = null;
+      return;
+    }
+    if (_selectedProvider != null && providers.contains(_selectedProvider)) {
+      return;
+    }
+    _selectedProvider = providers.first;
+    widget.settingsService.saveModelCatalogProvider(_selectedProvider);
+  }
+
+  void _syncProviderAfterCatalogChange({bool adjustModel = true}) {
     final providers = _providers;
     if (providers.isEmpty) {
       _selectedProvider = null;
@@ -167,6 +188,7 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
     if (_selectedProvider == null || !providers.contains(_selectedProvider)) {
       _selectedProvider = providers.first;
     }
+    if (!adjustModel) return;
     final forProvider = _modelsForProvider;
     if (forProvider.isEmpty) return;
     final current = _modelController.text.trim();
@@ -182,6 +204,7 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
       _selectedCategoryFilter = filterId;
       _syncProviderAfterCatalogChange();
     });
+    widget.settingsService.saveModelCatalogCategoryFilter(filterId);
   }
 
   NanoGptModelInfo? get _selectedModelInfo {
@@ -436,9 +459,8 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
                 const SizedBox(height: 8),
                 SettingsUi.sectionHint(
                   context,
-                  'Filter by category, then provider. Tap Browse models for context, '
-                  'output, parameters, TPS, uptime, description, and capabilities — '
-                  'without leaving the app. Custom model id still works below.',
+                  'Filter by category, then provider — your picks stay saved. '
+                  'Tap Browse models for latency, speed, context, and more.',
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -537,6 +559,8 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
                           _modelController.text = forProvider.first.id;
                         }
                       });
+                      widget.settingsService.saveModelCatalogProvider(provider);
+                      _refreshSelectedRuntimeStats();
                     },
                   ),
                   const SizedBox(height: 12),

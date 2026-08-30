@@ -71,6 +71,7 @@ import '../widgets/minimal_chip_button.dart';
 import '../widgets/narrator_bubble.dart';
 import '../widgets/narrator_sheet.dart';
 import '../widgets/preset_picker.dart';
+import '../widgets/quick_api_connection_sheet.dart';
 import '../widgets/reply_rewrite_sheet.dart';
 import '../widgets/rp_rich_text.dart';
 import '../widgets/memory_summary_sheet.dart';
@@ -704,6 +705,21 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       if (_toastEntry == entry) _toastEntry = null;
       entry.remove();
     });
+  }
+
+  Future<void> _openQuickApi() async {
+    final saved = await showQuickApiConnectionSheet(
+      context: context,
+      apiKeyService: widget.apiKeyService,
+      settingsService: widget.settingsService,
+      nanoGptService: widget.nanoGptService,
+    );
+    if (!mounted || saved != true) return;
+    final model = await widget.settingsService.getModel();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Chat model switched to $model')),
+    );
   }
 
   Future<void> _openSettings() async {
@@ -4125,6 +4141,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               if (value == 'creation_center') _openCreationCenter();
               if (value == 'export') _exportChat();
               if (value == 'import') _importChat();
+              if (value == 'api') _openQuickApi();
               if (value == 'settings') _openSettings();
             },
             itemBuilder: (context) => [
@@ -4202,6 +4219,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               ),
               const PopupMenuItem(value: 'export', child: Text('Export chat')),
               const PopupMenuItem(value: 'import', child: Text('Import chat')),
+              const PopupMenuItem(
+                value: 'api',
+                child: Text('API & model'),
+              ),
               const PopupMenuItem(value: 'settings', child: Text('Settings')),
             ],
           ),

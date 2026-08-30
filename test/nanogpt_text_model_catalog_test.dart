@@ -120,4 +120,75 @@ void main() {
       expect(ids.contains('Uncensored'), isTrue);
     });
   });
+
+  group('NanoGptModelBrowseFilters', () {
+    final models = [
+      const NanoGptModelInfo(
+        id: 'fast/small',
+        ownedBy: 'fast',
+        name: 'Fast Small',
+        contextLength: 8192,
+        subscriptionIncluded: false,
+      ),
+      const NanoGptModelInfo(
+        id: 'big/slow',
+        ownedBy: 'big',
+        name: 'Big Slow',
+        contextLength: 200000,
+        subscriptionIncluded: true,
+      ),
+    ];
+
+    NanoGptModelRuntimeStats runtimeFor(String id) {
+      switch (id) {
+        case 'fast/small':
+          return const NanoGptModelRuntimeStats(
+            tps: 55,
+            ttftMs: 400,
+          );
+        case 'big/slow':
+          return const NanoGptModelRuntimeStats(
+            tps: 12,
+            ttftMs: 2200,
+          );
+        default:
+          return const NanoGptModelRuntimeStats();
+      }
+    }
+
+    test('low latency filter keeps fast models only', () {
+      final filtered = NanoGptModelBrowseFilters.applyAndSort(
+        models: models,
+        filters: const NanoGptModelBrowseFilters(
+          maxTtftMs: NanoGptModelBrowseFilters.lowLatencyTtftMs,
+        ),
+        sortId: NanoGptModelBrowseFilters.sortDefault,
+        runtimeFor: runtimeFor,
+      );
+      expect(filtered.map((m) => m.id).toList(), ['fast/small']);
+    });
+
+    test('128K context filter and latency sort', () {
+      final filtered = NanoGptModelBrowseFilters.applyAndSort(
+        models: models,
+        filters: const NanoGptModelBrowseFilters(
+          minContextTokens: NanoGptModelBrowseFilters.context128kTokens,
+        ),
+        sortId: NanoGptModelBrowseFilters.sortLatency,
+        runtimeFor: runtimeFor,
+      );
+      expect(filtered.length, 1);
+      expect(filtered.first.id, 'big/slow');
+    });
+
+    test('included only filter', () {
+      final filtered = NanoGptModelBrowseFilters.applyAndSort(
+        models: models,
+        filters: const NanoGptModelBrowseFilters(includedOnly: true),
+        sortId: NanoGptModelBrowseFilters.sortDefault,
+        runtimeFor: runtimeFor,
+      );
+      expect(filtered.map((m) => m.id).toList(), ['big/slow']);
+    });
+  });
 }
