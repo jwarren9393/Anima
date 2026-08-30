@@ -5,7 +5,7 @@ import 'package:anima/services/authors_note_composer.dart';
 
 void main() {
   group('ExplicitSceneGuidance', () {
-    test('explicit mood ids trigger vocabulary rule check', () {
+    test('intimacy mood ids trigger vocabulary rule check', () {
       expect(
         ExplicitSceneGuidance.needsVocabularyRule(const ['explicit']),
         isTrue,
@@ -17,16 +17,20 @@ void main() {
         isTrue,
       );
       expect(
-        ExplicitSceneGuidance.needsVocabularyRule(const ['romantic', 'tense']),
-        isFalse,
+        ExplicitSceneGuidance.needsVocabularyRule(const ['sensual']),
+        isTrue,
       );
       expect(
-        ExplicitSceneGuidance.needsVocabularyRule(const ['sensual']),
+        ExplicitSceneGuidance.needsVocabularyRule(const ['no_porn_script']),
+        isTrue,
+      );
+      expect(
+        ExplicitSceneGuidance.needsVocabularyRule(const ['romantic', 'tense']),
         isFalse,
       );
     });
 
-    test('vocabulary rule bans common LLM tropes', () {
+    test('vocabulary rule bans common LLM tropes and porn-script lines', () {
       const rule = ExplicitSceneGuidance.vocabularyRule;
       expect(rule, contains('his member'));
       expect(rule, contains('her core'));
@@ -34,6 +38,10 @@ void main() {
       expect(rule, contains('cock'));
       expect(rule, contains('{{user}}'));
       expect(rule, contains('{{char}}'));
+      expect(rule, contains('right there'));
+      expect(rule, contains("don't you dare stop"));
+      expect(rule, contains('PORN-SCRIPT DIALOGUE LAW'));
+      expect(rule, contains('*grips the sheets*'));
     });
   });
 
@@ -49,14 +57,20 @@ void main() {
       expect(note.split('EXPLICIT VOCABULARY LAW').length, 2);
     });
 
-    test('does not inject vocabulary law for sensual-only mood', () {
-      final note = AuthorsNoteComposer.effectiveNote(
+    test('injects vocabulary law for sensual and anti-script moods', () {
+      final sensual = AuthorsNoteComposer.effectiveNote(
         manualAuthorsNote: '',
         activeSceneMoodIds: const ['sensual'],
       );
+      expect(sensual, contains('SCENE MOOD — SENSUAL'));
+      expect(sensual, contains('EXPLICIT VOCABULARY LAW'));
 
-      expect(note, contains('SCENE MOOD — SENSUAL'));
-      expect(note, isNot(contains('EXPLICIT VOCABULARY LAW')));
+      final antiScript = AuthorsNoteComposer.effectiveNote(
+        manualAuthorsNote: '',
+        activeSceneMoodIds: const ['no_porn_script'],
+      );
+      expect(antiScript, contains('REAL VOICE / ANTI-SCRIPT'));
+      expect(antiScript, contains('EXPLICIT VOCABULARY LAW'));
     });
   });
 }

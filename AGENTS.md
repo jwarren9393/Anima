@@ -61,8 +61,8 @@ High-value SillyTavern concepts to aim for over time:
 
 **Phase:** Post-roadmap tweaks
 
-**Last updated:** 2026-08-27  
-**Last agent action:** Group chat handoff fix — after another cast member speaks, forced chip replies get a late “write ONLY as X” nudge so the model stops mimicking the previous speaker.
+**Last updated:** 2026-08-30  
+**Last agent action:** Build 63 — Guide AI prompt fix, expanded anti-script vocabulary law, **Real voice (anti-script)** scene mood.
 
 ### What works today
 
@@ -122,7 +122,7 @@ High-value SillyTavern concepts to aim for over time:
 - **Character token badges** — ~token count beside names in **Characters**, character editor (live), group setup, and Creation Center cast pickers (≈1 token per 4 chars; color hints when large)
 - **Persona + lorebook token badges** — same style on **Personas** list + editor; **global lorebooks** list; lorebook editor shows enabled-book total and per-entry content size
 - **AI Compact** — character card, **persona**, whole lorebook, and individual lore entries; review sheet before apply
-- **Chat screen** — Close returns home; bubbles use the chat’s persona avatar; **Scene moods** (mood icon + **+** menu) — includes **Intimate build-up**, **Explicit / graphic**, **Afterglow** with hard-coded **vocabulary law** (plain adult words; bans LLM euphemisms/tropes when those moods are on); **Chat copies** — per-chat character/persona overrides + **Chat lore** (thread-only World Info merged with global picks); long-press avatar edits chat copy (library unchanged)
+- **Chat screen** — Close returns home; bubbles use the chat’s persona avatar; **Scene moods** (mood icon + **+** menu) — includes **Sensual / intimate**, **Real voice (anti-script)**, **Intimate build-up**, **Explicit / graphic**, **Afterglow** with hard-coded **vocabulary law** (plain adult words; bans LLM euphemisms, porn-script dialogue, em-dash spam, recycled *actions* when those moods are on); **Chat copies** — per-chat character/persona overrides + **Chat lore** (thread-only World Info merged with global picks); long-press avatar edits chat copy (library unchanged)
 - **Linux install/update** — `./scripts/update_linux.sh` builds and installs the desktop app; add `--pull` to download GitHub changes first
 - **Smoke:** `flutter test` (341) + `flutter analyze` pass; Android + Windows + Linux desktop debug work
 
@@ -475,7 +475,7 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 2. First launch: use **Documents/Anima** (or pick a folder). On Android, allow **All files access** so My Files can open it.
 3. Enter your NanoGPT API key in **Settings → API** (saved in that folder as `api_key.txt`).
 4. Optional on Windows: if Dart extension can't find Flutter, set user-level `"dart.flutterSdkPath": "C:\\src\\flutter"` (workspace no longer hardcodes a path).
-5. **Release rule:** keep `pubspec.yaml` at **`1.0.0+<build>`** — only increment the number after `+`. Upload to the existing **`v1.0.0`** GitHub release (not a new tag per build). Current phone APK is **build 62**.
+5. **Release rule:** keep `pubspec.yaml` at **`1.0.0+<build>`** — only increment the number after `+`. Upload to the existing **`v1.0.0`** GitHub release (not a new tag per build). Current phone APK is **build 63**.
 
 ---
 

@@ -4,24 +4,30 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   const service = CharacterGuideService();
 
-  test('buildGuideMessages scopes instruction to the active character', () {
+  test('buildGuideMessages puts player note in system law, not user speech', () {
     final messages = service.buildGuideMessages(
-      instruction: 'gets nervous and backs toward the door',
+      instruction: '"You\'re disgusting" — she spits and backs away',
       characterName: 'Mira',
       userName: 'Jay',
     );
 
     expect(messages.length, 2);
+    expect(messages.first['role'], 'system');
+    final system = messages.first['content'] ?? '';
+    expect(system, contains('CHARACTER GUIDE'));
+    expect(system, contains('You\'re disgusting'));
+    expect(system, contains('Jay did NOT speak'));
+    expect(system, contains('Do not moralize'));
+
     final user = messages.last['content'] ?? '';
+    expect(user, isNot(contains('You\'re disgusting')));
     expect(user, contains('Mira'));
-    expect(user, contains('gets nervous'));
-    expect(user, contains('completely NEW reply'));
-    expect(user, isNot(contains('rewrite')));
+    expect(user, contains('not Jay'));
   });
 
-  test('buildGuideMessages rejects empty instruction', () {
+  test('formatGuideInstruction rejects empty instruction', () {
     expect(
-      () => service.buildGuideMessages(
+      () => service.formatGuideInstruction(
         instruction: '   ',
         characterName: 'Mira',
         userName: 'Jay',

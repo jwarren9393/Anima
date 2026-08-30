@@ -58,10 +58,22 @@ class SceneMoodPresets {
       text:
           'SCENE MOOD — SENSUAL / INTIMATE (ongoing until turned off):\n'
           'Write adult intimacy like real people: breath, hesitation, humor, awkward '
-          'beats, specific sensation, emotional stakes. Avoid porn clichés — no "oh god '
-          'yes", no breathy stammering for its own sake, no "that was amazing" '
-          'curtain-call, no instant fade-to-black after climax. Stay in the moment; '
-          'match {{user}}\'s pacing. {{char}} stays in character — not a generic lover voice.',
+          'beats, specific sensation, emotional stakes. {{char}} sounds like THEM — '
+          'not a generic porn voice. Avoid script dialogue and recycled *action* beats. '
+          'Stay in the moment; match {{user}}\'s pacing.',
+    ),
+    SceneMoodPreset(
+      id: 'no_porn_script',
+      name: 'Real voice (anti-script)',
+      description: 'Ban generic porn dialogue — character stays themselves.',
+      text:
+          'SCENE MOOD — REAL VOICE / ANTI-SCRIPT (ongoing until turned off):\n'
+          'Adult scenes must NOT sound like the same porn script for every character. '
+          '{{char}} keeps their real personality, speech rhythm, and limits — shy stays '
+          'shy, bold stays bold, awkward stays awkward. No interchangeable lines like '
+          '"don\'t stop", "right there", or em-dash stammer spam. No copy-paste '
+          '*arches back* / *grips sheets* staging every time. Write fresh, specific '
+          'beats that fit THIS person in THIS moment.',
     ),
     SceneMoodPreset(
       id: 'intimate_buildup',

@@ -1313,6 +1313,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       assistantIndex: assistantIndex,
       excludeLastAssistant: true,
       allowGreetingNudge: false,
+      mode: PromptMode.continueScene,
       speakingAs: speaker,
       advanceGroupSpeaker: false,
       rewriteMessages: guideMessages,
@@ -3374,9 +3375,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     _ensureApiHasInteractiveTurn(msgs, characterName: character.name);
 
-    if (rewriteMessages != null && rewriteMessages.isNotEmpty) {
-      msgs.addAll(rewriteMessages);
-    } else {
+    if (rewriteMessages == null) {
       if (allowGreetingNudge && msgs.length <= 1) {
         msgs.add({
           'role': 'user',
@@ -3433,13 +3432,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     // Scene law + director are injected late (mandatory). If the player just
     // spoke after a narrator card, their line sits above this stack and the
     // model no longer has a user turn to answer — add one last.
-    _appendPostSceneLawReplyNudge(
-      msgs,
-      messages: _messages,
-      endExclusive: end,
-      characterName: character.name,
-      userName: userName,
-    );
+    if (rewriteMessages == null) {
+      _appendPostSceneLawReplyNudge(
+        msgs,
+        messages: _messages,
+        endExclusive: end,
+        characterName: character.name,
+        userName: userName,
+      );
+    }
 
     if (rewriteMessages == null && others.isNotEmpty) {
       final handoff = _groupSpeakerInference.buildHandoffNudge(
@@ -3450,6 +3451,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       if (handoff != null) {
         msgs.add(handoff);
       }
+    }
+
+    if (rewriteMessages != null && rewriteMessages.isNotEmpty) {
+      msgs.addAll(rewriteMessages);
     }
 
     return msgs;
