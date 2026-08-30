@@ -97,15 +97,35 @@ class WorldWorkshopBuilder {
 
   static const slimCharacterCardFieldSplitRules = '''
 FIELD SPLIT (token efficiency — critical):
-- description = physical appearance, age, role/occupation, and factual backstory
-  (who they are on paper: looks, history, affiliations, concrete skills).
+- description = physical appearance, supernatural powers/abilities, weaknesses,
+  role/occupation, and factual backstory (who they are on paper).
 - personality = temperament, values, habits, speech style, and how they behave
   in scenes — not a repeat of description.
 - Put each fact in ONE field only. Never copy the same sentence into both fields.
-- If a detail could fit both, choose: facts/history → description; behavior/voice
-  → personality.
-- Keep each field 2–4 sentences unless the source is unusually rich.
+- If a detail could fit both, choose: facts/history/powers → description;
+  behavior/voice → personality.
+- Keep each field 2–4 sentences unless enrich mode or the guidance note says otherwise.
 - mes_example = short RP sample only (not a third copy of bio text).''';
+
+  static const slimCharacterCardFieldSplitRulesEnrich = '''
+FIELD SPLIT (enrich mode — use the full token budget):
+- description = appearance, anatomy, supernatural/divine powers, weaknesses,
+  role, occupation, and factual backstory. Include EVERY power, trait, and
+  physical detail from the workshop — nothing important may be omitted.
+- personality = temperament, speech rhythm, habits, seduction style, and how
+  they behave in scenes — not a repeat of description.
+- Put each fact in ONE field only; split facts/powers → description, behavior → personality.
+- Use multiple sentences or short paragraphs per field when the source is rich.
+- mes_example = at least one substantive RP exchange in this character's voice.''';
+
+  static const slimPersonaFieldRulesEnrich = '''
+- Generate ONLY these persona fields: name, description, appearance, personality,
+  background, and goals.
+- This is the human player ({{user}}), not an AI character card.
+- Use the full token budget from the guidance note. background MUST include
+  powers, abilities, weaknesses, divine traits, relationships, secrets, and
+  nuanced facts from the workshop.
+- Multiple sentences or short paragraphs per field are expected when the source is rich.''';
 
   static const slimCharacterCardFieldRules = '''
 - Generate ONLY these card fields: name, description, personality, mes_example,
@@ -156,7 +176,54 @@ LOREBOOK SCOPE (critical — Anima uses separate character cards):
 - Generate ONLY these persona fields: name, description, appearance,
   personality, background, and goals.
 - This is the human player ({{user}}), not an AI character card.
-- Keep each field concise (a few sentences). Do not write long essays.''';
+- background must include abilities, powers, relationships, and key personal facts.
+- Keep each field concise unless enrich mode or the guidance note says otherwise.''';
+
+  static String characterFieldSplitRules(WorkshopCardMergeDepth mergeDepth) {
+    return mergeDepth == WorkshopCardMergeDepth.enrich
+        ? slimCharacterCardFieldSplitRulesEnrich
+        : slimCharacterCardFieldSplitRules;
+  }
+
+  static String personaFieldRules(WorkshopCardMergeDepth mergeDepth) {
+    return mergeDepth == WorkshopCardMergeDepth.enrich
+        ? slimPersonaFieldRulesEnrich
+        : slimPersonaFieldRules;
+  }
+
+  /// When the workshop ends on a long assistant draft, treat it as authoritative.
+  String formatLatestWorkshopDraftBlock(List<ChatMessage> conversation) {
+    if (conversation.isEmpty) return '';
+    final window = conversation.length > 10
+        ? conversation.sublist(conversation.length - 10)
+        : conversation;
+    ChatMessage? best;
+    var bestLen = 0;
+    for (final message in window) {
+      if (!message.isAssistant) continue;
+      final len = message.text.trim().length;
+      if (len > bestLen) {
+        bestLen = len;
+        best = message;
+      }
+    }
+    if (best == null || bestLen < 400) return '';
+    return '''
+PRIMARY WORKSHOP DRAFT (authoritative — include ALL of this detail in the export):
+${best.text.trim()}
+
+''';
+  }
+
+  static const aliasIdentityRules = '''
+IDENTITY / ALIAS RULES (critical):
+- One person with multiple names (public name, true name, alias, divine name,
+  nickname, title) is ONE identity — never list them as separate people.
+- Example: "Marlon Williams (true name Oniasis)" = ONE entry named for how they
+  are primarily known in play; mention other names in the summary field.
+- Secret identities, god names, and mortal guises of the same being = ONE entry.
+- Only split into multiple entries when the source clearly describes different
+  individuals who are not the same person.''';
 
   static const slimPersonaUpdateFieldRules = '''
 - Update ONLY: name (if notes request it), description, appearance,
@@ -647,7 +714,7 @@ Output rules:
 - Use REAL names from the transcript below — never copy schema placeholder text.
 - Example shape (fill with actual people from the chat; names are illustrative only):
 $characterListJsonExample
-- Use distinct names; do not duplicate the same person under aliases.
+$aliasIdentityRules
 - If none qualify, return {"characters":[]}.
 '''
             .trim();
@@ -1357,16 +1424,16 @@ ${formatTranscript(conversation)}
   List<Map<String, String>> buildPersonaUpdateMessages({
     required List<ChatMessage> conversation,
     required Persona existing,
-    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+    String buildPromptNote = CharacterBuildSettings.defaultPromptNote,
     Lorebook? sourceLorebook,
     WorkshopSourceContext? importedSource,
     String worldSummary = '',
     List<String> canonPinMessageIds = const [],
     WorkshopCardMergeDepth mergeDepth = WorkshopCardMergeDepth.standard,
   }) {
-    final guidance = guidanceNote.trim().isEmpty
-        ? CollaboratorSettings.defaultGuidanceNote
-        : guidanceNote.trim();
+    final guidance = buildPromptNote.trim().isEmpty
+        ? CharacterBuildSettings.defaultPromptNote
+        : buildPromptNote.trim();
     final name = existing.name.trim().isEmpty ? 'User' : existing.name.trim();
     final currentPersona = formatPersonaJson(existing);
 
@@ -1397,7 +1464,11 @@ Output rules:
   "background": "history, relationships, abilities, and important personal facts",
   "goals": "current goals, motives, fears, loyalties, and conflicts"
 }
-- Do not sanitize or moralize.
+${personaFieldRules(mergeDepth)}
+${mergeDepth.mergeRules}
+- Do not include greetings, example dialogue, system instructions, or commands
+  telling the assistant to roleplay this persona.
+- Preserve established facts. Do not sanitize or moralize.
 '''
             .trim();
 
@@ -1407,12 +1478,13 @@ Output rules:
         ? ''
         : 'World summary:\n${worldSummary.trim()}\n\n';
     final canonBlock = formatCanonPins(conversation, canonPinMessageIds);
+    final draft = formatLatestWorkshopDraftBlock(conversation);
     final user =
         '''
 CURRENT PERSONA (preserve established facts; merge workshop updates):
 $currentPersona
 
-$imported$summaryBlock${canonBlock.isEmpty ? '' : '$canonBlock\n'}${source.isEmpty ? '' : '''
+$imported$summaryBlock${canonBlock.isEmpty ? '' : '$canonBlock\n'}${draft}${source.isEmpty ? '' : '''
 Linked lorebook:
 
 $source
@@ -1464,7 +1536,7 @@ Output rules:
 - Use REAL names from the conversation below — never copy schema placeholder text.
 - Example shape (fill with actual people from the transcript; names are illustrative only):
 $characterListJsonExample
-- Use distinct names; do not duplicate the same person under aliases.
+$aliasIdentityRules
 - If none qualify, return {"characters":[]}.
 '''
             .trim();
@@ -1472,6 +1544,7 @@ $characterListJsonExample
     final source = formatLorebookContext(sourceLorebook);
     final imported = _importedBlock(importedSource);
     final castBlock = formatWorkshopCastForLoreExport(existingCast);
+    final draft = formatLatestWorkshopDraftBlock(conversation);
     final user =
         '''
 $imported${castBlock.isEmpty ? '' : '$castBlock\n'}${source.isEmpty ? '' : '''
@@ -1479,7 +1552,70 @@ Use this linked lorebook as source material:
 
 $source
 
-'''}List playable characters from the linked lorebook, imported chat source, and workshop conversation:
+'''}${draft}List playable characters from the linked lorebook, imported chat source, and workshop conversation:
+
+${formatTranscript(conversation)}
+'''
+            .trim();
+
+    return [
+      {'role': 'system', 'content': system},
+      {'role': 'user', 'content': user},
+    ];
+  }
+
+  /// Who the human player might portray — merges aliases into one identity.
+  List<Map<String, String>> buildPersonaDetectMessages({
+    required List<ChatMessage> conversation,
+    String buildPromptNote = CharacterBuildSettings.defaultPromptNote,
+    Lorebook? sourceLorebook,
+    WorkshopSourceContext? importedSource,
+    List<Character> existingCast = const [],
+  }) {
+    final guidance = buildPromptNote.trim().isEmpty
+        ? CharacterBuildSettings.defaultPromptNote
+        : buildPromptNote.trim();
+
+    final system =
+        '''
+You scan a world-building conversation and list who the HUMAN PLAYER might
+portray in roleplay (their persona / {{user}} identity).
+
+Guidance note (follow closely):
+$guidance
+
+Include:
+- The player character identity developed in the workshop (who {{user}} is)
+- Recurring figures clearly meant as the player's role, not NPCs they only talk to
+
+Skip:
+- NPCs the player will not portray
+- Pure places, factions, or items
+- Identities that already have a saved persona in the workshop (if listed below)
+
+Output rules:
+- Reply with ONLY a single JSON object. No markdown fences. No preamble.
+- Do NOT ask questions — output the list now.
+- Use REAL names from the conversation — never copy schema placeholder text.
+- Example shape:
+$characterListJsonExample
+$aliasIdentityRules
+- If none qualify, return {"characters":[]}.
+'''
+            .trim();
+
+    final source = formatLorebookContext(sourceLorebook);
+    final imported = _importedBlock(importedSource);
+    final castBlock = formatWorkshopCastForLoreExport(existingCast);
+    final draft = formatLatestWorkshopDraftBlock(conversation);
+    final user =
+        '''
+$imported${castBlock.isEmpty ? '' : '$castBlock\n'}${source.isEmpty ? '' : '''
+Use this linked lorebook as source material:
+
+$source
+
+'''}${draft}List playable player identities from the linked lorebook, imported chat source, and workshop conversation:
 
 ${formatTranscript(conversation)}
 '''
@@ -1522,9 +1658,16 @@ Output rules:
 - Reply with ONLY a single JSON object. No markdown fences. No preamble.
 - Prefer this shape (chara_card_v2):
 $slimCharacterCardJsonShape
-$slimCharacterCardFieldRules
+- Generate ONLY these card fields: name, description, personality, mes_example,
+  creator_notes, and tags.
+- Do NOT output scenario, first_mes, alternate_greetings, system_prompt, or
+  post_history_instructions. Anima uses app-wide system/post-history prompts
+  instead of per-character copies of those fields.
+- Do NOT include a character_book / lorebook on the card — world lore stays in
+  the separate global lorebook.
+${characterFieldSplitRules(mergeDepth)}
 - Fill fields from the conversation. Invent only what is needed for a usable card.
-${mergeDepth == WorkshopCardMergeDepth.enrich ? '- Include rich, specific detail from the workshop — relationships, sensory beats, speech quirks, secrets, and history fragments. Several sentences per field are fine.' : '- Keep each field concise (a few sentences each). Do not write long essays.'}
+${mergeDepth == WorkshopCardMergeDepth.enrich ? '- Include rich, specific detail from the workshop — use the full token budget.' : '- Keep each field concise (a few sentences each) unless the guidance note says otherwise.'}
 ${mergeDepth.mergeRules}
 - Do not sanitize or moralize. Output only the JSON object.
 '''
@@ -1532,9 +1675,10 @@ ${mergeDepth.mergeRules}
 
     final source = formatLorebookContext(sourceLorebook);
     final imported = _importedBlock(importedSource);
+    final draft = formatLatestWorkshopDraftBlock(conversation);
     final user =
         '''
-$imported${source.isEmpty ? '' : '''
+$imported${draft}${source.isEmpty ? '' : '''
 Use this linked lorebook as source material:
 
 $source
@@ -1655,19 +1799,27 @@ Output rules:
 - Reply with ONLY a single JSON object. No markdown fences. No preamble.
 - Prefer this shape (chara_card_v2):
 $slimCharacterCardJsonShape
-$slimCharacterCardUpdateFieldRules
+- Update ONLY: description, personality, mes_example, creator_notes, and tags
+  (plus name only if the workshop explicitly requests a rename).
+- Do NOT output or change scenario, first_mes, alternate_greetings,
+  system_prompt, or post_history_instructions — the app keeps the existing card's
+  values for those fields.
+- Do NOT include a character_book / lorebook on the card — world lore stays in
+  the separate global lorebook. The app keeps the card's existing book.
+${characterFieldSplitRules(mergeDepth)}
 - Do not sanitize or moralize. Output only the JSON object.
 '''
             .trim();
 
     final source = formatLorebookContext(sourceLorebook);
     final imported = _importedBlock(importedSource);
+    final draft = formatLatestWorkshopDraftBlock(conversation);
     final user =
         '''
 CURRENT CHARACTER CARD (preserve established facts; merge workshop updates):
 $currentCard
 
-$imported${source.isEmpty ? '' : '''
+$imported${draft}${source.isEmpty ? '' : '''
 Use this linked lorebook as additional source material:
 
 $source
@@ -1835,14 +1987,14 @@ ${formatTranscript(conversation)}
     required List<ChatMessage> conversation,
     required String personaName,
     String personaSummary = '',
-    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+    String buildPromptNote = CharacterBuildSettings.defaultPromptNote,
     Lorebook? sourceLorebook,
     WorkshopSourceContext? importedSource,
     WorkshopCardMergeDepth mergeDepth = WorkshopCardMergeDepth.standard,
   }) {
-    final guidance = guidanceNote.trim().isEmpty
-        ? CollaboratorSettings.defaultGuidanceNote
-        : guidanceNote.trim();
+    final guidance = buildPromptNote.trim().isEmpty
+        ? CharacterBuildSettings.defaultPromptNote
+        : buildPromptNote.trim();
     final name = personaName.trim();
     final summary = personaSummary.trim();
 
@@ -1871,7 +2023,7 @@ Output rules:
 }
 - Write facts about the target persona only. Keep broad world history in the
   separate lorebook instead of repeating it here.
-${mergeDepth == WorkshopCardMergeDepth.enrich ? '- Include rich personal detail from the workshop — relationships, motives, secrets, appearance specifics, and speech habits. Several sentences per field are fine.' : '- Keep each field concise (a few sentences each).'}
+${personaFieldRules(mergeDepth)}
 ${mergeDepth.mergeRules}
 - Do not include greetings, example dialogue, system instructions, or commands
   telling the assistant to roleplay this persona.
@@ -1881,9 +2033,10 @@ ${mergeDepth.mergeRules}
 
     final source = formatLorebookContext(sourceLorebook);
     final imported = _importedBlock(importedSource);
+    final draft = formatLatestWorkshopDraftBlock(conversation);
     final user =
         '''
-$imported${source.isEmpty ? '' : '''
+$imported${draft}${source.isEmpty ? '' : '''
 Use this linked lorebook as source material:
 
 $source

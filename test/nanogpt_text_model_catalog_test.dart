@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:anima/services/api_key_service.dart';
 import 'package:anima/services/nanogpt_service.dart';
 
 void main() {
@@ -118,6 +119,58 @@ void main() {
       expect(ids[1], NanoGptTextModelCatalogFilter.uncensoredFriendlyId);
       expect(ids.contains('Roleplay'), isTrue);
       expect(ids.contains('Uncensored'), isTrue);
+    });
+  });
+
+  group('NanoGptTextModelPerformanceFilter', () {
+    final models = [
+      const NanoGptModelInfo(
+        id: 'fast/small',
+        ownedBy: 'fast',
+        name: 'Small Fast',
+        contextLength: 8192,
+      ),
+      const NanoGptModelInfo(
+        id: 'slow/large',
+        ownedBy: 'slow',
+        name: 'Large Slow',
+        contextLength: 131072,
+      ),
+    ];
+
+    test('applyContext keeps models above minimum window', () {
+      final filtered = NanoGptTextModelPerformanceFilter.applyContext(
+        models,
+        NanoGptTextModelPerformanceFilter.context128kId,
+      );
+      expect(filtered.map((m) => m.id).toList(), ['slow/large']);
+    });
+
+    test('runtime threshold helpers expose expected values', () {
+      expect(
+        NanoGptTextModelPerformanceFilter.minTps(
+          NanoGptTextModelPerformanceFilter.tps40Id,
+        ),
+        40,
+      );
+      expect(
+        NanoGptTextModelPerformanceFilter.maxTtftMs(
+          NanoGptTextModelPerformanceFilter.ttft500Id,
+        ),
+        500,
+      );
+    });
+
+    test('sortModels orders by context descending', () {
+      final service = NanoGptService(
+        apiKeyService: ApiKeyService(),
+      );
+      final sorted = NanoGptTextModelPerformanceFilter.sortModels(
+        models,
+        TextModelSortMode.contextDesc,
+        service,
+      );
+      expect(sorted.first.id, 'slow/large');
     });
   });
 }

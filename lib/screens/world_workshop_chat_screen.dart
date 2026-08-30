@@ -2754,9 +2754,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
 
       var detectRaw = await widget.nanoGptService.complete(
         model: build.model,
-        messages: _builder.buildCharacterDetectMessages(
+        messages: _builder.buildPersonaDetectMessages(
           conversation: _workshop.messages,
-          buildPromptNote: build.promptNote,
+          buildPromptNote: build.personaPromptNote,
           sourceLorebook: _lorebookForPrompt,
           importedSource: _workshop.importedSource,
           existingCast: workshopCast,
@@ -2771,9 +2771,9 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         detectRaw = await widget.nanoGptService.complete(
           model: build.model,
           messages: [
-            ..._builder.buildCharacterDetectMessages(
+            ..._builder.buildPersonaDetectMessages(
               conversation: _workshop.messages,
-              buildPromptNote: build.promptNote,
+              buildPromptNote: build.personaPromptNote,
               sourceLorebook: _lorebookForPrompt,
               importedSource: _workshop.importedSource,
               existingCast: workshopCast,
@@ -2823,15 +2823,13 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
         _exporting = true;
         _exportStatus = 'Generating persona: ${selected.name}…';
       });
-      final collaborator = await widget.settingsService
-          .getCollaboratorSettings();
       final personaRaw = await widget.nanoGptService.complete(
         model: build.model,
         messages: _builder.buildPersonaExportMessages(
           conversation: _workshop.messages,
           personaName: selected.name,
           personaSummary: selected.summary,
-          guidanceNote: collaborator.guidanceNote,
+          buildPromptNote: build.personaPromptNote,
           sourceLorebook: _lorebookForPrompt,
           importedSource: _workshop.importedSource,
           mergeDepth: mergeDepth,
@@ -2965,20 +2963,18 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     });
 
     try {
-      final collaborator = await widget.settingsService
-          .getCollaboratorSettings();
-      final model = await widget.settingsService.getModel();
+      final build = await widget.settingsService.resolveCharacterBuild();
       final sampling = WorldWorkshopBuilder.workshopExportSampling(
-        await widget.settingsService.getSampling(),
+        build.sampling,
       );
       final baseUrl = await widget.settingsService.getApiBaseUrl();
 
       final personaRaw = await widget.nanoGptService.complete(
-        model: model,
+        model: build.model,
         messages: _builder.buildPersonaUpdateMessages(
           conversation: _workshop.messages,
           existing: existing,
-          guidanceNote: collaborator.guidanceNote,
+          buildPromptNote: build.personaPromptNote,
           sourceLorebook: _lorebookForPrompt,
           importedSource: _workshop.importedSource,
           worldSummary: _workshop.worldSummary,

@@ -245,6 +245,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _SettingsTile(
             icon: Icons.auto_awesome,
             title: 'AI collaborator',
+            subtitle: 'Field wands, Creation Center chat, Paths, Narrator',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => CollaboratorSettingsScreen(
@@ -255,7 +256,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           _SettingsTile(
             icon: Icons.badge_outlined,
-            title: 'Character builds',
+            title: 'Character & persona builds',
+            subtitle: 'Model, sampling, and prompts for full card JSON',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => CharacterBuildSettingsScreen(
@@ -334,10 +336,12 @@ class _SettingsTile extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.onTap,
+    this.subtitle,
   });
 
   final IconData icon;
   final String title;
+  final String? subtitle;
   final VoidCallback onTap;
 
   @override
@@ -345,6 +349,7 @@ class _SettingsTile extends StatelessWidget {
     return ListTile(
       leading: Icon(icon),
       title: Text(title),
+      subtitle: subtitle == null ? null : Text(subtitle!),
       trailing: const Icon(Icons.chevron_right),
       onTap: onTap,
     );

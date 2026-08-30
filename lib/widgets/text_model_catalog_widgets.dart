@@ -162,6 +162,7 @@ Future<String?> showTextModelPickerSheet({
   required List<NanoGptModelInfo> models,
   required String? selectedId,
   required NanoGptService nanoGptService,
+  String initialContextFilter = NanoGptTextModelPerformanceFilter.contextAllId,
 }) {
   return showModalBottomSheet<String>(
     context: context,
@@ -172,6 +173,7 @@ Future<String?> showTextModelPickerSheet({
         models: models,
         selectedId: selectedId,
         nanoGptService: nanoGptService,
+        initialContextFilter: initialContextFilter,
       );
     },
   );
@@ -182,11 +184,13 @@ class _TextModelPickerSheet extends StatefulWidget {
     required this.models,
     required this.selectedId,
     required this.nanoGptService,
+    required this.initialContextFilter,
   });
 
   final List<NanoGptModelInfo> models;
   final String? selectedId;
   final NanoGptService nanoGptService;
+  final String initialContextFilter;
 
   @override
   State<_TextModelPickerSheet> createState() => _TextModelPickerSheetState();
@@ -194,12 +198,17 @@ class _TextModelPickerSheet extends StatefulWidget {
 
 class _TextModelPickerSheetState extends State<_TextModelPickerSheet> {
   late final TextEditingController _searchController;
+  late String _contextFilter;
+  String _minTpsFilter = NanoGptTextModelPerformanceFilter.tpsAllId;
+  String _maxTtftFilter = NanoGptTextModelPerformanceFilter.ttftAllId;
+  TextModelSortMode _sortMode = TextModelSortMode.catalog;
   bool _loadingStats = false;
 
   @override
   void initState() {
     super.initState();
     _searchController = TextEditingController();
+    _contextFilter = widget.initialContextFilter;
     _prefetchStats();
   }
 
@@ -218,16 +227,56 @@ class _TextModelPickerSheetState extends State<_TextModelPickerSheet> {
   }
 
   List<NanoGptModelInfo> _filteredModels(String query) {
+    final filtered = NanoGptTextModelPerformanceFilter.applyAll(
+      models: widget.models,
+      contextFilterId: _contextFilter,
+      minTpsFilterId: _minTpsFilter,
+      maxTtftFilterId: _maxTtftFilter,
+      sortMode: _sortMode,
+      statsSource: widget.nanoGptService,
+    );
     final lower = query.trim().toLowerCase();
-    if (lower.isEmpty) return widget.models;
+    if (lower.isEmpty) return filtered;
     return [
-      for (final model in widget.models)
+      for (final model in filtered)
         if (model.displayName.toLowerCase().contains(lower) ||
             model.id.toLowerCase().contains(lower) ||
             model.description.toLowerCase().contains(lower) ||
             (model.category?.toLowerCase().contains(lower) ?? false))
           model,
     ];
+  }
+
+  Widget _filterDropdown({
+    required String label,
+    required String value,
+    required List<String> options,
+    required String Function(String) labelFor,
+    required ValueChanged<String?> onChanged,
+  }) {
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: label,
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: options.contains(value) ? value : options.first,
+          isExpanded: true,
+          isDense: true,
+          items: [
+            for (final option in options)
+              DropdownMenuItem(
+                value: option,
+                child: Text(labelFor(option), overflow: TextOverflow.ellipsis),
+              ),
+          ],
+          onChanged: onChanged,
+        ),
+      ),
+    );
   }
 
   @override
@@ -272,57 +321,149 @@ class _TextModelPickerSheetState extends State<_TextModelPickerSheet> {
               ),
             ),
             const SizedBox(height: 8),
-            Expanded(
-              child: ListView.builder(
-                itemCount: visible.length,
-                itemBuilder: (context, index) {
-                  final model = visible[index];
-                  final selected = model.id == widget.selectedId;
-                  final runtime = widget.nanoGptService.cachedRuntimeStats(
-                    model.id,
-                  );
-                  final statLine = model.statChipLine(runtime: runtime);
-                  final description = model.description.trim();
-
-                  return ListTile(
-                    selected: selected,
-                    title: Text(model.displayName),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (statLine.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            statLine,
-                            style: Theme.of(context).textTheme.labelMedium,
-                          ),
-                        ],
-                        if (description.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Text(
-                            description,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                        const SizedBox(height: 4),
-                        Text(
-                          model.id,
-                          style: Theme.of(context).textTheme.bodySmall,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _filterDropdown(
+                          label: 'Context',
+                          value: _contextFilter,
+                          options: NanoGptTextModelPerformanceFilter.contextFilterIds,
+                          labelFor: NanoGptTextModelPerformanceFilter.labelForContext,
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() => _contextFilter = value);
+                          },
                         ),
-                      ],
-                    ),
-                    isThreeLine: true,
-                    trailing: selected
-                        ? Icon(
-                            Icons.check_circle,
-                            color: Theme.of(context).colorScheme.primary,
-                          )
-                        : null,
-                    onTap: () => Navigator.pop(context, model.id),
-                  );
-                },
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _filterDropdown(
+                          label: 'Min speed',
+                          value: _minTpsFilter,
+                          options: NanoGptTextModelPerformanceFilter.tpsFilterIds,
+                          labelFor: NanoGptTextModelPerformanceFilter.labelForTps,
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() => _minTpsFilter = value);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _filterDropdown(
+                          label: 'Max TTFT',
+                          value: _maxTtftFilter,
+                          options: NanoGptTextModelPerformanceFilter.ttftFilterIds,
+                          labelFor: NanoGptTextModelPerformanceFilter.labelForTtft,
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() => _maxTtftFilter = value);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _filterDropdown(
+                          label: 'Sort',
+                          value: _sortMode.name,
+                          options: TextModelSortMode.values
+                              .map((mode) => mode.name)
+                              .toList(),
+                          labelFor: (name) =>
+                              NanoGptTextModelPerformanceFilter.labelForSort(
+                            TextModelSortMode.values.byName(name),
+                          ),
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(
+                              () => _sortMode = TextModelSortMode.values.byName(
+                                value,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '${visible.length} of ${widget.models.length} models',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            ),
+            Expanded(
+              child: visible.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No models match these filters.',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: visible.length,
+                      itemBuilder: (context, index) {
+                        final model = visible[index];
+                        final selected = model.id == widget.selectedId;
+                        final runtime = widget.nanoGptService.cachedRuntimeStats(
+                          model.id,
+                        );
+                        final statLine = model.statChipLine(runtime: runtime);
+                        final description = model.description.trim();
+
+                        return ListTile(
+                          selected: selected,
+                          title: Text(model.displayName),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (statLine.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  statLine,
+                                  style: Theme.of(context).textTheme.labelMedium,
+                                ),
+                              ],
+                              if (description.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  description,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                              const SizedBox(height: 4),
+                              Text(
+                                model.id,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                          isThreeLine: true,
+                          trailing: selected
+                              ? Icon(
+                                  Icons.check_circle,
+                                  color: Theme.of(context).colorScheme.primary,
+                                )
+                              : null,
+                          onTap: () => Navigator.pop(context, model.id),
+                        );
+                      },
+                    ),
             ),
           ],
         ),

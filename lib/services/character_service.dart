@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
 import '../models/character.dart';
 import 'app_paths.dart';
 import 'avatar_service.dart';
@@ -79,7 +81,7 @@ class CharacterService {
 
   /// Adds a new character (or replaces one with the same id) and saves.
   Future<List<Character>> upsert(Character character) async {
-    final all = await loadCharacters();
+    final all = List<Character>.from(await loadCharacters());
     final index = all.indexWhere((c) => c.id == character.id);
     if (index >= 0) {
       all[index] = character;
@@ -101,4 +103,39 @@ class CharacterService {
 
   /// Creates a new unique id for a character.
   String newId() => 'char_${DateTime.now().millisecondsSinceEpoch}';
+
+  /// Deep copy of [source] with a new id, name suffix, and separate avatar file.
+  Future<Character> duplicate(Character source) async {
+    final id = newId();
+    String? avatar;
+    final avatarName = source.avatarFileName?.trim();
+    if (avatarName != null && avatarName.isNotEmpty) {
+      final bytes = await _avatarService.readBytes(avatarName);
+      if (bytes != null) {
+        avatar = await _avatarService.saveHistoryBytes(
+          stem: id,
+          bytes: bytes,
+          extension: p.extension(avatarName),
+        );
+      }
+    }
+
+    Map<String, dynamic>? book;
+    final rawBook = source.characterBook;
+    if (rawBook != null && rawBook.isNotEmpty) {
+      book = jsonDecode(jsonEncode(rawBook)) as Map<String, dynamic>;
+    }
+    final extensions = jsonDecode(jsonEncode(source.extensions))
+        as Map<String, dynamic>;
+
+    final baseName = source.name.trim().isEmpty ? 'Character' : source.name.trim();
+    return source.copyWith(
+      id: id,
+      name: '$baseName (copy)',
+      avatarFileName: avatar,
+      characterBook: book,
+      extensions: extensions,
+      clearSourceWorkshopId: true,
+    );
+  }
 }

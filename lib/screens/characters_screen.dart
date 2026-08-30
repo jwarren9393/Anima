@@ -233,6 +233,27 @@ class _CharactersScreenState extends State<CharactersScreen> {
     await _load();
   }
 
+  Future<void> _duplicate(Character character) async {
+    final copy = await widget.characterService.duplicate(character);
+    await widget.characterService.upsert(copy);
+    final categoryIds =
+        _categoryState.categoriesForCharacter(character.id);
+    if (categoryIds.isNotEmpty) {
+      final next = await widget.categoryService.setCategoriesForCharacter(
+        copy.id,
+        categoryIds,
+      );
+      if (mounted) setState(() => _categoryState = next);
+    }
+    await _load();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Duplicated “${character.name}” as “${copy.name}”'),
+      ),
+    );
+  }
+
   Future<void> _editCategories(Character character) async {
     final initial =
         _categoryState.categoriesForCharacter(character.id).toSet();
@@ -588,6 +609,9 @@ class _CharactersScreenState extends State<CharactersScreen> {
                               trailing: PopupMenuButton<String>(
                                 onSelected: (value) {
                                   if (value == 'edit') _edit(character);
+                                  if (value == 'duplicate') {
+                                    _duplicate(character);
+                                  }
                                   if (value == 'promote') {
                                     _promoteToFull(character);
                                   }
@@ -602,6 +626,10 @@ class _CharactersScreenState extends State<CharactersScreen> {
                                   const PopupMenuItem(
                                     value: 'edit',
                                     child: Text('Edit'),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: 'duplicate',
+                                    child: Text('Duplicate'),
                                   ),
                                   if (character.isTemporary)
                                     const PopupMenuItem(

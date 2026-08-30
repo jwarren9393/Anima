@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/settings_service.dart';
 import 'settings_ui.dart';
 
-/// Model, sampling, and prompt for full character card JSON generation.
+/// Shared model, sampling, and build prompts for character + persona JSON generation.
 class CharacterBuildSettingsScreen extends StatefulWidget {
   const CharacterBuildSettingsScreen({
     super.key,
@@ -23,7 +23,8 @@ class _CharacterBuildSettingsScreenState
   final _maxTokensController = TextEditingController();
   final _temperatureController = TextEditingController();
   final _topPController = TextEditingController();
-  final _promptController = TextEditingController();
+  final _characterPromptController = TextEditingController();
+  final _personaPromptController = TextEditingController();
   bool _useMainChatModel = true;
   bool _loading = true;
   bool _saving = false;
@@ -43,7 +44,8 @@ class _CharacterBuildSettingsScreenState
       _maxTokensController.text = '${settings.maxTokens}';
       _temperatureController.text = settings.temperature.toString();
       _topPController.text = settings.topP.toString();
-      _promptController.text = settings.promptNote;
+      _characterPromptController.text = settings.promptNote;
+      _personaPromptController.text = settings.personaPromptNote;
       _loading = false;
     });
   }
@@ -69,19 +71,28 @@ class _CharacterBuildSettingsScreenState
         maxTokens: maxTokens,
         temperature: temperature,
         topP: topP,
-        promptNote: _promptController.text,
+        promptNote: _characterPromptController.text,
+        personaPromptNote: _personaPromptController.text,
       ),
     );
     if (!mounted) return;
     setState(() => _saving = false);
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Character build settings saved.')),
+      const SnackBar(content: Text('Character & persona build settings saved.')),
     );
   }
 
-  void _resetPrompt() {
+  void _resetCharacterPrompt() {
     setState(() {
-      _promptController.text = CharacterBuildSettings.defaultPromptNote;
+      _characterPromptController.text =
+          CharacterBuildSettings.defaultPromptNote;
+    });
+  }
+
+  void _resetPersonaPrompt() {
+    setState(() {
+      _personaPromptController.text =
+          CharacterBuildSettings.defaultPersonaPromptNote;
     });
   }
 
@@ -100,32 +111,40 @@ class _CharacterBuildSettingsScreenState
     _maxTokensController.dispose();
     _temperatureController.dispose();
     _topPController.dispose();
-    _promptController.dispose();
+    _characterPromptController.dispose();
+    _personaPromptController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Character builds')),
+      appBar: AppBar(title: const Text('Character & persona builds')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               padding: SettingsUi.listPadding,
               children: [
+                SettingsUi.sectionHint(
+                  context,
+                  'One place for full JSON card generation: character cards and '
+                  'user personas from Creation Center, chat import, and the AI '
+                  'builders on the character/persona editors. Field wands use '
+                  'Settings → AI collaborator instead.',
+                ),
+                const SizedBox(height: 24),
                 SettingsUi.sectionTitle(context, 'Model'),
                 const SizedBox(height: 8),
                 SettingsUi.sectionHint(
                   context,
-                  'Used when generating a full character card from chat or '
-                  'Creation Center — separate from your main chat model. '
-                  'Copy a model id from Settings → API & connection.',
+                  'Shared by character and persona builds — separate from your '
+                  'main chat model. Copy a model id from Settings → API & connection.',
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Use main chat model'),
                   subtitle: const Text(
-                    'When off, the model id below is used for card builds only.',
+                    'When off, the model id below is used for all card builds.',
                   ),
                   value: _useMainChatModel,
                   onChanged: _saving
@@ -137,7 +156,7 @@ class _CharacterBuildSettingsScreenState
                   enabled: !_saving && !_useMainChatModel,
                   scrollPadding: SettingsUi.keyboardScrollPadding,
                   decoration: SettingsUi.fieldDecoration(
-                    label: 'Card build model id',
+                    label: 'Build model id',
                     hintText: 'e.g. openai/gpt-4o-mini',
                   ),
                 ),
@@ -146,8 +165,8 @@ class _CharacterBuildSettingsScreenState
                 const SizedBox(height: 8),
                 SettingsUi.sectionHint(
                   context,
-                  'Only apply to full card JSON generation — not normal chat, '
-                  'wands, or Paths.',
+                  'Shared max tokens, temperature, and top P for character and '
+                  'persona JSON builds — not normal chat, wands, or Paths.',
                 ),
                 TextField(
                   controller: _maxTokensController,
@@ -189,29 +208,57 @@ class _CharacterBuildSettingsScreenState
                   child: const Text('Reset parameters to defaults'),
                 ),
                 const SizedBox(height: 32),
-                SettingsUi.sectionTitle(context, 'Build prompt'),
+                SettingsUi.sectionTitle(context, 'Character card build prompt'),
                 const SizedBox(height: 8),
                 SettingsUi.sectionHint(
                   context,
-                  'Extra instructions sent with every full card build request. '
-                  'Does not affect per-field wands on the character editor.',
+                  'Extra instructions for full character card JSON (description, '
+                  'personality, mes_example, tags). Used by Creation Center, chat '
+                  'import, and the character editor AI builder.',
                 ),
                 TextField(
-                  controller: _promptController,
+                  controller: _characterPromptController,
                   enabled: !_saving,
                   minLines: 5,
                   maxLines: 12,
                   scrollPadding: SettingsUi.keyboardScrollPadding,
                   textCapitalization: TextCapitalization.sentences,
                   decoration: SettingsUi.fieldDecoration(
-                    label: 'Card build prompt',
-                    hintText: 'How card builds should write…',
+                    label: 'Character build prompt',
+                    hintText: 'How character card builds should write…',
                   ),
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton(
-                  onPressed: _saving ? null : _resetPrompt,
-                  child: const Text('Reset prompt to default'),
+                  onPressed: _saving ? null : _resetCharacterPrompt,
+                  child: const Text('Reset character prompt to default'),
+                ),
+                const SizedBox(height: 32),
+                SettingsUi.sectionTitle(context, 'Persona build prompt'),
+                const SizedBox(height: 8),
+                SettingsUi.sectionHint(
+                  context,
+                  'Extra instructions for full persona JSON (identity, appearance, '
+                  'personality, background, goals). Used by Creation Center and the '
+                  'persona editor AI builder. Leave empty to reuse the character '
+                  'build prompt above.',
+                ),
+                TextField(
+                  controller: _personaPromptController,
+                  enabled: !_saving,
+                  minLines: 5,
+                  maxLines: 12,
+                  scrollPadding: SettingsUi.keyboardScrollPadding,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: SettingsUi.fieldDecoration(
+                    label: 'Persona build prompt (optional)',
+                    hintText: 'How persona builds should write…',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton(
+                  onPressed: _saving ? null : _resetPersonaPrompt,
+                  child: const Text('Reset persona prompt to default'),
                 ),
                 const SizedBox(height: 24),
                 SettingsUi.saveButton(

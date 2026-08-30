@@ -5,7 +5,7 @@
 > **Also read for day-to-day coding in Cursor:** [`AGENTS.md`](AGENTS.md) (living status, roadmap, agent rules).  
 > **Also read for user-facing feature catalog:** [`README.md`](README.md) (screen-by-screen product guide).
 
-**Last updated:** 2026-07-29 · **Version:** 1.0.0 build **39** · **Tests:** 211 (`flutter test`)
+**Last updated:** 2026-08-30 · **Version:** 1.0.0 build **64** · **Tests:** 361 (`flutter test`)
 
 ---
 
@@ -529,13 +529,18 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 - **AI wand** on creative fields — appends text using `character_collaborator.dart`.
 - **Consistency check** — read-only AI report.
 - **Generate avatar** — NanoGPT image + `avatar_prompt_builder.dart`.
-- **Character builds** (Settings) — separate model for **slim JSON** card generation (no scenario/greetings in that template).
+- **Character & persona builds** (Settings) — shared model + sampling for **full JSON** card generation; separate **character** and **persona** build prompts (`CharacterBuildSettings` in `settings_service.dart`). Used by Creation Center export, chat import sheets, and AI builders — **not** field wands.
+- **Duplicate** — ⋮ menu on Characters and Personas list copies with new id.
+- **Compact** — AI shorten with review sheet (card, persona, lorebook, entry).
+- **~token badges** — approximate prompt token counts on lists and editors.
 
 ### Personas
 
-- Multiple {{user}} identities; default for new chats.
+- Multiple {{user}} identities; list may be empty; default for new chats.
 - Per-chat persona override (⋮ menu).
 - Structured fields injected labeled in system prompt.
+- **AI persona builder** — plain English → full persona JSON via **Character & persona builds** settings.
+- **Duplicate** from list ⋮ menu.
 
 ---
 
@@ -544,6 +549,10 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 **Not the same as regular chat** — `world_workshop_chat_screen.dart`
 
 - Brainstorm worlds; export lorebook, opening scene, characters, persona.
+- **Persona detect** merges aliases (public name + true name = one identity).
+- **Standard** vs **Add more workshop details** merge depth on create/update.
+- Long assistant drafts marked **PRIMARY WORKSHOP DRAFT** in export prompts.
+- Persona/character export uses **Character & persona builds** model, sampling, and prompts (not wand guidance).
 - **World dashboard** hub: summarize, glossary, scene ideas, play plan, bundle import/export.
 - **Fix last** chip — in-place correction on previous AI reply.
 - **World summary** folding (like memory summarize).
@@ -574,8 +583,8 @@ Workshops listed on Home horizontal row + Settings → Creation Center.
 | Settings hub | Gear | All settings menus |
 | API settings | Banner / hub | Key, models, credits |
 | Sampling | Settings | Generation parameters |
-| AI collaborator | Settings | Wand, Format, Paths, Narrator notes |
-| Character builds | Settings | Card JSON model |
+| AI collaborator | Settings | Wand guidance, auto-wrap, Paths, Narrator (main chat model) |
+| Character & persona builds | Settings | Shared build model + sampling; character + persona JSON prompts |
 | Global chat prompts | Settings | System + post-history |
 | Appearance | Settings | Theme Studio |
 | Backup & sync | Settings | .anima-backup + sync file |
@@ -594,7 +603,7 @@ Workshops listed on Home horizontal row + Settings → Creation Center.
 | Creation Center | `world_workshop_list_screen.dart` |
 | Generation parameters | `sampling_settings_screen.dart` |
 | AI collaborator | `collaborator_settings_screen.dart` |
-| Character builds | `character_build_settings_screen.dart` |
+| Character & persona builds | `character_build_settings_screen.dart` |
 | Global chat prompts | `global_chat_prompts_screen.dart` |
 | Appearance | `appearance_settings_screen.dart` |
 | Backup, restore & sync | `backup_restore_screen.dart` |
@@ -603,27 +612,29 @@ Workshops listed on Home horizontal row + Settings → Creation Center.
 
 ## 20. AI collaborator utilities
 
-**Settings:** `collaborator_settings_screen.dart` — four configurable areas:
+**Settings:** `collaborator_settings_screen.dart`
 
-| Note | Used by |
-|------|---------|
-| **Wand guidance** | Character/lore wands, Creation Center creative calls |
-| **Composer Format** | Chat ✨ Format (low temperature) |
+| Note / toggle | Used by |
+|---------------|---------|
+| **Wand guidance** | Character/persona/lore field wands; Creation Center brainstorm chat |
+| **Auto-wrap dialogue on send** | Local `"quote"` wrapping on send (no AI) |
 | **Roadway / Paths** | Paths brainstorm + combine |
 | **Narrator** | Chat Narrator **Generate** (capped tokens + cleanup) |
 
 Plus **Enter to send** toggle (desktop).
 
+**Not here:** full character/persona JSON builds → **Settings → Character & persona builds**.
+
 ### One-shot AI helpers (non-streaming `complete()`)
 
 | Feature | Service |
 |---------|---------|
-| Composer Format | `message_formatter.dart` |
 | Paths | `roadway_service.dart` |
 | Narrator Generate | `narrator_service.dart` |
+| Guide AI (character voice) | `character_guide_service.dart` |
 | Rewrite reply | `reply_rewrite_service.dart` |
 | Memory summarize | `chat_context_service.dart` |
-| Character/lore wand | `character_collaborator.dart`, `lore_collaborator.dart` |
+| Character/lore/persona wand | `character_collaborator.dart`, `lore_collaborator.dart`, `persona_collaborator.dart` |
 | Workshop exports | `world_workshop_builder.dart` |
 
 ---
@@ -685,7 +696,7 @@ Applied in `PromptBuilder.applyMacros()`.
 ## 26. Testing and quality
 
 ```bash
-flutter test      # 211 tests
+flutter test      # 361 tests
 flutter analyze
 ```
 

@@ -173,6 +173,7 @@ class CharacterBuildSettings {
     this.temperature = defaultTemperature,
     this.topP = defaultTopP,
     this.promptNote = defaultPromptNote,
+    this.personaPromptNote = '',
   });
 
   static const defaultMaxTokens = 2048;
@@ -187,6 +188,15 @@ class CharacterBuildSettings {
       'personality = temperament, speech style, and behavior — never repeat the '
       'same facts in both fields. Keep each field concise (2–4 sentences). '
       'Stay faithful to established facts. Do not sanitize or moralize.';
+  static const defaultPersonaPromptNote =
+      'Write accurate, playable user personas ({{user}}) from the source material. '
+      'Focus on description, appearance, personality, background, and goals. '
+      'Split fields: description = identity, role, and title; appearance = physical '
+      'look and clothing; personality = temperament, speech, and behavior; '
+      'background = history, abilities, powers, relationships, and key facts; '
+      'goals = motives and what they want — never repeat the same facts across '
+      'fields. Include ALL relevant detail from the source. Stay faithful to '
+      'established facts. Do not sanitize or moralize.';
 
   /// When true, [SettingsService.getModel] is used for card builds.
   final bool useMainChatModel;
@@ -197,8 +207,12 @@ class CharacterBuildSettings {
   final double temperature;
   final double topP;
 
-  /// Injected into full card JSON export/update prompts.
+  /// Injected into full character card JSON export/update prompts.
   final String promptNote;
+
+  /// Injected into full persona JSON export/update prompts. When empty, uses
+  /// [effectivePromptNote] so one shared note still works.
+  final String personaPromptNote;
 
   String resolvedModel(String mainChatModel) {
     if (useMainChatModel) {
@@ -226,6 +240,12 @@ class CharacterBuildSettings {
     return note.isEmpty ? defaultPromptNote : note;
   }
 
+  String effectivePersonaPromptNote() {
+    final note = personaPromptNote.trim();
+    if (note.isEmpty) return effectivePromptNote();
+    return note;
+  }
+
   CharacterBuildSettings copyWith({
     bool? useMainChatModel,
     String? modelId,
@@ -233,6 +253,7 @@ class CharacterBuildSettings {
     double? temperature,
     double? topP,
     String? promptNote,
+    String? personaPromptNote,
   }) {
     return CharacterBuildSettings(
       useMainChatModel: useMainChatModel ?? this.useMainChatModel,
@@ -241,21 +262,28 @@ class CharacterBuildSettings {
       temperature: temperature ?? this.temperature,
       topP: topP ?? this.topP,
       promptNote: promptNote ?? this.promptNote,
+      personaPromptNote: personaPromptNote ?? this.personaPromptNote,
     );
   }
 }
 
-/// Resolved model + sampling + prompt for one card-build API call.
+/// Resolved model + sampling + prompts for one card-build API call.
 class CharacterBuildRequest {
   const CharacterBuildRequest({
     required this.model,
     required this.sampling,
     required this.promptNote,
+    required this.personaPromptNote,
   });
 
   final String model;
   final SamplingSettings sampling;
+
+  /// Character card JSON builds.
   final String promptNote;
+
+  /// Persona JSON builds (Creation Center + persona AI builder).
+  final String personaPromptNote;
 }
 
 /// App-wide system prompt + post-history text merged into every chat.
@@ -430,6 +458,8 @@ class SettingsService {
   static const _characterBuildTemperatureKey = 'character_build_temperature';
   static const _characterBuildTopPKey = 'character_build_top_p';
   static const _characterBuildPromptKey = 'character_build_prompt_note';
+  static const _characterBuildPersonaPromptKey =
+      'character_build_persona_prompt_note';
   static const _globalChatSystemPromptKey = 'global_chat_system_prompt';
   static const _globalChatPostHistoryKey = 'global_chat_post_history';
   static const _contextHistoryTokensKey = 'context_history_token_budget';
@@ -476,6 +506,7 @@ class SettingsService {
     _characterBuildTemperatureKey,
     _characterBuildTopPKey,
     _characterBuildPromptKey,
+    _characterBuildPersonaPromptKey,
     _globalChatSystemPromptKey,
     _globalChatPostHistoryKey,
     _contextHistoryTokensKey,
@@ -836,6 +867,8 @@ class SettingsService {
     final tempRaw = await _storage.read(key: _characterBuildTemperatureKey);
     final topPRaw = await _storage.read(key: _characterBuildTopPKey);
     final promptRaw = await _storage.read(key: _characterBuildPromptKey);
+    final personaPromptRaw =
+        await _storage.read(key: _characterBuildPersonaPromptKey);
 
     final maxTokens =
         int.tryParse(maxRaw ?? '') ?? CharacterBuildSettings.defaultMaxTokens;
@@ -853,6 +886,7 @@ class SettingsService {
       promptNote: (promptRaw == null || promptRaw.trim().isEmpty)
           ? CharacterBuildSettings.defaultPromptNote
           : promptRaw,
+      personaPromptNote: personaPromptRaw?.trim() ?? '',
     );
   }
 
@@ -888,9 +922,20 @@ class SettingsService {
     } else {
       await _storage.write(key: _characterBuildPromptKey, value: prompt);
     }
+
+    final personaPrompt = settings.personaPromptNote.trim();
+    if (personaPrompt.isEmpty ||
+        personaPrompt == CharacterBuildSettings.defaultPersonaPromptNote) {
+      await _storage.delete(key: _characterBuildPersonaPromptKey);
+    } else {
+      await _storage.write(
+        key: _characterBuildPersonaPromptKey,
+        value: personaPrompt,
+      );
+    }
   }
 
-  /// Model, sampling, and prompt for one full card build request.
+  /// Model, sampling, and prompts for one full card build request.
   Future<CharacterBuildRequest> resolveCharacterBuild() async {
     final build = await getCharacterBuildSettings();
     final mainModel = await getModel();
@@ -898,6 +943,7 @@ class SettingsService {
       model: build.resolvedModel(mainModel),
       sampling: build.toSampling(),
       promptNote: build.effectivePromptNote(),
+      personaPromptNote: build.effectivePersonaPromptNote(),
     );
   }
 

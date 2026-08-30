@@ -362,33 +362,52 @@ class AnimaTheme {
     return white;
   }
 
+  /// Material 2021 text styles may leave [TextStyle.fontSize] null; [TextTheme.apply]
+  /// with a non-1.0 [fontSizeFactor] asserts in that case — scale explicitly.
+  static TextStyle? _scaledBodyStyle(
+    TextStyle? style,
+    double fallbackSize,
+    double textScale,
+    Color color,
+  ) {
+    if (style == null) return null;
+    final size = style.fontSize ?? fallbackSize;
+    return style.copyWith(fontSize: size * textScale, color: color);
+  }
+
   static TextTheme _textTheme(ColorScheme scheme, UiStyleSettings settings) {
     final base = _bodyBase(settings.bodyFont);
     final title = _titleStyle(scheme, settings.headingFont);
     final textScale = settings.textScale;
     final headingScale = settings.headingScale;
+    final onSurface = scheme.onSurface;
 
-    return base
-        .apply(
-          bodyColor: scheme.onSurface,
-          displayColor: scheme.onSurface,
-          fontSizeFactor: textScale,
-        )
-        .copyWith(
-          headlineLarge: title.copyWith(fontSize: 32 * headingScale),
-          headlineMedium: title.copyWith(fontSize: 26 * headingScale),
-          headlineSmall: title.copyWith(fontSize: 22 * headingScale),
-          titleLarge: title.copyWith(fontSize: 20 * headingScale),
-          titleMedium: base.titleMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-            color: scheme.onSurface,
-            fontSize: (base.titleMedium?.fontSize ?? 16) * textScale,
-          ),
-          labelLarge: base.labelLarge?.copyWith(
-            fontWeight: FontWeight.w600,
-            color: scheme.primary,
-            fontSize: (base.labelLarge?.fontSize ?? 14) * textScale,
-          ),
-        );
+    return base.copyWith(
+      displayLarge: _scaledBodyStyle(base.displayLarge, 57, textScale, onSurface),
+      displayMedium: _scaledBodyStyle(base.displayMedium, 45, textScale, onSurface),
+      displaySmall: _scaledBodyStyle(base.displaySmall, 36, textScale, onSurface),
+      headlineLarge: title.copyWith(fontSize: 32 * headingScale),
+      headlineMedium: title.copyWith(fontSize: 26 * headingScale),
+      headlineSmall: title.copyWith(fontSize: 22 * headingScale),
+      titleLarge: title.copyWith(fontSize: 20 * headingScale),
+      titleMedium: _scaledBodyStyle(
+        base.titleMedium,
+        16,
+        textScale,
+        onSurface,
+      )?.copyWith(fontWeight: FontWeight.w600),
+      titleSmall: _scaledBodyStyle(base.titleSmall, 14, textScale, onSurface),
+      bodyLarge: _scaledBodyStyle(base.bodyLarge, 16, textScale, onSurface),
+      bodyMedium: _scaledBodyStyle(base.bodyMedium, 14, textScale, onSurface),
+      bodySmall: _scaledBodyStyle(base.bodySmall, 12, textScale, onSurface),
+      labelLarge: _scaledBodyStyle(
+        base.labelLarge,
+        14,
+        textScale,
+        scheme.primary,
+      )?.copyWith(fontWeight: FontWeight.w600),
+      labelMedium: _scaledBodyStyle(base.labelMedium, 12, textScale, onSurface),
+      labelSmall: _scaledBodyStyle(base.labelSmall, 11, textScale, onSurface),
+    );
   }
 }

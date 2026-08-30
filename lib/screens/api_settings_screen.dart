@@ -40,6 +40,7 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
   List<NanoGptModelInfo> _models = const [];
   String? _selectedProvider;
   String _selectedCategoryFilter = NanoGptTextModelCatalogFilter.allId;
+  String _selectedContextFilter = NanoGptTextModelPerformanceFilter.contextAllId;
 
   bool _loadingImageModels = false;
   String? _imageModelsError;
@@ -128,13 +129,20 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
     );
   }
 
+  List<NanoGptModelInfo> get _modelsAfterContext {
+    return NanoGptTextModelPerformanceFilter.applyContext(
+      _modelsForCategory,
+      _selectedContextFilter,
+    );
+  }
+
   List<String> get _categoryFilters =>
       NanoGptTextModelCatalogFilter.categoryFilterIds(_models);
 
   List<String> get _providers {
     final seen = <String>{};
     final list = <String>[];
-    for (final model in _modelsForCategory) {
+    for (final model in _modelsAfterContext) {
       if (seen.add(model.ownedBy)) list.add(model.ownedBy);
     }
     // Auto first, then A–Z (catalog is already sorted this way; keep stable).
@@ -155,7 +163,7 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
   List<NanoGptModelInfo> get _modelsForProvider {
     final provider = _selectedProvider;
     if (provider == null) return const [];
-    return _modelsForCategory.where((m) => m.ownedBy == provider).toList();
+    return _modelsAfterContext.where((m) => m.ownedBy == provider).toList();
   }
 
   void _syncProviderAfterCatalogChange() {
@@ -174,6 +182,14 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
     if (!stillValid) {
       _modelController.text = forProvider.first.id;
     }
+  }
+
+  void _onContextFilterChanged(String? filterId) {
+    if (filterId == null) return;
+    setState(() {
+      _selectedContextFilter = filterId;
+      _syncProviderAfterCatalogChange();
+    });
   }
 
   void _onCategoryFilterChanged(String? filterId) {
@@ -210,6 +226,7 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
       models: models,
       selectedId: _modelController.text.trim(),
       nanoGptService: widget.nanoGptService,
+      initialContextFilter: _selectedContextFilter,
     );
     if (picked == null || !mounted) return;
     setState(() => _modelController.text = picked);
@@ -363,7 +380,7 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
     final providers = _providers;
     final modelsForProvider = _modelsForProvider;
     final categoryFilters = _categoryFilters;
-    final filteredModelCount = _modelsForCategory.length;
+    final filteredModelCount = _modelsAfterContext.length;
 
     return Scaffold(
       appBar: AppBar(title: const Text('API & connection')),
@@ -436,9 +453,9 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
                 const SizedBox(height: 8),
                 SettingsUi.sectionHint(
                   context,
-                  'Filter by category, then provider. Tap Browse models for context, '
-                  'output, parameters, TPS, uptime, description, and capabilities — '
-                  'without leaving the app. Custom model id still works below.',
+                  'Filter by category, context size, then provider. In Browse models, '
+                  'filter or sort by TPS and TTFT (latency) after stats load. Custom '
+                  'model id still works below.',
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -504,6 +521,33 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
                         ),
                     ],
                     onChanged: _onCategoryFilterChanged,
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    key: ValueKey('context-$_selectedContextFilter'),
+                    initialValue: NanoGptTextModelPerformanceFilter.contextFilterIds
+                            .contains(_selectedContextFilter)
+                        ? _selectedContextFilter
+                        : NanoGptTextModelPerformanceFilter.contextAllId,
+                    isExpanded: true,
+                    decoration: SettingsUi.fieldDecoration(
+                      label: 'Min context',
+                      helperText: '$filteredModelCount models meet this window',
+                    ),
+                    items: [
+                      for (final filterId
+                          in NanoGptTextModelPerformanceFilter.contextFilterIds)
+                        DropdownMenuItem(
+                          value: filterId,
+                          child: Text(
+                            NanoGptTextModelPerformanceFilter.labelForContext(
+                              filterId,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                    onChanged: _onContextFilterChanged,
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(

@@ -42,5 +42,21 @@ void main() {
         CharacterBuildSettings.defaultPromptNote,
       );
     });
+
+    test('effectivePersonaPromptNote falls back to character prompt', () {
+      const settings = CharacterBuildSettings(
+        promptNote: 'Character note',
+        personaPromptNote: '',
+      );
+      expect(settings.effectivePersonaPromptNote(), 'Character note');
+    });
+
+    test('effectivePersonaPromptNote uses persona override when set', () {
+      const settings = CharacterBuildSettings(
+        promptNote: 'Character note',
+        personaPromptNote: 'Persona note',
+      );
+      expect(settings.effectivePersonaPromptNote(), 'Persona note');
+    });
   });
 }

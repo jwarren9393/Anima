@@ -96,6 +96,26 @@ void main() {
       await characters.delete(id);
       expect(await characters.loadCharacters(), isEmpty);
     });
+
+    test('duplicate creates new id and copy suffix name', () async {
+      const source = Character(
+        id: 'char_src',
+        name: 'Mira',
+        description: 'A witch',
+        personality: 'Bold',
+        tags: ['magic'],
+      );
+      await characters.upsert(source);
+      final copy = await characters.duplicate(source);
+      expect(copy.id, isNot(source.id));
+      expect(copy.name, 'Mira (copy)');
+      expect(copy.description, source.description);
+      expect(copy.tags, source.tags);
+      expect(copy.sourceWorkshopId, isNull);
+
+      await characters.upsert(copy);
+      expect((await characters.loadCharacters()).length, 2);
+    });
   });
 
   group('PersonaService', () {
@@ -112,6 +132,24 @@ void main() {
       await personas.delete('persona_test');
       expect(await personas.loadPersonas(), isEmpty);
       expect(await personas.getActivePersonaId(), isNull);
+    });
+
+    test('duplicate creates new id and copy suffix name', () async {
+      const source = Persona(
+        id: 'persona_src',
+        name: 'Jay',
+        description: 'Player one',
+        personality: 'Calm',
+      );
+      await personas.upsert(source);
+      final copy = await personas.duplicate(source);
+      expect(copy.id, isNot(source.id));
+      expect(copy.name, 'Jay (copy)');
+      expect(copy.description, source.description);
+      expect(copy.sourceWorkshopId, isNull);
+
+      await personas.upsert(copy);
+      expect((await personas.loadPersonas()).length, 2);
     });
   });
 }

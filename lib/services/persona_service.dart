@@ -183,7 +183,7 @@ class PersonaService {
   }
 
   Future<List<Persona>> upsert(Persona persona) async {
-    final all = await loadPersonas();
+    final all = List<Persona>.from(await loadPersonas());
     final index = all.indexWhere((p) => p.id == persona.id);
     if (index >= 0) {
       all[index] = persona;
@@ -216,4 +216,29 @@ class PersonaService {
   }
 
   String newId() => 'persona_${DateTime.now().millisecondsSinceEpoch}';
+
+  /// Deep copy of [source] with a new id, name suffix, and separate avatar file.
+  Future<Persona> duplicate(Persona source) async {
+    final id = newId();
+    String? avatar;
+    final avatarName = source.avatarFileName?.trim();
+    if (avatarName != null && avatarName.isNotEmpty) {
+      final bytes = await _avatarService.readBytes(avatarName);
+      if (bytes != null) {
+        avatar = await _avatarService.saveHistoryBytes(
+          stem: id,
+          bytes: bytes,
+          extension: p.extension(avatarName),
+        );
+      }
+    }
+
+    final baseName = source.name.trim().isEmpty ? 'User' : source.name.trim();
+    return source.copyWith(
+      id: id,
+      name: '$baseName (copy)',
+      avatarFileName: avatar,
+      clearSourceWorkshopId: true,
+    );
+  }
 }

@@ -92,8 +92,11 @@ extension WorkshopCardMergeDepthLabels on WorkshopCardMergeDepth {
         WorkshopCardMergeDepth.enrich =>
           '\nENRICH MODE (important):\n'
           '- The card may already look complete — still ADD relevant workshop '
-          'details that are missing (relationships, sensory beats, backstory '
-          'fragments, speech quirks, goals, secrets, etc.).\n'
+          'details that are missing (powers, abilities, weaknesses, anatomy, '
+          'relationships, sensory beats, backstory fragments, speech quirks, '
+          'goals, secrets, divine traits, etc.).\n'
+          '- Use the full token budget from the guidance note. Do not summarize '
+          'rich workshop drafts into short blurbs.\n'
           '- Do not shorten fields unless the workshop explicitly revises them '
           'shorter.\n'
           '- Prefer concrete workshop facts over generic padding.\n',

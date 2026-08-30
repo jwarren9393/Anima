@@ -10,12 +10,15 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **Also builds** | Linux desktop (works); Windows desktop (needs a Windows host) |
 | **Distribution** | Personal use only — **not** published to app stores |
 | **Repo** | https://github.com/jwarren9393/Anima (private) |
-| **Version** | **1.0.0** build **61** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
+| **Version** | **1.0.0** build **64** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
 
 ### What’s new in recent builds (1.0.0)
 
 | Build | Highlights |
 |-------|------------|
+| **64** | **Character & persona builds** — one Settings menu: shared model + sampling; separate **character** and **persona** build prompts. **Creation Center export fix** — persona builds use persona prompt + full token budget; alias names (e.g. mortal name + true name) merge to one identity; long workshop drafts prioritized; **Enrich** keeps powers/abilities. **Model browse filters** — min context, min speed, max TTFT, sort. **Duplicate** character/persona from ⋮ menu. **Theme fix** — text scale no longer crashes on launch. |
+| **63** | **Guide AI fix** — character voice direction no longer posts as your persona dialogue; anti-moralizing system block. **Scene moods** — **Real voice (anti-script)** + expanded vocabulary law (bans porn-script tropes, em-dash spam, recycled *actions* on explicit moods). |
+| **62** | **Group speaker handoff** — tapping a cast chip after another character spoke picks the right speaker from scene context. **Character voice** — long-press cast chip → **Write line** (manual) or **Guide AI** (loose direction → fresh reply for that character). **Google Drive sync** — auto-remount when GNOME Drive went idle. |
 | **61** | **Memory overhaul** — Scene (current place/cast) vs Ledger (durable plot); summarize **merges** instead of newest-wins; **pin** ledger lines; open threads kept until resolved. **Narrator scene lock** — old narrator/director cards stay out of API history so long chats don’t rewind. |
 | **60** | **Sync/restore fix** — `.anima-backup` may include plain-text library files; phone pull no longer rejects `anima_active_persona_id.txt` as “not valid JSON”. |
 | **59** | **Portable data folder** — characters, chats, avatars, settings, and API key live in one visible folder (`Documents/Anima` by default). First-run picker + **Settings → Data folder**. Android uses public Documents instead of locked app storage. |
@@ -36,7 +39,7 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **33** | **Update workshop cast** (workshop-tied characters only, not whole library); Creation Center collaborator prompt — brainstorm-only, points to real ⋮ menu actions |
 | **32** | Creation Center **World dashboard** hub; **Fix last** chip; minimal UI pass (chat/home/group/settings); workshop **world summary** folding; full feature README |
 
-Earlier 1.0.0 builds added Storybook layout, opening scenes library, backup/sync, group chat polish, and the core SillyTavern-style toolkit. **272 tests** at build 48.
+Earlier 1.0.0 builds added Storybook layout, opening scenes library, backup/sync, group chat polish, presence/scene law, Director mode, temporary NPCs, and the core SillyTavern-style toolkit. **361 tests** at build 64.
 
 API base (pay-as-you-go): `https://nano-gpt.com/api/v1/chat/completions`  
 Auth: `Authorization: Bearer <API_KEY>`  
@@ -128,17 +131,17 @@ Living build notes for coding agents: [`AGENTS.md`](AGENTS.md) (status, roadmap,
 
 ## Feature summary (at a glance)
 
-**Chat & roleplay** — Solo and group chats; streaming; swipes; edit / delete / rewind / branch; Continue, Impersonate, Regenerate, **Rewrite reply…**; **Narrator** (nudge + Generate + post); **Director** (commands next reply); **presence / scene law** (always on — who’s present, witness-tagged memory, per-character filtering); Paths (Roadway); auto-reply (default off); ✨ Format; memory summary + auto-summarize (background); Author’s Note; per-chat persona and World Info; opening scene; context estimate; export/import chat; manage cast mid-chat (+ temporary NPCs); fullscreen avatars.
+**Chat & roleplay** — Solo and group chats; streaming; swipes; edit / delete / rewind / branch; Continue, Impersonate, Regenerate, **Rewrite reply…**; **Narrator** (nudge + Generate + post); **Director** (commands next reply); **presence / scene law** (always on in groups — who’s present, witness-tagged memory, per-character filtering); **Character voice** — long-press cast chip → **Write line** or **Guide AI**; **Scene moods** (sensual, anti-script, explicit, afterglow + vocabulary law); Paths (Roadway); auto-reply (default off); **auto-wrap dialogue on send**; memory summary + auto-summarize (background); Author’s Note; per-chat persona and World Info; opening scene; context estimate; export/import chat; manage cast mid-chat (+ temporary NPCs); fullscreen avatars; **group-react** cards.
 
-**Characters & personas** — ST V1/V2/V3 JSON + PNG import/export; categories; AI wand; consistency check **+ review-before-apply fix**; **AI card builder** with field split + review sheet; **temporary characters** (quick NPC, promote to full card); **Full cards only** filter; embedded lorebooks; alternate greetings; **Generate avatar**; group speaker chips.
+**Characters & personas** — ST V1/V2/V3 JSON + PNG import/export; categories; **Duplicate** from ⋮ menu; AI wand (tap quick / long-press source); consistency check **+ review-before-apply fix**; **Compact** card/persona/lore; **AI card/persona builder**; temporary characters; **Full cards only** filter; embedded lorebooks; alternate greetings; **~token badges**; **Generate avatar** + history; group speaker chips.
 
-**World & lore** — Global lorebooks + scan depth/budget + recursive scan; keyword triggers + toast; entry AI wand + keyword suggest; **consistency check + fix**; per-chat lore picks.
+**World & lore** — Global lorebooks + scan depth/budget + recursive scan; keyword triggers + toast; entry AI wand + keyword suggest; **consistency check + fix**; per-chat lore picks; **Compact lorebook / entry**.
 
-**Creation Center** — World workshops; import chat/lore/bundle; world dashboard (play, summarize, glossary, scene ideas, export); Fix last; canon pins; create/update lorebook, opening scene, characters, persona; **Update workshop cast** / **Update my persona**; roleplay chats on Home; linked lore off in prompts by default.
+**Creation Center** — World workshops; import chat/lore/bundle; world dashboard; Fix last; canon pins; create/update lorebook (review sheet + gap fill); opening scene; characters + persona (**Standard** vs **Add more workshop details**); alias-aware persona detect; **Update workshop cast** / **Update my persona**; roleplay chats on Home; linked lore off in prompts by default.
 
-**API & models** — NanoGPT key + subscription toggle; **category + provider filters**; **Browse models** with ctx/output/params/TPS/TTFT/uptime; image model picker; credits usage.
+**API & models** — NanoGPT key + subscription toggle; **category + provider filters**; **Browse models** with ctx/output/params/TPS/TTFT/uptime + **min context / speed / TTFT filters and sort**; image model picker; credits usage.
 
-**Look & data** — Theme Studio (8 presets, Storybook layout, chat backgrounds, RP colors); backup `.anima-backup` + phone ↔ PC sync (no API key in file).
+**Look & data** — Theme Studio (8 presets, Storybook layout, chat backgrounds, RP colors, text scale); backup `.anima-backup` + phone ↔ PC sync (no API key in file); visible **Documents/Anima** data folder.
 
 ---
 
@@ -221,7 +224,7 @@ Then: greeting picker for the first character → opens the chat.
 
 ## 3. Chat screen
 
-Minimal chrome: **Close** · title · **⋮** menu. **Android:** **Director** and **Continue** sit in a row **above** the composer (still visible with the keyboard). The typing row is **+** (Narrator / moods) · field · **Send** / **Stop**. **Desktop:** moods · Narrator · Director · field · **▶ Continue** · **Send** / **Stop**.
+Minimal chrome: **Close** · title · **⋮** menu. **Voice row** above composer (**You** + cast names). **Long-press a cast name** → **Write line** (manual bubble) or **Guide AI** (direction → fresh reply for that character). Tap **You** to return to your persona. **Android:** **Director** and **Continue** above the composer (Director icon fills gold when on). **+** opens Narrator, **scene moods**, group react. **Desktop:** moods · Narrator · Director · field · **▶ Continue** · **Send** / **Stop**.
 
 ### App bar ⋮ menu
 
@@ -252,8 +255,9 @@ Minimal chrome: **Close** · title · **⋮** menu. **Android:** **Director** an
 | Control | Behavior |
 |---------|----------|
 | **Narrator** (theater) | Sheet: optional **nudge**, editable line, **Generate** or type, **Post** — omniscient timeline card; resets who’s **present** in the scene; injected as system; solo/group only |
-| **Director** (control-camera) | Posts a centered **Director** card that **commands the next AI reply** (mandatory system injection for that generation); tap to edit; long-press to delete; solo/group only |
-| **Format (✨)** | AI cleanup + `*action*` / `"dialogue"` markup per **Composer Format** note (Settings → AI collaborator) |
+| **Director** (control-camera) | Posts a centered **Director** card that **commands the next AI reply** (mandatory system injection for that generation); tap to edit; long-press to delete; icon fills gold when active; solo/group only |
+| **Scene moods** (+ menu / mood icon) | Per-chat tone chips — drunk, tense, sensual, **Real voice (anti-script)**, intimate build-up, explicit, afterglow; inject vocabulary law on adult moods |
+| **Auto-wrap on send** | Wraps plain text in `"quotes"` between `*actions*` locally on send (default on) — **Settings → AI collaborator** |
 | **Continue (▶)** | Next AI reply without a new user message |
 | **Send** | Posts user message; generates reply only if **Auto-reply** is on |
 | **Stop** | While streaming — keeps partial text |
@@ -345,8 +349,8 @@ Opened from Home or Chat ⋮ → **Settings**. Top banner: **API & connection** 
 | **World** | **Creation Center** | World workshops, import chat/lore/bundle, hub dashboard |
 | **AI** | **Generation parameters** | Sampling, context size, auto-summarize |
 | **AI** | **Global chat prompts** | App-wide system + post-history |
-| **AI** | **AI collaborator** | Wand, Format, Paths, **Narrator** notes; Enter-to-send (desktop) |
-| **AI** | **Character builds** | Model + sampling for slim card JSON generation |
+| **AI** | **AI collaborator** | Wand guidance, workshop chat steer, **auto-wrap on send**, Paths, **Narrator**; Enter-to-send (desktop) |
+| **AI** | **Character & persona builds** | Shared model + sampling; separate character and persona JSON build prompts |
 | **App** | **Data folder** | Visible library location (open / copy / move) |
 | **App** | **Appearance** | Theme Studio — presets, layout, colors, fonts, chat experience, avatars |
 | **App** | **Backup, restore & sync** | `.anima-backup` export + cross-device sync file |
@@ -372,7 +376,7 @@ Detailed sections below follow this order where possible.
 - **Provider** filter second: **Auto** first (`auto-model`, `auto-model-basic`, `auto-model-standard`, `auto-model-premium`), then A–Z — scoped to the category filter.
 - Status line shows filtered count (e.g. `54 of 200 models · 12 providers`).
 - **Selected model card** — summary for your current pick: stat chips, description, capability chips, pricing/Included; loads **TPS / TTFT / uptime %** from NanoGPT’s providers API when available.
-- **Browse models** — searchable sheet for the current provider filter: same stats per row (context, max output, parameter size e.g. 70B, TPS, TTFT, uptime %, description, Included/category); tap to select.
+- **Browse models** — searchable sheet for the current provider filter: same stats per row (context, max output, parameter size e.g. 70B, TPS, TTFT, uptime %, description, Included/category); **filter by min context, min speed, max TTFT**; **sort** by name, context, speed, TTFT, or cost; tap to select.
 - **Note:** NanoGPT’s website “Intelligence” benchmark (Artificial Analysis) is **not** in the public API — Anima shows what NanoGPT returns on models + providers endpoints.
 - Refresh catalog; **custom model id** field still works for ids not in the list.
 - Save model separately from API key.
@@ -405,7 +409,8 @@ Multiple **{{user}}** identities.
 
 **Actions**
 
-- Create / edit / delete (at least one persona always kept).
+- Create / edit / delete (list may be empty).
+- **Duplicate** — ⋮ menu copies card with new id + `(copy)` name.
 - **Set as default** for new chats (long-press on list also works).
 - Per-chat persona via chat ⋮ (can differ from default).
 - Tap **your** avatar in chat → persona editor.
@@ -419,7 +424,7 @@ Multiple **{{user}}** identities.
 
 **List actions**
 
-- Import card (JSON / PNG), **New**, export, delete.
+- Import card (JSON / PNG), **New**, export, delete, **Duplicate** (⋮ menu).
 - **Full cards only** filter chip — hides temporary NPCs (quick characters not promoted to full cards).
 - Starter character **Anima** if library is empty.
 - Avatar, description preview, lorebook count, category names on rows; **Temporary** badge on quick NPCs.
@@ -574,10 +579,10 @@ Hub on **Home** (world tiles) and **Settings → Creation Center**.
 | **Start roleplay (pick cast)** | Shortcut to solo/group with workshop opening prefilled |
 | **Create/Update lorebook** | NanoGPT → keyword entries → one global lorebook (one workshop ↔ one book). **First create:** optional preview → **Create lorebook**. **Update:** merges immediately from workshop chat (no fake “export anyway” audit). |
 | **Create/Update opening scene** | Saves narrator prose; syncs to Opening scenes library |
-| **Create AI characters** | Multi-select people from chat + lore → generate cards → review before save |
+| **Create AI characters** | Multi-select people from chat + lore → **Standard** or **Add more workshop details** → review before save |
 | **Update workshop cast** | Characters tied to this workshop (`linkedCharacterIds` or created here) → merge chat → review → save (does not scan whole Characters library) |
 | **Update my persona** | When a persona is linked → merge workshop chat into persona fields → review → save (⋮ menu + dashboard persona row) |
-| **Create my persona** | Pick one person from workshop + lore → player-focused fields → review before save |
+| **Create my persona** | Pick one player identity (aliases = one person) → persona fields → review before save |
 | **Include linked lorebook in prompts** | Toggle — **off by default** after create; saves tokens; **Update lorebook** still uses the book |
 
 **Workshop AI behavior** — the chat bot is **brainstorm-only**; it cannot save lore, cards, or scenes. It tells you to use the exact ⋮ menu labels above (no fake “pick A or B” action menus).
@@ -650,24 +655,26 @@ App-wide prompts merged into **every** chat (on top of each card; per-chat Autho
 
 ### 4.9 AI collaborator
 
-Four editable guidance notes (presets / reset):
+Per-field wands and chat-tool guidance (uses **main chat model** — not full card JSON builds).
 
-1. **Wand guidance note** — character wands, lore wands, Creation Center.
-2. **Composer Format** — chat ✨ Format button.
-3. **Roadway / Paths** — Paths brainstorming.
-4. **Narrator** — chat **Narrator → Generate** (capped tokens; output cleanup).
+| Area | Used by |
+|------|---------|
+| **Wand guidance note** | Character/persona/lore field wands (sparkle); Creation Center brainstorm chat |
+| **Auto-wrap dialogue on send** | Wraps plain text in `"quotes"` on send — `*actions*` stay as asterisks |
+| **Roadway / Paths** | Paths brainstorm + combine |
+| **Narrator** | Chat **Narrator → Generate** |
 
 **Enter to send** (desktop) — Enter sends, Shift+Enter newline; off = Enter always newline.
 
-Format uses lower temperature to stay close to the draft. Wand uses normal model + sampling.
+### 4.10 Character & persona builds
 
-### 4.10 Character builds
+One menu for **full JSON card generation** — Creation Center, chat import, and AI builders on character/persona editors. Separate from main chat model.
 
-Separate from main chat model — used for **slim card JSON** generation (Creation Center characters, **New character from chat**, AI card builder).
+- **Shared:** use main chat model **or** custom build model id; max tokens, temperature, top P.
+- **Character build prompt** — extra instructions for character card JSON (description, personality, mes_example, tags).
+- **Persona build prompt** — optional separate instructions for persona JSON; **leave empty to reuse the character prompt**.
 
-- Use main chat model **or** custom model id.
-- Max tokens, temperature, top P.
-- Editable **prompt note** for the build template.
+Does **not** affect per-field wands (those use AI collaborator).
 
 ### 4.11 Appearance (Theme Studio)
 
@@ -840,7 +847,7 @@ Read and update **`AGENTS.md`** after meaningful code changes.
 cd /path/to/Anima
 flutter doctor
 flutter pub get
-flutter test
+flutter test      # 361 tests
 flutter analyze
 flutter run -d windows   # or android device
 ```

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:anima/models/character.dart';
 import 'package:anima/models/chat_message.dart';
 import 'package:anima/models/chat_session.dart';
+import 'package:anima/models/field_wand_options.dart';
 import 'package:anima/models/global_lorebook.dart';
 import 'package:anima/models/lorebook.dart';
 import 'package:anima/models/persona.dart';
@@ -564,6 +565,42 @@ Here is the card you asked for:
         expect(messages[1]['content'], contains('Mira'));
       },
     );
+
+    test('persona detect merges alias identities', () {
+      final messages = builder.buildPersonaDetectMessages(
+        conversation: sampleConversation(),
+        buildPromptNote: 'Keep powers.',
+      );
+      expect(messages[0]['content'], contains('HUMAN PLAYER'));
+      expect(messages[0]['content'], contains('Oniasis'));
+      expect(messages[0]['content'], contains('ONE identity'));
+    });
+
+    test('enrich persona export asks for full background detail', () {
+      final messages = builder.buildPersonaExportMessages(
+        conversation: sampleConversation(),
+        personaName: 'Marlon',
+        mergeDepth: WorkshopCardMergeDepth.enrich,
+        buildPromptNote: 'Use all 2048 tokens.',
+      );
+      expect(messages[0]['content'], contains('Use all 2048 tokens.'));
+      expect(messages[0]['content'], contains('powers, abilities'));
+      expect(messages[0]['content'], contains('ENRICH MODE'));
+    });
+
+    test('formatLatestWorkshopDraftBlock surfaces long assistant drafts', () {
+      final conversation = [
+        ChatMessage(id: '1', role: ChatRole.user, text: 'Draft him.'),
+        ChatMessage(
+          id: '2',
+          role: ChatRole.assistant,
+          text: '### Persona Draft\n${'Power detail. ' * 80}',
+        ),
+      ];
+      final block = builder.formatLatestWorkshopDraftBlock(conversation);
+      expect(block, contains('PRIMARY WORKSHOP DRAFT'));
+      expect(block, contains('Persona Draft'));
+    });
 
     test('parsePersonaJson builds structured persona with a fresh id', () {
       const raw = '''

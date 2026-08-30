@@ -476,6 +476,217 @@ class NanoGptTextModelCatalogFilter {
   }
 }
 
+/// Sort order for browse sheet model lists.
+enum TextModelSortMode {
+  catalog,
+  contextDesc,
+  tpsDesc,
+  ttftAsc,
+}
+
+/// Context / speed / latency filters for the text model catalog.
+class NanoGptTextModelPerformanceFilter {
+  const NanoGptTextModelPerformanceFilter._();
+
+  static const contextAllId = '__ctx_all__';
+  static const context8kId = '__ctx_8k__';
+  static const context32kId = '__ctx_32k__';
+  static const context128kId = '__ctx_128k__';
+  static const context200kId = '__ctx_200k__';
+
+  static const tpsAllId = '__tps_all__';
+  static const tps20Id = '__tps_20__';
+  static const tps40Id = '__tps_40__';
+  static const tps60Id = '__tps_60__';
+
+  static const ttftAllId = '__ttft_all__';
+  static const ttft500Id = '__ttft_500__';
+  static const ttft1000Id = '__ttft_1000__';
+  static const ttft2000Id = '__ttft_2000__';
+
+  static const contextFilterIds = [
+    contextAllId,
+    context8kId,
+    context32kId,
+    context128kId,
+    context200kId,
+  ];
+
+  static const tpsFilterIds = [tpsAllId, tps20Id, tps40Id, tps60Id];
+
+  static const ttftFilterIds = [
+    ttftAllId,
+    ttft500Id,
+    ttft1000Id,
+    ttft2000Id,
+  ];
+
+  static String labelForContext(String filterId) => switch (filterId) {
+        contextAllId => 'Any context',
+        context8kId => '≥ 8K context',
+        context32kId => '≥ 32K context',
+        context128kId => '≥ 128K context',
+        context200kId => '≥ 200K context',
+        _ => 'Any context',
+      };
+
+  static String labelForTps(String filterId) => switch (filterId) {
+        tpsAllId => 'Any speed',
+        tps20Id => '≥ 20 TPS',
+        tps40Id => '≥ 40 TPS',
+        tps60Id => '≥ 60 TPS',
+        _ => 'Any speed',
+      };
+
+  static String labelForTtft(String filterId) => switch (filterId) {
+        ttftAllId => 'Any TTFT',
+        ttft500Id => '≤ 500 ms TTFT',
+        ttft1000Id => '≤ 1 s TTFT',
+        ttft2000Id => '≤ 2 s TTFT',
+        _ => 'Any TTFT',
+      };
+
+  static String labelForSort(TextModelSortMode mode) => switch (mode) {
+        TextModelSortMode.catalog => 'Default order',
+        TextModelSortMode.contextDesc => 'Largest context',
+        TextModelSortMode.tpsDesc => 'Fastest (TPS)',
+        TextModelSortMode.ttftAsc => 'Lowest latency (TTFT)',
+      };
+
+  static int? minContextTokens(String filterId) => switch (filterId) {
+        context8kId => 8000,
+        context32kId => 32000,
+        context128kId => 128000,
+        context200kId => 200000,
+        _ => null,
+      };
+
+  static double? minTps(String filterId) => switch (filterId) {
+        tps20Id => 20,
+        tps40Id => 40,
+        tps60Id => 60,
+        _ => null,
+      };
+
+  static double? maxTtftMs(String filterId) => switch (filterId) {
+        ttft500Id => 500,
+        ttft1000Id => 1000,
+        ttft2000Id => 2000,
+        _ => null,
+      };
+
+  static List<NanoGptModelInfo> applyContext(
+    List<NanoGptModelInfo> models,
+    String filterId,
+  ) {
+    final min = minContextTokens(filterId);
+    if (min == null) return models;
+    return [
+      for (final model in models)
+        if ((model.contextLength ?? 0) >= min) model,
+    ];
+  }
+
+  /// Filters by cached runtime stats. Models with unknown stats stay visible.
+  static List<NanoGptModelInfo> applyRuntime({
+    required List<NanoGptModelInfo> models,
+    required String minTpsFilterId,
+    required String maxTtftFilterId,
+    required NanoGptService statsSource,
+  }) {
+    final minTpsValue = minTps(minTpsFilterId);
+    final maxTtftValue = maxTtftMs(maxTtftFilterId);
+    if (minTpsValue == null && maxTtftValue == null) return models;
+
+    return [
+      for (final model in models)
+        if (_passesRuntime(
+          statsSource.cachedRuntimeStats(model.id),
+          minTps: minTpsValue,
+          maxTtftMs: maxTtftValue,
+        ))
+          model,
+    ];
+  }
+
+  static bool _passesRuntime(
+    NanoGptModelRuntimeStats stats, {
+    required double? minTps,
+    required double? maxTtftMs,
+  }) {
+    if (minTps != null) {
+      final tps = stats.tps;
+      if (tps != null && tps < minTps) return false;
+    }
+    if (maxTtftMs != null) {
+      final ttft = stats.ttftMs;
+      if (ttft != null && ttft > maxTtftMs) return false;
+    }
+    return true;
+  }
+
+  static List<NanoGptModelInfo> sortModels(
+    List<NanoGptModelInfo> models,
+    TextModelSortMode mode,
+    NanoGptService statsSource,
+  ) {
+    if (mode == TextModelSortMode.catalog || models.length < 2) {
+      return models;
+    }
+    final sorted = List<NanoGptModelInfo>.from(models);
+    switch (mode) {
+      case TextModelSortMode.catalog:
+        break;
+      case TextModelSortMode.contextDesc:
+        sorted.sort((a, b) {
+          final av = a.contextLength ?? 0;
+          final bv = b.contextLength ?? 0;
+          if (av != bv) return bv.compareTo(av);
+          return a.id.compareTo(b.id);
+        });
+      case TextModelSortMode.tpsDesc:
+        sorted.sort((a, b) {
+          final av = statsSource.cachedRuntimeStats(a.id).tps;
+          final bv = statsSource.cachedRuntimeStats(b.id).tps;
+          if (av == null && bv == null) return a.id.compareTo(b.id);
+          if (av == null) return 1;
+          if (bv == null) return -1;
+          final cmp = bv.compareTo(av);
+          return cmp != 0 ? cmp : a.id.compareTo(b.id);
+        });
+      case TextModelSortMode.ttftAsc:
+        sorted.sort((a, b) {
+          final av = statsSource.cachedRuntimeStats(a.id).ttftMs;
+          final bv = statsSource.cachedRuntimeStats(b.id).ttftMs;
+          if (av == null && bv == null) return a.id.compareTo(b.id);
+          if (av == null) return 1;
+          if (bv == null) return -1;
+          final cmp = av.compareTo(bv);
+          return cmp != 0 ? cmp : a.id.compareTo(b.id);
+        });
+    }
+    return sorted;
+  }
+
+  static List<NanoGptModelInfo> applyAll({
+    required List<NanoGptModelInfo> models,
+    required String contextFilterId,
+    required String minTpsFilterId,
+    required String maxTtftFilterId,
+    required TextModelSortMode sortMode,
+    required NanoGptService statsSource,
+  }) {
+    var out = applyContext(models, contextFilterId);
+    out = applyRuntime(
+      models: out,
+      minTpsFilterId: minTpsFilterId,
+      maxTtftFilterId: maxTtftFilterId,
+      statsSource: statsSource,
+    );
+    return sortModels(out, sortMode, statsSource);
+  }
+}
+
 /// One image model from NanoGPT's image-model catalog.
 class NanoGptImageModelInfo {
   const NanoGptImageModelInfo({

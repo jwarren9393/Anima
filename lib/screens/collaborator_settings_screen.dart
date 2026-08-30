@@ -121,9 +121,10 @@ class _CollaboratorSettingsScreenState
                 const SizedBox(height: 8),
                 SettingsUi.sectionHint(
                   context,
-                  'Sent with character-editor and World Info entry wand taps, '
-                  'and with Creation Center chats. Use this to steer creative '
-                  'writing — for example, tell it not to sanitize replies.',
+                  'Sent with per-field sparkle wands on character, persona, and '
+                  'World Info editors — one field at a time, not full card builds. '
+                  'Also steers Creation Center brainstorming chat. Full character '
+                  'and persona JSON builds use Settings → Character & persona builds.',
                 ),
                 PresetButton(
                   label: 'Guidance presets',
@@ -229,8 +230,8 @@ class _CollaboratorSettingsScreenState
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Wand, Paths, and Narrator use your normal NanoGPT model and '
-                  'generation parameters from Settings.',
+                  'Wand, Paths, and Narrator use your main chat model and '
+                  'generation parameters from Settings → Generation parameters.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 24),

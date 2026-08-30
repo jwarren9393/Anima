@@ -132,7 +132,7 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
       final messages = _workshopBuilder.buildPlainEnglishPersonaExportMessages(
         userBrief: brief,
         personaName: _nameController.text.trim(),
-        buildPromptNote: build.promptNote,
+        buildPromptNote: build.personaPromptNote,
       );
 
       Persona? draft;
@@ -209,7 +209,7 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
       final messages = _workshopBuilder.buildPlainEnglishPersonaUpdateMessages(
         existing: existing,
         userBrief: brief,
-        buildPromptNote: build.promptNote,
+        buildPromptNote: build.personaPromptNote,
       );
 
       Persona? draft;
