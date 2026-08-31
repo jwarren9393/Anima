@@ -1017,9 +1017,10 @@ class _LivePreview extends StatelessWidget {
                     color: style.chatExperience.bubbleFill(ui.userBubbleColor),
                     borderRadius: BorderRadius.circular(ui.chatBubbleRadius),
                   ),
-                  child: Text(
-                    'Your message',
-                    style: theme.textTheme.bodyMedium?.copyWith(
+                  child: RpRichText(
+                    text: '*leans back with a grin* "Told you I\'d win."',
+                    isUser: true,
+                    baseStyle: theme.textTheme.bodyMedium!.copyWith(
                       color: ui.userBubbleForeground,
                       fontSize: 14 * ui.chatFontScale,
                     ),

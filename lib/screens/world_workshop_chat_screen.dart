@@ -33,6 +33,7 @@ import '../services/workshop_hub_controller.dart';
 import '../widgets/workshop_card_merge_sheet.dart';
 import '../widgets/workshop_compact_toolbar.dart';
 import '../widgets/workshop_overview_sheet.dart';
+import 'api_settings_screen.dart';
 import 'lorebooks_screen.dart';
 import '../utils/platform_utils.dart';
 import '../utils/scroll_to_end.dart';
@@ -3915,6 +3916,14 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
       onSelected: _handleWorkshopMenuAction,
       itemBuilder: (context) => [
         const PopupMenuItem(
+          value: 'api',
+          child: ListTile(
+            leading: Icon(Icons.key_outlined),
+            title: Text('API & connection'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        const PopupMenuItem(
           value: 'dashboard',
           child: ListTile(
             leading: Icon(Icons.dashboard_outlined),
@@ -4030,8 +4039,22 @@ class _WorldWorkshopChatScreenState extends State<WorldWorkshopChatScreen>
     );
   }
 
+  void _openApiSettings() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ApiSettingsScreen(
+          apiKeyService: widget.apiKeyService,
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
+        ),
+      ),
+    );
+  }
+
   void _handleWorkshopMenuAction(String value) {
     switch (value) {
+      case 'api':
+        _openApiSettings();
       case 'dashboard':
         _showOverview();
       case 'context':

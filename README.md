@@ -219,6 +219,7 @@ Minimal chrome: **Close** · title · **⋮** menu. **Voice row** above composer
 
 | Item | What it does |
 |------|----------------|
+| **API & connection** | Jump straight to the API key / model picker — top of the menu for quick model swaps while testing |
 | **Persona: …** / **Switch persona** | Who {{user}} is for **this thread only** (saved on the chat) |
 | **Author’s Note** | Per-chat instructions injected after history every turn (+ presets, macros) |
 | **World Info: …** | Use Settings default, pick specific global lorebooks, or turn global lore **off** for this thread (character card lore still applies) |
@@ -564,6 +565,7 @@ Hub on **Home** (world tiles) and **Settings → Creation Center**.
 
 | Item | Purpose |
 |------|---------|
+| **API & connection** | Jump to the API key / model picker — top of the menu for quick model swaps |
 | **World dashboard** | Hub overview sheet (see below) |
 | **Context estimate** | Detailed breakdown |
 | **Start roleplay (pick cast)** | Shortcut to solo/group with workshop opening prefilled |
@@ -703,7 +705,7 @@ Does **not** affect per-field wands (those use AI collaborator).
 
 - Shape, size tier, fine scale slider for chat avatars.
 
-Live preview; **Save** applies app-wide immediately via `AppearanceController`.
+Live preview; **Save** applies app-wide immediately via `AppearanceController`. The preview bubbles are real sample RP lines — your side shows `*action* + "dialogue"` and the character side shows `*smiles* "Hello there."` — so action / dialogue colors and fonts render exactly like live chat.
 
 ### 4.12 Backup, restore & sync
 

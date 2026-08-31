@@ -427,7 +427,7 @@ Special tuned sampling for: memory summarize, narrator generate, composer format
 
 ### Chrome
 
-- App bar: Close · title · ⋮ menu
+- App bar: Close · title · ⋮ menu (**leads with "API & connection"** → `api_settings_screen.dart` for quick model swaps mid-chat)
 - **Android:** Director + Continue buttons **above** the composer (stay visible with keyboard); typing row is **+** (Narrator / moods) · field · Send/Stop. No delete-confirm dialogs or bottom SnackBars in chat (errors use the banner above the composer).
 - **Desktop:** moods · Narrator · Director · field · ▶ Continue · Send/Stop
 - Chips: Memory, Note (when set); group speaker chips (hidden when keyboard open)
@@ -551,6 +551,7 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 - **World summary** folding (like memory summarize).
 - Workshop chat import from live chat with trim options.
 - Linked lorebook in prompts **off by default** after create (toggle in ⋮).
+- **⋮ menu leads with "API & connection"** → `api_settings_screen.dart` (quick model swaps while testing workshop builds).
 - **No Narrator theater button** here.
 
 Workshops listed on Home horizontal row + Settings → Creation Center.
@@ -640,6 +641,7 @@ Plus **Enter to send** toggle (desktop).
 - Speaker name above messages; side hero portrait (Storybook).
 - RP colors: `*actions*` gold italic, `"dialogue"` bolder.
 - Avatar shape/size scale.
+- **Live preview** renders real RP sample lines through `RpRichText` — user bubble shows `*action* + "dialogue"` (`isUser: true`), AI bubble shows `*smiles* "Hello there."` — so RP color/font changes are visible exactly as they'll appear in chat before saving.
 
 `AppearanceController` reloads `MaterialApp` theme on save.
 

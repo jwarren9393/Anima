@@ -2,10 +2,9 @@
 set -e
 
 # ==============================================================================
-# AUTOMATIC VALUE EXTRACTION (NO HARDCODING REQUIRED)
+# AUTOMATIC VALUE EXTRACTION
 # ==============================================================================
 
-# 1. Extract version and build number from pubspec.yaml (stripping any Windows CRLF returns)
 if [ ! -f "pubspec.yaml" ]; then
   echo "❌ Error: pubspec.yaml not found in current directory."
   exit 1
@@ -16,17 +15,13 @@ VERSION=$(echo "$FULL_VERSION" | cut -d'+' -f1 | tr -d '\r')
 BUILD_NUM=$(echo "$FULL_VERSION" | cut -d'+' -f2 | tr -d '\r')
 
 if [ -z "$BUILD_NUM" ]; then
-  echo "❌ Error: Could not parse build number from pubspec.yaml (Expected format: 1.0.0+66)"
+  echo "❌ Error: Could not parse build number from pubspec.yaml"
   exit 1
 fi
 
-# 2. Automatically find connected ADB device (phone)
+PROJECT_ROOT="$(pwd)"
 DEVICE_ID=$(adb devices | grep -w "device" | awk '{print $1}' | head -n1 | tr -d '\r')
-
-# 3. Desktop install directory on Linux Mint
 DESKTOP_DIR="$HOME/.local/share/anima"
-
-# 4. Commit message & Release notes from terminal argument (or fallback default)
 CHANGELOG="${1:-Build ${BUILD_NUM} release update and improvements}"
 
 echo "=================================================="
@@ -78,13 +73,13 @@ echo "✅ Desktop app updated in-place!"
 # 4. PACKAGE DESKTOP ZIP FOR GITHUB RELEASE
 # ==============================================================================
 echo -e "\n🗜️  [4/5] Packaging Linux Release Zip..."
-(cd build/linux/x64/release/bundle && zip -rq "../../../../Anima-${VERSION}-linux-x64.zip" .)
+(cd build/linux/x64/release/bundle && zip -rq "${PROJECT_ROOT}/Anima-${VERSION}-linux-x64.zip" .)
 
 # ==============================================================================
-# 5. PUBLISH GITHUB RELEASE
+# 5. PUBLISH / UPDATE GITHUB RELEASE (IN-PLACE ON v1.0.0)
 # ==============================================================================
-echo -e "\n🌐 [5/5] Publishing GitHub Release..."
-TAG="v${VERSION}-b${BUILD_NUM}"
+echo -e "\n🌐 [5/5] Updating GitHub Release (v${VERSION})..."
+TAG="v${VERSION}"
 RELEASE_TITLE="Anima ${VERSION} (build ${BUILD_NUM})"
 RELEASE_BODY="Install the new APK over the existing app (do not uninstall first).
 
@@ -92,15 +87,14 @@ RELEASE_BODY="Install the new APK over the existing app (do not uninstall first)
 - ${CHANGELOG}"
 
 if command -v gh &> /dev/null; then
-  gh release create "$TAG" "Anima-${VERSION}.apk" "Anima-${VERSION}-linux-x64.zip" \
-    --title "$RELEASE_TITLE" \
-    --notes "$RELEASE_BODY" || {
-      echo "⚠️ Release already exists or warning occurred. Updating assets..."
-      gh release upload "$TAG" "Anima-${VERSION}.apk" "Anima-${VERSION}-linux-x64.zip" --clobber
-    }
-  echo "✅ GitHub Release published: https://github.com/jwarren9393/Anima/releases/tag/${TAG}"
+  # If release exists, update title/notes and upload fresh assets with --clobber
+  gh release edit "$TAG" --title "$RELEASE_TITLE" --notes "$RELEASE_BODY" || \
+  gh release create "$TAG" --title "$RELEASE_TITLE" --notes "$RELEASE_BODY"
+
+  gh release upload "$TAG" "Anima-${VERSION}.apk" "Anima-${VERSION}-linux-x64.zip" --clobber
+  echo "✅ GitHub Release updated: https://github.com/jwarren9393/Anima/releases/tag/${TAG}"
 else
-  echo "⚠️ GitHub CLI (gh) not installed. Binaries saved locally. Install 'gh' or upload via Web UI."
+  echo "⚠️ GitHub CLI (gh) not found. Upload binaries manually if needed."
 fi
 
 echo -e "\n🎉 ALL DONE! App built, phone updated, desktop updated, and GitHub release published!"

@@ -75,6 +75,7 @@ import '../widgets/reply_rewrite_sheet.dart';
 import '../widgets/rp_rich_text.dart';
 import '../widgets/memory_summary_sheet.dart';
 import '../widgets/scene_mood_sheet.dart';
+import 'api_settings_screen.dart';
 import 'characters_screen.dart';
 import 'character_edit_screen.dart';
 import 'group_chat_setup_screen.dart';
@@ -704,6 +705,18 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       if (_toastEntry == entry) _toastEntry = null;
       entry.remove();
     });
+  }
+
+  Future<void> _openApiSettings() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ApiSettingsScreen(
+          apiKeyService: widget.apiKeyService,
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
+        ),
+      ),
+    );
   }
 
   Future<void> _openSettings() async {
@@ -4114,6 +4127,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             tooltip: 'More',
             enabled: !_loading && !_busy,
             onSelected: (value) {
+              if (value == 'api') _openApiSettings();
               if (value == 'persona') _pickPersona();
               if (value == 'authors_note') _editAuthorsNote();
               if (value == 'lorebooks') _pickChatLorebooks();
@@ -4133,6 +4147,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               if (value == 'settings') _openSettings();
             },
             itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'api',
+                child: Text('API & connection'),
+              ),
               PopupMenuItem(
                 value: 'persona',
                 child: Text(
