@@ -5,23 +5,23 @@ set -e
 # AUTOMATIC VALUE EXTRACTION (NO HARDCODING REQUIRED)
 # ==============================================================================
 
-# 1. Extract version and build number from pubspec.yaml
+# 1. Extract version and build number from pubspec.yaml (stripping any Windows CRLF returns)
 if [ ! -f "pubspec.yaml" ]; then
   echo "❌ Error: pubspec.yaml not found in current directory."
   exit 1
 fi
 
-FULL_VERSION=$(grep "^version:" pubspec.yaml | head -n1 | awk '{print $2}')
-VERSION=$(echo "$FULL_VERSION" | cut -d'+' -f1)
-BUILD_NUM=$(echo "$FULL_VERSION" | cut -d'+' -f2)
+FULL_VERSION=$(grep "^version:" pubspec.yaml | head -n1 | awk '{print $2}' | tr -d '\r')
+VERSION=$(echo "$FULL_VERSION" | cut -d'+' -f1 | tr -d '\r')
+BUILD_NUM=$(echo "$FULL_VERSION" | cut -d'+' -f2 | tr -d '\r')
 
 if [ -z "$BUILD_NUM" ]; then
-  echo "❌ Error: Could not parse build number from pubspec.yaml (Expected format: 1.0.0+65)"
+  echo "❌ Error: Could not parse build number from pubspec.yaml (Expected format: 1.0.0+66)"
   exit 1
 fi
 
 # 2. Automatically find connected ADB device (phone)
-DEVICE_ID=$(adb devices | grep -w "device" | awk '{print $1}' | head -n1)
+DEVICE_ID=$(adb devices | grep -w "device" | awk '{print $1}' | head -n1 | tr -d '\r')
 
 # 3. Desktop install directory on Linux Mint
 DESKTOP_DIR="$HOME/.local/share/anima"
@@ -95,7 +95,7 @@ if command -v gh &> /dev/null; then
   gh release create "$TAG" "Anima-${VERSION}.apk" "Anima-${VERSION}-linux-x64.zip" \
     --title "$RELEASE_TITLE" \
     --notes "$RELEASE_BODY" || {
-      echo "⚠️ Release create warning (release may already exist). Uploading assets..."
+      echo "⚠️ Release already exists or warning occurred. Updating assets..."
       gh release upload "$TAG" "Anima-${VERSION}.apk" "Anima-${VERSION}-linux-x64.zip" --clobber
     }
   echo "✅ GitHub Release published: https://github.com/jwarren9393/Anima/releases/tag/${TAG}"
