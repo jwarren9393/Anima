@@ -1265,4 +1265,33 @@ Here is the card you asked for:
       expect(updated.sourceWorkshopId, 'w1');
     });
   });
+
+  group('Creation Center narrator / director guidance', () {
+    test('chatSystemPrompt bans opening scenes and teaches Narrator/Director cards', () {
+      final prompt = builder.chatSystemPrompt();
+      expect(prompt, contains('NO "opening scene" feature'));
+      expect(prompt, contains('opening scene library'));
+      expect(prompt, contains('Narrator card'));
+      expect(prompt, contains('Director card'));
+      expect(
+        prompt,
+        contains('write a few SHORT **Narrator card** passages instead'),
+      );
+      expect(
+        prompt,
+        isNot(contains('Create/Update opening scene')),
+      );
+    });
+
+    test('scene ideas label hooks as narrator cards, never opening scenes', () {
+      final messages = builder.buildSceneIdeasMessages(
+        conversation: sampleConversation(),
+        count: 3,
+      );
+      final system = messages.first['content'] ?? '';
+      expect(system, contains('Narrator cards'));
+      expect(system, contains('no Opening scene feature'));
+      expect(system, contains('label them "Narrator card"'));
+    });
+  });
 }

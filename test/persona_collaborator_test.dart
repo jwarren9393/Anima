@@ -83,5 +83,23 @@ void main() {
       expect(messages[0]['content'], contains('JSON'));
       expect(messages[1]['content'], contains('Val'));
     });
+
+    test('expand asks for richer JSON persona while keeping identity', () {
+      final messages = collaborator.buildExpandMessages(
+        draft: PersonaDraftContext(
+          name: 'Val',
+          description: 'Heir of House Blackwood.',
+          personality: 'Calm and watchful.',
+        ),
+      );
+      final system = messages[0]['content']!;
+      final user = messages[1]['content']!;
+      expect(system, contains('expand'));
+      expect(system, contains('Invent interesting ideas'));
+      expect(system, contains('Keep the same player identity'));
+      expect(user, contains('CURRENT PERSONA (expand this'));
+      expect(user, contains('Val'));
+      expect(user, contains('Heir of House Blackwood.'));
+    });
   });
 }

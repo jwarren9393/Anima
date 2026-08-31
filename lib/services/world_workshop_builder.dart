@@ -316,7 +316,7 @@ TARGET FIELD RULES (read the user's notes carefully):
   their notes clearly affect — do not rewrite unrelated fields.
 - Never duplicate the same facts in both description and personality.''';
 
-  /// Applies [workshopExportMinMaxTokens] for lorebook / opening-scene JSON.
+  /// Applies [workshopExportMinMaxTokens] for lorebook JSON.
   static SamplingSettings workshopExportSampling(SamplingSettings base) {
     const minTokens = workshopExportMinMaxTokens;
     final user = base.maxTokens;
@@ -422,8 +422,6 @@ HOW THE USER ACTUALLY SAVES WORK (tell them when relevant, using exact labels):
   workshop (created here or linked here); user reviews before overwrite.
 - ⋮ menu → **Create my persona** / **Update my persona** — player identity for
   this workshop; update merges the full workshop chat into the linked persona.
-- ⋮ menu → **Opening scene** / chip **Add scene** — narrator setup for roleplay
-  (not stored in the lorebook).
 - ⋮ menu → **World dashboard** → **Play this world** — starts solo/group chat.
 - Long-press messages → **Pin as canon**, **Fold older chat into summary**.
 - **Fix last** composer chip — small in-place correction to your previous reply.
@@ -437,7 +435,29 @@ CONVERSATION STYLE (stay immersive):
 - If they say they want lore or cards saved, acknowledge and point to the control
   above; do not output finished lorebook JSON or card JSON unless they explicitly
   ask for a draft preview in chat (rare).
-- Opening scene prose belongs in **Opening scene**, not buried only in lore entries.
+
+ROLEPLAY CARDS — Anima has NO "opening scene" feature:
+- Anima removed "opening scenes" long ago. There is no Opening scene option, no
+  opening scene library, no "Add scene" bar, and no opening scene card. NEVER
+  mention, suggest, ask about, or offer to create an "opening scene" — and do
+  not invent an "opening scene entry" or a "saved opening" as if the app had
+  one. If the user asks about openings, explain that Anima uses Narrator cards
+  instead (below).
+- **Narrator card** — a centered card posted in a live roleplay chat with the
+  Narrator control. It is omniscient scene prose: where they are, the
+  atmosphere, what is happening, and who is physically present. It acts as
+  scene law until the scene changes. When the user asks for an opening, a
+  starting scene, a beginning, a story hook, or "write an opening scene for
+  me", write a few SHORT **Narrator card** passages instead — clearly labeled
+  "Narrator card —", ready to paste into the roleplay chat after the user runs
+  **Play this world**. Never call those transcripts "opening scenes".
+- **Director card** — a centered card posted with the Director control in a
+  live roleplay chat. It commands the NEXT AI reply only: mandatory beats,
+  tone, staging, and what that one reply must do. It is not a starting scene
+  and does not persist as fixed setup.
+- Creation Center cannot post Narrator or Director cards itself; it only drafts
+  text here. Point users to the Narrator / Director controls in a live roleplay
+  chat when they ask for scene text.
 
 $lengthNote
 
@@ -2979,7 +2999,9 @@ ${formatTranscript(conversation)}
   }) {
     final system =
         '''
-Suggest $count mid-story SCENE IDEAS (not opening scenes). Reply with ONLY JSON:
+Suggest $count mid-story SCENE IDEAS (hooks the user can later paste as
+Narrator cards in roleplay — Anima has no Opening scene feature, so never call
+these "opening scenes"; label them "Narrator card"). Reply with ONLY JSON:
 {"scenes": [{"title": "short label", "text": "2-4 sentences of setup"}]}
 '''
             .trim();

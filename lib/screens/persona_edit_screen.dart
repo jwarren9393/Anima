@@ -73,13 +73,14 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
   bool _avatarBusy = false;
   bool _aiCardBusy = false;
   bool _compactBusy = false;
+  bool _expandBusy = false;
   PersonaCollaboratorField? _wandBusy;
   String? _avatarFileName;
   late final String _personaId;
 
   bool get _isEditing => widget.existing != null;
   bool get _busy =>
-      _saving || _avatarBusy || _wandBusy != null || _aiCardBusy || _compactBusy;
+      _saving || _avatarBusy || _wandBusy != null || _aiCardBusy || _compactBusy || _expandBusy;
 
   bool get _hasPersonaContent =>
       _descriptionController.text.trim().isNotEmpty ||
@@ -302,7 +303,7 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
   }
 
   Future<void> _runCompactPersona() async {
-    if (_compactBusy || _aiCardBusy || _wandBusy != null) return;
+    if (_compactBusy || _expandBusy || _aiCardBusy || _wandBusy != null) return;
     final draft = _draftContext();
     if (!_draftHasCompactableContent(draft)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -423,6 +424,137 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
       );
     } finally {
       if (mounted) setState(() => _compactBusy = false);
+    }
+  }
+
+  bool _draftHasExpandableContent(PersonaDraftContext draft) {
+    return draft.name.trim().isNotEmpty ||
+        _draftHasCompactableContent(draft);
+  }
+
+  Future<void> _runExpandPersona() async {
+    if (_expandBusy || _compactBusy || _aiCardBusy || _wandBusy != null) return;
+    final draft = _draftContext();
+    if (!_draftHasExpandableContent(draft)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Give the persona a name first, then expand.'),
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Expand persona?'),
+        content: const Text(
+          'AI will add new interesting details, ideas, and texture to the '
+          'persona based on what is already there. You review every change '
+          'before saving.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Expand'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _expandBusy = true);
+    try {
+      final before = _personaFromDraft();
+      final collaborator =
+          await widget.settingsService.getCollaboratorSettings();
+      final messages = _collaborator.buildExpandMessages(
+        draft: draft,
+        guidanceNote: collaborator.guidanceNote,
+      );
+      final model = await widget.settingsService.getModel();
+      final sampling = WorldWorkshopBuilder.consistencyFixSampling(
+        await widget.settingsService.getSampling(),
+      );
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+
+      Persona? expanded;
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final raw = await widget.nanoGptService.complete(
+          model: model,
+          messages: messages,
+          baseUrl: baseUrl,
+          sampling: sampling,
+        );
+        try {
+          expanded = _workshopBuilder.parsePersonaUpdateJson(
+            raw,
+            original: before,
+          );
+          break;
+        } on FormatException {
+          if (attempt == 1) rethrow;
+        }
+      }
+      if (expanded == null) {
+        throw const FormatException(
+          'Could not find persona JSON in the AI reply. Try again.',
+        );
+      }
+
+      if (!mounted) return;
+      final changes = comparePersonaFields(before, expanded);
+      if (changes.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No new details were suggested. Try editing manually.'),
+          ),
+        );
+        return;
+      }
+
+      final selected = await showAiFieldChangesSheet(
+        context: context,
+        title: 'Review expanded persona',
+        subtitle:
+            'Check fields to apply. Tap a row to compare before and after.',
+        changes: changes,
+        applyLabel: 'Update persona',
+      );
+      if (selected == null || !mounted) return;
+
+      final merged = mergePersonaChanges(before, expanded, selected);
+      setState(() => _applyPersonaFields(merged));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Expanded ${selected.length} field${selected.length == 1 ? '' : 's'}.',
+          ),
+        ),
+      );
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } on NanoGptCancelledException {
+      // Ignore.
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Expand failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _expandBusy = false);
     }
   }
 
@@ -782,11 +914,16 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
             enabled: !_busy,
             onSelected: (value) {
               if (value == 'compact') _runCompactPersona();
+              if (value == 'expand') _runExpandPersona();
             },
             itemBuilder: (context) => [
               const PopupMenuItem(
                 value: 'compact',
                 child: Text('Compact persona…'),
+              ),
+              const PopupMenuItem(
+                value: 'expand',
+                child: Text('Expand persona…'),
               ),
             ],
           ),

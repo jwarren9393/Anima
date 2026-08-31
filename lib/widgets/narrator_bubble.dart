@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 import '../models/ui_style_settings.dart';
 import 'rp_rich_text.dart';
 
-/// Narrator-style opening scene shown above chat messages (not a character bubble).
+/// Centered Narrator or Director card in chat (not a character bubble).
 class NarratorBubble extends StatelessWidget {
   const NarratorBubble({
     super.key,
     required this.text,
-    this.label = 'Opening scene',
-    this.icon = Icons.auto_stories_outlined,
+    this.label = 'Narrator',
+    this.icon = Icons.theater_comedy_outlined,
     this.onTap,
     this.onLongPress,
     this.injecting = false,

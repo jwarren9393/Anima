@@ -146,7 +146,7 @@ Anima/
 | File | Role |
 |------|------|
 | `chat_message.dart` | Message bubble: `ChatRole` user / assistant / **narrator**; swipes; group speaker |
-| `chat_session.dart` | Thread: messages, note, persona, lore picks, memory, opening scene, group cast |
+| `chat_session.dart` | Thread: messages, note, persona, lore picks, memory, group cast |
 | `character.dart` | ST-compatible card fields + Anima id + embedded lorebook |
 | `persona.dart` | Structured {{user}} identity fields |
 | `lorebook.dart` | World Info entries (ST import shapes) |
@@ -154,8 +154,6 @@ Anima/
 | `character_category.dart` | Anima-only category lists (not ST tags) |
 | `world_workshop.dart` | Creation Center workshop state |
 | `workshop_hub_models.dart` | Hub: play plan, kit, locations, relationships, scene ideas |
-| `saved_opening_scene.dart` | Opening scenes library entries |
-| `opening_scene_length.dart` | Short/Medium/Long AI hints (Creation Center) |
 | `chat_experience_settings.dart` | Classic vs Storybook, backgrounds, bubble opacity |
 | `ui_style_settings.dart` | Theme Studio + `AnimaUiTheme` extension |
 | `theme_palette.dart` | Colors, fonts, 8 presets |
@@ -179,7 +177,6 @@ Anima/
 | `lore_settings_screen.dart` | Scan depth/budget + link to global books |
 | `world_workshop_list_screen.dart` | Creation Center list |
 | `world_workshop_chat_screen.dart` | Workshop chat (NOT regular chat) |
-| `opening_scenes_screen.dart` | Opening scenes library |
 | `settings_screen.dart` | Settings hub |
 | `api_settings_screen.dart` | API key, model catalog browser |
 | `sampling_settings_screen.dart` | Temperature, context, auto-summarize |
@@ -196,7 +193,7 @@ Anima/
 | `nanogpt_service.dart` | Streaming chat, `complete()`, catalogs, images, credits |
 | `api_key_service.dart` | Secure API key |
 | `settings_service.dart` | All preferences + `SamplingSettings` + `CollaboratorSettings` |
-| `prompt_builder.dart` | System prompt, post-history, opening scene block, macros |
+| `prompt_builder.dart` | System prompt, post-history, narrator/director blocks, macros |
 | `chat_context_service.dart` | History trim, memory summarize prompts |
 | `chat_service.dart` | Save/load `anima_chats.json` |
 | `character_service.dart` | `anima_characters.json` |
@@ -215,7 +212,6 @@ Anima/
 | `world_workshop_service.dart` | Workshop persistence |
 | `workshop_hub_service.dart` | Hub CRUD, bundle import/export |
 | `workshop_hub_controller.dart` | Hub AI actions |
-| `opening_scene_service.dart` | Opening scenes library |
 | `composer_draft_service.dart` | Per-chat composer autosave |
 | `chat_transcript_codec.dart` | Chat JSON / plain export |
 | `character_card_codec.dart` | ST V1/V2/V3 + PNG chara chunk |
@@ -268,9 +264,6 @@ No global state management package — services passed as constructor args.
 | `lorebookIds` | `null` = use global enabled books; list = override |
 | `memorySummary` | Long-term folded story text |
 | `memoryCoveredCount` | Messages already folded into memory |
-| `openingScene` | Fixed narrator prose **above** message list (not in `messages`) |
-| `openingSceneInPrompt` | Inject opening scene every turn (default on) |
-| `openingSceneInMemory` | Opening scene folded into memory on first summarize |
 | `participantIds` | Group cast (2+ = group) |
 | `nextSpeakerIndex` | Round-robin / chip selection |
 | `sourceWorkshopId` | Provenance from Creation Center |
@@ -289,7 +282,7 @@ Keyword-triggered content; ST JSON import; scan depth, token budget, recursive s
 
 ### `WorldWorkshop` — Creation Center
 
-Workshop chat messages, world summary, linked lorebook, opening scene, hub fields (kit, pins, glossary export, etc.). **Separate** from `ChatSession`.
+Workshop chat messages, world summary, linked lorebook, hub fields (kit, pins, glossary export, scene ideas, etc.). **Separate** from `ChatSession`. **No opening scene field — Narrator / Director cards are timeline messages inside live chats, never saved here.**
 
 ---
 
@@ -375,25 +368,24 @@ All library files live in **one user-owned folder** (`AppDataRoot`, default `Doc
    - Persona block  
    - Global system prompt (Settings)
 
-2. **System (optional):** Opening scene block — if `openingSceneInPrompt` and text set
+2. **System (optional):** Memory summary — clinical bullet facts via `ChatContextService.formatMemoryForPrompt()` (reference only; do not mimic tone)
 
-3. **System (optional):** Memory summary — clinical bullet facts via `ChatContextService.formatMemoryForPrompt()` (reference only; do not mimic tone)
-
-4. **History:** `ChatContextService.selectHistory()` — recent messages within **history token budget** (skips messages already in `memoryCoveredCount` when possible)
+3. **History:** `ChatContextService.selectHistory()` — recent messages within **history token budget** (skips messages already in `memoryCoveredCount` when possible)
 
    For each history message:
-   - **Narrator** (`ChatRole.narrator`) → **system** block via `NarratorService.formatForPrompt()` (omniscient direction, not user/char speech)
+   - **Narrator** (`ChatRole.narrator`) → **system** block via `NarratorService.formatForPrompt()` (omniscient scene law; the latest narrator beat is broadcast to the present cast, older beats are background only)
+   - **Director** (`ChatRole.director`) → **system** block via `DirectorService.formatActiveInstruction()` — the **pending** Director note is injected late as a mandatory override; older director notes are omitted from history
    - **Group assistant** → `SpeakerName: body` (prefix stripped from body if duplicated)
    - **User / solo assistant** → `message.toApiMap()`
 
-5. **Optional:** Rewrite messages (`ReplyRewriteService`) when regenerating with rewrite mode
+4. **Optional:** Rewrite messages (`ReplyRewriteService`) when regenerating with rewrite mode
 
-6. **Optional nudges** (if not rewriting):
+5. **Optional nudges** (if not rewriting):
    - Greeting nudge (alternate opening)
    - Continue: `(Continue. Write only the next reply as …)`
    - Impersonate: `(Write only User's next message…)`
 
-7. **System:** `PromptBuilder.buildPostHistory()`  
+6. **System:** `PromptBuilder.buildPostHistory()`  
    - Global post-history  
    - Per-card post-history  
    - Author's Note
@@ -412,8 +404,8 @@ Special tuned sampling for: memory summarize, narrator generate, composer format
 |-----------|----------------|-------------------|---------|
 | **Normal user send** | `ChatRole.user` in history | `role: user` | Player RP as {{user}} |
 | **OOC** | User message `(OOC: …)` | `role: user` | Soft player direction (convention, not enforced system rule) |
-| **Narrator** (theater icon) | `ChatRole.narrator` in timeline | `role: system` narrator block | Omniscient scene voice + direction |
-| **Opening scene** | `ChatSession.openingScene` (above list) | `role: system` opening block | Fixed setup at chat start |
+| **Narrator** (theater icon) | `ChatRole.narrator` in timeline | `role: system` narrator block | Omniscient scene voice + scene law |
+| **Director** (control-camera) | `ChatRole.director` in timeline | `role: system` director block (pending note only, late) | Mandatory command for the **next** AI reply |
 | **Author's Note** | `ChatSession.authorsNote` | Post-history system | Every-turn steer |
 | **Memory summary** | `ChatSession.memorySummary` | System before history (clinical bullets; reference-only wrapper) | Long-term facts, not voice |
 | **Lore hits** | Injected in system prompt | World info sections | Keyword-triggered facts |
@@ -531,7 +523,7 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 - **Generate avatar** — NanoGPT image + `avatar_prompt_builder.dart`.
 - **Character & persona builds** (Settings) — shared model + sampling for **full JSON** card generation; separate **character** and **persona** build prompts (`CharacterBuildSettings` in `settings_service.dart`). Used by Creation Center export, chat import sheets, and AI builders — **not** field wands.
 - **Duplicate** — ⋮ menu on Characters and Personas list copies with new id.
-- **Compact** — AI shorten with review sheet (card, persona, lorebook, entry).
+- **Compact / Expand** — AI shortens or enriches fields with a review sheet before apply (Compact: card, persona, lorebook, entry; **Expand: character card and persona only** — the AI invents new interesting details from what’s already there, no prompts needed).
 - **~token badges** — approximate prompt token counts on lists and editors.
 
 ### Personas
@@ -548,7 +540,8 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 
 **Not the same as regular chat** — `world_workshop_chat_screen.dart`
 
-- Brainstorm worlds; export lorebook, opening scene, characters, persona.
+- Brainstorm worlds; export lorebook, characters, persona.
+- **Narrator / Director aware** — the collaborator prompt explicitly bans "opening scenes" (removed feature) and drafts **Narrator card** text instead when asked for an opening/hook; it knows Director cards command the next reply in live chats.
 - **Persona detect** merges aliases (public name + true name = one identity).
 - **Standard** vs **Add more workshop details** merge depth on create/update.
 - Long assistant drafts marked **PRIMARY WORKSHOP DRAFT** in export prompts.
@@ -570,14 +563,13 @@ Workshops listed on Home horizontal row + Settings → Creation Center.
 |--------|-------|---------|
 | Home | App start | History, Creation Center tiles, New FAB, Settings |
 | Chat | Tap history row | Solo/group RP |
-| Group setup | New → Group | Cast, order, lore/scene/note/auto chips |
+| Group setup | New → Group | Cast, order, lore/note/auto chips |
 | Characters | Settings / pickers | CRUD, import/export, categories |
 | Character edit | Tap character | All card fields, lorebook tab, wand |
 | Personas | Settings | CRUD, default persona |
 | Lorebooks | Settings → World Info | Global books list |
 | Lorebook edit | Tap book | Entries + wand |
 | Lore settings | Settings | Scan depth, budget, recursive |
-| Opening scenes | Settings | Saved opening setups |
 | Creation Center list | Home / Settings | Workshops |
 | Workshop chat | Tap workshop | World building chat |
 | Settings hub | Gear | All settings menus |
@@ -598,7 +590,6 @@ Workshops listed on Home horizontal row + Settings → Creation Center.
 | API & connection (banner) | `api_settings_screen.dart` |
 | Personas | `personas_screen.dart` |
 | Characters | `characters_screen.dart` |
-| Opening scenes | `opening_scenes_screen.dart` |
 | World Info & lore | `lore_settings_screen.dart` → lorebooks |
 | Creation Center | `world_workshop_list_screen.dart` |
 | Generation parameters | `sampling_settings_screen.dart` |

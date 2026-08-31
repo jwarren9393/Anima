@@ -861,6 +861,136 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
     }
   }
 
+  bool _draftHasExpandableContent(CharacterDraftContext draft) {
+    return draft.name.trim().isNotEmpty || _draftHasCompactableContent(draft);
+  }
+
+  Future<void> _runExpandCard() async {
+    if (_wandBusy != null || _consistencyBusy || _aiCardBusy) return;
+    final draft = _draftContext();
+    if (!_draftHasExpandableContent(draft)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Give the card a name first, then expand.'),
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Expand character card?'),
+        content: const Text(
+          'AI will add new interesting details, ideas, and texture to the '
+          'card based on what is already there. You review every change '
+          'before saving.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Expand'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _consistencyBusy = true);
+    try {
+      final before = _characterFromDraft();
+      final collaborator =
+          await widget.settingsService.getCollaboratorSettings();
+      final messages = _collaborator.buildExpandMessages(
+        draft: draft,
+        guidanceNote: collaborator.guidanceNote,
+      );
+      final model = await widget.settingsService.getModel();
+      final sampling = WorldWorkshopBuilder.consistencyFixSampling(
+        await widget.settingsService.getSampling(),
+      );
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+
+      Character? expanded;
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final raw = await widget.nanoGptService.complete(
+          model: model,
+          messages: messages,
+          baseUrl: baseUrl,
+          sampling: sampling,
+        );
+        try {
+          expanded = _workshopBuilder.parseCharacterConsistencyFixJson(
+            raw,
+            original: before,
+          );
+          break;
+        } on FormatException {
+          if (attempt == 1) rethrow;
+        }
+      }
+      if (expanded == null) {
+        throw const FormatException(
+          'Could not find character card JSON in the AI reply. Try again.',
+        );
+      }
+
+      if (!mounted) return;
+      final changes = compareCharacterFields(before, expanded);
+      if (changes.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No new details were suggested. Try editing manually.'),
+          ),
+        );
+        return;
+      }
+
+      final selected = await showAiFieldChangesSheet(
+        context: context,
+        title: 'Review expanded card',
+        subtitle:
+            'Check fields to apply. Tap a row to compare before and after.',
+        changes: changes,
+        applyLabel: 'Update card',
+      );
+      if (selected == null || !mounted) return;
+
+      final merged = mergeCharacterChanges(before, expanded, selected);
+      setState(() => _applyFullCharacter(merged));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Expanded ${selected.length} field${selected.length == 1 ? '' : 's'}.',
+          ),
+        ),
+      );
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } on NanoGptCancelledException {
+      // Ignore.
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Expand failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _consistencyBusy = false);
+    }
+  }
+
   Future<void> _openAvatarHistory() async {
     final picked = await showAvatarHistorySheet(
       context: context,
@@ -1201,6 +1331,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
             onSelected: (value) {
               if (value == 'consistency') _runConsistencyCheck();
               if (value == 'compact') _runCompactCard();
+              if (value == 'expand') _runExpandCard();
               if (value == 'avatar_pick') _pickAvatar();
               if (value == 'avatar_gen') _generateAvatar();
               if (value == 'avatar_history') _openAvatarHistory();
@@ -1214,6 +1345,10 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
               const PopupMenuItem(
                 value: 'compact',
                 child: Text('Compact card…'),
+              ),
+              const PopupMenuItem(
+                value: 'expand',
+                child: Text('Expand card…'),
               ),
               const PopupMenuDivider(),
               const PopupMenuItem(

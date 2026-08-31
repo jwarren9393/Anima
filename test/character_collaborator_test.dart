@@ -117,5 +117,24 @@ void main() {
       expect(messages[0]['content'], contains('JSON'));
       expect(messages[1]['content'], contains('Rin'));
     });
+
+    test('expand asks for richer JSON card while keeping identity', () {
+      final messages = collaborator.buildExpandMessages(
+        draft: CharacterDraftContext(
+          name: 'Rin',
+          description: 'Tall scout.',
+          personality: 'Quiet and watchful.',
+        ),
+      );
+      final system = messages[0]['content']!;
+      final user = messages[1]['content']!;
+      expect(system, contains('expand'));
+      expect(system, contains('Invent interesting ideas'));
+      expect(system, contains('Keep the same character identity'));
+      expect(system, contains('chara_card_v2'));
+      expect(user, contains('CURRENT CHARACTER CARD (expand this'));
+      expect(user, contains('Rin'));
+      expect(user, contains('Tall scout.'));
+    });
   });
 }

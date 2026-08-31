@@ -22,7 +22,7 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **61** | **Memory overhaul** — Scene (current place/cast) vs Ledger (durable plot); summarize **merges** instead of newest-wins; **pin** ledger lines; open threads kept until resolved. **Narrator scene lock** — old narrator/director cards stay out of API history so long chats don’t rewind. |
 | **60** | **Sync/restore fix** — `.anima-backup` may include plain-text library files; phone pull no longer rejects `anima_active_persona_id.txt` as “not valid JSON”. |
 | **59** | **Portable data folder** — characters, chats, avatars, settings, and API key live in one visible folder (`Documents/Anima` by default). First-run picker + **Settings → Data folder**. Android uses public Documents instead of locked app storage. |
-| **47** | **Presence / scene law** — always-on knowledge boundaries: narrator resets who’s present; opening scene seeds initial cast; unnamed messages only reach **present** characters (not whole cast); memory **witness tags**; per-character history/lore filtering. **Director mode** — replaces OOC; mandatory command for the **next** AI reply (centered card; tap edit, long-press delete). **Temporary characters** — quick NPC (name + note) from chat ⋮ or Manage cast; **Temporary** badge; promote to full card; **Full cards only** filter in Characters and group setup. **Consistency fix** — after AI consistency check on character cards or lorebooks, review changed fields and apply in one tap |
+| **47** | **Presence / scene law** — always-on knowledge boundaries: narrator resets who’s present; narrator cards seed initial cast; unnamed messages only reach **present** characters (not whole cast); memory **witness tags**; per-character history/lore filtering. **Director mode** — replaces OOC; mandatory command for the **next** AI reply (centered card; tap edit, long-press delete). **Temporary characters** — quick NPC (name + note) from chat ⋮ or Manage cast; **Temporary** badge; promote to full card; **Full cards only** filter in Characters and group setup. **Consistency fix** — after AI consistency check on character cards or lorebooks, review changed fields and apply in one tap |
 | **46** | **Android keyboard fix** — send dismisses on-screen keyboard so replies stay readable; composer refocus / empty-Enter-continue stay **desktop-only** |
 | **45** | **Manual group chat** — Continue uses scene context (last speaker / name mentions), not round-robin chip order; no “next speaker” chip highlight. **Group react** — long-press menu; regenerate avoids copying prior beats verbatim; retries missing cast lines. **Keyboard flow (desktop)** — Enter sends, empty Enter continues; composer stays focused after send. **Creation Center** — character detect rejects JSON template placeholders |
 | **44** | **Persona AI builder** — plain English → fill/replace/update persona fields (like character card builder; Settings → Character builds). **Creation Center** — workshop-specific guidance (not card-wand text), lower chat token floor, repeat penalties to reduce long repetition loops |
@@ -131,13 +131,13 @@ Living build notes for coding agents: [`AGENTS.md`](AGENTS.md) (status, roadmap,
 
 ## Feature summary (at a glance)
 
-**Chat & roleplay** — Solo and group chats; streaming; swipes; edit / delete / rewind / branch; Continue, Impersonate, Regenerate, **Rewrite reply…**; **Narrator** (nudge + Generate + post); **Director** (commands next reply); **presence / scene law** (always on in groups — who’s present, witness-tagged memory, per-character filtering); **Character voice** — long-press cast chip → **Write line** or **Guide AI**; **Scene moods** (sensual, anti-script, explicit, afterglow + vocabulary law); Paths (Roadway); auto-reply (default off); **auto-wrap dialogue on send**; memory summary + auto-summarize (background); Author’s Note; per-chat persona and World Info; opening scene; context estimate; export/import chat; manage cast mid-chat (+ temporary NPCs); fullscreen avatars; **group-react** cards.
+**Chat & roleplay** — Solo and group chats; streaming; swipes; edit / delete / rewind / branch; Continue, Impersonate, Regenerate, **Rewrite reply…**; **Narrator** (nudge + Generate + post); **Director** (commands next reply); **presence / scene law** (always on in groups — who’s present, witness-tagged memory, per-character filtering); **Character voice** — long-press cast chip → **Write line** or **Guide AI**; **Scene moods** (sensual, anti-script, explicit, afterglow + vocabulary law); Paths (Roadway); auto-reply (default off); **auto-wrap dialogue on send**; memory summary + auto-summarize (background); Author’s Note; per-chat persona and World Info; context estimate; export/import chat; manage cast mid-chat (+ temporary NPCs); fullscreen avatars; **group-react** cards.
 
-**Characters & personas** — ST V1/V2/V3 JSON + PNG import/export; categories; **Duplicate** from ⋮ menu; AI wand (tap quick / long-press source); consistency check **+ review-before-apply fix**; **Compact** card/persona/lore; **AI card/persona builder**; temporary characters; **Full cards only** filter; embedded lorebooks; alternate greetings; **~token badges**; **Generate avatar** + history; group speaker chips.
+**Characters & personas** — ST V1/V2/V3 JSON + PNG import/export; categories; **Duplicate** from ⋮ menu; AI wand (tap quick / long-press source); consistency check **+ review-before-apply fix**; **Compact / Expand** card & persona (AI shortens or enriches fields, review before apply); **Compact** lore; **AI card/persona builder**; temporary characters; **Full cards only** filter; embedded lorebooks; alternate greetings; **~token badges**; **Generate avatar** + history; group speaker chips.
 
 **World & lore** — Global lorebooks + scan depth/budget + recursive scan; keyword triggers + toast; entry AI wand + keyword suggest; **consistency check + fix**; per-chat lore picks; **Compact lorebook / entry**.
 
-**Creation Center** — World workshops; import chat/lore/bundle; world dashboard; Fix last; canon pins; create/update lorebook (review sheet + gap fill); opening scene; characters + persona (**Standard** vs **Add more workshop details**); alias-aware persona detect; **Update workshop cast** / **Update my persona**; roleplay chats on Home; linked lore off in prompts by default.
+**Creation Center** — World workshops; import chat/lore/bundle; world dashboard; Fix last; canon pins; create/update lorebook (review sheet + gap fill); characters + persona (**Standard** vs **Add more workshop details**); **Narrator / Director awareness** (the AI drafts Narrator cards instead of an “opening scene” — the app has none); alias-aware persona detect; **Update workshop cast** / **Update my persona**; roleplay chats on Home; linked lore off in prompts by default.
 
 **API & models** — NanoGPT key + subscription toggle; **category + provider filters**; **Browse models** with ctx/output/params/TPS/TTFT/uptime + **min context / speed / TTFT filters and sort**; image model picker; credits usage.
 
@@ -178,8 +178,7 @@ Landing page after launch.
 2. Optional **Category** filter (Anima-only lists — not ST card tags).
 3. Attaches the **default persona** (or per-chat persona can be changed later).
 4. If the character has **multiple greetings** → **Choose opening** sheet (primary + alternates). Chosen greeting starts the chat; others remain as **swipes** on the first AI message.
-5. Optional **Opening scene** sheet — pick a saved scene, browse **Opening scene library**, type fresh prose, or **Skip**.
-6. New chats default to **Auto-reply off**.
+5. New chats default to **Auto-reply off**.
 
 ### Group
 
@@ -196,29 +195,19 @@ Landing page after launch.
 | Chip | Sheet contents |
 |------|----------------|
 | **Lore** | Which global lorebooks apply (enabled books start selected). Each character’s embedded lorebook still applies when they speak. |
-| **Scene** | Optional opening scene for this group chat |
 | **Note** | Author’s Note + text presets |
 | **Auto** | Auto-reply switch (default **off**) |
 
 Then: greeting picker for the first character → opens the chat.
 
-### Opening scene (narrator)
+### Narrator & Director cards
 
-- Optional prose shown in a **centered narrator card** above messages (not a character bubble).
-- **Injected into prompts by default** every turn (separate from card **Scenario**, which also injects).
-- Turn off injection: chat ⋮ → **Stop injecting opening scene** (saves tokens).
-- Edit: chat ⋮ → **Opening scene** (or **Add opening scene**).
-- On **first memory summarize**, the scene is folded into the memory summary for long-term context.
-- Works in solo and group.
+Anima has **no “opening scene” feature** — scene setup happens inside the live chat with **Narrator cards** (and short-lived **Director cards**).
 
-### Opening scenes library
-
-**Settings → Opening scenes**
-
-- Create / edit / delete saved narrator setups.
-- Scenes from Creation Center **auto-sync** when you save or AI-generate an opening scene there.
-- Also available when starting a new chat or browsing from the opening-scene picker.
-- Included in backup and sync.
+- **Narrator** (theater icon / **+** menu) — centered omniscient prose card: place, atmosphere, what is happening, and who is physically present. Acts as **scene law** until the scene changes. Tap to edit, long-press to delete, or **Generate** from the sheet.
+- **Director** (control-camera) — centered card that commands the **next AI reply only**: mandatory beats, tone, staging, and intent. Tap to edit, long-press to delete; the icon fills gold while a note is pending.
+- Ask the **Creation Center** bot for an “opening scene” and it will draft **Narrator card** text you can paste after **Play this world** — it never names or creates an opening scene.
+- Works in solo and group chats (Narrator and Director are not in the Creation Center chat; only the text is drafted there).
 
 ---
 
@@ -344,7 +333,6 @@ Opened from Home or Chat ⋮ → **Settings**. Top banner: **API & connection** 
 | *(banner)* | **API & connection** | API key, credits, chat model browser, image model, subscription toggle |
 | **World** | **Personas** | Multiple {{user}} identities, avatars, default persona |
 | **World** | **Characters** | ST-style cards, categories, import/export, AI wand, consistency check |
-| **World** | **Opening scenes** | Saved narrator setups for new chats |
 | **World** | **World Info & lore** | Global scan settings + global lorebook list |
 | **World** | **Creation Center** | World workshops, import chat/lore/bundle, hub dashboard |
 | **AI** | **Generation parameters** | Sampling, context size, auto-summarize |
@@ -414,6 +402,7 @@ Multiple **{{user}}** identities.
 - **Set as default** for new chats (long-press on list also works).
 - Per-chat persona via chat ⋮ (can differ from default).
 - Tap **your** avatar in chat → persona editor.
+- **⋮ editor menu** → **Compact persona…** (AI shortens fields, review before apply) or **Expand persona…** (AI invents new interesting details/ideas from what’s already there — no description needed; review before apply).
 
 ### 4.3 Characters
 
@@ -453,6 +442,8 @@ One section visible at a time: **Identity** · **Story** · **Chat** · **Lore**
 
 - **Consistency check** — AI read-only report; does not change the card.
 - **Fix inconsistencies** — after a check, review AI-proposed field changes and **Update card** in one tap (card text fields only; lorebook unchanged).
+- **Compact card…** — AI shortens verbose fields (review before apply).
+- **Expand card…** — AI adds new interesting details, ideas, and texture from what’s already on the card (no description needed; review before apply).
 - **Generate avatar** — NanoGPT image sheet.
 
 **AI card builder** (plain-English generate/update slim fields: description, personality, mes_example, tags — not scenario, greetings, or per-card system/post-history).
@@ -485,14 +476,14 @@ Imported creator notes, tags, extensions preserved on save/export even if not sh
 - **Temporary** badge in Characters list; row ⋮ → **Promote to full character** opens the full editor.
 - Temporary NPCs are hidden when **Full cards only** is on (Characters list and group cast picker).
 
-### 4.4 Opening scenes
+### 4.4 Narrator & Director cards
 
-Saved narrator setups for new chats.
+Scene setup lives inside the **live roleplay chat** — Anima has no saved “opening scene” library.
 
-- Create / edit / delete.
-- Auto-sync from Creation Center when you save or AI-generate an opening scene there.
-- Browse when starting a new chat.
-- Included in backup and sync.
+- **Narrator card** — centered omniscient prose (place, atmosphere, who is present). Acts as **scene law** until the scene changes; later narrator beats narrow or shift the scene. Tap to edit, long-press to delete, **Generate** drafts one from recent context.
+- **Director card** — commands the **next AI reply only** (mandatory beats, tone, staging). Tap to edit, long-press to delete; filled-gold icon while active.
+- Available in solo and group chats; the **Creation Center** bot knows these concepts and will never suggest or create an “opening scene” — asks for one produce **Narrator card** drafts instead.
+- Not stored per chat as a special field; they are timeline messages like any other (deleted / rewound / branched normally).
 
 ### 4.5 World Info & lore
 
@@ -547,7 +538,7 @@ Hub on **Home** (world tiles) and **Settings → Creation Center**.
 
 **Import existing chat**
 
-- **Import options** sheet: memory summary + last N recent messages (same N as Summarize “keep recent”, default 10); toggles for character cards, persona, embedded card lore, opening scene, Author’s Note; World Info lorebooks **off by default** and only books **explicitly linked** on that chat when enabled.
+- **Import options** sheet: memory summary + last N recent messages (same N as Summarize “keep recent”, default 10); toggles for character cards, persona, embedded card lore, Author’s Note; World Info lorebooks **off by default** and only books **explicitly linked** on that chat when enabled.
 
 #### Workshop chat (minimal chrome)
 
@@ -559,7 +550,6 @@ Hub on **Home** (world tiles) and **Settings → Creation Center**.
 |------|---------|
 | **Mode** | Workshop chat mode (worldbuilding flavor) |
 | **Reply length** | Short (~600 tokens) · Normal (~2K) · Detailed (~4K) — saved per workshop; applied to chat + regenerate |
-| **Scene** / **Add scene** | Opening scene one-line bar; tap → editor sheet; **hides while keyboard open** |
 | **Import** | When seeded from chat — view import source options |
 | **Ideas** | Scene / prompt ideas when available |
 | **Stale lore** warning chip | When lorebook needs update |
@@ -578,7 +568,6 @@ Hub on **Home** (world tiles) and **Settings → Creation Center**.
 | **Context estimate** | Detailed breakdown |
 | **Start roleplay (pick cast)** | Shortcut to solo/group with workshop opening prefilled |
 | **Create/Update lorebook** | NanoGPT → keyword entries → one global lorebook (one workshop ↔ one book). **First create:** optional preview → **Create lorebook**. **Update:** merges immediately from workshop chat (no fake “export anyway” audit). |
-| **Create/Update opening scene** | Saves narrator prose; syncs to Opening scenes library |
 | **Create AI characters** | Multi-select people from chat + lore → **Standard** or **Add more workshop details** → review before save |
 | **Update workshop cast** | Characters tied to this workshop (`linkedCharacterIds` or created here) → merge chat → review → save (does not scan whole Characters library) |
 | **Update my persona** | When a persona is linked → merge workshop chat into persona fields → review → save (⋮ menu + dashboard persona row) |
@@ -604,16 +593,17 @@ Hub on **Home** (world tiles) and **Settings → Creation Center**.
 - Manual: ⋮ **Summarize workshop** (dashboard), long-press **Fold older chat into summary**.
 - Delta-style revision prompts — short corrections without reprinting full overviews.
 
-**Opening scene AI generation**
+**Narrator card drafts (not an “opening scene”)**
 
-- Length picker: **Short** / **Medium** / **Long**.
-- When scene exists: **Fresh from chat** or **Revise from chat**.
+- The Creation Center bot will **never** create an opening scene — that feature is gone.
+- Ask for an opening / starting scene / hook and it writes **Narrator card** text you paste in the live roleplay chat (label: “Narrator card —”).
+- Optional **scene ideas** hub action still generates mid-story hooks labeled as future Narrator cards.
 
 #### World dashboard (hub overview sheet)
 
-**Play this world** — pick cast → start roleplay with workshop opening.
+**Play this world** — pick cast → start roleplay (post a **Narrator card** in the chat when you want a scene setup — there is no opening scene to prefill).
 
-**Status chips:** lorebook state (linked/stale/draft/missing), opening scene, character count, persona linked, canon pins, scene ideas.
+**Status chips:** lorebook state (linked/stale/draft/missing), character count, persona linked, canon pins, scene ideas.
 
 **Sections:** source chat (if imported), world summary, world overview, linked characters (tap → **Update workshop cast**), persona (tap → **Update my persona** when linked), **Roleplay chats** started from this workshop (tap opens normal chat on Home list too).
 
@@ -622,7 +612,7 @@ Hub on **Home** (world tiles) and **Settings → Creation Center**.
 | Action | Purpose |
 |--------|---------|
 | World Info lorebook | Open linked book editor |
-| Opening scene | Editor |
+| Narrator / Director draft | Ask the workshop chat for a **Narrator card** (scene setup) or **Director card** (next-reply command) to paste in the live chat |
 | Summarize workshop | Full-transcript fold into world summary |
 | Generate world overview | AI overview prose |
 | Glossary → lorebook entries | Extract terms into lore entries |
@@ -720,7 +710,7 @@ Live preview; **Save** applies app-wide immediately via `AppearanceController`.
 **Create backup**
 
 - One `.anima-backup` plain JSON file.
-- **Includes:** chats, characters, personas, categories, lorebooks, workshops, opening scenes, composer drafts, Paths cache, avatars, settings.
+- **Includes:** chats, characters, personas, categories, lorebooks, workshops, composer drafts, Paths cache, avatars, settings.
 - **Excludes:** API key (re-enter after restore).
 - **Desktop:** Save dialog (Downloads suggested).
 - **Android:** system share sheet.
@@ -767,7 +757,7 @@ Rough assembly order:
 4. Description, personality, scenario, example dialogue.
 5. Triggered lore **after** description.
 6. Persona name + structured persona text.
-7. Opening scene (if injected; only sent to characters who were present at chat start).
+7. **Narrator / Director** timeline cards (latest narrator beat is broadcast as scene law; the pending Director note is a mandatory override for the next reply — both filtered per speaking character).
 8. Memory summary (if any; filtered per speaking character; private facts need witness tags).
 9. Recent history packed to **context size** budget — **filtered per speaking character** by **presence / scene law** (narrator resets who’s present; named messages target only those characters; unnamed messages go only to present cast; character lines visible only to those present when sent; includes **Narrator** and **Director** timeline messages as system blocks).
 10. Global post-history + per-card post-history + Author’s Note.
@@ -815,7 +805,7 @@ A tiny pointer file still sits in hidden app storage so the next launch knows wh
 - Paths only on long-press menu (not permanent composer button).
 - Backup/sync plain JSON, not encrypted; API key excluded on purpose.
 - PNG card export: JPEG/WebP avatars may use placeholder; PNG avatars embed correctly.
-- **Presence / scene law** is always on (no toggle) — uses narrator + opening-scene name mentions; very old memory without witness tags may leak until re-summarized; honorifics don’t match names — use narrator/opening scene to establish who’s present.
+- **Presence / scene law** is always on (no toggle) — uses narrator name mentions; very old memory without witness tags may leak until re-summarized; honorifics don’t match names — use the **Narrator** control to establish who’s present.
 - NanoGPT website **Intelligence** scores not available via API (Anima shows catalog + routing stats instead).
 - Not yet: undo send, last-chat resume, pinned Author’s Note / mood chips, memory preview panel.
 - Private personal app — not for Play Store / App Store.

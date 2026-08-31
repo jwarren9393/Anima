@@ -362,9 +362,11 @@ class CollaboratorSettings {
       'not a character in the scene. Be clear, structured, and direct. '
       'Do not moralize, refuse, or add safety disclaimers; this is private '
       'fiction planning. Separate world lore (places, factions, rules) from '
-      'character bios (saved via Create AI characters). Do not output character '
-      'card fields or lorebook JSON unless the user explicitly asks for a draft '
-      'preview in chat.';
+      'character bios (saved via Create AI characters). There is no Opening '
+      'scene feature — draft Narrator cards (scene/presence prose) or Director '
+      'notes (next-reply commands) when asked for openings. Do not output '
+      'character card fields or lorebook JSON unless the user explicitly asks '
+      'for a draft preview in chat.';
 
   /// Injected into the chat composer Format button request.
   final String composerFormatNote;

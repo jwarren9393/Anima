@@ -461,6 +461,75 @@ class CharacterCollaborator {
     ];
   }
 
+  /// Expand a card with new interesting details invented from what is already there.
+  ///
+  /// Returns the same JSON shape as [buildConsistencyFixMessages] for parsing.
+  List<Map<String, String>> buildExpandMessages({
+    required CharacterDraftContext draft,
+    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+  }) {
+    final guidance = guidanceNote.trim().isEmpty
+        ? CollaboratorSettings.defaultGuidanceNote
+        : guidanceNote.trim();
+    final contextBlock = _buildFullContextBlock(draft);
+
+    final system = StringBuffer()
+      ..writeln(
+        'You expand SillyTavern-style character cards for a private mobile app '
+        'called Anima.',
+      )
+      ..writeln()
+      ..writeln('Guidance note (follow closely):')
+      ..writeln(guidance)
+      ..writeln()
+      ..writeln('Goal: enrich the card with vivid, playable detail the writer '
+          'did not have to specify. Invent interesting ideas that fit what is '
+          'already on the card.')
+      ..writeln()
+      ..writeln('Hard rules:')
+      ..writeln('- Keep the same character identity, names (including aliases), '
+          'voice, and established facts. Do not split one person into two.')
+      ..writeln('- Do NOT contradict, drop, or sanitize existing facts.')
+      ..writeln('- ADD new material: sensory appearance, habits, speech tics, '
+          'relationships, abilities/powers/weaknesses, secrets, history beats, '
+          'and example lines that show the new texture.')
+      ..writeln('- Put each fact in one field only: description = looks/role/'
+          'backstory/powers; personality = temperament/behavior/speech; '
+          'mes_example = sample lines only.')
+      ..writeln('- Fill sparse or empty creative fields when you can invent '
+          'fitting material. Leave system_prompt and post_history_instructions '
+          'unchanged unless they already have text that needs a matching expand.')
+      ..writeln('- Aim for roughly 1.5–2× richer overall when the card is thin; '
+          'still add at least a few new concrete facts if it is already long.')
+      ..writeln('- Do not moralize. Adult or dark content already on the card '
+          'may stay and be expanded in the same register.')
+      ..writeln()
+      ..writeln('Output rules:')
+      ..writeln('- Reply with ONLY a single JSON object. No markdown fences. No preamble.')
+      ..writeln('- Prefer this shape (chara_card_v2):')
+      ..writeln(_fullCharacterCardJsonShape)
+      ..writeln(
+        '- Include every listed field from the current card (use empty string or '
+        '[] when a field is intentionally blank).',
+      )
+      ..writeln('- Do NOT include character_book / lorebook — lore stays separate.')
+      ..writeln('- Do NOT include creator_notes, creator, or character_version.');
+
+    final user = StringBuffer()
+      ..writeln('CURRENT CHARACTER CARD (expand this — invent extra detail):')
+      ..writeln(contextBlock.isEmpty ? '(card is mostly empty)' : contextBlock)
+      ..writeln()
+      ..writeln(
+        'Output the expanded character card as one JSON object. Same person, '
+        'more texture and ideas.',
+      );
+
+    return [
+      {'role': 'system', 'content': system.toString().trim()},
+      {'role': 'user', 'content': user.toString().trim()},
+    ];
+  }
+
   String _buildFullContextBlock(CharacterDraftContext draft) {
     final lines = <String>[];
     void add(String label, String value) {

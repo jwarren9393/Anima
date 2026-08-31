@@ -273,6 +273,62 @@ class PersonaCollaborator {
     ];
   }
 
+  /// Expand a persona with new interesting details invented from existing fields.
+  List<Map<String, String>> buildExpandMessages({
+    required PersonaDraftContext draft,
+    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+  }) {
+    final guidance = guidanceNote.trim().isEmpty
+        ? CollaboratorSettings.defaultGuidanceNote
+        : guidanceNote.trim();
+    final contextBlock = _buildCompactContextBlock(draft);
+
+    final system = StringBuffer()
+      ..writeln(
+        'You expand a user persona ({{user}}) for a private mobile roleplay '
+        'app called Anima.',
+      )
+      ..writeln()
+      ..writeln('Guidance note (follow closely):')
+      ..writeln(guidance)
+      ..writeln()
+      ..writeln('Goal: enrich the persona with vivid, playable detail the '
+          'writer did not have to specify. Invent interesting ideas that fit.')
+      ..writeln()
+      ..writeln('Hard rules:')
+      ..writeln('- Keep the same player identity, names (including aliases), '
+          'voice, and established facts. Do not split one person into two.')
+      ..writeln('- Do NOT contradict, drop, or sanitize existing facts.')
+      ..writeln('- ADD new material: appearance texture, habits, speech, '
+          'abilities/powers/weaknesses, relationships, history, and goals.')
+      ..writeln('- Put each fact in one field only (identity vs appearance vs '
+          'personality vs background vs goals).')
+      ..writeln('- Fill sparse or empty fields when you can invent fitting material.')
+      ..writeln('- Aim for roughly 1.5–2× richer overall when the persona is thin; '
+          'still add at least a few new concrete facts if it is already long.')
+      ..writeln('- Do not moralize. Adult or dark content already present may stay '
+          'and be expanded in the same register.')
+      ..writeln()
+      ..writeln('Output rules:')
+      ..writeln('- Reply with ONLY a single JSON object. No markdown fences. No preamble.')
+      ..writeln('- Shape:')
+      ..writeln(_personaJsonShape)
+      ..writeln('- Include every listed field (use empty string when intentionally blank).');
+
+    final user = StringBuffer()
+      ..writeln('CURRENT PERSONA (expand this — invent extra detail):')
+      ..writeln(contextBlock.isEmpty ? '(persona is mostly empty)' : contextBlock)
+      ..writeln()
+      ..writeln(
+        'Output the expanded persona as one JSON object. Same player, more texture and ideas.',
+      );
+
+    return [
+      {'role': 'system', 'content': system.toString().trim()},
+      {'role': 'user', 'content': user.toString().trim()},
+    ];
+  }
+
   String _buildCompactContextBlock(PersonaDraftContext draft) {
     final lines = <String>[];
     void add(String label, String value) {
