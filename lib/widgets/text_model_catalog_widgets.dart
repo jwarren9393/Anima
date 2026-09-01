@@ -163,6 +163,8 @@ Future<String?> showTextModelPickerSheet({
   required String? selectedId,
   required NanoGptService nanoGptService,
   String initialContextFilter = NanoGptTextModelPerformanceFilter.contextAllId,
+  Set<String> favoriteIds = const {},
+  Future<void> Function(NanoGptModelInfo model)? onToggleFavorite,
 }) {
   return showModalBottomSheet<String>(
     context: context,
@@ -174,6 +176,8 @@ Future<String?> showTextModelPickerSheet({
         selectedId: selectedId,
         nanoGptService: nanoGptService,
         initialContextFilter: initialContextFilter,
+        favoriteIds: favoriteIds,
+        onToggleFavorite: onToggleFavorite,
       );
     },
   );
@@ -185,12 +189,16 @@ class _TextModelPickerSheet extends StatefulWidget {
     required this.selectedId,
     required this.nanoGptService,
     required this.initialContextFilter,
+    this.favoriteIds = const {},
+    this.onToggleFavorite,
   });
 
   final List<NanoGptModelInfo> models;
   final String? selectedId;
   final NanoGptService nanoGptService;
   final String initialContextFilter;
+  final Set<String> favoriteIds;
+  final Future<void> Function(NanoGptModelInfo model)? onToggleFavorite;
 
   @override
   State<_TextModelPickerSheet> createState() => _TextModelPickerSheetState();
@@ -203,6 +211,8 @@ class _TextModelPickerSheetState extends State<_TextModelPickerSheet> {
   String _maxTtftFilter = NanoGptTextModelPerformanceFilter.ttftAllId;
   TextModelSortMode _sortMode = TextModelSortMode.catalog;
   bool _loadingStats = false;
+  late final Set<String> _favoriteIds = Set.of(widget.favoriteIds);
+  bool _favoritesOnly = false;
 
   @override
   void initState() {
@@ -227,7 +237,7 @@ class _TextModelPickerSheetState extends State<_TextModelPickerSheet> {
   }
 
   List<NanoGptModelInfo> _filteredModels(String query) {
-    final filtered = NanoGptTextModelPerformanceFilter.applyAll(
+    var filtered = NanoGptTextModelPerformanceFilter.applyAll(
       models: widget.models,
       contextFilterId: _contextFilter,
       minTpsFilterId: _minTpsFilter,
@@ -235,6 +245,12 @@ class _TextModelPickerSheetState extends State<_TextModelPickerSheet> {
       sortMode: _sortMode,
       statsSource: widget.nanoGptService,
     );
+    if (_favoritesOnly) {
+      filtered = [
+        for (final model in filtered)
+          if (_favoriteIds.contains(model.id)) model,
+      ];
+    }
     final lower = query.trim().toLowerCase();
     if (lower.isEmpty) return filtered;
     return [
@@ -359,6 +375,27 @@ class _TextModelPickerSheetState extends State<_TextModelPickerSheet> {
                     children: [
                       Expanded(
                         child: _filterDropdown(
+                          label: 'List',
+                          value: _favoritesOnly ? 'favorites' : 'all',
+                          options: const ['all', 'favorites'],
+                          labelFor: (value) => value == 'favorites'
+                              ? 'Starred only'
+                              : 'All models',
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(
+                              () => _favoritesOnly = value == 'favorites',
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _filterDropdown(
                           label: 'Max TTFT',
                           value: _maxTtftFilter,
                           options: NanoGptTextModelPerformanceFilter.ttftFilterIds,
@@ -454,12 +491,40 @@ class _TextModelPickerSheetState extends State<_TextModelPickerSheet> {
                             ],
                           ),
                           isThreeLine: true,
-                          trailing: selected
-                              ? Icon(
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (widget.onToggleFavorite != null)
+                                IconButton(
+                                  tooltip: _favoriteIds.contains(model.id)
+                                      ? 'Remove favorite'
+                                      : 'Save as favorite',
+                                  icon: Icon(
+                                    _favoriteIds.contains(model.id)
+                                        ? Icons.star
+                                        : Icons.star_border,
+                                    color: _favoriteIds.contains(model.id)
+                                        ? Theme.of(
+                                            context,
+                                          ).colorScheme.tertiary
+                                        : null,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      if (!_favoriteIds.remove(model.id)) {
+                                        _favoriteIds.add(model.id);
+                                      }
+                                    });
+                                    widget.onToggleFavorite!(model);
+                                  },
+                                ),
+                              if (selected)
+                                Icon(
                                   Icons.check_circle,
                                   color: Theme.of(context).colorScheme.primary,
-                                )
-                              : null,
+                                ),
+                            ],
+                          ),
                           onTap: () => Navigator.pop(context, model.id),
                         );
                       },

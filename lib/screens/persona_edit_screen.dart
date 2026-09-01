@@ -11,11 +11,13 @@ import '../services/avatar_service.dart';
 import '../services/nanogpt_service.dart';
 import '../services/persona_collaborator.dart';
 import '../services/persona_service.dart';
+import '../services/character_service.dart';
 import '../services/persona_token_service.dart';
 import '../services/ai_field_changes.dart';
 import '../services/settings_service.dart';
 import '../widgets/character_token_badge.dart';
 import '../widgets/ai_field_changes_sheet.dart';
+import '../widgets/cross_reference_source_sheet.dart';
 import '../services/world_workshop_builder.dart';
 import '../widgets/anima_avatar.dart';
 import '../widgets/avatar_history_sheet.dart';
@@ -558,6 +560,145 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
     }
   }
 
+  /// Cross-reference: draft this persona from another character/persona card.
+  Future<void> _runCrossReferencePersona() async {
+    if (_expandBusy || _compactBusy || _aiCardBusy || _wandBusy != null) return;
+
+    final characters = await CharacterService().loadCharacters();
+    final personas = await widget.personaService.loadPersonas();
+    if (!mounted) return;
+
+    final source = await showCrossReferenceSourceSheet(
+      context: context,
+      characters: characters,
+      personas: personas,
+      excludeId: _personaId,
+      targetLabel: 'persona',
+    );
+    if (source == null || !mounted) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Base persona on another?'),
+        content: Text(
+          'AI will draft this persona using ${source.label} as shared-world '
+          'reference — borrowing facts that fit and inventing glue where the '
+          'source is quiet. You review every change before saving.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Draft from source'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _expandBusy = true);
+    try {
+      final before = _personaFromDraft();
+      final draft = _draftContext();
+      final collaborator =
+          await widget.settingsService.getCollaboratorSettings();
+      final messages = _collaborator.buildCrossReferenceMessages(
+        draft: draft,
+        sourceLabel: source.label,
+        sourceBlock: source.block,
+        notes: source.notes,
+        guidanceNote: collaborator.guidanceNote,
+      );
+      final model = await widget.settingsService.getModel();
+      final sampling = WorldWorkshopBuilder.consistencyFixSampling(
+        await widget.settingsService.getSampling(),
+      );
+      final baseUrl = await widget.settingsService.getApiBaseUrl();
+
+      Persona? referenced;
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final raw = await widget.nanoGptService.complete(
+          model: model,
+          messages: messages,
+          baseUrl: baseUrl,
+          sampling: sampling,
+        );
+        try {
+          referenced = _workshopBuilder.parsePersonaUpdateJson(
+            raw,
+            original: before,
+          );
+          break;
+        } on FormatException {
+          if (attempt == 1) rethrow;
+        }
+      }
+      if (referenced == null) {
+        throw const FormatException(
+          'Could not find persona JSON in the AI reply. Try again.',
+        );
+      }
+
+      if (!mounted) return;
+      final changes = comparePersonaFields(before, referenced);
+      if (changes.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No changes were suggested. Try adding a connection note or '
+              'another source.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      final selected = await showAiFieldChangesSheet(
+        context: context,
+        title: 'Review cross-referenced persona',
+        subtitle:
+            'Check fields to apply. Tap a row to compare before and after.',
+        changes: changes,
+        applyLabel: 'Update persona',
+      );
+      if (selected == null || !mounted) return;
+
+      final merged = mergePersonaChanges(before, referenced, selected);
+      setState(() => _applyPersonaFields(merged));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Applied ${selected.length} field${selected.length == 1 ? '' : 's'} '
+            'from ${source.label}.',
+          ),
+        ),
+      );
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } on NanoGptCancelledException {
+      // Ignore.
+    } on NanoGptException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Cross-reference failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _expandBusy = false);
+    }
+  }
+
   PersonaDraftContext _draftContext() {
     return PersonaDraftContext(
       name: _nameController.text,
@@ -915,6 +1056,7 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
             onSelected: (value) {
               if (value == 'compact') _runCompactPersona();
               if (value == 'expand') _runExpandPersona();
+              if (value == 'cross_reference') _runCrossReferencePersona();
             },
             itemBuilder: (context) => [
               const PopupMenuItem(
@@ -924,6 +1066,10 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
               const PopupMenuItem(
                 value: 'expand',
                 child: Text('Expand persona…'),
+              ),
+              const PopupMenuItem(
+                value: 'cross_reference',
+                child: Text('Base on another card…'),
               ),
             ],
           ),

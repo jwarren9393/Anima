@@ -136,5 +136,44 @@ void main() {
       expect(user, contains('Rin'));
       expect(user, contains('Tall scout.'));
     });
+
+    test('cross-reference grounds target in source world', () {
+      final messages = collaborator.buildCrossReferenceMessages(
+        draft: const CharacterDraftContext(
+          name: 'Rin',
+          description: 'Tall scout.',
+        ),
+        sourceLabel: 'Character: Mira',
+        sourceBlock: 'Name:\nMira\n\nPersonality:\nBold guild captain.',
+        notes: 'Old rivals from the Guild.',
+      );
+      final system = messages[0]['content']!;
+      final user = messages[1]['content']!;
+
+      expect(messages.length, 2);
+      expect(system, contains('CROSS-REFERENCE'));
+      expect(system, contains('The TARGET comes first'));
+      expect(system, contains('do NOT copy the source bio wholesale'));
+      expect(system, contains('chara_card_v2'));
+      expect(user, contains('SOURCE CARD (reference material — Character: Mira)'));
+      expect(user, contains('Bold guild captain.'));
+      expect(user, contains('TARGET CHARACTER CARD'));
+      expect(user, contains('Rin'));
+      expect(user, contains('Tall scout.'));
+      expect(user, contains('Old rivals from the Guild.'));
+    });
+
+    test('cross-reference omits connection notes when empty', () {
+      final messages = collaborator.buildCrossReferenceMessages(
+        draft: const CharacterDraftContext(name: 'Rin'),
+        sourceLabel: 'Persona: Ash',
+        sourceBlock: 'Name:\nAsh',
+      );
+      expect(messages[1]['content'], isNot(contains('HOW THEY CONNECT')));
+      expect(
+        messages[1]['content'],
+        contains('SOURCE CARD (reference material — Persona: Ash)'),
+      );
+    });
   });
 }

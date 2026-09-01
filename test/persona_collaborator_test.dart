@@ -101,5 +101,30 @@ void main() {
       expect(user, contains('Val'));
       expect(user, contains('Heir of House Blackwood.'));
     });
+
+    test('cross-reference grounds persona in source world', () {
+      final messages = collaborator.buildCrossReferenceMessages(
+        draft: const PersonaDraftContext(
+          name: 'Val',
+          description: 'Heir of House Blackwood.',
+        ),
+        sourceLabel: 'Character: Mira',
+        sourceBlock: 'Name:\nMira\n\nPersonality:\nBold guild captain.',
+        notes: 'Childhood friend of Mira.',
+      );
+      final system = messages[0]['content']!;
+      final user = messages[1]['content']!;
+
+      expect(messages.length, 2);
+      expect(system, contains('CROSS-REFERENCE'));
+      expect(system, contains('The TARGET comes first'));
+      expect(system, contains('{{user}}'));
+      expect(user, contains('SOURCE CARD (reference material — Character: Mira)'));
+      expect(user, contains('Bold guild captain.'));
+      expect(user, contains('TARGET PERSONA'));
+      expect(user, contains('Val'));
+      expect(user, contains('Heir of House Blackwood.'));
+      expect(user, contains('Childhood friend of Mira.'));
+    });
   });
 }

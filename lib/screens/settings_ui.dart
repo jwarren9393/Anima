@@ -39,11 +39,13 @@ class SettingsUi {
     required String label,
     String? helperText,
     String? hintText,
+    Widget? suffixIcon,
   }) {
     return InputDecoration(
       labelText: label,
       helperText: helperText,
       hintText: hintText,
+      suffixIcon: suffixIcon,
       border: const OutlineInputBorder(),
     );
   }

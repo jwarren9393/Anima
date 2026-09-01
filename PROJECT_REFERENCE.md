@@ -192,7 +192,7 @@ Anima/
 |------|------|
 | `nanogpt_service.dart` | Streaming chat, `complete()`, catalogs, images, credits |
 | `api_key_service.dart` | Secure API key |
-| `settings_service.dart` | All preferences + `SamplingSettings` + `CollaboratorSettings` |
+| `settings_service.dart` | All preferences + `SamplingSettings` + `CollaboratorSettings` + `FavoriteModel` (starred NanoGPT models) |
 | `prompt_builder.dart` | System prompt, post-history, narrator/director blocks, macros |
 | `chat_context_service.dart` | History trim, memory summarize prompts |
 | `chat_service.dart` | Save/load `anima_chats.json` |
@@ -205,8 +205,8 @@ Anima/
 | `roadway_cache_service.dart` | Per-chat cached path options |
 | `message_formatter.dart` | Composer ✨ Format |
 | `reply_rewrite_service.dart` | Rewrite reply modes |
-| `character_collaborator.dart` | Character wand prompts |
-| `persona_collaborator.dart` | Persona wand |
+| `character_collaborator.dart` | Character wand prompts (+ Compact / Expand / cross-reference) |
+| `persona_collaborator.dart` | Persona wand (+ Compact / Expand / cross-reference) |
 | `lore_collaborator.dart` | Lore entry wand + keyword suggest |
 | `world_workshop_builder.dart` | All Creation Center AI prompts + JSON parsers |
 | `world_workshop_service.dart` | Workshop persistence |
@@ -348,6 +348,7 @@ All library files live in **one user-owned folder** (`AppDataRoot`, default `Doc
 - Category filter (incl. **Uncensored & derestricted (broad)** heuristic).
 - Provider filter.
 - **Browse models** sheet: context window, max output, params, TPS, TTFT, uptime, description, capabilities, pricing.
+- **Favorite models** — tap the star on any model row or on the selected model card to save it. Starred models get a ⭐ badge and a **Favorites** filter at the top of the sheet. Stored in `anima_settings.json` (`FavoriteModel`, newest-first, deduped by id) — survives restarts, included in backup/sync.
 
 ---
 
@@ -524,6 +525,7 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 - **Character & persona builds** (Settings) — shared model + sampling for **full JSON** card generation; separate **character** and **persona** build prompts (`CharacterBuildSettings` in `settings_service.dart`). Used by Creation Center export, chat import sheets, and AI builders — **not** field wands.
 - **Duplicate** — ⋮ menu on Characters and Personas list copies with new id.
 - **Compact / Expand** — AI shortens or enriches fields with a review sheet before apply (Compact: card, persona, lorebook, entry; **Expand: character card and persona only** — the AI invents new interesting details from what’s already there, no prompts needed).
+- **Base on another card… (cross-reference)** — character + persona editor ⋮ menus. Pick any other character or persona (`cross_reference_source_sheet.dart` — Characters/Personas tabs + optional "How should they connect?" note) and the AI drafts the card being edited grounded in the source's shared world. Prompt law (`buildCrossReferenceMessages` in both collaborators): **the target comes first** — its name/identity is never replaced; borrowed facts (factions, places, history, speech register) are re-pointed at the target; glue is invented where the source is silent; never copy the source bio wholesale. Same JSON output shape as Expand → reuses `parseCharacterConsistencyFixJson` / `parsePersonaUpdateJson` + the `AiFieldChangesSheet` review flow. Works on brand-new (blank) cards too, which is the fast cast-building path.
 - **~token badges** — approximate prompt token counts on lists and editors.
 
 ### Personas

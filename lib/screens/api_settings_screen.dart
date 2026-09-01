@@ -46,6 +46,7 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
   String? _imageModelsError;
   List<NanoGptImageModelInfo> _imageModels = const [];
   bool _loadingSelectedRuntime = false;
+  List<FavoriteModel> _favorites = const [];
 
   @override
   void initState() {
@@ -58,12 +59,14 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
     final model = await widget.settingsService.getModel();
     final imageModel = await widget.settingsService.getImageModel();
     final subscription = await widget.settingsService.getUseSubscriptionApi();
+    final favorites = await widget.settingsService.getFavoriteModels();
     if (!mounted) return;
     setState(() {
       _hasKey = key != null;
       _modelController.text = model;
       _imageModelController.text = imageModel;
       _useSubscription = subscription;
+      _favorites = favorites;
       _loading = false;
     });
     await Future.wait([_loadModels(), _loadImageModels()]);
@@ -209,6 +212,32 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
     return null;
   }
 
+  Set<String> get _favoriteIds =>
+      {for (final favorite in _favorites) favorite.id};
+
+  /// Star / unstar the model currently in the id field.
+  Future<void> _toggleFavoriteCurrent() async {
+    final model = _modelController.text.trim();
+    if (model.isEmpty) return;
+    final provider = _selectedModelInfo?.ownedBy ?? '';
+    await widget.settingsService.toggleFavoriteModel(
+      model,
+      provider: provider,
+    );
+    final favorites = await widget.settingsService.getFavoriteModels();
+    if (!mounted) return;
+    setState(() => _favorites = favorites);
+  }
+
+  /// Apply a favorited model id to the field (not saved until Save).
+  Future<void> _onPickFavorite(String id) async {
+    setState(() {
+      _modelController.text = id;
+      _selectedProvider = _providerForCurrentModel();
+    });
+    await _refreshSelectedRuntimeStats();
+  }
+
   Future<void> _refreshSelectedRuntimeStats() async {
     final id = _modelController.text.trim();
     if (id.isEmpty) return;
@@ -227,6 +256,16 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
       selectedId: _modelController.text.trim(),
       nanoGptService: widget.nanoGptService,
       initialContextFilter: _selectedContextFilter,
+      favoriteIds: _favoriteIds,
+      onToggleFavorite: (model) async {
+        await widget.settingsService.toggleFavoriteModel(
+          model.id,
+          provider: model.ownedBy,
+        );
+        final favorites = await widget.settingsService.getFavoriteModels();
+        if (!mounted) return;
+        setState(() => _favorites = favorites);
+      },
     );
     if (picked == null || !mounted) return;
     setState(() => _modelController.text = picked);
@@ -629,6 +668,26 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
                     hintText: SettingsService.defaultModel,
                     helperText:
                         'Filled by the dropdowns, or type a custom id yourself',
+                    suffixIcon: IconButton(
+                      tooltip: _favoriteIds.contains(
+                            _modelController.text.trim(),
+                          )
+                          ? 'Remove from favorites'
+                          : 'Save as favorite',
+                      onPressed: _modelController.text.trim().isEmpty
+                          ? null
+                          : _toggleFavoriteCurrent,
+                      icon: Icon(
+                        _favoriteIds.contains(_modelController.text.trim())
+                            ? Icons.star
+                            : Icons.star_border,
+                        color: _favoriteIds.contains(
+                              _modelController.text.trim(),
+                            )
+                            ? Theme.of(context).colorScheme.tertiary
+                            : null,
+                      ),
+                    ),
                   ),
                   onChanged: (_) {
                     setState(() {
@@ -637,6 +696,46 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen> {
                     _refreshSelectedRuntimeStats();
                   },
                 ),
+                if (_favorites.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    key: ValueKey('fav-${_modelController.text.trim()}'),
+                    initialValue:
+                        _favoriteIds.contains(_modelController.text.trim())
+                            ? _modelController.text.trim()
+                            : null,
+                    isExpanded: true,
+                    decoration: SettingsUi.fieldDecoration(
+                      label: 'Favorite models',
+                      helperText: 'Your starred models — tap to switch',
+                    ),
+                    items: [
+                      for (final favorite in _favorites)
+                        DropdownMenuItem(
+                          value: favorite.id,
+                          child: Text(
+                            favorite.provider.isEmpty
+                                ? favorite.id
+                                : '${favorite.id}  ·  ${favorite.provider}',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                    onChanged: (id) {
+                      if (id == null || id == _modelController.text.trim()) {
+                        return;
+                      }
+                      _onPickFavorite(id);
+                    },
+                  ),
+                ] else ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'No favorite models yet — tap the star to remember the '
+                    'current model, or star rows in Browse models.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
                 const SizedBox(height: 16),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,

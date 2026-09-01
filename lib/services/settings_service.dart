@@ -392,6 +392,24 @@ class CollaboratorSettings {
   }
 }
 
+/// A starred NanoGPT model — remembered for quick switching in API settings.
+class FavoriteModel {
+  const FavoriteModel({required this.id, this.provider = ''});
+
+  final String id;
+  final String provider;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        if (provider.isNotEmpty) 'provider': provider,
+      };
+
+  static FavoriteModel fromJson(Map<String, dynamic> json) => FavoriteModel(
+        id: '${json['id'] ?? ''}'.trim(),
+        provider: '${json['provider'] ?? ''}'.trim(),
+      );
+}
+
 /// App preferences. When a data folder is set, these live in `anima_settings.json`.
 class SettingsService {
   SettingsService({
@@ -468,6 +486,7 @@ class SettingsService {
   static const _contextAutoSummarizeKey = 'context_auto_summarize';
   static const _contextSummarizeEveryKey = 'context_summarize_every';
   static const _contextKeepRecentKey = 'context_summarize_keep_recent';
+  static const _favoriteModelsKey = 'nanogpt_favorite_models';
   static const _syncFilePathKey = 'sync_file_path';
   static const _syncContentUriKey = 'sync_content_uri';
   static const _syncLastPushKey = 'sync_last_push_at';
@@ -515,6 +534,7 @@ class SettingsService {
     _contextAutoSummarizeKey,
     _contextSummarizeEveryKey,
     _contextKeepRecentKey,
+    _favoriteModelsKey,
   ];
 
   static const storedKeys = <String>[
@@ -579,6 +599,84 @@ class SettingsService {
       return;
     }
     await _storage.write(key: _imageModelStorageKey, value: trimmed);
+  }
+
+  /// Starred models (API & connection → Favorite models). Newest first,
+  /// deduplicated by id; survives backups and cross-device sync.
+  Future<List<FavoriteModel>> getFavoriteModels() async {
+    final raw = await _storage.read(key: _favoriteModelsKey);
+    if (raw == null || raw.trim().isEmpty) return const [];
+    final List<dynamic> decoded;
+    try {
+      final value = jsonDecode(raw);
+      if (value is! List) return const [];
+      decoded = value;
+    } on FormatException {
+      return const [];
+    }
+    final out = <FavoriteModel>[];
+    final seen = <String>{};
+    for (final item in decoded) {
+      if (item is! Map) continue;
+      final favorite = FavoriteModel.fromJson(
+        Map<String, dynamic>.from(item),
+      );
+      if (favorite.id.isEmpty || !seen.add(favorite.id)) continue;
+      out.add(favorite);
+    }
+    return out;
+  }
+
+  Future<void> saveFavoriteModels(List<FavoriteModel> favorites) async {
+    final existing = await getFavoriteModels();
+    final seen = {for (final f in existing) f.id};
+    final merged = <FavoriteModel>[...existing];
+    for (final favorite in favorites) {
+      final id = favorite.id.trim();
+      if (id.isEmpty || !seen.add(id)) continue;
+      merged.add(FavoriteModel(id: id, provider: favorite.provider.trim()));
+    }
+    if (merged.isEmpty) {
+      await _storage.delete(key: _favoriteModelsKey);
+      return;
+    }
+    await _storage.write(
+      key: _favoriteModelsKey,
+      value: jsonEncode([for (final favorite in merged) favorite.toJson()]),
+    );
+  }
+
+  /// Adds [modelId] to favorites, or removes it when already starred.
+  /// Returns true when the model is favorited after the call.
+  Future<bool> toggleFavoriteModel(
+    String modelId, {
+    String provider = '',
+  }) async {
+    final trimmed = modelId.trim();
+    if (trimmed.isEmpty) return false;
+    final current = await getFavoriteModels();
+    final exists = current.any((favorite) => favorite.id == trimmed);
+    final List<FavoriteModel> updated;
+    if (exists) {
+      updated = [
+        for (final favorite in current)
+          if (favorite.id != trimmed) favorite,
+      ];
+    } else {
+      updated = [
+        FavoriteModel(id: trimmed, provider: provider.trim()),
+        ...current,
+      ];
+    }
+    if (updated.isEmpty) {
+      await _storage.delete(key: _favoriteModelsKey);
+    } else {
+      await _storage.write(
+        key: _favoriteModelsKey,
+        value: jsonEncode([for (final f in updated) f.toJson()]),
+      );
+    }
+    return !exists;
   }
 
   Future<String?> getSelectedCharacterId() async {

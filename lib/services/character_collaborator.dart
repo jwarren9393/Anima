@@ -530,6 +530,107 @@ class CharacterCollaborator {
     ];
   }
 
+  /// Cross-reference: draft this card with another character/persona card as
+  /// shared-world reference material. The target identity in [draft] stays;
+  /// facts from the source are re-pointed at the target.
+  ///
+  /// Returns the same JSON shape as [buildExpandMessages] for parsing.
+  List<Map<String, String>> buildCrossReferenceMessages({
+    required CharacterDraftContext draft,
+    required String sourceLabel,
+    required String sourceBlock,
+    String notes = '',
+    String guidanceNote = CollaboratorSettings.defaultGuidanceNote,
+  }) {
+    final guidance = guidanceNote.trim().isEmpty
+        ? CollaboratorSettings.defaultGuidanceNote
+        : guidanceNote.trim();
+    final contextBlock = _buildFullContextBlock(draft);
+    final trimmedNotes = notes.trim();
+
+    final system = StringBuffer()
+      ..writeln(
+        'You adapt SillyTavern-style character cards for a private mobile app '
+        'called Anima.',
+      )
+      ..writeln()
+      ..writeln('Guidance note (follow closely):')
+      ..writeln(guidance)
+      ..writeln()
+      ..writeln(
+        'Task: CROSS-REFERENCE. The SOURCE card is reference material; the '
+        'TARGET is the character card you are drafting. Ground the target in '
+        'the source’s shared world so both cards fit together in the same '
+        'chats.',
+      )
+      ..writeln()
+      ..writeln('Hard rules:')
+      ..writeln(
+        '- The TARGET comes first. Keep its name (and aliases) exactly; never '
+        'replace the target with the source character.',
+      )
+      ..writeln(
+        '- Keep everything already written on the target unless it directly '
+        'conflicts with a borrowed fact; resolve conflicts in favor of the '
+        'target.',
+      )
+      ..writeln(
+        '- Borrow concrete shared-world facts from the SOURCE (places, '
+        'factions, organizations, events, history, speech register) and '
+        're-point them at the target.',
+      )
+      ..writeln(
+        '- Invent glue where the source is silent: how the target fits the '
+        'same world, and optionally how they know of or cross paths with the '
+        'source.',
+      )
+      ..writeln(
+        '- The target is a distinct person: do NOT copy the source bio '
+        'wholesale or duplicate the source identity, appearance, or voice.',
+      )
+      ..writeln(
+        '- Put each fact in one field only: description = looks/role/backstory; '
+        'personality = temperament/behavior/speech; mes_example = sample lines '
+        'only.',
+      )
+      ..writeln(
+        '- Fill sparse or empty creative fields with grounded material. Leave '
+        'system_prompt and post_history_instructions unchanged.',
+      )
+      ..writeln(
+        '- Do not moralize. Match the register of the source and target cards.',
+      )
+      ..writeln()
+      ..writeln('Output rules:')
+      ..writeln('- Reply with ONLY a single JSON object. No markdown fences. No preamble.')
+      ..writeln('- Prefer this shape (chara_card_v2):')
+      ..writeln(_fullCharacterCardJsonShape)
+      ..writeln(
+        '- Include every listed field from the target card (use empty string or '
+        '[] when a field is intentionally blank).',
+      )
+      ..writeln('- Do NOT include character_book / lorebook — lore stays separate.')
+      ..writeln('- Do NOT include creator_notes, creator, or character_version.');
+
+    final userParts = <String>[
+      'SOURCE CARD (reference material — $sourceLabel):',
+      sourceBlock.trim().isEmpty ? '(source card is empty)' : sourceBlock.trim(),
+      'TARGET CHARACTER CARD (draft this):',
+      contextBlock.isEmpty
+          ? '(target card is mostly empty — draft it from the source’s world)'
+          : contextBlock,
+      if (trimmedNotes.isNotEmpty) 'HOW THEY CONNECT (follow this):\n$trimmedNotes',
+      'Output the cross-referenced target card as one JSON object. Same '
+          'target, grounded in the source’s world.',
+    ];
+    final user = userParts.join('\n\n');
+
+    return [
+      {'role': 'system', 'content': system.toString().trim()},
+      {'role': 'user', 'content': user},
+    ];
+  }
+
   String _buildFullContextBlock(CharacterDraftContext draft) {
     final lines = <String>[];
     void add(String label, String value) {

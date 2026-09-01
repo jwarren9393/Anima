@@ -361,7 +361,8 @@ Detailed sections below follow this order where possible.
 **AI model (chat)**
 
 - Live NanoGPT **model catalog** (`detailed=true`).
-- **Category** filter first: **All**, **Uncensored & derestricted (broad)** (NanoGPT’s Uncensored category plus any model whose id/name/description contains uncensored, abliterated, derestricted, unfiltered, or unrestricted), then each NanoGPT category (Roleplay, Coding, etc.).
+- **Category** filter first: **All**, **Uncensored & derestricted (broad)** ..., then each NanoGPT category.
+- **Favorite models** — tap the star on any row in the browse sheet (or on the selected model card) to save models that worked well. Starred models get a ⭐ badge and a quick **Favorites** filter at the top of the sheet so you can jump back to them without re-searching. Stored in Anima settings and included in backup/sync.
 - **Provider** filter second: **Auto** first (`auto-model`, `auto-model-basic`, `auto-model-standard`, `auto-model-premium`), then A–Z — scoped to the category filter.
 - Status line shows filtered count (e.g. `54 of 200 models · 12 providers`).
 - **Selected model card** — summary for your current pick: stat chips, description, capability chips, pricing/Included; loads **TPS / TTFT / uptime %** from NanoGPT’s providers API when available.
@@ -370,7 +371,12 @@ Detailed sections below follow this order where possible.
 - Refresh catalog; **custom model id** field still works for ids not in the list.
 - Save model separately from API key.
 
-**Image model (avatars)**
+**Favorite models (starred)**
+
+- Tap the **star** next to any model in the Browse sheet, or star/unstar right from the selected model card — keeps models that worked well so you don't have to re-find them when experimenting.
+- Starred models appear in a quick **Favorites** filter at the top of the browse sheet and get a ⭐ badge in the model card and rows.
+- Stored per-device in your Anima settings (survives restarts, included in backup/restore and sync).
+- Newest-first ordering; deduplicated by model id.
 
 - Separate picker for **Generate avatar**.
 - **Use subscription API on:** subscription image catalog only (hides paid wallet models).
@@ -403,7 +409,7 @@ Multiple **{{user}}** identities.
 - **Set as default** for new chats (long-press on list also works).
 - Per-chat persona via chat ⋮ (can differ from default).
 - Tap **your** avatar in chat → persona editor.
-- **⋮ editor menu** → **Compact persona…** (AI shortens fields, review before apply) or **Expand persona…** (AI invents new interesting details/ideas from what’s already there — no description needed; review before apply).
+- **⋮ editor menu** → **Compact persona…** (AI shortens fields, review before apply), **Expand persona…** (AI invents new interesting details/ideas from what’s already there — no description needed; review before apply), or **Base on another card…** (cross-reference — AI drafts this persona from another character/persona’s shared world so your cast fits together; optional connection note; review before apply).
 
 ### 4.3 Characters
 
@@ -445,6 +451,7 @@ One section visible at a time: **Identity** · **Story** · **Chat** · **Lore**
 - **Fix inconsistencies** — after a check, review AI-proposed field changes and **Update card** in one tap (card text fields only; lorebook unchanged).
 - **Compact card…** — AI shortens verbose fields (review before apply).
 - **Expand card…** — AI adds new interesting details, ideas, and texture from what’s already on the card (no description needed; review before apply).
+- **Base on another card…** — cross-reference: pick another character or persona and the AI drafts **this** card grounded in that card’s shared world (factions, places, history, relationships re-pointed at this card). Optional “How should they connect?” note (e.g. *“make her Mira’s estranged sister”*). The card you’re editing keeps its identity — the source is reference material, never a replacement. Review before apply.
 - **Generate avatar** — NanoGPT image sheet.
 
 **AI card builder** (plain-English generate/update slim fields: description, personality, mes_example, tags — not scenario, greetings, or per-card system/post-history).

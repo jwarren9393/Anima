@@ -237,23 +237,27 @@ IDENTITY / ALIAS RULES (critical):
     WorkshopReplyLength replyLength = WorkshopReplyLength.normal,
   }) {
     final withPenalties = base.copyWith(
-      frequencyPenalty: base.frequencyPenalty < 0.35 ? 0.4 : base.frequencyPenalty,
-      presencePenalty: base.presencePenalty < 0.15 ? 0.18 : base.presencePenalty,
+      frequencyPenalty: base.frequencyPenalty < 0.35
+          ? 0.4
+          : base.frequencyPenalty,
+      presencePenalty: base.presencePenalty < 0.15
+          ? 0.18
+          : base.presencePenalty,
       repetitionPenalty: base.repetitionPenalty ?? 1.08,
     );
     return switch (replyLength) {
       WorkshopReplyLength.short => _workshopChatWithCap(
-          withPenalties,
-          cap: workshopChatShortMaxTokens,
-        ),
+        withPenalties,
+        cap: workshopChatShortMaxTokens,
+      ),
       WorkshopReplyLength.normal => _workshopChatWithFloor(
-          withPenalties,
-          floor: workshopChatMinMaxTokens,
-        ),
+        withPenalties,
+        floor: workshopChatMinMaxTokens,
+      ),
       WorkshopReplyLength.detailed => _workshopChatWithFloor(
-          withPenalties,
-          floor: workshopChatDetailedMaxTokens,
-        ),
+        withPenalties,
+        floor: workshopChatDetailedMaxTokens,
+      ),
     };
   }
 
@@ -364,21 +368,21 @@ TARGET FIELD RULES (read the user's notes carefully):
     final lengthNote = switch (replyLength) {
       WorkshopReplyLength.short =>
         'Reply length: SHORT — give a concise, focused answer (a few paragraphs '
-        'at most). Skip long question lists unless the user explicitly asks for them.',
+            'at most). Skip long question lists unless the user explicitly asks for them.',
       WorkshopReplyLength.normal =>
         'Reply length: NORMAL — balanced brainstorming. You may ask follow-up '
-        'questions, but keep structure clear and avoid huge walls of text.',
+            'questions, but keep structure clear and avoid huge walls of text.',
       WorkshopReplyLength.detailed =>
         'Reply length: DETAILED — the user wants a thorough brainstorm. Lay out '
-        'ideas fully, ask multiple follow-up questions, and finish every numbered '
-        'or bulleted list you start.',
+            'ideas fully, ask multiple follow-up questions, and finish every numbered '
+            'or bulleted list you start.',
     };
     final modeNote = switch (mode) {
       WorkshopMode.explore =>
         'Mode: EXPLORE — brainstorm freely, ask questions, propose ideas.',
       WorkshopMode.canon =>
         'Mode: CANON — consolidate established facts, flag contradictions, '
-        'and help lock in what is officially true in this world.',
+            'and help lock in what is officially true in this world.',
       WorkshopMode.characters =>
         'Mode: CHARACTERS — focus on cast, voices, relationships, and motives.',
       WorkshopMode.playtest =>
@@ -519,9 +523,7 @@ pad with repetition to fill the token budget.
     for (final c in allCharacters) {
       if (c.sourceWorkshopId == workshop.id && seen.add(c.id)) cast.add(c);
     }
-    cast.sort(
-      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-    );
+    cast.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     return cast;
   }
 
@@ -594,8 +596,8 @@ ${lines.join('\n')}
 
     final embeddedLoreCount = options.includeEmbeddedCharacterLore
         ? characters
-            .where((c) => (c.lorebook?.entries.isNotEmpty ?? false))
-            .length
+              .where((c) => (c.lorebook?.entries.isNotEmpty ?? false))
+              .length
         : 0;
 
     return WorkshopSourceContext(
@@ -605,10 +607,7 @@ ${lines.join('\n')}
       memorySummary: options.includeMemorySummary
           ? session.memorySummary.trim()
           : '',
-      recentTranscript: formatRoleplayTranscript(
-        recent,
-        userName: userName,
-      ),
+      recentTranscript: formatRoleplayTranscript(recent, userName: userName),
       recentMessageCount: recent.length,
       charactersText: options.includeCharacters
           ? formatCharactersForImport(characters)
@@ -617,14 +616,17 @@ ${lines.join('\n')}
       personaText: options.includePersona
           ? formatPersonaForImport(persona)
           : '',
-      personaName: options.includePersona &&
-              persona?.name.trim().isNotEmpty == true
+      personaName:
+          options.includePersona && persona?.name.trim().isNotEmpty == true
           ? persona!.name.trim()
           : null,
       loreReferenceText: formatLorebooksForImport(
-        linkedLorebooks:
-            options.includeGlobalLorebooks ? linkedLorebooks : const [],
-        characters: options.includeEmbeddedCharacterLore ? characters : const [],
+        linkedLorebooks: options.includeGlobalLorebooks
+            ? linkedLorebooks
+            : const [],
+        characters: options.includeEmbeddedCharacterLore
+            ? characters
+            : const [],
       ),
       lorebookNames: loreNames,
       authorsNote: options.includeAuthorsNote
@@ -905,8 +907,9 @@ $brief
     if (brief.isEmpty) {
       throw ArgumentError('userBrief must not be empty');
     }
-    final name =
-        existing.name.trim().isEmpty ? 'Character' : existing.name.trim();
+    final name = existing.name.trim().isEmpty
+        ? 'Character'
+        : existing.name.trim();
     final currentCard = formatCharacterCardJson(existing);
 
     final system =
@@ -1073,8 +1076,9 @@ $brief
     final guidance = buildPromptNote.trim().isEmpty
         ? CharacterBuildSettings.defaultPromptNote
         : buildPromptNote.trim();
-    final name =
-        existing.name.trim().isEmpty ? 'Character' : existing.name.trim();
+    final name = existing.name.trim().isEmpty
+        ? 'Character'
+        : existing.name.trim();
     final currentCard = formatCharacterCardJson(existing);
     final notes = changeNotes.trim();
     final userName = persona?.name.trim().isNotEmpty == true
@@ -1179,16 +1183,15 @@ $transcriptBlock
     String userName = 'User',
   }) {
     final transcript = StringBuffer();
-    final safeUser =
-        userName.trim().isEmpty ? 'User' : userName.trim();
+    final safeUser = userName.trim().isEmpty ? 'User' : userName.trim();
     for (final message in messages) {
       final text = message.text.trim();
       if (text.isEmpty) continue;
       final who = message.isUser
           ? safeUser
           : (message.speakerName?.trim().isNotEmpty == true
-              ? message.speakerName!.trim()
-              : 'Character');
+                ? message.speakerName!.trim()
+                : 'Character');
       transcript.writeln('$who: $text');
       transcript.writeln();
     }
@@ -1214,7 +1217,9 @@ $transcriptBlock
     for (final character in characters) {
       buffer.writeln();
       buffer.writeln();
-      buffer.writeln('### ${character.name.trim().isEmpty ? 'Unnamed' : character.name.trim()}');
+      buffer.writeln(
+        '### ${character.name.trim().isEmpty ? 'Unnamed' : character.name.trim()}',
+      );
       void field(String label, String value) {
         final trimmed = value.trim();
         if (trimmed.isEmpty) return;
@@ -1308,7 +1313,7 @@ $transcriptBlock
     if (cast.isEmpty) return '';
     final lines = <String>[
       'WORKSHOP CAST (already have or will get character cards — do NOT duplicate '
-      'these people as full lorebook bio entries):',
+          'these people as full lorebook bio entries):',
     ];
     for (final character in cast) {
       final name = character.name.trim();
@@ -1317,7 +1322,9 @@ $transcriptBlock
       if (role.isEmpty) {
         lines.add('- $name');
       } else {
-        final short = role.length > 120 ? '${role.substring(0, 117).trimRight()}…' : role;
+        final short = role.length > 120
+            ? '${role.substring(0, 117).trimRight()}…'
+            : role;
         lines.add('- $name — $short');
       }
     }
@@ -1504,7 +1511,7 @@ ${mergeDepth.mergeRules}
 CURRENT PERSONA (preserve established facts; merge workshop updates):
 $currentPersona
 
-$imported$summaryBlock${canonBlock.isEmpty ? '' : '$canonBlock\n'}${draft}${source.isEmpty ? '' : '''
+$imported$summaryBlock${canonBlock.isEmpty ? '' : '$canonBlock\n'}$draft${source.isEmpty ? '' : '''
 Linked lorebook:
 
 $source
@@ -1698,7 +1705,7 @@ ${mergeDepth.mergeRules}
     final draft = formatLatestWorkshopDraftBlock(conversation);
     final user =
         '''
-$imported${draft}${source.isEmpty ? '' : '''
+$imported$draft${source.isEmpty ? '' : '''
 Use this linked lorebook as source material:
 
 $source
@@ -1792,7 +1799,9 @@ ${formatTranscript(conversation)}
     final guidance = buildPromptNote.trim().isEmpty
         ? CharacterBuildSettings.defaultPromptNote
         : buildPromptNote.trim();
-    final name = existing.name.trim().isEmpty ? 'Character' : existing.name.trim();
+    final name = existing.name.trim().isEmpty
+        ? 'Character'
+        : existing.name.trim();
     final currentCard = formatCharacterCardJson(existing);
 
     final system =
@@ -1839,7 +1848,7 @@ ${characterFieldSplitRules(mergeDepth)}
 CURRENT CHARACTER CARD (preserve established facts; merge workshop updates):
 $currentCard
 
-$imported${draft}${source.isEmpty ? '' : '''
+$imported$draft${source.isEmpty ? '' : '''
 Use this linked lorebook as additional source material:
 
 $source
@@ -1918,7 +1927,9 @@ ${formatTranscript(conversation)}
       tokenBudget: fixed.tokenBudget,
       recursiveScanning: fixed.recursiveScanning,
       entries: fixed.entries,
-      extensions: fixed.extensions.isEmpty ? original.extensions : fixed.extensions,
+      extensions: fixed.extensions.isEmpty
+          ? original.extensions
+          : fixed.extensions,
     );
   }
 
@@ -1934,7 +1945,8 @@ ${formatTranscript(conversation)}
           'Could not find lore entry JSON in the AI reply. Try again.',
       notObjectMessage: 'Lore entry JSON must be an object.',
     );
-    final entryMap = map['entries'] is List && (map['entries'] as List).isNotEmpty
+    final entryMap =
+        map['entries'] is List && (map['entries'] as List).isNotEmpty
         ? Map<String, dynamic>.from((map['entries'] as List).first as Map)
         : map;
     final parsed = LorebookEntry.fromJson(entryMap);
@@ -2056,7 +2068,7 @@ ${mergeDepth.mergeRules}
     final draft = formatLatestWorkshopDraftBlock(conversation);
     final user =
         '''
-$imported${draft}${source.isEmpty ? '' : '''
+$imported$draft${source.isEmpty ? '' : '''
 Use this linked lorebook as source material:
 
 $source
@@ -2170,25 +2182,19 @@ ${formatTranscript(conversation)}
 
     final seen = <String>{};
     final out = <WorkshopCharacterCandidate>[];
-  var rawCount = 0;
+    var rawCount = 0;
     for (final item in listRaw) {
       if (item is! Map) continue;
       rawCount++;
       final data = Map<String, dynamic>.from(item);
       final name = '${data['name'] ?? ''}'.trim();
       if (name.isEmpty) continue;
-      final summary =
-          '${data['summary'] ?? data['description'] ?? ''}'.trim();
+      final summary = '${data['summary'] ?? data['description'] ?? ''}'.trim();
       if (isTemplateCharacterCandidate(name, summary)) continue;
       final key = name.toLowerCase();
       if (seen.contains(key)) continue;
       seen.add(key);
-      out.add(
-        WorkshopCharacterCandidate(
-          name: name,
-          summary: summary,
-        ),
-      );
+      out.add(WorkshopCharacterCandidate(name: name, summary: summary));
     }
     if (out.isEmpty && rawCount > 0) {
       throw const FormatException(
@@ -2542,7 +2548,9 @@ Write an updated world summary.
     final original = assistantReply.trim();
     final note = correctionNote.trim();
     if (original.isEmpty || note.isEmpty) {
-      throw ArgumentError('Need both the assistant reply and a correction note.');
+      throw ArgumentError(
+        'Need both the assistant reply and a correction note.',
+      );
     }
     return [
       {
@@ -2932,9 +2940,7 @@ ${formatTranscript(conversation)}
       final gap = '${item['gap'] ?? ''}'.trim();
       final entryRaw = item['entry'];
       if (entryRaw is! Map) continue;
-      var entry = LorebookEntry.fromJson(
-        Map<String, dynamic>.from(entryRaw),
-      );
+      var entry = LorebookEntry.fromJson(Map<String, dynamic>.from(entryRaw));
       if (entry.content.trim().isEmpty && entry.keys.isEmpty) continue;
       entry = entry.copyWith(id: entry.id ?? (nextId + i));
       final id = '${item['id'] ?? 'gap_${i + 1}'}'.trim();
