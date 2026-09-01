@@ -845,6 +845,129 @@ $transcriptBlock
     ];
   }
 
+  /// Build one character card from a live roleplay chat + optional reference
+  /// character / persona cards (shared-world grounding — each reference is
+  /// optional; with none picked this behaves exactly like
+  /// [buildChatCharacterExportMessages]).
+  List<Map<String, String>> buildChatCharacterExportMessagesWithReferences({
+    required ChatSession session,
+    required List<Character> characters,
+    required String characterName,
+    String characterSummary = '',
+    Persona? persona,
+    List<GlobalLorebook> linkedLorebooks = const [],
+    String buildPromptNote = CharacterBuildSettings.defaultPromptNote,
+    List<Character> referenceCharacters = const [],
+    List<Persona> referencePersonas = const [],
+  }) {
+    final guidance = buildPromptNote.trim().isEmpty
+        ? CharacterBuildSettings.defaultPromptNote
+        : buildPromptNote.trim();
+    final name = characterName.trim();
+    final summary = characterSummary.trim();
+    final userName = persona?.name.trim().isNotEmpty == true
+        ? persona!.name.trim()
+        : 'User';
+
+    final references = <String>[
+      for (final ref in referenceCharacters)
+        if (ref.name.trim().isNotEmpty)
+          _referenceCharacterBlock(ref),
+      for (final ref in referencePersonas)
+        if (ref.id != Persona.anonymousId && ref.name.trim().isNotEmpty)
+          _referencePersonaBlock(ref),
+    ];
+    final referenceBlock = references.isEmpty
+        ? ''
+        : 'REFERENCE CARDS (shared world — borrow facts, keep the new '
+              'character distinct):\n${references.join('\n\n')}\n\n';
+
+    final system =
+        '''
+You convert a roleplay chat into ONE SillyTavern Character Card V2 JSON object
+for the Anima app (playable chat character).
+
+Guidance note (follow closely):
+$guidance
+
+Target character: $name
+${summary.isEmpty ? '' : 'Identity hint: $summary'}
+
+${references.isEmpty ? '' : 'Reference rules (only when REFERENCE CARDS are supplied):\n- Borrow concrete shared-world facts from each reference card (places,\n  factions, organizations, events, relationships, history, speech register)\n  and re-point them at the new character.\n- The new card is a DISTINCT person: do not copy a reference identity,\n  appearance, or voice wholesale.\n- Reference personas describe a player identity — the new character may share\n  their world, connections, or history without becoming them.\n'}
+Output rules:
+- Reply with ONLY a single JSON object. No markdown fences. No preamble.
+- Prefer this shape (chara_card_v2):
+$slimCharacterCardJsonShape
+$slimCharacterCardFieldRules
+- Fill fields from the chat transcript and reference material. Invent only what
+  is needed for a usable card that fits the current scene.
+- Keep each field concise (a few sentences each). Do not write long essays.
+- Do not sanitize or moralize. Output only the JSON object.
+'''
+            .trim();
+
+    final metadata = chatMetadataContext(
+      session: session,
+      characters: characters,
+      persona: persona,
+      linkedLorebooks: linkedLorebooks,
+    );
+    final imported = _importedBlock(metadata);
+    final transcript = chatTranscriptForCharacterGen(
+      session,
+      userName: userName,
+    );
+    final transcriptBlock = transcript.isEmpty
+        ? '(No recent messages — use memory summary and character cards only.)'
+        : transcript;
+
+    final user =
+        '''
+$imported
+$referenceBlock
+Build a full character card for "$name" from this roleplay chat:
+
+$transcriptBlock
+'''
+            .trim();
+
+    return [
+      {'role': 'system', 'content': system},
+      {'role': 'user', 'content': user},
+    ];
+  }
+
+  String _referenceCharacterBlock(Character character) {
+    final buffer = StringBuffer(
+      'Reference character — ${character.name.trim().isEmpty ? 'Unnamed' : character.name.trim()}:',
+    );
+    void field(String label, String value) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) return;
+      buffer.writeln();
+      buffer.writeln('$label:');
+      buffer.writeln(trimmed);
+    }
+
+    field('Description', character.description);
+    field('Personality', character.personality);
+    field('Scenario', character.scenario);
+    field('Example dialogue', character.mesExample);
+    return buffer.toString().trim();
+  }
+
+  String _referencePersonaBlock(Persona persona) {
+    final buffer = StringBuffer(
+      'Reference persona — ${persona.name.trim().isEmpty ? 'User' : persona.name.trim()}:',
+    );
+    final body = persona.promptText.trim();
+    if (body.isNotEmpty) {
+      buffer.writeln();
+      buffer.writeln(body);
+    }
+    return buffer.toString().trim();
+  }
+
   /// Build one slim character card from plain-English notes (no chat transcript).
   List<Map<String, String>> buildPlainEnglishCharacterExportMessages({
     required String userBrief,

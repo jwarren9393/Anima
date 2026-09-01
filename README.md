@@ -230,9 +230,7 @@ Minimal chrome: **Close** · title · **⋮** menu. **Voice row** above composer
 | **Context estimate** | Rough token/message gauge vs history budget and model window |
 | **Characters** | Open Characters list |
 | **Manage cast** | Rename group, add/remove cast, lore, note — **Close** (X) returns Home for new/saved chats |
-| **New character** | Sheet: type a name + **generate from chat** or start blank |
-| **Add temporary character** | Quick NPC for this chat |
-| **Update character from chat** | Revise one saved card from thread context |
+| **Add / update character…** | One menu for all three character-in-chat flows: **New character from this chat** (AI builds a card from recent messages — optionally based on another card/persona you pick), **Add temporary character** (quick NPC), **Update saved character from chat** (revise one saved card from thread context) |
 | **Open in Creation Center** | Seed or open a workshop from this chat |
 | **Export chat** | Anima JSON (keeps swipes) or plain text |
 | **Import chat** | Anima JSON or best-effort `Name: message` text |
@@ -480,7 +478,7 @@ Imported creator notes, tags, extensions preserved on save/export even if not sh
 
 **Temporary characters**
 
-- Quick NPC: name + short note only (from chat ⋮ → **Add temporary character**, Manage cast **+**, or group setup).
+- Quick NPC: name + short note only (from chat ⋮ → **Add / update character… → Add temporary character**, Manage cast **+**, or group setup).
 - **Temporary** badge in Characters list; row ⋮ → **Promote to full character** opens the full editor.
 - Temporary NPCs are hidden when **Full cards only** is on (Characters list and group cast picker).
 

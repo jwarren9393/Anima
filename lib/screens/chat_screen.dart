@@ -58,6 +58,7 @@ import '../widgets/chat_lorebook_picker.dart';
 import '../widgets/chat_overrides_sheet.dart';
 import '../widgets/chat_hero_portrait.dart';
 import '../widgets/chat_image_background.dart';
+import '../widgets/add_update_character_sheet.dart';
 import '../widgets/create_character_from_chat_sheet.dart';
 import '../widgets/temporary_character_sheet.dart';
 import '../widgets/update_character_from_chat_sheet.dart';
@@ -2998,6 +2999,23 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _addOrUpdateCharacter() async {
+    if (_busy || _session == null) return;
+    final action = await showAddUpdateCharacterSheet(context: context);
+    if (action == null || !mounted || _session == null) return;
+    switch (action) {
+      case 'new':
+        await _createCharacterForChat();
+        break;
+      case 'temporary':
+        await _addTemporaryCharacterToChat();
+        break;
+      case 'update':
+        await _updateCharacterFromChat();
+        break;
+    }
+  }
+
   Future<void> _createCharacterForChat() async {
     if (_busy || _session == null) return;
     final created = await showCreateCharacterFromChatSheet(
@@ -3009,6 +3027,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       settingsService: widget.settingsService,
       nanoGptService: widget.nanoGptService,
       worldInfoService: widget.worldInfoService,
+      personaService: widget.personaService,
     );
     if (created == null || !mounted || _session == null) return;
 
@@ -4138,9 +4157,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               if (value == 'context') _showContextEstimate();
               if (value == 'characters') _openCharacters();
               if (value == 'manage_cast') _manageCast();
-              if (value == 'new_character') _createCharacterForChat();
-              if (value == 'new_temp_character') _addTemporaryCharacterToChat();
-              if (value == 'update_character') _updateCharacterFromChat();
+              if (value == 'add_character') _addOrUpdateCharacter();
               if (value == 'creation_center') _openCreationCenter();
               if (value == 'export') _exportChat();
               if (value == 'import') _importChat();
@@ -4207,16 +4224,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 child: Text('Manage cast'),
               ),
               const PopupMenuItem(
-                value: 'new_character',
-                child: Text('New character'),
-              ),
-              const PopupMenuItem(
-                value: 'new_temp_character',
-                child: Text('Add temporary character'),
-              ),
-              const PopupMenuItem(
-                value: 'update_character',
-                child: Text('Update character from chat'),
+                value: 'add_character',
+                child: Text('Add / update character…'),
               ),
               const PopupMenuDivider(),
               const PopupMenuItem(

@@ -1062,6 +1062,82 @@ Here is the card you asked for:
       expect(user, contains('Build a full character card for "Mira"'));
     });
 
+    test('chat export with references includes reference cards + persona', () {
+      final session = ChatSession(
+        id: 'chat_1',
+        characterId: 'hero',
+        title: 'Harbor run',
+        updatedAt: DateTime(2026, 1, 1),
+        messages: [
+          ChatMessage(
+            id: '1',
+            role: ChatRole.user,
+            text: 'The new ally meets us at the Tide Guild pier.',
+          ),
+        ],
+      );
+      const hero = Character(
+        id: 'hero',
+        name: 'Hero',
+        description: 'Main POV character',
+      );
+      const mira = Character(
+        id: 'mira',
+        name: 'Mira',
+        description: 'Dock smuggler who owes the Tide Guild. Long black hair.',
+      );
+      const jay = Persona(
+        id: 'p1',
+        name: 'Jay',
+        description: 'A wandering doctor with a lantern.',
+      );
+
+      final messages = builder.buildChatCharacterExportMessagesWithReferences(
+        session: session,
+        characters: const [hero],
+        characterName: 'Silas',
+        persona: const Persona(id: 'p1', name: 'Jay'),
+        referenceCharacters: const [mira],
+        referencePersonas: const [jay],
+      );
+
+      expect(messages.length, 2);
+      final system = messages.first['content'] ?? '';
+      expect(system, contains('REFERENCE CARDS'));
+      expect(system, contains('re-point them'));
+
+      final user = messages.last['content'] ?? '';
+      expect(user, contains('Reference character — Mira'));
+      expect(user, contains('Tide Guild'));
+      expect(user, contains('Reference persona — Jay'));
+      expect(user, contains('wandering doctor'));
+      expect(user, contains('Build a full character card for "Silas"'));
+    });
+
+    test('chat export with no references omits reference blocks', () {
+      final session = ChatSession(
+        id: 'chat_1',
+        characterId: 'hero',
+        title: 'Plain',
+        updatedAt: DateTime(2026, 1, 1),
+        messages: [
+          ChatMessage(id: '1', role: ChatRole.user, text: 'Hello.'),
+        ],
+      );
+
+      final messages = builder.buildChatCharacterExportMessagesWithReferences(
+        session: session,
+        characters: const [],
+        characterName: 'Silas',
+      );
+
+      final system = messages.first['content'] ?? '';
+      final user = messages.last['content'] ?? '';
+      expect(system, isNot(contains('Reference rules')));
+      expect(user, isNot(contains('REFERENCE CARDS')));
+      expect(user, contains('Build a full character card for "Silas"'));
+    });
+
     test('buildChatCharacterDetectMessages lists scan instructions', () {
       final session = ChatSession(
         id: 'chat_1',

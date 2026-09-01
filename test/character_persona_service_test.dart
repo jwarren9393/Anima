@@ -116,6 +116,29 @@ void main() {
       await characters.upsert(copy);
       expect((await characters.loadCharacters()).length, 2);
     });
+
+    test('concurrent upserts both survive (no lost update)', () async {
+      const first = Character(id: 'c1', name: 'Alpha');
+      const second = Character(id: 'c2', name: 'Beta');
+      await Future.wait([
+        characters.upsert(first),
+        characters.upsert(second),
+      ]);
+      final all = await characters.loadCharacters();
+      expect(all.map((c) => c.id), containsAll(['c1', 'c2']));
+      expect(all.map((c) => c.name), containsAll(['Alpha', 'Beta']));
+    });
+
+    test('upsert verifies on disk and overwrites the same id', () async {
+      const base = Character(id: 'c1', name: 'Nova');
+      await characters.upsert(base);
+      await characters.upsert(
+        const Character(id: 'c1', name: 'Nova', description: 'scars'),
+      );
+      final loaded = await characters.getById('c1');
+      expect(loaded?.description, 'scars');
+      expect((await characters.loadCharacters()).length, 1);
+    });
   });
 
   group('PersonaService', () {

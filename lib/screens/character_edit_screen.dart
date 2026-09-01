@@ -1337,11 +1337,21 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
       avatarFileName: _avatarFileName,
       isTemporary: widget.promoteAsFull ? false : _isTemporary,
     );
-    if (widget.persistToLibrary) {
-      await widget.characterService.upsert(character);
+    try {
+      if (widget.persistToLibrary) {
+        await widget.characterService.upsert(character);
+      }
+      if (!mounted) return;
+      Navigator.of(context).pop(character);
+    } catch (error) {
+      // Never close silently: keep the editor open so the user's edits are
+      // not lost, and tell them exactly what went wrong.
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save this card: $error')),
+      );
     }
-    if (!mounted) return;
-    Navigator.of(context).pop(character);
   }
 
   bool _reportLooksTruncated(String report) {

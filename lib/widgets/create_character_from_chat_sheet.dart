@@ -7,11 +7,16 @@ import '../models/persona.dart';
 import '../screens/character_edit_screen.dart';
 import '../services/character_service.dart';
 import '../services/nanogpt_service.dart';
+import '../services/persona_service.dart';
 import '../services/settings_service.dart';
 import '../services/world_info_service.dart';
 import '../services/world_workshop_builder.dart';
 
 /// Bottom sheet: create a character from the current chat context or start blank.
+///
+/// Optionally base the new card on another saved character / persona (shared
+/// world material) in addition to the recent chat messages. Both references
+/// are optional — leave them at "none" for the plain chat-based card.
 Future<Character?> showCreateCharacterFromChatSheet({
   required BuildContext context,
   required ChatSession session,
@@ -21,6 +26,7 @@ Future<Character?> showCreateCharacterFromChatSheet({
   required SettingsService settingsService,
   required NanoGptService nanoGptService,
   required WorldInfoService worldInfoService,
+  PersonaService? personaService,
 }) {
   return showModalBottomSheet<Character?>(
     context: context,
@@ -34,6 +40,7 @@ Future<Character?> showCreateCharacterFromChatSheet({
       settingsService: settingsService,
       nanoGptService: nanoGptService,
       worldInfoService: worldInfoService,
+      personaService: personaService,
     ),
   );
 }
@@ -47,6 +54,7 @@ class _CreateCharacterFromChatSheet extends StatefulWidget {
     required this.settingsService,
     required this.nanoGptService,
     required this.worldInfoService,
+    this.personaService,
   });
 
   final ChatSession session;
@@ -56,6 +64,7 @@ class _CreateCharacterFromChatSheet extends StatefulWidget {
   final SettingsService settingsService;
   final NanoGptService nanoGptService;
   final WorldInfoService worldInfoService;
+  final PersonaService? personaService;
 
   @override
   State<_CreateCharacterFromChatSheet> createState() =>
@@ -68,7 +77,11 @@ class _CreateCharacterFromChatSheetState
   final _nameController = TextEditingController();
 
   List<GlobalLorebook> _linkedLorebooks = const [];
-  bool _loadingLore = true;
+  List<Character> _allCharacters = const [];
+  List<Persona> _allPersonas = const [];
+  Character? _referenceCharacter;
+  Persona? _referencePersona;
+  bool _loadingData = true;
   bool _generating = false;
   String? _error;
 
@@ -76,10 +89,14 @@ class _CreateCharacterFromChatSheetState
       widget.session.messages.any((m) => m.text.trim().isNotEmpty) ||
       widget.session.memorySummary.trim().isNotEmpty;
 
+  Set<String> get _participantIds => {
+        for (final c in widget.participants) c.id,
+      };
+
   @override
   void initState() {
     super.initState();
-    _loadLorebooks();
+    _loadData();
   }
 
   @override
@@ -88,7 +105,7 @@ class _CreateCharacterFromChatSheetState
     super.dispose();
   }
 
-  Future<void> _loadLorebooks() async {
+  Future<void> _loadData() async {
     final linked = <GlobalLorebook>[];
     final loreIds = widget.session.lorebookIds;
     if (loreIds == null) {
@@ -103,10 +120,29 @@ class _CreateCharacterFromChatSheetState
         linked.add(book);
       }
     }
+
+    final all = await widget.characterService.loadCharacters();
+    final ordered = _builder.prioritizeCharactersForChatUpdate(
+      allCharacters: all,
+      participants: widget.participants,
+    );
+
+    var personas = <Persona>[];
+    final personaService = widget.personaService;
+    if (personaService != null) {
+      final loaded = await personaService.loadPersonas();
+      personas = [
+        for (final p in loaded)
+          if (!p.isAnonymous && p.name.trim().isNotEmpty) p,
+      ];
+    }
+
     if (!mounted) return;
     setState(() {
       _linkedLorebooks = linked;
-      _loadingLore = false;
+      _allCharacters = ordered;
+      _allPersonas = personas;
+      _loadingData = false;
     });
   }
 
@@ -124,6 +160,150 @@ class _CreateCharacterFromChatSheetState
     );
     if (!mounted) return;
     Navigator.of(context).pop(saved);
+  }
+
+  Future<void> _chooseReferenceCharacter() async {
+    final picked = await showModalBottomSheet<Object?>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        final theme = Theme.of(sheetContext);
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(
+                  'Base the new card on…',
+                  style: theme.textTheme.titleMedium,
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.block),
+                title: const Text('No reference card'),
+                subtitle: const Text('Plain chat-based card'),
+                selected: _referenceCharacter == null,
+                onTap: () => Navigator.pop(sheetContext, 'clear'),
+              ),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  itemCount: _allCharacters.length,
+                  itemBuilder: (context, index) {
+                    final character = _allCharacters[index];
+                    final inChat = _participantIds.contains(character.id);
+                    final isSelected = character.id == _referenceCharacter?.id;
+                    return ListTile(
+                      leading: Icon(
+                        isSelected
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_off,
+                        color: isSelected ? theme.colorScheme.primary : null,
+                      ),
+                      title: Text(character.name),
+                      subtitle: Text(
+                        [
+                          if (inChat) 'In this chat',
+                          'Shared reference card',
+                        ].join(' · '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      selected: isSelected,
+                      onTap: () => Navigator.pop(sheetContext, character),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+    if (!mounted) return;
+    if (picked == 'clear') {
+      setState(() => _referenceCharacter = null);
+    } else if (picked is Character) {
+      setState(() => _referenceCharacter = picked);
+    }
+  }
+
+  Future<void> _chooseReferencePersona() async {
+    final picked = await showModalBottomSheet<Object?>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        final theme = Theme.of(sheetContext);
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(
+                  'Base the new card on…',
+                  style: theme.textTheme.titleMedium,
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.block),
+                title: const Text('No reference persona'),
+                subtitle: const Text('Plain chat-based card'),
+                selected: _referencePersona == null,
+                onTap: () => Navigator.pop(sheetContext, 'clear'),
+              ),
+              if (_allPersonas.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text('No saved personas yet.'),
+                )
+              else
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    itemCount: _allPersonas.length,
+                    itemBuilder: (context, index) {
+                      final persona = _allPersonas[index];
+                      final isSelected = persona.id == _referencePersona?.id;
+                      return ListTile(
+                        leading: Icon(
+                          isSelected
+                              ? Icons.radio_button_checked
+                              : Icons.radio_button_off,
+                          color: isSelected ? theme.colorScheme.primary : null,
+                        ),
+                        title: Text(persona.name),
+                        subtitle: Text(
+                          'Persona — player identity reference',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        selected: isSelected,
+                        onTap: () => Navigator.pop(sheetContext, persona),
+                      );
+                    },
+                  ),
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+    if (!mounted) return;
+    if (picked == 'clear') {
+      setState(() => _referencePersona = null);
+    } else if (picked is Persona) {
+      setState(() => _referencePersona = picked);
+    }
   }
 
   Future<void> _generateFromChat() async {
@@ -145,13 +325,19 @@ class _CreateCharacterFromChatSheetState
     try {
       final build = await widget.settingsService.resolveCharacterBuild();
       final baseUrl = await widget.settingsService.getApiBaseUrl();
-      final messages = _builder.buildChatCharacterExportMessages(
+      final messages = _builder.buildChatCharacterExportMessagesWithReferences(
         session: widget.session,
         characters: widget.participants,
         characterName: name,
         persona: widget.persona,
         linkedLorebooks: _linkedLorebooks,
         buildPromptNote: build.promptNote,
+        referenceCharacters: _referenceCharacter == null
+            ? const <Character>[]
+            : [_referenceCharacter!],
+        referencePersonas: _referencePersona == null
+            ? const <Persona>[]
+            : [_referencePersona!],
       );
       final preferredId = widget.characterService.newId();
 
@@ -207,7 +393,7 @@ class _CreateCharacterFromChatSheetState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final busy = _generating || _loadingLore;
+    final busy = _generating || _loadingData;
 
     return SafeArea(
       child: Padding(
@@ -226,7 +412,8 @@ class _CreateCharacterFromChatSheetState
             Text(
               _hasChatContext
                   ? 'Type a name from the story and let the AI fill the card '
-                      'from what was said so far.'
+                      'from recent messages. Optionally also base it on another '
+                      'card or persona (each is optional).'
                   : 'Start a blank card, or chat a bit first to generate from context.',
               style: theme.textTheme.bodySmall,
             ),
@@ -253,7 +440,52 @@ class _CreateCharacterFromChatSheetState
                 ),
               ),
             ],
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: busy || _allCharacters.isEmpty
+                        ? null
+                        : _chooseReferenceCharacter,
+                    icon: const Icon(Icons.face_retouching_natural, size: 18),
+                    label: Text(
+                      _referenceCharacter == null
+                          ? 'Reference card: none'
+                          : _referenceCharacter!.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+                if (widget.personaService != null) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: busy || _allPersonas.isEmpty
+                          ? null
+                          : _chooseReferencePersona,
+                      icon: const Icon(Icons.person_outline, size: 18),
+                      label: Text(
+                        _referencePersona == null
+                            ? 'Reference persona: none'
+                            : _referencePersona!.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Optional — leave both at none for a plain chat-based card.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
             FilledButton.icon(
               onPressed: busy || !_hasChatContext ? null : _generateFromChat,
               icon: _generating

@@ -25,9 +25,43 @@ class CharacterService {
   final Future<Directory> Function() _documentsDirectory;
   final AvatarService _avatarService;
 
+  /// Serializes read-modify-write cycles so a concurrent save (e.g. a quick
+  /// temporary-character add while an editor save lands) never drops a card
+  /// because both read the same old list before writing.
+  Future<void> _writeQueue = Future.value();
+  bool _writing = false;
+
+  Future<T> _runSerialized<T>(Future<T> Function() op) {
+    // Re-entrant calls (upsert -> loadCharacters -> saveCharacters bootstrap)
+    // run directly instead of queuing behind the unfinished outer write, which
+    // would deadlock.
+    if (_writing) return op();
+    final next = _writeQueue.then((_) async {
+      _writing = true;
+      try {
+        return await op();
+      } finally {
+        _writing = false;
+      }
+    });
+    _writeQueue = next.then((_) {}, onError: (_) {});
+    return next;
+  }
+
   Future<File> _file() async {
     final dir = await _documentsDirectory();
     return File('${dir.path}/$_fileName');
+  }
+
+  /// Writes the characters file with `flush: true` so the bytes are really on
+  /// disk before the editor closes. A transient failure is retried once.
+  Future<void> _writeCharactersFile(File file, String data) async {
+    try {
+      await file.writeAsString(data, flush: true);
+    } catch (_) {
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      await file.writeAsString(data, flush: true);
+    }
   }
 
   /// Loads all characters. Returns an empty list when none are saved yet.
@@ -62,12 +96,15 @@ class CharacterService {
   }
 
   /// Overwrites the characters file with [characters].
-  Future<void> saveCharacters(List<Character> characters) async {
-    final file = await _file();
-    final payload = characters.map((c) => c.toJson()).toList();
-    await file.writeAsString(
-      const JsonEncoder.withIndent('  ').convert(payload),
-    );
+  Future<void> saveCharacters(List<Character> characters) {
+    return _runSerialized(() async {
+      final file = await _file();
+      final payload = characters.map((c) => c.toJson()).toList();
+      await _writeCharactersFile(
+        file,
+        const JsonEncoder.withIndent('  ').convert(payload),
+      );
+    });
   }
 
   /// Finds one character by id, or null if missing.
@@ -80,25 +117,41 @@ class CharacterService {
   }
 
   /// Adds a new character (or replaces one with the same id) and saves.
-  Future<List<Character>> upsert(Character character) async {
-    final all = List<Character>.from(await loadCharacters());
-    final index = all.indexWhere((c) => c.id == character.id);
-    if (index >= 0) {
-      all[index] = character;
-    } else {
-      all.add(character);
-    }
-    await saveCharacters(all);
-    return all;
+  ///
+  /// Read → modify → write runs on a single queue so concurrent saves cannot
+  /// clobber each other, and after writing we re-read the file from disk to
+  /// prove the card actually landed (a silent storage failure throws instead
+  /// of letting the editor close and lose the user's edits).
+  Future<List<Character>> upsert(Character character) {
+    return _runSerialized(() async {
+      final all = List<Character>.from(await loadCharacters());
+      final index = all.indexWhere((c) => c.id == character.id);
+      if (index >= 0) {
+        all[index] = character;
+      } else {
+        all.add(character);
+      }
+      await saveCharacters(all);
+      final onDisk = await getById(character.id);
+      if (onDisk == null) {
+        throw FileSystemException(
+          'The character card did not reach the library file. Please tap '
+          'Save again.',
+        );
+      }
+      return all;
+    });
   }
 
   /// Deletes a character. The list may end up empty.
-  Future<List<Character>> delete(String id) async {
-    final all = await loadCharacters();
-    all.removeWhere((c) => c.id == id);
-    await _avatarService.deleteAllForStem(id);
-    await saveCharacters(all);
-    return all;
+  Future<List<Character>> delete(String id) {
+    return _runSerialized(() async {
+      final all = await loadCharacters();
+      all.removeWhere((c) => c.id == id);
+      await _avatarService.deleteAllForStem(id);
+      await saveCharacters(all);
+      return all;
+    });
   }
 
   /// Creates a new unique id for a character.

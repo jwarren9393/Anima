@@ -4,8 +4,10 @@
 >
 > **Also read for day-to-day coding in Cursor:** [`AGENTS.md`](AGENTS.md) (living status, roadmap, agent rules).  
 > **Also read for user-facing feature catalog:** [`README.md`](README.md) (screen-by-screen product guide).
+>
+> **Living documents:** `AGENTS.md` + this file + `README.md` are kept current together — see §29 for the upkeep rule every agent must follow.
 
-**Last updated:** 2026-08-30 · **Version:** 1.0.0 build **64** · **Tests:** 361 (`flutter test`)
+**Last updated:** 2026-09-01 · **Version:** 1.0.0 build **64** · **Tests:** 379 (`flutter test`)
 
 ---
 
@@ -307,9 +309,11 @@ All library files live in **one user-owned folder** (`AppDataRoot`, default `Doc
 | `chat_backgrounds/` | User-picked chat backgrounds |
 | `README.txt` | Explains that this folder is the library |
 
+**Character saves** (`character_service.dart`): every write is flushed to disk (`flush: true`) with one automatic retry; concurrent saves are serialized through a write queue so a read-modify-write can never clobber another card (e.g. a quick temporary-NPC save racing an editor save); `upsert()` re-reads the file after writing and throws if the card did not land, so the editor can show the error and stay open instead of closing and silently losing edits.
+
 **Backup** (`AppBackupService`): single `.anima-backup` JSON with whitelist above + settings keys + base64 avatars. **No API key.** Copy the whole Anima folder to move the key too.
 
-**Sync** (`SyncService`): one user-chosen file (Google Drive on Android; path on desktop, including GNOME Files Google Drive). Linux gvfs uses Drive IDs — `resolveExistingSyncPath()` strips a picker-added `.anima-backup` suffix and remounts Drive with `gio mount` when the mount went idle. Push overwrites, pull restores.
+**Sync** (`SyncService`): one user-chosen file (Google Drive on Android; path on desktop, including GNOME Files Google Drive). Linux gvfs uses Drive IDs — `resolveExistingSyncPath()` strips a picker-added `.anima-backup` suffix and remounts Drive with `gio mount` when the mount went idle. Push overwrites, pull restores. Pulls/peeks read the remote **stably** (`readStableBytes()` — repeat until two consecutive reads return identical non-empty bytes, ≤5 tries, 250 ms apart) so a just-remounted Drive/SAF file that is stale or still downloading cannot make the first pull restore old data.
 
 ---
 
@@ -465,7 +469,8 @@ Special tuned sampling for: memory summarize, narrator generate, composer format
 - Lore hit toast overlay
 - Context estimate (⋮ menu)
 - Export/import transcript
-- Manage cast, new/update character from chat
+- Manage cast (rename groups, add/remove cast)
+- **Add / update character…** (⋮ hub, `add_update_character_sheet.dart`) — one menu for **New character from this chat** (optionally **based on** a chosen character + persona — each optional; blank = classic flow), **Add temporary character**, **Update saved character from chat**
 
 ---
 
@@ -526,6 +531,8 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 - **Duplicate** — ⋮ menu on Characters and Personas list copies with new id.
 - **Compact / Expand** — AI shortens or enriches fields with a review sheet before apply (Compact: card, persona, lorebook, entry; **Expand: character card and persona only** — the AI invents new interesting details from what’s already there, no prompts needed).
 - **Base on another card… (cross-reference)** — character + persona editor ⋮ menus. Pick any other character or persona (`cross_reference_source_sheet.dart` — Characters/Personas tabs + optional "How should they connect?" note) and the AI drafts the card being edited grounded in the source's shared world. Prompt law (`buildCrossReferenceMessages` in both collaborators): **the target comes first** — its name/identity is never replaced; borrowed facts (factions, places, history, speech register) are re-pointed at the target; glue is invented where the source is silent; never copy the source bio wholesale. Same JSON output shape as Expand → reuses `parseCharacterConsistencyFixJson` / `parsePersonaUpdateJson` + the `AiFieldChangesSheet` review flow. Works on brand-new (blank) cards too, which is the fast cast-building path.
+- **Add / update character… (chat ⋮ hub)** — `add_update_character_sheet.dart` routes to **New character from this chat**, **Add temporary character**, or **Update saved character from chat**. New-from-chat can optionally be **based on** one character card + one persona picked from the chat (each optional; leave both blank for the classic chat-only draft): `buildChatCharacterExportMessagesWithReferences()` in `world_workshop_builder.dart` prepends `_referenceCharacterBlock` / `_referencePersonaBlock` context so the draft is grounded in the chosen cards — borrowed world facts are re-pointed at the new character, whose own identity always wins.
+- **Save reliability** — see §8: flushed + retried writes, serialized `upsert()` with on-disk verification; on failure the editor **stays open** with edits intact and shows the error.
 - **~token badges** — approximate prompt token counts on lists and editors.
 
 ### Personas
@@ -629,7 +636,7 @@ Plus **Enter to send** toggle (desktop).
 | Rewrite reply | `reply_rewrite_service.dart` |
 | Memory summarize | `chat_context_service.dart` |
 | Character/lore/persona wand | `character_collaborator.dart`, `lore_collaborator.dart`, `persona_collaborator.dart` |
-| Workshop exports | `world_workshop_builder.dart` |
+| Workshop exports · character-from-chat (+ optional base card/persona grounding) | `world_workshop_builder.dart` |
 
 ---
 
@@ -652,6 +659,8 @@ Plus **Enter to send** toggle (desktop).
 ## 22. Backup, restore, and cross-device sync
 
 See §8. User must **re-enter API key** after restore.
+
+**Pull from cloud** reads the remote through `SyncService.readStableBytes()` (two identical consecutive non-empty reads, ≤5 attempts, 250 ms apart) before restoring — a freshly (re)mounted Google Drive / SAF file that returns stale or partially downloaded bytes can no longer make the first pull a silent no-op ("confirmation but nothing changed").
 
 ---
 
@@ -691,13 +700,13 @@ Applied in `PromptBuilder.applyMacros()`.
 ## 26. Testing and quality
 
 ```bash
-flutter test      # 361 tests
+flutter test      # 379 tests
 flutter analyze
 ```
 
-Tests cover: lore scan, prompt builders, card codec, backup, sync, narrator cleanup, model catalog, workshop JSON parsers, etc.
+Tests cover: lore scan, prompt builders, card codec, backup, sync stability, character save serialization, chat-export reference grounding, narrator cleanup, model catalog, workshop JSON parsers, etc.
 
-**Agent rule:** Run tests after meaningful changes; update `AGENTS.md` status.
+**Agent rule:** Run tests after meaningful changes; update the living documents — `AGENTS.md` always, plus `PROJECT_REFERENCE.md` / `README.md` when the change affects mechanics or the user-facing catalog.
 
 ---
 
@@ -740,6 +749,8 @@ Tests cover: lore scan, prompt builders, card codec, backup, sync, narrator clea
 1. Attach or paste **`PROJECT_REFERENCE.md`** for full context.
 2. Optionally add **`AGENTS.md`** for latest build status and agent conventions.
 3. For UI-only questions, **`README.md`** sections 1–4 are enough.
+
+**Living-document rule (for every agent):** these three files are the living docs and must be updated together after meaningful work — **`AGENTS.md`** always (status/roadmap/code map), **this file** whenever mechanics or architecture changed (update the section you touched), and **`README.md`** whenever anything user-visible changed.
 
 ---
 

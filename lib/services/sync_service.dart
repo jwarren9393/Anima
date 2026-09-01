@@ -21,6 +21,48 @@ class SyncService {
   static const defaultFileName = 'anima-sync.anima-backup';
   static const mimeType = 'application/json';
 
+  /// Some providers (GNOME gvfs Google Drive on Linux, Android SAF) can return
+  /// a stale or partially downloaded copy right after the folder is (re)mounted
+  /// or first opened. Reading once can restore an old snapshot — which made
+  /// Pull look like it "did nothing" on the first tap. We read until two
+  /// consecutive reads return identical, non-empty bytes (the file has been
+  /// fetched and is stable), then trust that copy.
+  static const readStableRetries = 5;
+  static const readStableDelay = Duration(milliseconds: 250);
+
+  /// Reads [read] until two consecutive results are identical non-empty bytes,
+  /// or until [retries] runs are exhausted (last non-empty result is returned).
+  static Future<Uint8List> readStableBytes(
+    Future<Uint8List> Function() read, {
+    int retries = readStableRetries,
+    Duration delay = readStableDelay,
+  }) async {
+    Uint8List? previous;
+    for (var attempt = 0; attempt < retries; attempt++) {
+      final bytes = await read();
+      if (bytes.isNotEmpty) {
+        if (previous != null && _bytesEqual(previous, bytes)) {
+          return bytes;
+        }
+        previous = bytes;
+      }
+      await Future<void>.delayed(delay);
+    }
+    if (previous != null && previous.isNotEmpty) return previous;
+    throw SyncException(
+      'The sync file came back empty. Open the folder once, then try '
+      'Pull again.',
+    );
+  }
+
+  static bool _bytesEqual(Uint8List a, Uint8List b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
   final SettingsService settingsService;
   final AppBackupService backupService;
 
@@ -139,7 +181,8 @@ class SyncService {
   }
 
   Future<AppBackupSummary> peekRemote() async {
-    final bytes = await _readSyncBytes(await loadTarget());
+    final target = await loadTarget();
+    final bytes = await readStableBytes(() => _readSyncBytes(target));
     final payload = await backupService.inspectBackup(bytes);
     return payload.summary;
   }
@@ -164,7 +207,7 @@ class SyncService {
     if (!target.isConfigured) {
       throw SyncException('Choose a sync file first.');
     }
-    final bytes = await _readSyncBytes(target);
+    final bytes = await readStableBytes(() => _readSyncBytes(target));
     final restored = await backupService.restoreBackup(bytes);
     final pulledAt = DateTime.now().toUtc();
     await settingsService.saveSyncLastPullAt(pulledAt);

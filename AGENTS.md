@@ -2,6 +2,7 @@
 
 > **Mandatory for every agent session:** Read this file fully at the start.
 > Update it before you finish any meaningful phase of work.
+> Three **living documents** must stay current after meaningful work: **`AGENTS.md`** (always), **`PROJECT_REFERENCE.md`** (when mechanics/architecture changed), **`README.md`** (when anything user-visible changed).
 > Keep language clear enough that a coding beginner (the project owner) can follow it.
 >
 > **Full project encyclopedia (external AI / deep onboarding):** [`PROJECT_REFERENCE.md`](PROJECT_REFERENCE.md)
@@ -52,7 +53,7 @@ High-value SillyTavern concepts to aim for over time:
 3. Act as a **patient mentor**: write the code, explain in plain English, avoid jargon.
 4. API keys must be entered in-app Settings and stored in the user **Anima folder** (`api_key.txt`) — never committed to Git.
 5. Do **not** invent app-store / Play Store requirements; this app stays private.
-6. After completing work, **update this file** (status, done, next).
+6. After completing work, **update all three living documents** — this file (status, done, next), [`PROJECT_REFERENCE.md`](PROJECT_REFERENCE.md) (any mechanics/architecture you changed), and [`README.md`](README.md) (anything user-visible).
 7. Prefer **SillyTavern-inspired** features that fit mobile; do not chase full ST feature parity.
 
 ---
@@ -61,8 +62,8 @@ High-value SillyTavern concepts to aim for over time:
 
 **Phase:** Post-roadmap tweaks
 
-**Last updated:** 2026-08-31    
-**Last agent action:** Creation Center AI now writes **Narrator cards** instead of ever suggesting the removed **opening scene** feature (also understands **Director cards**); added **Expand card… / Expand persona…** (AI enriches fields from what’s already there, review before apply — the opposite of Compact); Theme Studio preview “your message” bubble now shows RP `*action*` + `"dialogue"` styling; **API & connection** shortcut added at the top of the ⋮ menu in chat and Creation Center (fast model swaps while testing); added **Base on another card…** cross-reference (character + persona editors — AI drafts the card you're editing from another character/persona's shared world, review before apply); added **Favorite models** — star models in the API browser to save them for quick recall, with a Favorites filter and ⭐ badges.
+**Last updated:** 2026-09-01    
+**Last agent action:** Fixed **character save reliability** — card writes are flushed to disk with one automatic retry and concurrent card saves are serialized; if a save fails the character editor now shows an error banner and **stays open** (edits are never silently lost on close). Fixed **Pull from cloud** needing a second tap — sync file reads are stabilized (fresh-mount / partial-download guard with retries) so the first pull restores the real file. Chat ⋮ menu now has one **Add / update character…** entry consolidating New character / Add temporary character / Update character from chat — and **New character from this chat** can optionally be **based on** one character card + one persona you pick (AI drafts from the chat grounded in those cards; leave either blank for the classic flow).
 
 ### What works today
 
@@ -79,7 +80,7 @@ High-value SillyTavern concepts to aim for over time:
   - **Character & persona builds** — shared model, max tokens, temperature, top P for **full JSON card generation**; separate **character** and **persona** build prompts (Creation Center, chat import, AI builders on character/persona editors); separate from main chat model
   - **Global chat prompts** — app-wide **system prompt** + **post-history** merged into every chat (on top of each card; per-chat Author's Note still applies); preset pickers; `{{user}}` / `{{char}}`
   - **Appearance (Theme Studio)** — live preview + **category chips** (Presets / Layout / Colors / Fonts / Chat / Avatars); one section visible at a time; preview “your message” bubble shows a real RP line (`*action*` + `"dialogue"`) rendered like live chat
-  - **Backup & restore** — one `.anima-backup` JSON file (chats, characters, personas, categories, lorebooks, workshops, drafts, roadway cache, avatars, settings); **API key is not included in that share file** (it already lives in your Anima folder as `api_key.txt`); on Linux/Windows Create backup opens a **Save** dialog (Downloads suggested); Android still uses the share sheet; restore replaces Anima data only (whitelist), then returns to Home; **Cross-device sync** — pick one sync file in Google Drive (or a synced folder on desktop); **Linux Files → Google Drive** works (Anima maps GNOME’s hidden file ID and **remounts Drive if it went idle**); **Push to cloud** overwrites that file in place; **Pull from cloud** restores from it when switching phone ↔ PC (no delete-and-reupload)
+  - **Backup & restore** — one `.anima-backup` JSON file (chats, characters, personas, categories, lorebooks, workshops, drafts, roadway cache, avatars, settings); **API key is not included in that share file** (it already lives in your Anima folder as `api_key.txt`); on Linux/Windows Create backup opens a **Save** dialog (Downloads suggested); Android still uses the share sheet; restore replaces Anima data only (whitelist), then returns to Home; **Cross-device sync** — pick one sync file in Google Drive (or a synced folder on desktop); **Linux Files → Google Drive** works (Anima maps GNOME’s hidden file ID and **remounts Drive if it went idle**); **Push to cloud** overwrites that file in place; **Pull from cloud** restores from it when switching phone ↔ PC (no delete-and-reupload); pulls read the remote **stably** (re-read + retry so a just-remounted Drive/SAF file that's stale or still downloading can't restore old data — no more pulling twice)
   - API, Generation parameters
 - **Look** — Theme Studio with glass and solid presets (default Obsidian Gold soft-glow, no sparkle texture); Ivory Ink light preset + full color/font customization
 - **Generation parameters** — detailed help + many sampling presets; **context size in tokens** + presets (1K–24K); **auto-summarize** every N messages
@@ -116,7 +117,7 @@ High-value SillyTavern concepts to aim for over time:
 - **Per-chat persona** — in a chat, ⋮ menu → **Persona: …** to switch who you are for that thread (saved on the chat)
 - **Per-chat World Info** — ⋮ menu → **World Info: …** to use Settings default, pick specific global lorebooks, or turn global lore off for this thread (character card lore still applies)
 - **Group chat controls** — **manual mode (default):** your message only; **Continue** and implicit generation pick the speaker from scene context (last reply, name in your text, etc.) — **no** round-robin “next in order” chip highlight; tap a name chip to **force** that character’s reply; **Group react** — composer **+** menu / cast chip / long-press message — one AI call → **one centered group-react card** with each character’s line + avatar; long-press for Delete/Rewind/etc.; regenerate avoids copying prior beats verbatim; auto-reply (optional, long-press toggle) still round-robins when on; leading `Name:` is stripped from solo replies
-- **Manage cast (mid-chat)** — ⋮ → **Manage cast** (rename groups, add/remove cast); **+ menu → Add temporary character** (quick NPC) or full character; ⋮ → **Add temporary character**; ⋮ → **New character** / **Update character from chat**; manage screen **+** uses full or temporary flow
+- **Manage cast (mid-chat)** — ⋮ → **Manage cast** (rename groups, add/remove cast); **+ menu → Add temporary character** (quick NPC) or full character; ⋮ → **Add / update character…** — one menu with **New character from this chat** (optionally **based on** a chosen character + persona from the chat, each optional), **Add temporary character**, and **Update saved character from chat**; manage screen **+** uses full or temporary flow
 - **Avatars** — persona + character photos; **Generate avatar** saves each accept as history (`{id}_{timestamp}.png`) — **Avatar history…** (⋮ menu / History button) to reuse; changing avatar no longer deletes older files; accept also **exports a copy** (Gallery on Android · `Downloads/Anima Avatars` on desktop); long-press history tile to export/delete; **tap avatar** for fullscreen
 - **Context estimate** — chat ⋮ → **Context estimate** shows full next-reply breakdown (speaker card, group snippets, World Info hits, persona/globals, memory, history) plus model window; Creation Center shows a live banner estimate
 - **Character token badges** — ~token count beside names in **Characters**, character editor (live), group setup, and Creation Center cast pickers (≈1 token per 4 chars; color hints when large)
@@ -323,7 +324,8 @@ lib/
     chat_lorebook_picker.dart     Per-chat global lorebook picker (chat ⋮ menu)
     character_category_controls.dart Category filter + manage / assign sheets
     preset_picker.dart            Preset button + bottom sheets (sampling / text)
-    create_character_from_chat_sheet.dart Scan/generate character card from live chat context
+    add_update_character_sheet.dart Chat ⋮ → Add / update character… hub (new / temporary / update from chat)
+    create_character_from_chat_sheet.dart Scan/generate character card from live chat context (+ optional character/persona base)
     update_character_from_chat_sheet.dart Pick saved card + optional notes → merge update from chat
     scene_mood_sheet.dart         Per-chat scene mood toggle sheet (composer mood icon + ⋮ menu)
     memory_summary_sheet.dart     Scene/Ledger editor with pin toggles (chat ⋮ → Memory summary)
@@ -489,13 +491,12 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ---
 
-## How to update this document
+## How to update the living documents
 
-When you finish work, edit these sections:
+After finishing work, keep all three living documents in sync:
 
-1. **Current status** — phase name, date, last agent action, what works / doesn't
-2. **Build phases** — check off completed items
-3. **Code map** — if you added/removed files
-4. **Next actions** — replace with the true next steps
+1. **`AGENTS.md` (this file — always)** — Current status (date + last agent action), what works / doesn't, build-phase checkboxes, code map (add/remove files), next actions.
+2. **`PROJECT_REFERENCE.md` (when mechanics or architecture changed)** — update the numbered section covering what you touched (e.g. §8 persistence, §12 chat mechanics, §16 character cards, §22 sync, §26 test count).
+3. **`README.md` (when anything user-visible changed)** — feature catalog rows, menu tables, install/release notes.
 
 Do not delete historical phase checklists; mark them done so future agents see progress.

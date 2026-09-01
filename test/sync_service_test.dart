@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -159,5 +160,47 @@ void main() {
       'google-drive://wjakwan@gmail.com/',
     );
     expect(SyncService.googleDriveMountUriFromPath('/tmp/local.backup'), isNull);
+  });
+
+  test('readStableBytes returns immediately when already stable', () async {
+    final bytes = Uint8List.fromList([5, 5, 5]);
+    var calls = 0;
+    final result = await SyncService.readStableBytes(
+      () async {
+        calls++;
+        return bytes;
+      },
+      delay: Duration.zero,
+    );
+    expect(calls, 2);
+    expect(result, bytes);
+  });
+
+  test('readStableBytes waits until two consecutive reads agree', () async {
+    final stale = Uint8List.fromList([1, 2, 3]);
+    final fresh = Uint8List.fromList([9, 9, 9, 9]);
+    var calls = 0;
+    final result = await SyncService.readStableBytes(
+      () async {
+        calls++;
+        if (calls == 1) return stale;
+        return fresh;
+      },
+      retries: 4,
+      delay: Duration.zero,
+    );
+    expect(calls, 3);
+    expect(result, fresh);
+  });
+
+  test('readStableBytes throws on a permanently empty file', () async {
+    await expectLater(
+      SyncService.readStableBytes(
+        () async => Uint8List(0),
+        retries: 2,
+        delay: Duration.zero,
+      ),
+      throwsA(isA<SyncException>()),
+    );
   });
 }
