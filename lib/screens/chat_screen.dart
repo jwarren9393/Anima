@@ -230,6 +230,47 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       : SettingsService.defaultUserName;
   String? get _personaAvatarFileName => _persona?.avatarFileName;
 
+  int _joinIndexFor(Character character) =>
+      _session?.joinMessageCountFor(character.id) ?? 0;
+
+  /// Brief catch-up block for a character who joined mid-chat.
+  /// Strips Director cards; keeps visible actions, spoken lines, and narrator
+  /// backdrop from just before their join point.
+  String _buildCatchUpBlock(int joinIndex) {
+    if (joinIndex <= 0) return '';
+    final start = (joinIndex - 5).clamp(0, _messages.length);
+    if (start >= joinIndex) return '';
+    final snippets = <String>[];
+    for (var i = start; i < joinIndex; i++) {
+      final msg = _messages[i];
+      if (msg.isDirector) continue;
+      if (msg.text.trim().isEmpty) continue;
+      if (msg.isNarrator) {
+        snippets.add('[Setting: ${msg.text.trim()}]');
+        continue;
+      }
+      if (msg.isGroupBeat && msg.beatLines != null) {
+        for (final line in msg.beatLines!) {
+          final body = line.text.trim();
+          if (body.isNotEmpty) {
+            snippets.add('${line.speakerName}: $body');
+          }
+        }
+        continue;
+      }
+      if (msg.isUser) {
+        snippets.add('$_userName: ${msg.text.trim()}');
+      } else if (msg.speakerName != null && msg.speakerName!.trim().isNotEmpty) {
+        final body = msg.text.trim();
+        if (body.isNotEmpty) {
+          snippets.add('${msg.speakerName}: $body');
+        }
+      }
+    }
+    if (snippets.isEmpty) return '';
+    return 'You just entered the scene. From what you can see and hear:\n${snippets.join('\n')}';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -2087,6 +2128,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         focusCharacter: character,
         participants: _participants,
         userName: userName,
+        joinedAtMessageCount: _joinIndexFor(character),
       );
       final injection = _lorebookService.buildInjection(
         character: character,
@@ -2118,12 +2160,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       isGroup: true,
     );
 
+    final minJoinIndex =
+        speakers.map((c) => _joinIndexFor(c)).reduce((a, b) => a < b ? a : b);
     final visibleHistory = _presence.filterHistoryForSpeakers(
       history: history,
       allMessages: _messages,
       speakers: speakers,
       participants: _participants,
       userName: userName,
+      joinedAtMessageCount: minJoinIndex,
     );
 
     final pendingDirectorId = _session?.pendingDirectorMessageId;
@@ -2177,6 +2222,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       characterName: speakers.map((c) => c.name).join(', '),
     );
 
+    if (minJoinIndex > 0) {
+      final catchUp = _buildCatchUpBlock(minJoinIndex);
+      if (catchUp.isNotEmpty) {
+        historyApi.insert(0, {'role': 'system', 'content': catchUp});
+      }
+    }
+
     final globalPrompts =
         await widget.settingsService.getGlobalChatPromptSettings();
 
@@ -2188,6 +2240,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         speakers: speakers,
         userName: userName,
         castNames: _participants.map((c) => c.name),
+        joinedAtMessageCount: minJoinIndex,
       );
       memoryBlock = _presence.formatFilteredMemoryForPrompt(
         filteredMemory: filtered,
@@ -2491,6 +2544,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       focusCharacter: speaker,
       participants: _participants,
       userName: userName,
+      joinedAtMessageCount: _joinIndexFor(speaker),
     );
     final loreSettings = await widget.settingsService.getLoreSettings();
     final extraBooks = await _lorebooksForSession(session);
@@ -2565,6 +2619,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         characterName: speaker.name,
         userName: userName,
         castNames: _participants.map((c) => c.name),
+        joinedAtMessageCount: _joinIndexFor(speaker),
       );
       final block = _presence.formatFilteredMemoryForPrompt(
         filteredMemory: filtered,
@@ -2588,6 +2643,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         focusCharacter: speaker,
         participants: _participants,
         userName: userName,
+        joinedAtMessageCount: _joinIndexFor(speaker),
       ),
       allMessages: _messages,
       endExclusive: end,
@@ -3273,6 +3329,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         focusCharacter: character,
         participants: _participants,
         userName: userName,
+        joinedAtMessageCount: _joinIndexFor(character),
       ),
       allMessages: _messages,
       endExclusive: end,
@@ -3322,6 +3379,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         characterName: character.name,
         userName: userName,
         castNames: _participants.map((c) => c.name),
+        joinedAtMessageCount: _joinIndexFor(character),
       );
       final block = _presence.formatFilteredMemoryForPrompt(
         filteredMemory: filtered,
@@ -3329,6 +3387,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       );
       if (block.isNotEmpty) {
         msgs.add({'role': 'system', 'content': block});
+      }
+    }
+
+    final joinIndex = _joinIndexFor(character);
+    if (joinIndex > 0) {
+      final catchUp = _buildCatchUpBlock(joinIndex);
+      if (catchUp.isNotEmpty) {
+        msgs.add({'role': 'system', 'content': catchUp});
       }
     }
 
@@ -3348,6 +3414,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         focusCharacter: character,
         participants: _participants,
         userName: userName,
+        joinedAtMessageCount: _joinIndexFor(character),
       ),
       allMessages: _messages,
       endExclusive: end,

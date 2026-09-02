@@ -269,6 +269,7 @@ No global state management package — services passed as constructor args.
 | `participantIds` | Group cast (2+ = group) |
 | `nextSpeakerIndex` | Round-robin / chip selection |
 | `sourceWorkshopId` | Provenance from Creation Center |
+| `castJoinedAt` | `Map<String,int>` — message count when each character id joined; empty for legacy chats. See §12 for prompt-level effects |
 
 ### `Character` — SillyTavern-compatible card
 
@@ -471,6 +472,7 @@ Special tuned sampling for: memory summarize, narrator generate, composer format
 - Export/import transcript
 - Manage cast (rename groups, add/remove cast)
 - **Add / update character…** (⋮ hub, `add_update_character_sheet.dart`) — one menu for **New character from this chat** (optionally **based on** a chosen character + persona — each optional; blank = classic flow), **Add temporary character**, **Update saved character from chat**
+- **Mid-chat character join-awareness** — `ChatSession.castJoinedAt` records the message count when each character was added. `PresenceService` methods accept `joinedAtMessageCount`: a character who joined mid-chat sees **all non-Director messages from their join point onward** in both presence filtering and narrator scene backdrop. A **catch-up block** (`_buildCatchUpBlock`) injects a brief "You just entered the scene. From what you can see and hear:" context from the 5 messages before the join time, stripped of private/asterisk-only text.
 
 ---
 
@@ -531,7 +533,7 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 - **Duplicate** — ⋮ menu on Characters and Personas list copies with new id.
 - **Compact / Expand** — AI shortens or enriches fields with a review sheet before apply (Compact: card, persona, lorebook, entry; **Expand: character card and persona only** — the AI invents new interesting details from what’s already there, no prompts needed).
 - **Base on another card… (cross-reference)** — character + persona editor ⋮ menus. Pick any other character or persona (`cross_reference_source_sheet.dart` — Characters/Personas tabs + optional "How should they connect?" note) and the AI drafts the card being edited grounded in the source's shared world. Prompt law (`buildCrossReferenceMessages` in both collaborators): **the target comes first** — its name/identity is never replaced; borrowed facts (factions, places, history, speech register) are re-pointed at the target; glue is invented where the source is silent; never copy the source bio wholesale. Same JSON output shape as Expand → reuses `parseCharacterConsistencyFixJson` / `parsePersonaUpdateJson` + the `AiFieldChangesSheet` review flow. Works on brand-new (blank) cards too, which is the fast cast-building path.
-- **Add / update character… (chat ⋮ hub)** — `add_update_character_sheet.dart` routes to **New character from this chat**, **Add temporary character**, or **Update saved character from chat**. New-from-chat can optionally be **based on** one character card + one persona picked from the chat (each optional; leave both blank for the classic chat-only draft): `buildChatCharacterExportMessagesWithReferences()` in `world_workshop_builder.dart` prepends `_referenceCharacterBlock` / `_referencePersonaBlock` context so the draft is grounded in the chosen cards — borrowed world facts are re-pointed at the new character, whose own identity always wins.
+- **Add / update character… (chat ⋮ hub)** — `add_update_character_sheet.dart` routes to **New character from this chat**, **Add temporary character**, or **Update saved character from chat**. New-from-chat can optionally be **based on** one character card + one persona picked from the chat (each optional; leave both blank for the classic chat-only draft): `buildChatCharacterExportMessagesWithReferences()` in `world_workshop_builder.dart` prepends `_referenceCharacterBlock` / `_referencePersonaBlock` context so the draft is grounded in the chosen cards — borrowed world facts are re-pointed at the new character, whose own identity always wins. A **"Who they are" description text field** in the sheet is passed as `characterSummary` (shown as "Identity hint" in the generation prompt) so you can describe the new character's role and relationship to the reference cards or current scene.
 - **Save reliability** — see §8: flushed + retried writes, serialized `upsert()` with on-disk verification; on failure the editor **stays open** with edits intact and shows the error.
 - **~token badges** — approximate prompt token counts on lists and editors.
 

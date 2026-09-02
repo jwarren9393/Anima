@@ -88,6 +88,7 @@ Knowledge boundaries (absolute — never break these):
     required Character focusCharacter,
     required List<Character> participants,
     required String userName,
+    int joinedAtMessageCount = 0,
   }) {
     if (history.isEmpty) return history;
     if (participants.length <= 1) return history;
@@ -109,6 +110,7 @@ Knowledge boundaries (absolute — never break these):
         castNames: castNames,
         participants: participants,
         soloChat: isSolo,
+        joinedAtMessageCount: joinedAtMessageCount,
       );
     }).toList(growable: false);
   }
@@ -120,6 +122,7 @@ Knowledge boundaries (absolute — never break these):
     required List<Character> speakers,
     required List<Character> participants,
     required String userName,
+    int joinedAtMessageCount = 0,
   }) {
     if (speakers.isEmpty) return history;
     if (speakers.length == 1) {
@@ -129,6 +132,7 @@ Knowledge boundaries (absolute — never break these):
         focusCharacter: speakers.first,
         participants: participants,
         userName: userName,
+        joinedAtMessageCount: joinedAtMessageCount,
       );
     }
 
@@ -145,6 +149,7 @@ Knowledge boundaries (absolute — never break these):
           castNames: _castNames(participants, userName),
           participants: participants,
           soloChat: false,
+          joinedAtMessageCount: joinedAtMessageCount,
         )) {
           return true;
         }
@@ -162,12 +167,19 @@ Knowledge boundaries (absolute — never break these):
     required Set<String> castNames,
     List<Character> participants = const [],
     bool soloChat = false,
+    int joinedAtMessageCount = 0,
   }) {
     final focus = _normName(focusCharacterName);
     if (focus.isEmpty) return true;
 
     if (message.isDirector) {
       return false;
+    }
+
+    // A character who joined mid-chat witnesses every non-Director message from
+    // their join point onward (they were in the scene from that moment).
+    if (joinedAtMessageCount > 0 && messageIndex >= joinedAtMessageCount) {
+      return true;
     }
 
     if (message.isNarrator) {
@@ -392,6 +404,7 @@ Knowledge boundaries (absolute — never break these):
     required String characterName,
     required String userName,
     required Iterable<String> castNames,
+    int joinedAtMessageCount = 0,
   }) {
     final body = memory.trim();
     if (body.isEmpty) return '';
@@ -420,6 +433,7 @@ Knowledge boundaries (absolute — never break these):
     required List<Character> speakers,
     required String userName,
     required Iterable<String> castNames,
+    int joinedAtMessageCount = 0,
   }) {
     final body = memory.trim();
     if (body.isEmpty || speakers.isEmpty) return '';
@@ -431,6 +445,7 @@ Knowledge boundaries (absolute — never break these):
         characterName: speaker.name,
         userName: userName,
         castNames: castNames,
+        joinedAtMessageCount: joinedAtMessageCount,
       );
       for (final line in slice.split('\n')) {
         final trimmed = line.trim();

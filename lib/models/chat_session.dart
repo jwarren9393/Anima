@@ -26,6 +26,7 @@ class ChatSession {
     Map<String, Character>? characterOverrides,
     this.personaOverride,
     this.chatLorebook,
+    Map<String, int>? castJoinedAt,
   })  : messages = List<ChatMessage>.from(messages ?? const []),
         participantIds = List<String>.from(participantIds ?? const []),
         lorebookIds =
@@ -34,7 +35,8 @@ class ChatSession {
             List<String>.from(activeSceneMoodIds ?? const []),
         characterOverrides = Map<String, Character>.from(
           characterOverrides ?? const {},
-        );
+        ),
+        castJoinedAt = Map<String, int>.from(castJoinedAt ?? const {});
 
   final String id;
 
@@ -97,6 +99,10 @@ class ChatSession {
   /// Lorebook owned by this chat only — merged with selected global books.
   final Lorebook? chatLorebook;
 
+  /// When each cast member joined this chat (character id → message count at join).
+  /// Empty for legacy chats or when everyone started together.
+  final Map<String, int> castJoinedAt;
+
   bool get hasCharacterOverrides => characterOverrides.isNotEmpty;
 
   Character? characterOverrideFor(String characterId) =>
@@ -110,6 +116,11 @@ class ChatSession {
     if (characterId.isEmpty) return const [];
     return [characterId];
   }
+
+  /// Message count when [characterId] joined this chat.
+  /// Returns 0 for legacy chats or members who started at the beginning.
+  int joinMessageCountFor(String characterId) =>
+      castJoinedAt[characterId] ?? 0;
 
   ChatSession copyWith({
     String? id,
@@ -141,6 +152,7 @@ class ChatSession {
     bool clearPersonaOverride = false,
     Lorebook? chatLorebook,
     bool clearChatLorebook = false,
+    Map<String, int>? castJoinedAt,
   }) {
     return ChatSession(
       id: id ?? this.id,
@@ -178,6 +190,7 @@ class ChatSession {
       chatLorebook: clearChatLorebook
           ? null
           : (chatLorebook ?? this.chatLorebook),
+      castJoinedAt: castJoinedAt ?? this.castJoinedAt,
     );
   }
 
@@ -213,6 +226,7 @@ class ChatSession {
         if (personaOverride != null) 'personaOverride': personaOverride!.toJson(),
         if (chatLorebook != null && !chatLorebook!.isEmpty)
           'chatLorebook': chatLorebook!.toJson(),
+      if (castJoinedAt.isNotEmpty) 'castJoinedAt': castJoinedAt,
       };
 
   factory ChatSession.fromJson(Map<String, dynamic> json) {
@@ -296,6 +310,15 @@ class ChatSession {
       }
     }
 
+    Map<String, int> castJoinedAt = const {};
+    final rawJoined = json['castJoinedAt'];
+    if (rawJoined is Map) {
+      castJoinedAt = {
+        for (final entry in rawJoined.entries)
+          if (entry.value is int) '${entry.key}': entry.value as int,
+      };
+    }
+
     return ChatSession(
       id: json['id'] as String? ?? '',
       characterId: json['characterId'] as String? ?? '',
@@ -329,6 +352,7 @@ class ChatSession {
       characterOverrides: overrides,
       personaOverride: personaOverride,
       chatLorebook: chatLorebook,
+      castJoinedAt: castJoinedAt,
     );
   }
 

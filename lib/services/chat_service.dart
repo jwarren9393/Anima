@@ -414,6 +414,18 @@ class ChatService {
       nextTitle = _defaultTitle(orderedMembers.first);
     }
 
+    // Track when each character joined.
+    final priorIds = session.effectiveParticipantIds.toSet();
+    var nextJoined = Map<String, int>.from(session.castJoinedAt);
+    // Remove leavers.
+    nextJoined.removeWhere((id, _) => !orderedIds.contains(id));
+    // Record newcomers at the current message count.
+    for (final id in orderedIds) {
+      if (!priorIds.contains(id) && !nextJoined.containsKey(id)) {
+        nextJoined[id] = session.messages.length;
+      }
+    }
+
     final updated = session.copyWith(
       characterId: newBucket,
       title: nextTitle,
@@ -422,6 +434,7 @@ class ChatService {
       authorsNote: authorsNote ?? session.authorsNote,
       autoReply: autoReply ?? session.autoReply,
       lorebookIds: lorebookIds ?? session.lorebookIds,
+      castJoinedAt: nextJoined,
     );
 
     if (oldBucket != newBucket) {

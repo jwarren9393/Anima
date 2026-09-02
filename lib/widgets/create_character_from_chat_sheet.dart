@@ -75,6 +75,7 @@ class _CreateCharacterFromChatSheetState
     extends State<_CreateCharacterFromChatSheet> {
   final _builder = WorldWorkshopBuilder();
   final _nameController = TextEditingController();
+  final _descriptionController = TextEditingController();
 
   List<GlobalLorebook> _linkedLorebooks = const [];
   List<Character> _allCharacters = const [];
@@ -102,6 +103,7 @@ class _CreateCharacterFromChatSheetState
   @override
   void dispose() {
     _nameController.dispose();
+    _descriptionController.dispose();
     super.dispose();
   }
 
@@ -329,6 +331,7 @@ class _CreateCharacterFromChatSheetState
         session: widget.session,
         characters: widget.participants,
         characterName: name,
+        characterSummary: _descriptionController.text.trim(),
         persona: widget.persona,
         linkedLorebooks: _linkedLorebooks,
         buildPromptNote: build.promptNote,
@@ -430,6 +433,23 @@ class _CreateCharacterFromChatSheetState
               onChanged: (_) {
                 if (_error != null) setState(() => _error = null);
               },
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _descriptionController,
+              enabled: !busy,
+              minLines: 2,
+              maxLines: 4,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                labelText: 'Who they are (optional)',
+                hintText:
+                    'e.g. Marcus, the estranged younger brother of Ashley Diamond who just returned to town',
+                border: OutlineInputBorder(),
+                helperText: 'Describe who this character is — their role, '
+                    'how they relate to the reference or the current scene.',
+                helperMaxLines: 2,
+              ),
             ),
             if (_error != null) ...[
               const SizedBox(height: 12),
