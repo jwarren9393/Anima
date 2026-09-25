@@ -86,7 +86,7 @@ step "Installing system build packages"
 APT_PACKAGES=(
   git curl wget unzip zip xz-utils rsync file
   build-essential clang cmake ninja-build pkg-config
-  libgtk-3-dev liblzma-dev libsecret-1-dev libjsoncpp-dev
+  libgtk-3-dev liblzma-dev libsecret-1-dev libjsoncpp-dev libsqlite3-dev
   android-sdk-platform-tools-common gh
 )
 # Never let one broken third-party repository abort the whole install.
@@ -170,19 +170,23 @@ ok "Android SDK ready at $SDK_ROOT"
 
 step "Saving environment variables"
 BASHRC="$HOME/.bashrc"
-BLOCK_START="# >>> Anima dev environment >>>"
-BLOCK_END="# <<< Anima dev environment <<<"
-if grep -qF "$BLOCK_START" "$BASHRC" 2>/dev/null; then
-  # Remove the previous block so paths stay correct when this script is re-run.
-  python3 - "$BASHRC" "$BLOCK_START" "$BLOCK_END" <<'PY'
-import sys
-path, start, end = sys.argv[1], sys.argv[2], sys.argv[3]
+BLOCK_START="# >>> Anima/Journey dev environment >>>"
+BLOCK_END="# <<< Anima/Journey dev environment <<<"
+# Strip any previous block (either project's older marker) so running both setup
+# scripts can never leave duplicate PATH/JAVA_HOME entries in ~/.bashrc.
+if grep -qE '# >>> .*dev environment >>>' "$BASHRC" 2>/dev/null; then
+  python3 - "$BASHRC" <<'PY'
+import re, sys
+path = sys.argv[1]
+start = re.compile(r'^# >>> .*dev environment >>>$')
+end = re.compile(r'^# <<< .*dev environment <<<$')
 keep, skipping = [], False
 for line in open(path).read().splitlines():
-    if line.strip() == start:
+    stripped = line.strip()
+    if start.match(stripped):
         skipping = True
         continue
-    if line.strip() == end:
+    if end.match(stripped):
         skipping = False
         continue
     if not skipping:
@@ -202,12 +206,14 @@ fi
 } >> "$BASHRC"
 ok "Added PATH, JAVA_HOME and ANDROID_HOME to ~/.bashrc"
 
-# Apps started from the application menu (Cursor, the Anima launcher) never read
-# ~/.bashrc, so mirror the same values for the login session too.
+# Apps started from the application menu (Cursor, the menu launcher) never read
+# ~/.bashrc, so mirror the same values for the login session too. Anima and Journey
+# share this one file so PATH is never duplicated.
 ENV_DIR="$HOME/.config/environment.d"
 mkdir -p "$ENV_DIR"
-cat > "$ENV_DIR/50-anima-dev.conf" <<EOF
-# Written by Anima's scripts/setup_linux_dev.sh — safe to delete.
+rm -f "$ENV_DIR/50-anima-dev.conf" "$ENV_DIR/50-journey-dev.conf" 2>/dev/null || true
+cat > "$ENV_DIR/50-flutter-dev.conf" <<EOF
+# Written by Anima/Journey scripts/setup_linux_dev.sh — safe to delete.
 JAVA_HOME=$JDK_HOME
 ANDROID_HOME=$SDK_ROOT
 ANDROID_SDK_ROOT=$SDK_ROOT
@@ -284,7 +290,7 @@ step "Checking where Flutter is able to build from"
 # flutter_plugins.dart -> link.createSync, and on failure it rethrows). exFAT/FAT
 # drives cannot store symlinks, so builds must run from a real Linux drive.
 BUILD_DIR="$ROOT_DIR"
-PROBE="$ROOT_DIR/.anima-symlink-probe"
+PROBE="$ROOT_DIR/.dev-symlink-probe"
 if ln -s /tmp "$PROBE" 2>/dev/null; then
   rm -f "$PROBE"
   ok "This folder supports symlinks — builds work here."

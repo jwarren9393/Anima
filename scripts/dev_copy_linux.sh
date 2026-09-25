@@ -33,7 +33,7 @@ PROBE_DIR="$(dirname "$TARGET")"
 [[ -d "$PROBE_DIR" ]] || PROBE_DIR="$HOME"
 if ! ln -s /tmp "$PROBE_DIR/.anima-symlink-probe" 2>/dev/null; then
   rm -f "$PROBE_DIR/.anima-symlink-probe" 2>/dev/null || true
-  fail "That folder is also on a drive without symlink support. Pick a folder on your internal disk, e.g. ~/Anima"
+  fail "That folder is also on a drive without symlink support. Pick a folder on your internal disk, e.g. ~/Documents/App-Builds/Anima"
 fi
 rm -f "$PROBE_DIR/.anima-symlink-probe"
 ok "$PROBE_DIR can store symlinks, so Flutter builds will work there."
