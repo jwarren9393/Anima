@@ -136,7 +136,10 @@ Anima/
     setup_linux_dev.sh    # fresh Linux install: apt deps, JDK 17, Flutter, Android SDK, gh, env vars, Cursor
     dev_copy_linux.sh     # buildable working copy at ~/Anima when the source sits on exFAT
     update_linux.sh       # Linux build + install
-    update_windows.ps1    # Windows build + zip + optional gh release
+    update_windows.ps1    # Windows build + zip + optional gh release (local fallback)
+    upload_github_release.ps1 # APK + Windows zip upload (⚠️ replaces the APK asset)
+  .github/workflows/
+    windows-release.yml   # GitHub Actions: Windows zip → existing v1.0.0 release
   AGENTS.md               # Cursor agent living doc (status, roadmap)
   README.md               # User feature catalog
   PROJECT_REFERENCE.md    # This file — full encyclopedia
@@ -723,7 +726,8 @@ Tests cover: lore scan, prompt builders, card codec, backup, sync stability, cha
 | New Linux PC (toolchain) | `bash scripts/setup_linux_dev.sh [--github]` |
 | Buildable copy when the source is on exFAT | `bash scripts/dev_copy_linux.sh` |
 | Android APK | `flutter build apk --release` |
-| Windows | `.\scripts\update_windows.ps1 -Zip` |
+| Windows (normal path) | **GitHub Actions** `.github/workflows/windows-release.yml` — dispatched by `./deploy.sh` step 7/7, attaches `Anima-<version>-windows-x64.zip` to **v1.0.0** |
+| Windows (local fallback) | `.\scripts\update_windows.ps1 -Zip` on the Windows PC — **never add `-Release`** (it would overwrite the current APK asset with that PC's older one) |
 | Linux | `./scripts/update_linux.sh` |
 
 - **exFAT rule:** Flutter writes its plugin links as symlinks and **rethrows** when the filesystem
@@ -741,8 +745,16 @@ Tests cover: lore scan, prompt builders, card codec, backup, sync stability, cha
   on purpose so every machine signs identically; `android/app/build.gradle.kts` falls back to debug
   signing when they are absent. A mismatched signature on the phone
   (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`) needs one `adb uninstall com.anima.anima` first.
+- **Windows build (CI):** `.github/workflows/windows-release.yml` runs on a `windows-latest` runner
+  (`flutter pub get` → `dart run flutter_launcher_icons` → `flutter build windows --release` →
+  `Compress-Archive` → `softprops/action-gh-release` with `tag_name: v1.0.0`) so the zip replaces the
+  previous one on the same release. `deploy.sh` step **7/7** dispatches it
+  (`gh workflow run windows-release.yml -f tag=v1.0.0`) and polls the release asset's `createdAt`
+  until it is newer than the dispatch time (max ~15 min, fail-fast if `gh` is unreachable). Local
+  fallback on the Windows PC: `.\scripts\update_windows.ps1 -Zip`; **never `-Release`**, because that
+  re-uploads whatever APK sits in that PC's `build\` folder over the current asset.
 - Version: `pubspec.yaml` → `1.0.0+NN` (NN = build number).
-- Releases: GitHub `v1.0.0` tag — APK + Windows zip (assets overwritten per build).
+- Releases: GitHub `v1.0.0` tag — APK + Linux zip + Windows zip (every asset is overwritten per build; the Windows zip is produced by GitHub Actions).
 - Icon: `assets/branding/anima_icon.png` → Android, Windows exe, Linux bundle.
 
 ---

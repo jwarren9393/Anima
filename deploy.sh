@@ -55,9 +55,9 @@ echo "=================================================="
 # 1. SANITY CHECKS — type-check + tests before anything ships
 # ==============================================================================
 if [ "$SKIP_CHECKS" = "1" ]; then
-  echo -e "\n🔍 [1/6] Checks skipped (--skip-checks)."
+  echo -e "\n🔍 [1/7] Checks skipped (--skip-checks)."
 else
-  echo -e "\n🔍 [1/6] Running flutter analyze + flutter test..."
+  echo -e "\n🔍 [1/7] Running flutter analyze + flutter test..."
   flutter analyze || { echo "❌ flutter analyze failed — fix the issues, or re-run with --skip-checks."; exit 1; }
   flutter test    || { echo "❌ Tests failed — fix them, or re-run with --skip-checks."; exit 1; }
   echo "   ✅ Checks passed."
@@ -66,7 +66,7 @@ fi
 # ==============================================================================
 # 2. GIT COMMIT & PUSH
 # ==============================================================================
-echo -e "\n📦 [2/6] Syncing source code to GitHub..."
+echo -e "\n📦 [2/7] Syncing source code to GitHub..."
 git add .
 if git diff --staged --quiet; then
   echo "No uncommitted code changes."
@@ -76,9 +76,9 @@ fi
 git push origin main
 
 # ==============================================================================
-# 2. BUILD ANDROID APK & INSTALL TO PHONE
+# 3. BUILD ANDROID APK & INSTALL TO PHONE
 # ==============================================================================
-echo -e "\n📱 [3/6] Compiling Android Release APK..."
+echo -e "\n📱 [3/7] Compiling Android Release APK..."
 flutter build apk --release --build-name="$VERSION" --build-number="$BUILD_NUM"
 cp build/app/outputs/flutter-apk/app-release.apk "Anima-${VERSION}.apk"
 
@@ -104,20 +104,20 @@ fi
 # ==============================================================================
 # 4. BUILD + INSTALL LINUX DESKTOP (bundle, icon and menu entry) — one code path
 # ==============================================================================
-echo -e "\n💻 [4/6] Building and installing the Linux desktop app..."
+echo -e "\n💻 [4/7] Building and installing the Linux desktop app..."
 ./scripts/update_linux.sh
 echo "✅ Desktop app updated in-place!"
 
 # ==============================================================================
-# 4. PACKAGE DESKTOP ZIP FOR GITHUB RELEASE
+# 5. PACKAGE DESKTOP ZIP FOR GITHUB RELEASE
 # ==============================================================================
-echo -e "\n🗜️  [5/6] Packaging Linux Release Zip..."
+echo -e "\n🗜️  [5/7] Packaging Linux Release Zip..."
 (cd build/linux/x64/release/bundle && zip -rq "${PROJECT_ROOT}/Anima-${VERSION}-linux-x64.zip" .)
 
 # ==============================================================================
-# 5. PUBLISH / UPDATE GITHUB RELEASE (IN-PLACE ON v1.0.0)
+# 6. PUBLISH / UPDATE GITHUB RELEASE (IN-PLACE ON v1.0.0)
 # ==============================================================================
-echo -e "\n🌐 [6/6] Updating GitHub Release (v${VERSION})..."
+echo -e "\n🌐 [6/7] Updating GitHub Release (v${VERSION})..."
 TAG="v${VERSION}"
 RELEASE_TITLE="Anima ${VERSION} (build ${BUILD_NUM})"
 RELEASE_BODY="Install the new APK over the existing app (do not uninstall first).
@@ -136,4 +136,55 @@ else
   echo "⚠️ GitHub CLI (gh) not found. Upload binaries manually if needed."
 fi
 
-echo -e "\n🎉 ALL DONE! App built, phone updated, desktop updated, and GitHub release published!"
+# ==============================================================================
+# 7. WINDOWS APP — built by GitHub Actions (Flutter cannot cross-compile it here)
+# ==============================================================================
+echo -e "\n🪟 [7/7] Asking GitHub Actions to build the Windows app..."
+WINDOWS_CI="https://github.com/jwarren9393/Anima/actions/workflows/windows-release.yml"
+if command -v gh &> /dev/null; then
+  WINDOWS_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  if gh workflow run windows-release.yml --ref main -f "tag=$TAG" > /dev/null 2>&1; then
+    echo "   Dispatched — waiting for the Windows zip (usually 4–8 minutes)..."
+    WINDOWS_READY=0
+    GH_FAILS=0
+    for _ in $(seq 1 45); do
+      sleep 20
+
+      # The release keeps the same file name, so compare upload timestamps to
+      # tell a fresh zip from the one that was already there.
+      if ASSET_AT=$(gh release view "$TAG" --json assets \
+          -q '[.assets[] | select(.name | test("windows-x64\\.zip$"))][0].createdAt' 2>/dev/null); then
+        GH_FAILS=0
+      else
+        ASSET_AT=""
+        GH_FAILS=$((GH_FAILS + 1))
+        if [ "$GH_FAILS" -ge 4 ]; then
+          echo "   ⚠️ Cannot reach GitHub to check the Windows build (4 tries)."
+          echo "      It keeps building in the background: $WINDOWS_CI"
+          break
+        fi
+        continue
+      fi
+
+      if [ -n "$ASSET_AT" ] && [ "$ASSET_AT" != "null" ] && [ "$ASSET_AT" \> "$WINDOWS_STARTED_AT" ]; then
+        WINDOWS_READY=1
+        break
+      fi
+    done
+
+    if [ "$WINDOWS_READY" = "1" ]; then
+      echo "   ✅ Fresh Windows zip is on the release — grab it on the PC any time."
+    else
+      echo "   ⚠️ Windows zip not confirmed yet — watch it here:"
+      echo "      $WINDOWS_CI"
+    fi
+  else
+    echo "   ⚠️ Could not start the Windows workflow. Run it from the Actions tab:"
+    echo "      $WINDOWS_CI"
+  fi
+else
+  echo "   ⚠️ GitHub CLI (gh) not found — start the Windows build from the Actions tab:"
+  echo "      $WINDOWS_CI"
+fi
+
+echo -e "\n🎉 ALL DONE! App built, phone updated, desktop updated, Windows building on GitHub!"

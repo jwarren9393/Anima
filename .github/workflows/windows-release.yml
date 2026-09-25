@@ -1,0 +1,74 @@
+name: Windows Release
+
+# Anima's Windows app cannot be built on Linux (Flutter has no cross-compile for
+# Windows), so `./deploy.sh` asks GitHub Actions to build it instead. The zip is
+# attached to the existing v1.0.0 release — the same single-release rule as the
+# Android APK and the Linux zip.
+#
+# Automatic:  ./deploy.sh dispatches this workflow as its last step.
+# Manual:     repo → Actions → "Windows Release" → Run workflow.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag that receives Anima-<version>-windows-x64.zip'
+        required: false
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows portable zip
+    runs-on: windows-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate the app icon
+        run: dart run flutter_launcher_icons
+
+      - name: Build the Windows release
+        run: flutter build windows --release
+
+      - name: Work out the release tag
+        id: release
+        shell: pwsh
+        run: |
+          $tag = "${{ github.event.inputs.tag }}"
+          if ([string]::IsNullOrWhiteSpace($tag)) { $tag = 'v1.0.0' }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+
+      - name: Package the portable zip
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path 'pubspec.yaml' -Pattern '^version:\s*(\S+)').Matches[0].Groups[1].Value
+          $versionName = $version.Split('+')[0]
+          $zip = "Anima-$versionName-windows-x64.zip"
+          Compress-Archive -Path 'build/windows/x64/runner/Release/*' -DestinationPath $zip -Force
+          "ZIP_NAME=$zip" >> $env:GITHUB_ENV
+          Write-Host "Packaged $zip"
+
+      - name: Upload the zip as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: anima-windows-x64
+          path: ${{ env.ZIP_NAME }}
+
+      - name: Attach the zip to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          files: ${{ env.ZIP_NAME }}
+          fail_on_unmatched_files: true

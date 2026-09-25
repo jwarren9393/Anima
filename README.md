@@ -108,16 +108,35 @@ Update later: `./scripts/update_linux.sh --pull`
 > an exFAT drive, run `bash scripts/dev_copy_linux.sh` once — it makes a buildable copy at
 > **`~/Documents/App-Builds/Anima`**, and git keeps that copy and the portable one in sync.
 
-### Windows
+### Windows — portable folder, no installer
+
+**You don't build this one yourself any more.** Every `./deploy.sh` on the Linux laptop asks
+**GitHub Actions** to build the Windows app, and the zip lands on the same **v1.0.0** release as the
+APK. Give it 5–8 minutes after a deploy, then:
+
+1. Open the **[v1.0.0 release](https://github.com/jwarren9393/Anima/releases/tag/v1.0.0)** on the Windows PC.
+2. Download **`Anima-1.0.0-windows-x64.zip`**.
+3. Right-click the zip → **Extract All**, then double-click **`anima.exe`** inside it.
+
+There is no installer and nothing to uninstall — just keep every file from the zip together (the
+`.exe`, the DLLs, and the `data` folder). You can move that folder anywhere: `Desktop\Anima`, a USB
+stick, another PC. To update, extract the newer zip over it. Your library stays in
+**Documents\Anima**, or drop a folder called **`AnimaData`** next to `anima.exe` to keep everything
+inside that one folder (handy for a USB stick).
+
+You can still build it by hand on a Windows PC if you want to:
 
 ```powershell
 flutter pub get
 flutter build windows --release
 # Run: build\windows\x64\runner\Release\anima.exe (keep the whole Release folder)
+.\scripts\update_windows.ps1 -Zip          # builds + makes build\Anima-1.0.0-windows-x64.zip
 ```
 
-Or: `.\scripts\update_windows.ps1 -Zip` for a zip package (build embeds the Anima icon in `anima.exe`).  
-**GitHub Releases (APK + Windows):** `flutter build apk --release` then `.\scripts\update_windows.ps1 -Zip -Release` — uploads one `Anima-1.0.0.apk` (removes stale APK assets first). Or `.\scripts\upload_github_release.ps1` after both builds.
+⚠️ Avoid `.\scripts\update_windows.ps1 -Zip -Release`: that script also re-uploads the APK sitting in
+that PC's `build\` folder and would overwrite the current APK on the release with an older one. To
+publish only a zip you built locally, use
+`gh release upload v1.0.0 "build\Anima-1.0.0-windows-x64.zip" --clobber`.
 
 ### Moving data between devices
 
@@ -814,7 +833,7 @@ A tiny pointer file still sits in hidden app storage so the next launch knows wh
 
 ## 8. Current limits
 
-- Windows build only on a Windows PC.
+- Windows builds are made for you by **GitHub Actions** (`windows-release.yml`, dispatched by `./deploy.sh`) because Flutter cannot cross-compile Windows from Linux; a Windows PC can still build one by hand.
 - Group chat is simple (chips + round-robin), not full SillyTavern group orchestration.
 - No NovelAI / Agnai / Risu lore converters (ST JSON + `character_book` work).
 - No TTS (removed).
