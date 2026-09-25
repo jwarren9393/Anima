@@ -480,6 +480,14 @@ and waits up to ~15 minutes for a zip whose upload time is newer than the dispat
 Release → Run workflow**. `scripts/update_windows.ps1` still works for a local build on the Windows
 PC — but **never with `-Release`**, because that re-uploads whatever APK is sitting in that PC's
 `build\` folder and would overwrite the current one on the release.
+**VS 18 caveat (learned 2026-09-24):** `permission_handler_windows 0.2.2` compiles with `/await` +
+C++/WinRT, so the STL pulls in `<experimental/coroutine>`; Visual Studio 18 (MSVC/STL 14.51) makes
+that a **hard error** (`C2338` over an `STL1011` message) and the runner's first Windows build failed
+after ~4½ minutes. `windows/CMakeLists.txt` now defines
+`_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS` **before** `include(flutter/generated_plugins.cmake)`
+so the definition reaches every plugin target. Don't remove it unless the dependency drops `/await`.
+`deploy.sh` step 7/7 also now notices a **failed** run (compares the newest run's `createdAt` with the
+dispatch time) and reports it immediately instead of waiting out the 15-minute poll.
 
 ### Windows (the other host — project at `D:\AI\Anima`)
 

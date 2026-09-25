@@ -170,6 +170,22 @@ if command -v gh &> /dev/null; then
         WINDOWS_READY=1
         break
       fi
+
+      # Report a failed build straight away instead of waiting out the full loop.
+      if RUN_LINE=$(gh run list --workflow windows-release.yml --branch main --limit 1 \
+          --json createdAt,status,conclusion \
+          -q '.[0] | .createdAt + "|" + .status + "|" + (.conclusion // "")' 2>/dev/null); then
+        RUN_CREATED="${RUN_LINE%%|*}"
+        RUN_REST="${RUN_LINE#*|}"
+        RUN_STATUS="${RUN_REST%%|*}"
+        RUN_CONCLUSION="${RUN_REST#*|}"
+        if [ -n "$RUN_CREATED" ] && [ "$RUN_CREATED" \> "$WINDOWS_STARTED_AT" ] &&
+            [ "$RUN_STATUS" = "completed" ] && [ "$RUN_CONCLUSION" != "success" ]; then
+          echo "   ⚠️ The Windows build finished as: $RUN_CONCLUSION"
+          echo "      Log: $WINDOWS_CI"
+          break
+        fi
+      fi
     done
 
     if [ "$WINDOWS_READY" = "1" ]; then

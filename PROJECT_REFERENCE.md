@@ -753,6 +753,12 @@ Tests cover: lore scan, prompt builders, card codec, backup, sync stability, cha
   until it is newer than the dispatch time (max ~15 min, fail-fast if `gh` is unreachable). Local
   fallback on the Windows PC: `.\scripts\update_windows.ps1 -Zip`; **never `-Release`**, because that
   re-uploads whatever APK sits in that PC's `build\` folder over the current asset.
+- **Windows + Visual Studio 18:** `permission_handler_windows 0.2.2` sets `/await` and includes
+  C++/WinRT, which drags in `<experimental/coroutine>`; MSVC/STL 14.51 (VS 18, GitHub's
+  `windows-latest`) rejects that with `error C2338` / `STL1011`. `windows/CMakeLists.txt` calls
+  `add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)` before
+  `include(flutter/generated_plugins.cmake)` so the definition inherits into every plugin
+  subdirectory. Keep it while any Windows plugin still uses `/await`.
 - Version: `pubspec.yaml` → `1.0.0+NN` (NN = build number).
 - Releases: GitHub `v1.0.0` tag — APK + Linux zip + Windows zip (every asset is overwritten per build; the Windows zip is produced by GitHub Actions).
 - Icon: `assets/branding/anima_icon.png` → Android, Windows exe, Linux bundle.

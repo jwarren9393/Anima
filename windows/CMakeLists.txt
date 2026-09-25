@@ -53,6 +53,14 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 add_subdirectory("runner")
 
 
+# permission_handler_windows still compiles with /await and C++/WinRT, which pull
+# in <experimental/coroutine>. Visual Studio 18 (MSVC 14.51+ / STL 14.51) turns
+# that deprecation into a hard error (C2338 above an STL1011 message) — it breaks
+# GitHub's windows-latest runner and any PC that has updated Visual Studio.
+# The STL names this macro in the error text as the supported way to keep going;
+# /await itself still works, so the Windows app builds unchanged.
+add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
 include(flutter/generated_plugins.cmake)
