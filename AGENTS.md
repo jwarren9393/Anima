@@ -62,8 +62,9 @@ High-value SillyTavern concepts to aim for over time:
 
 **Phase:** Post-roadmap tweaks
 
-**Last updated:** 2026-09-01    
-**Last agent action:** Fixed **character save reliability** — card writes are flushed to disk with one automatic retry and concurrent card saves are serialized; if a save fails the character editor now shows an error banner and **stays open** (edits are never silently lost on close). Fixed **Pull from cloud** needing a second tap — sync file reads are stabilized (fresh-mount / partial-download guard with retries) so the first pull restores the real file. Chat ⋮ menu now has one **Add / update character…** entry consolidating New character / Add temporary character / Update character from chat — and **New character from this chat** can optionally be **based on** one character card + one persona you pick (AI drafts from the chat grounded in those cards; leave either blank for the classic flow). Fixed **mid-chat-added characters having no scene awareness** — presence now uses `castJoinedAt` (the message count when each character was added to the chat) so characters who joined later see all post-join history and narrator context, ending the "I can't write a reply from no context" error; a catch-up block ("You just entered the scene…") is injected into their prompt. Added **"Who they are" description field** to the create-character-from-chat sheet — describes the new character's role/relationship (passed as `characterSummary` to the AI card builder).
+**Last updated:** 2026-09-24    
+**Last agent action:** Rebuilt the **Linux Mint 22.3 dev environment from scratch** (the host was reinstalled, so no tools were left). Added **`scripts/setup_linux_dev.sh`** — one idempotent command that installs the apt build deps (clang/cmake/ninja/GTK 3/`libsecret-1-dev`/`libjsoncpp-dev`), **JDK 17** (Temurin, Ubuntu OpenJDK fallback), **Flutter stable** (`~/development/flutter`), the **Android SDK** (`~/Android/Sdk`: cmdline-tools, platform-tools, platform 36, build-tools 36.0.0, licences accepted), **GitHub CLI**, writes `JAVA_HOME`/`ANDROID_HOME`/PATH into `~/.bashrc` **and** `~/.config/environment.d/50-anima-dev.conf`, points Cursor's Dart extension at the SDK, accepts the GitHub sign-in (`--github`: `gh auth login --web`, `gh auth setup-git`, git identity), and refreshes package/pub state. Also added **`scripts/dev_copy_linux.sh`**, needed because **the project folder lives on an exFAT drive that cannot store symlinks** — Flutter creates its plugin links as symlinks and **rethrows** on failure (`flutter_plugins.dart` → `handleSymlinkException` only handles Windows), so `flutter pub get` and every build fail in that folder; the script creates a build-capable git working copy on the Linux drive. Both projects were then **moved out of the exFAT drive** to their intended home — **`~/Documents/App-Builds/Anima`** and **`~/Documents/App-Builds/Journey`** (1756 files each side, key files verified byte-identical, git remotes intact) — and the duplicate exFAT copies were deleted at the owner's request, so each project now has **exactly one working copy**.
+**Previous agent action:** Fixed **character save reliability** — card writes are flushed to disk with one automatic retry and concurrent card saves are serialized; if a save fails the character editor now shows an error banner and **stays open** (edits are never silently lost on close). Fixed **Pull from cloud** needing a second tap — sync file reads are stabilized (fresh-mount / partial-download guard with retries) so the first pull restores the real file. Chat ⋮ menu now has one **Add / update character…** entry consolidating New character / Add temporary character / Update character from chat — and **New character from this chat** can optionally be **based on** one character card + one persona you pick (AI drafts from the chat grounded in those cards; leave either blank for the classic flow). Fixed **mid-chat-added characters having no scene awareness** — presence now uses `castJoinedAt` (the message count when each character was added to the chat) so characters who joined later see all post-join history and narrator context, ending the "I can't write a reply from no context" error; a catch-up block ("You just entered the scene…") is injected into their prompt. Added **"Who they are" description field** to the create-character-from-chat sheet — describes the new character's role/relationship (passed as `characterSummary` to the AI card builder).
 
 ### What works today
 
@@ -125,7 +126,7 @@ High-value SillyTavern concepts to aim for over time:
 - **AI Compact** — character card, **persona**, whole lorebook, and individual lore entries; review sheet before apply
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar; **Scene moods** (mood icon + **+** menu) — includes **Sensual / intimate**, **Real voice (anti-script)**, **Intimate build-up**, **Explicit / graphic**, **Afterglow** with hard-coded **vocabulary law** (plain adult words; bans LLM euphemisms, porn-script dialogue, em-dash spam, recycled *actions* when those moods are on); **Chat copies** — per-chat character/persona overrides + **Chat lore** (thread-only World Info merged with global picks); long-press avatar edits chat copy (library unchanged)
 - **Linux install/update** — `./scripts/update_linux.sh` builds and installs the desktop app; add `--pull` to download GitHub changes first
-- **Smoke:** `flutter test` (361) + `flutter analyze` pass; Android + Windows + Linux desktop debug work
+- **Smoke:** `flutter test` (379) + `flutter analyze` pass; Android + Windows + Linux desktop debug work
 
 ### What does NOT work yet / limits
 
@@ -387,6 +388,8 @@ lib/
     settings_store.dart           Settings JSON in the library folder (migrates from secure storage)
     nanogpt_service.dart          Streaming + text/image model catalogs + image generate + credit usage + sampling + plain-English errors
 scripts/
+  setup_linux_dev.sh              Fresh Linux install: apt deps, JDK 17, Flutter, Android SDK, gh, env vars, Cursor Dart path
+  dev_copy_linux.sh               Build-capable copy on the internal disk (`~/Anima`) when the source sits on exFAT
   update_linux.sh                 One-command Linux build/install + launcher; optional Git pull
   update_windows.ps1              Windows build + optional zip / GitHub Release upload (`-Zip`, `-Release`)
   upload_github_release.ps1       Upload APK + Windows zip; deletes stale .apk assets first
@@ -408,9 +411,50 @@ scripts/
 
 ---
 
-## Machine notes (this developer PC)
+## Machine notes (developer PCs)
 
-### Windows (this PC)
+### Linux Mint 22.3 Cinnamon — **current host** (`jay@jay-mint-laptop`)
+
+Everything below is installed by **`bash scripts/setup_linux_dev.sh`** (idempotent — re-run it any time; `--github` also signs in to GitHub).
+
+| Tool | Status |
+|------|--------|
+| Flutter | ✅ stable at `~/development/flutter` (git clone, so `flutter upgrade` works) — verify with `flutter --version` |
+| Dart | ✅ ships with Flutter (satisfies `pubspec.yaml` `sdk: ^3.12.2`) |
+| JDK | ✅ Temurin 17 at `/usr/lib/jvm/temurin-17-jdk-amd64` (falls back to Ubuntu `openjdk-17-jdk`) |
+| Android SDK | ✅ `~/Android/Sdk` — cmdline-tools, platform-tools, **platform 36**, **build-tools 36.0.0**, licences accepted |
+| Linux desktop toolchain | ✅ clang / cmake / ninja / GTK 3 + `libsecret-1-dev` + `libjsoncpp-dev` |
+| GitHub CLI (`gh`) | ✅ from Ubuntu apt — `gh auth login --hostname github.com --git-protocol https --web` then `gh auth setup-git` |
+| Cursor | ✅ 3.21.18 (.deb) with Dart-Code Dart/Flutter extensions + `dart.flutterSdkPath` set |
+| Physical Android phone | Samsung SM-S731U — udev rules come from `android-sdk-platform-tools-common`; check `adb devices` shows `device` |
+
+**Project home (canonical working copies): `/home/jay/Documents/App-Builds/`**
+
+| Project | Path | Branch | Remote |
+|---------|------|--------|--------|
+| Anima | `~/Documents/App-Builds/Anima` | `main` | `jwarren9393/Anima` |
+| Journey | `~/Documents/App-Builds/Journey` | `master` | `jwarren9393/Journey` |
+| Packaged Windows builds | `~/Documents/App-Builds/AppBuilds/` | — | — |
+
+These live on the **ext4** root partition (`/dev/sdb2`) — exactly what Flutter needs.
+
+**One copy only.** The old exFAT copies on Jay-Storage (`/media/jay/Jay-Storage/App-Builds/…`) were
+deleted on 2026-09-24 so there is exactly one working copy of each project — the paths above.
+
+**⚠️ Never build from an exFAT/FAT drive.** exFAT cannot store symlinks, and Flutter writes its plugin
+links as symlinks then **rethrows** when that fails (`flutter_tools/lib/src/flutter_plugins.dart` →
+`handleSymlinkException` only covers Windows). On such a drive `flutter pub get`, `flutter test`,
+`flutter run` and every build fail — symptoms are a `FileSystemException` about `.plugin_symlinks` or
+zero-byte files inside `linux/flutter/ephemeral/.plugin_symlinks/`. If a copy of the repo ever lands on
+one (USB stick, portable drive), run **`bash scripts/dev_copy_linux.sh`** there first — it makes a
+build-capable copy at `~/Documents/App-Builds/Anima`.
+
+Environment variables are written to two places, so both terminals and menu-launched apps work:
+**`~/.bashrc`** (marked `# >>> Anima dev environment >>>` block) and
+**`~/.config/environment.d/50-anima-dev.conf`**. Sign out and back in after the first run.
+
+### Windows (the other host — project at `D:\AI\Anima`)
+
 
 | Tool | Status |
 |------|--------|
@@ -438,26 +482,6 @@ flutter pub get
 flutter run -d windows
 ```
 
-### Linux (alternate host)
-
-| Tool | Status |
-|------|--------|
-| Flutter | ✅ 3.47.0 stable at `~/development/flutter` |
-| Dart | ✅ 3.13.0 |
-| JDK | ✅ Temurin 17 at `~/development/jdk-17` |
-| Android SDK | ✅ `~/Android/Sdk` (platform 36, build-tools 36.0.0) |
-| Linux desktop toolchain | ✅ cmake/ninja/clang/GTK + `libsecret-1-dev`; F5 (device: Linux) |
-| GitHub CLI (`gh`) | ✅ `~/.local/bin/gh` (logged in as jwarren9393) |
-| Physical Android phone | ✅ Samsung SM-S731U (`R3CYA09N26J`), Android 16 |
-
-PATH tip for Linux shells:
-
-```bash
-export JAVA_HOME="$HOME/development/jdk-17"
-export ANDROID_HOME="$HOME/Android/Sdk"
-export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$HOME/development/flutter/bin:$HOME/.local/bin:$PATH"
-```
-
 ### Phone USB debugging (owner checklist)
 
 1. On the phone: **Settings → About phone → tap Build number 7 times** (unlocks Developer options).
@@ -465,7 +489,7 @@ export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME
 3. Plug phone into this PC with a data-capable USB cable.
 4. Accept the “Allow USB debugging?” prompt on the phone.
 5. In a terminal, run: `adb devices` — you should see your phone listed (not `unauthorized`).
-6. From the Anima folder: `flutter run`
+6. From the project folder (`~/Documents/App-Builds/Anima` on the Linux host): `flutter run`
 
 If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the prompt. On some Linux setups a udev rule may be needed later.
 
@@ -473,11 +497,12 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. Run the app: **`flutter run -d linux`** (desktop) or plug in your Android phone + **`flutter run`**.
-2. First launch: use **Documents/Anima** (or pick a folder). On Android, allow **All files access** so My Files can open it.
-3. Enter your NanoGPT API key in **Settings → API** (saved in that folder as `api_key.txt`).
-4. Optional on Windows: if Dart extension can't find Flutter, set user-level `"dart.flutterSdkPath": "C:\\src\\flutter"` (workspace no longer hardcodes a path).
-5. **Release rule:** keep `pubspec.yaml` at **`1.0.0+<build>`** — only increment the number after `+`. Upload to the existing **`v1.0.0`** GitHub release (not a new tag per build). Current phone APK is **build 64**.
+1. **New/reinstalled Linux PC?** Run **`bash scripts/setup_linux_dev.sh --github`** — it installs the toolchain, connects GitHub, and creates the buildable working copy.
+2. Work in **`~/Documents/App-Builds/Anima`** (ext4), **not** the exFAT Jay-Storage copy (Flutter cannot build there — see Machine notes). Then **`flutter run -d linux`** (desktop) or plug in your Android phone + **`flutter run`**.
+3. First launch: use **Documents/Anima** (or pick a folder). On Android, allow **All files access** so My Files can open it.
+4. Enter your NanoGPT API key in **Settings → API** (saved in that folder as `api_key.txt`). Your old library can be restored from the `.anima-backup` file in **Settings → Backup, restore & sync**.
+5. Optional on Windows: if Dart extension can't find Flutter, set user-level `"dart.flutterSdkPath": "C:\\src\\flutter"` (workspace no longer hardcodes a path).
+6. **Release rule:** keep `pubspec.yaml` at **`1.0.0+<build>`** — only increment the number after `+`. Upload to the existing **`v1.0.0`** GitHub release (not a new tag per build). Current phone APK is **build 64**.
 
 ---
 

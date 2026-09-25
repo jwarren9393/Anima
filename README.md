@@ -88,16 +88,25 @@ flutter build apk --release
 # APK: build/app/outputs/flutter-apk/app-release.apk
 ```
 
-### Linux — Kubuntu/Ubuntu
+### Linux — Kubuntu / Ubuntu / Mint
+
+One command prepares a fresh PC (build tools, JDK 17, Flutter, the Android SDK, GitHub CLI and
+Cursor's Dart path), then the installer builds and installs Anima:
 
 ```bash
-sudo apt install clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev
-# Flutter SDK + flutter config --enable-linux-desktop
-gh repo clone jwarren9393/Anima && cd Anima
-./scripts/update_linux.sh
+git clone https://github.com/jwarren9393/Anima.git && cd Anima
+bash scripts/setup_linux_dev.sh --github   # --github also signs you in to GitHub
+./scripts/update_linux.sh                  # build + install Anima for this user
 ```
 
 Update later: `./scripts/update_linux.sh --pull`
+
+> **Keep the project folder on a normal Linux drive (ext4), not an exFAT/FAT USB drive.**
+> Flutter creates its plugin links as symlinks and exFAT cannot store symlinks, so
+> `flutter pub get` and every build fail there. On this PC the projects live at
+> **`~/Documents/App-Builds/Anima`** and **`~/Documents/App-Builds/Journey`**; if your source is on
+> an exFAT drive, run `bash scripts/dev_copy_linux.sh` once — it makes a buildable copy at
+> **`~/Documents/App-Builds/Anima`**, and git keeps that copy and the portable one in sync.
 
 ### Windows
 
@@ -841,12 +850,13 @@ Read and update **`AGENTS.md`** after meaningful code changes.
 ## Developer quick start
 
 ```bash
-cd /path/to/Anima
+bash scripts/setup_linux_dev.sh   # once per Linux PC — installs every tool listed below
+cd ~/Documents/App-Builds/Anima    # Anima's home on the Linux drive (see the exFAT note above)
 flutter doctor
 flutter pub get
-flutter test      # 361 tests
+flutter test      # 379 tests
 flutter analyze
-flutter run -d windows   # or android device
+flutter run -d linux     # or -d windows / a connected Android device
 ```
 
 **API key:** Settings → API & connection → paste key → Save.

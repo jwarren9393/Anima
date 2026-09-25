@@ -133,6 +133,8 @@ Anima/
   assets/branding/        # anima_icon.png (Android + desktop)
   android/ linux/ windows/ # Platform runners
   scripts/
+    setup_linux_dev.sh    # fresh Linux install: apt deps, JDK 17, Flutter, Android SDK, gh, env vars, Cursor
+    dev_copy_linux.sh     # buildable working copy at ~/Anima when the source sits on exFAT
     update_linux.sh       # Linux build + install
     update_windows.ps1    # Windows build + zip + optional gh release
   AGENTS.md               # Cursor agent living doc (status, roadmap)
@@ -716,10 +718,22 @@ Tests cover: lore scan, prompt builders, card codec, backup, sync stability, cha
 
 | Platform | Command |
 |----------|---------|
+| New Linux PC (toolchain) | `bash scripts/setup_linux_dev.sh [--github]` |
+| Buildable copy when the source is on exFAT | `bash scripts/dev_copy_linux.sh` |
 | Android APK | `flutter build apk --release` |
 | Windows | `.\scripts\update_windows.ps1 -Zip` |
 | Linux | `./scripts/update_linux.sh` |
 
+- **exFAT rule:** Flutter writes its plugin links as symlinks and **rethrows** when the filesystem
+  refuses them (`flutter_tools/lib/src/flutter_plugins.dart` → `handleSymlinkException`, which only
+  covers Windows). A checkout on an exFAT/FAT drive (e.g. the Jay-Storage copy of this repo)
+  therefore cannot run `flutter pub get`, `flutter test`, or any build. Run those from **`~/Anima`**
+  (created by `scripts/dev_copy_linux.sh`) and keep the two in step with git push/pull.
+  The canonical copies live at **`~/Documents/App-Builds/Anima`** (branch `main`) and
+  **`~/Documents/App-Builds/Journey`** (branch `master`) on the ext4 root partition.
+- Linux dev environment: Flutter at `~/development/flutter`, JDK 17, Android SDK at `~/Android/Sdk`
+  (platform 36 + build-tools 36.0.0, licences accepted), env vars written to `~/.bashrc` and
+  `~/.config/environment.d/50-anima-dev.conf`, Cursor's `dart.flutterSdkPath` set by the script.
 - Version: `pubspec.yaml` → `1.0.0+NN` (NN = build number).
 - Releases: GitHub `v1.0.0` tag — APK + Windows zip (assets overwritten per build).
 - Icon: `assets/branding/anima_icon.png` → Android, Windows exe, Linux bundle.
