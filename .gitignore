@@ -56,3 +56,6 @@ app.*.map.json
 # Local release APK copies (GitHub Releases hold the official binaries)
 /dist/
 *.apk
+
+# Linux release zip (published via GitHub Releases, rebuilt by deploy.sh)
+/*.zip

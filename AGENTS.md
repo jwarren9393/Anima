@@ -462,7 +462,9 @@ Flutter template signed releases with the *machine-local* debug keystore, so APK
 machines (and the ones already on the phone) could not update each other —
 `INSTALL_FAILED_UPDATE_INCOMPATIBLE` means exactly that. `deploy.sh` now prints the fix and keeps
 going; the one-time cure is `adb uninstall com.anima.anima` (safe — the library lives in
-`Documents/Anima`) and then re-running `./deploy.sh`.
+`Documents/Anima`) and then re-running `./deploy.sh`. **Done on 2026-09-24:** the phone was
+uninstalled once and now runs **build 70 signed with the new key**, so every later update installs in
+place (the app asks for "All files access" and the `Documents/Anima` folder again after the reinstall).
 
 ### Windows (the other host — project at `D:\AI\Anima`)
 

@@ -102,14 +102,10 @@ else
 fi
 
 # ==============================================================================
-# 3. BUILD LINUX DESKTOP & UPDATE IN-PLACE
+# 4. BUILD + INSTALL LINUX DESKTOP (bundle, icon and menu entry) — one code path
 # ==============================================================================
-echo -e "\n💻 [4/6] Compiling Linux Desktop Release..."
-flutter build linux --release --build-name="$VERSION" --build-number="$BUILD_NUM"
-
-echo "Updating desktop application in-place..."
-mkdir -p "$DESKTOP_DIR"
-rsync -av --delete build/linux/x64/release/bundle/ "$DESKTOP_DIR/"
+echo -e "\n💻 [4/6] Building and installing the Linux desktop app..."
+./scripts/update_linux.sh
 echo "✅ Desktop app updated in-place!"
 
 # ==============================================================================
