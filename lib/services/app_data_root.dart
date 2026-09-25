@@ -30,6 +30,7 @@ class AppDataRoot {
     Future<bool> Function()? requestStorageAccess,
     Future<bool> Function()? hasStorageAccess,
     Future<String?> Function()? pickDirectoryPath,
+    Future<bool> Function(Directory)? directoryWritable,
   })  : _supportDirectory =
             supportDirectory ?? getApplicationSupportDirectory,
         _legacyDocumentsDirectory =
@@ -40,7 +41,8 @@ class AppDataRoot {
             requestStorageAccess ?? AndroidStorage.ensureAccess,
         _hasStorageAccess =
             hasStorageAccess ?? AndroidStorage.hasAllFilesAccess,
-        _pickDirectoryPath = pickDirectoryPath ?? _defaultPickDirectory;
+        _pickDirectoryPath = pickDirectoryPath ?? _defaultPickDirectory,
+        _directoryWritable = directoryWritable ?? isDirectoryWritable;
 
   static AppDataRoot? instance;
 
@@ -86,6 +88,7 @@ class AppDataRoot {
   final Future<bool> Function() _requestStorageAccess;
   final Future<bool> Function() _hasStorageAccess;
   final Future<String?> Function() _pickDirectoryPath;
+  final Future<bool> Function(Directory) _directoryWritable;
 
   String? _path;
 
@@ -148,23 +151,35 @@ class AppDataRoot {
   }
 
   /// Load the saved pointer, or adopt an existing library folder.
+  ///
+  /// Never throws. A library folder that exists but cannot be written — for
+  /// example Android right after an install, before "All files access" is
+  /// granted — reports `false` so the setup screen can ask for permission or a
+  /// different folder. Throwing here used to leave the app on a spinner forever.
   Future<bool> load() async {
-    final pointer = await _readPointer();
-    if (pointer != null && await _isUsableDirectory(pointer)) {
-      _path = pointer;
-      return true;
-    }
+    try {
+      final pointer = await _readPointer();
+      if (pointer != null && await _isUsableDirectory(pointer)) {
+        _path = pointer;
+        return true;
+      }
 
-    final publicPath = await defaultPublicPath();
-    if (await looksLikeLibrary(Directory(publicPath))) {
-      await setPath(publicPath, migrateLegacy: false);
-      return true;
-    }
+      final publicPath = await defaultPublicPath();
+      if (await looksLikeLibrary(Directory(publicPath)) &&
+          await _isUsableDirectory(publicPath)) {
+        await setPath(publicPath, migrateLegacy: false);
+        return true;
+      }
 
-    final portable = portablePath();
-    if (portable != null && await looksLikeLibrary(Directory(portable))) {
-      await setPath(portable, migrateLegacy: false);
-      return true;
+      final portable = portablePath();
+      if (portable != null &&
+          await looksLikeLibrary(Directory(portable)) &&
+          await _isUsableDirectory(portable)) {
+        await setPath(portable, migrateLegacy: false);
+        return true;
+      }
+    } catch (_) {
+      // Fall through: the folder setup screen lets the user fix it.
     }
 
     return false;
@@ -179,7 +194,7 @@ class AppDataRoot {
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
-    if (!await isDirectoryWritable(dir)) {
+    if (!await _directoryWritable(dir)) {
       throw AppDataRootException(
         'Anima could not write to that folder. Pick a different location.',
       );
@@ -328,10 +343,10 @@ class AppDataRoot {
     try {
       final dir = Directory(path);
       if (await dir.exists()) {
-        return await isDirectoryWritable(dir);
+        return await _directoryWritable(dir);
       }
       await dir.create(recursive: true);
-      return await isDirectoryWritable(dir);
+      return await _directoryWritable(dir);
     } catch (_) {
       return false;
     }

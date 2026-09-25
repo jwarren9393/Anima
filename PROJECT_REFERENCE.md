@@ -7,7 +7,7 @@
 >
 > **Living documents:** `AGENTS.md` + this file + `README.md` are kept current together — see §29 for the upkeep rule every agent must follow.
 
-**Last updated:** 2026-09-01 · **Version:** 1.0.0 build **64** · **Tests:** 379 (`flutter test`)
+**Last updated:** 2026-09-24 · **Version:** 1.0.0 build **71** · **Tests:** 381 (`flutter test`)
 
 ---
 
@@ -233,7 +233,7 @@ Anima/
 
 `lib/main.dart`:
 
-1. `AnimaBootstrap` loads `AppDataRoot` (user-owned library folder). First launch shows `DataFolderSetupScreen` if none is chosen.
+1. `AnimaBootstrap` loads `AppDataRoot` (user-owned library folder). First launch shows `DataFolderSetupScreen` if none is chosen. `load()` **never throws** — a library folder that exists but cannot be written (Android right after an install, before "All files access" is granted) returns "not configured" so `_boot()` / `_onFolderReady()` fall back to the setup screen instead of leaving the app on the loading spinner.
 2. Loads `AppearanceController` / `UiStyleSettings` from `anima_settings.json` in that folder.
 3. Builds `ThemeData` via `anima_theme.dart`.
 4. `MaterialApp` → `HomeScreen` with injected services (API key, chat, characters, etc.).
@@ -294,6 +294,8 @@ Workshop chat messages, world summary, linked lorebook, hub fields (kit, pins, g
 ## 8. Persistence and local files
 
 All library files live in **one user-owned folder** (`AppDataRoot`, default `Documents/Anima`). Services resolve it through `appDocumentsDirectory()`. A pointer file in app-support storage remembers the path.
+
+**Adopting an existing library must never throw** (`app_data_root.dart`): `load()` wraps the whole path resolution (saved pointer → `Documents/Anima` → portable `AnimaData`) in a try/catch, checks each candidate with `_isUsableDirectory()` (exists + write probe) before adopting it, and returns `false` when nothing is writable. `setPath()` still throws `AppDataRootException` for the explicit "user picked a folder" flows (that message is shown in the sheet), but the automatic startup path cannot. Regression tests: `test/app_data_root_test.dart` ("load does not throw when the existing library folder is not writable", "load adopts the public library once the folder is writable again").
 
 | File / folder | Contents |
 |---------------|----------|
@@ -704,7 +706,7 @@ Applied in `PromptBuilder.applyMacros()`.
 ## 26. Testing and quality
 
 ```bash
-flutter test      # 379 tests
+flutter test      # 381 tests
 flutter analyze
 ```
 

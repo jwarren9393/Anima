@@ -77,7 +77,7 @@ Official Android builds are on the private repo’s **[Releases](https://github.
 2. Download **`Anima-1.0.0.apk`**.
 3. Open the downloaded APK. If Android asks, allow your browser or file manager to **install unknown apps**.
 4. Tap **Install**, then open Anima.
-5. Allow **All files access** if Android asks, then use **Documents/Anima** (or pick another folder).
+5. Allow **All files access** if Android asks, then use **Documents/Anima** (or pick another folder). If access was lost — for example right after reinstalling the app — Anima opens this folder screen so you can allow it again; it never hangs on the loading spinner.
 6. Enter the NanoGPT key under **Settings → API & connection**.
 
 To update Android later, download the newly refreshed APK and install it over the existing app. Your library lives in **Documents/Anima** (or the folder you chose), so it survives app updates. Uninstalling the APK also leaves that folder in place — copy it if you want a spare.
@@ -854,7 +854,7 @@ bash scripts/setup_linux_dev.sh   # once per Linux PC — installs every tool li
 cd ~/Documents/App-Builds/Anima    # Anima's home on the Linux drive (see the exFAT note above)
 flutter doctor
 flutter pub get
-flutter test      # 379 tests
+flutter test      # 381 tests
 flutter analyze
 flutter run -d linux     # or -d windows / a connected Android device
 ```

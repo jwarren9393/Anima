@@ -66,6 +66,41 @@ void main() {
     expect(root.path, public.path);
   });
 
+  test('load does not throw when the existing library folder is not writable', () async {
+    // Android right after an install: Documents/Anima exists (with a library) but
+    // "All files access" has not been granted yet, so writes fail. This used to
+    // throw inside load() and left the app stuck on its loading spinner forever.
+    final public = Directory(p.join(temp.path, 'sdcard', 'Documents', 'Anima'));
+    await public.create(recursive: true);
+    await File(p.join(public.path, 'anima_characters.json')).writeAsString('[]');
+
+    final root = AppDataRoot(
+      supportDirectory: () async => support,
+      legacyDocumentsDirectory: () async => legacy,
+      homeDirectory: homeDocsParent.path,
+      androidPublicDocumentsPath: p.join(temp.path, 'sdcard', 'Documents'),
+      isAndroid: true,
+      isDesktop: false,
+      requestStorageAccess: () async => false,
+      hasStorageAccess: () async => false,
+      pickDirectoryPath: () async => null,
+      directoryWritable: (Directory _) async => false,
+    );
+
+    expect(await root.load(), isFalse);
+    expect(root.isConfigured, isFalse);
+  });
+
+  test('load adopts the public library once the folder is writable again', () async {
+    final public = Directory(p.join(temp.path, 'sdcard', 'Documents', 'Anima'));
+    await public.create(recursive: true);
+    await File(p.join(public.path, 'anima_characters.json')).writeAsString('[]');
+
+    final root = buildRoot(isAndroid: true, isDesktop: false);
+    expect(await root.load(), isTrue);
+    expect(root.path, public.path);
+  });
+
   test('setPath copies legacy files and writes a pointer', () async {
     await File(p.join(legacy.path, 'anima_chats.json')).writeAsString('{"ok":1}');
     final avatars = Directory(p.join(legacy.path, 'avatars'));

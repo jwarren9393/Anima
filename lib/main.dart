@@ -52,7 +52,15 @@ class _AnimaBootstrapState extends State<AnimaBootstrap> {
   }
 
   Future<void> _boot() async {
-    final configured = await _dataRoot.load();
+    // Never let a storage problem leave the app on the loading spinner: any
+    // failure falls through to the folder setup screen, which can ask for the
+    // "All files access" permission or a different folder.
+    var configured = false;
+    try {
+      configured = await _dataRoot.load();
+    } catch (_) {
+      configured = false;
+    }
     if (!mounted) return;
     setState(() {
       if (configured) {
@@ -66,9 +74,20 @@ class _AnimaBootstrapState extends State<AnimaBootstrap> {
   }
 
   void _onFolderReady() {
+    Widget? app;
+    try {
+      app = _createApp();
+    } catch (_) {
+      app = null;
+    }
     setState(() {
-      _app = _createApp();
-      _needsSetup = false;
+      if (app != null) {
+        _app = app;
+        _needsSetup = false;
+      } else {
+        // Let the setup screen try again instead of showing a blank app.
+        _needsSetup = true;
+      }
     });
   }
 
