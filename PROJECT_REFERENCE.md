@@ -733,7 +733,12 @@ Tests cover: lore scan, prompt builders, card codec, backup, sync stability, cha
   **`~/Documents/App-Builds/Journey`** (branch `master`) on the ext4 root partition.
 - Linux dev environment: Flutter at `~/development/flutter`, JDK 17, Android SDK at `~/Android/Sdk`
   (platform 36 + build-tools 36.0.0, licences accepted), env vars written to `~/.bashrc` and
-  `~/.config/environment.d/50-anima-dev.conf`, Cursor's `dart.flutterSdkPath` set by the script.
+  `~/.config/environment.d/50-flutter-dev.conf` (shared with Journey), Cursor's
+  `dart.flutterSdkPath` set by the script.
+- **Release signing:** `android/key.properties` + `android/keystore/anima-release.jks` are committed
+  on purpose so every machine signs identically; `android/app/build.gradle.kts` falls back to debug
+  signing when they are absent. A mismatched signature on the phone
+  (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`) needs one `adb uninstall com.anima.anima` first.
 - Version: `pubspec.yaml` → `1.0.0+NN` (NN = build number).
 - Releases: GitHub `v1.0.0` tag — APK + Windows zip (assets overwritten per build).
 - Icon: `assets/branding/anima_icon.png` → Android, Windows exe, Linux bundle.

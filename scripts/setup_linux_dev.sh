@@ -29,6 +29,9 @@ SDK_ROOT="$HOME/Android/Sdk"
 CMDLINE_TOOLS_ZIP="commandlinetools-linux-16111833_latest.zip"
 CMDLINE_TOOLS_URL="https://dl.google.com/android/repository/$CMDLINE_TOOLS_ZIP"
 ANDROID_PLATFORM="platforms;android-36"
+# Some plugin Gradle modules pin older platforms — pre-seed them so the first build
+# doesn't have to download them mid-flight (Gradle would fetch them anyway).
+ANDROID_EXTRA_PLATFORMS="platforms;android-35 platforms;android-34"
 ANDROID_BUILD_TOOLS="build-tools;36.0.0"
 RUN_GITHUB=0
 WORK_COPY="$HOME/Documents/App-Builds/Anima"
@@ -162,7 +165,7 @@ export PATH="$SDK_ROOT/cmdline-tools/latest/bin:$SDK_ROOT/platform-tools:$PATH"
 echo "    Accepting Android SDK licences…"
 yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
 echo "    Installing platform-tools, $ANDROID_PLATFORM and $ANDROID_BUILD_TOOLS…"
-"$SDKMANAGER" --install "platform-tools" "$ANDROID_PLATFORM" "$ANDROID_BUILD_TOOLS" >/dev/null \
+"$SDKMANAGER" --install "platform-tools" "$ANDROID_PLATFORM" $ANDROID_EXTRA_PLATFORMS "$ANDROID_BUILD_TOOLS" >/dev/null \
   || warn "Some Android packages could not be installed — re-run this script after checking your connection."
 [[ -x "$SDK_ROOT/platform-tools/adb" ]] && ok "adb installed at $SDK_ROOT/platform-tools/adb"
 ok "Android SDK ready at $SDK_ROOT"

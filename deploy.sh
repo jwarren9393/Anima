@@ -83,11 +83,22 @@ flutter build apk --release --build-name="$VERSION" --build-number="$BUILD_NUM"
 cp build/app/outputs/flutter-apk/app-release.apk "Anima-${VERSION}.apk"
 
 if [ -n "$DEVICE_ID" ]; then
-  echo "Installing in-place onto device ($DEVICE_ID)..."
-  adb -s "$DEVICE_ID" install -r "Anima-${VERSION}.apk"
-  echo "✅ Phone updated successfully!"
+  echo "   Installing in-place onto device ($DEVICE_ID)..."
+  if INSTALL_OUT=$(adb -s "$DEVICE_ID" install -r "Anima-${VERSION}.apk" 2>&1); then
+    echo "$INSTALL_OUT"
+    echo "   ✅ Phone updated successfully!"
+  else
+    echo "$INSTALL_OUT"
+    if echo "$INSTALL_OUT" | grep -q 'INSTALL_FAILED_UPDATE_INCOMPATIBLE'; then
+      echo "   ⚠️ The app on the phone was signed with a different key."
+      echo "      The Anima library lives in Documents/Anima, so this one-time fix is safe:"
+      echo "        adb -s $DEVICE_ID uninstall com.anima.anima"
+      echo "      then re-run ./deploy.sh — every later update installs in place."
+    fi
+    echo "   ⚠️ Phone install failed — continuing with the rest of the deploy."
+  fi
 else
-  echo "⚠️ No ADB device found. Skipping physical phone install."
+  echo "   ⚠️ No ADB device found. Skipping physical phone install."
 fi
 
 # ==============================================================================

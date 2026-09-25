@@ -451,8 +451,18 @@ one (USB stick, portable drive), run **`bash scripts/dev_copy_linux.sh`** there 
 build-capable copy at `~/Documents/App-Builds/Anima`.
 
 Environment variables are written to two places, so both terminals and menu-launched apps work:
-**`~/.bashrc`** (marked `# >>> Anima dev environment >>>` block) and
-**`~/.config/environment.d/50-anima-dev.conf`**. Sign out and back in after the first run.
+**`~/.bashrc`** (marked `# >>> Anima/Journey dev environment >>>` block — shared with Journey, so
+running either project's setup script never duplicates PATH) and
+**`~/.config/environment.d/50-flutter-dev.conf`**. Sign out and back in after the first run.
+
+**Release signing / phone updates.** Release APKs are signed with the **committed** key
+`android/keystore/anima-release.jks` (settings in `android/key.properties`), so builds from this
+laptop and from the Windows PC always produce installable updates. Before 2026-09-24 the stock
+Flutter template signed releases with the *machine-local* debug keystore, so APKs from different
+machines (and the ones already on the phone) could not update each other —
+`INSTALL_FAILED_UPDATE_INCOMPATIBLE` means exactly that. `deploy.sh` now prints the fix and keeps
+going; the one-time cure is `adb uninstall com.anima.anima` (safe — the library lives in
+`Documents/Anima`) and then re-running `./deploy.sh`.
 
 ### Windows (the other host — project at `D:\AI\Anima`)
 
