@@ -98,7 +98,7 @@
 | Paths | `path_provider` → app documents directory |
 | Files | `file_picker`, `share_plus`, Android `saf` for sync URIs |
 | Fonts | `google_fonts` |
-| Tests | `flutter_test` — 211 tests |
+| Tests | `flutter_test` — 381 tests |
 
 **Platforms:** Android (primary), Linux desktop, Windows desktop. macOS not targeted.
 
@@ -134,6 +134,8 @@ Anima/
   android/ linux/ windows/ # Platform runners
   scripts/
     setup_linux_dev.sh    # fresh Linux install: apt deps, JDK 17, Flutter, Android SDK, gh, env vars, Cursor
+    setup_windows_dev.ps1 # fresh Windows install: winget JDK 17/gh/platform-tools, Flutter at C:\src\flutter, Android SDK, VS Build Tools, env vars, Developer Mode
+    install_windows_atl.ps1 # adds C++ ATL to an existing VS Build Tools install (needed for Windows desktop builds)
     dev_copy_linux.sh     # buildable working copy at ~/Anima when the source sits on exFAT
     update_linux.sh       # Linux build + install
     update_windows.ps1    # Windows build + zip + optional gh release (local fallback)

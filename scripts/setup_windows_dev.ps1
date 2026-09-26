@@ -50,9 +50,11 @@ function Install-WingetPackage([string]$id, [string]$label, [string[]]$ExtraArgs
     }
 }
 
-Write-Step 'Git safe.directory for Anima (post laptop reset / ownership change)'
-git config --global --add safe.directory 'D:/AI/Anima' 2>$null
-git config --global --add safe.directory 'D:\AI\Anima' 2>$null
+Write-Step 'Git safe.directory for this repo (post laptop reset / ownership change)'
+# Register whatever folder this checkout actually lives in, so git never refuses
+# to work in it because of a Windows ownership mismatch.
+git config --global --add safe.directory ($RootDir -replace '\\', '/') 2>$null
+git config --global --add safe.directory $RootDir 2>$null
 
 Write-Step 'Package manager checks'
 Ensure-Winget
@@ -63,15 +65,29 @@ Install-WingetPackage 'GitHub.cli' 'GitHub CLI'
 Install-WingetPackage 'Google.PlatformTools' 'Android Platform Tools (adb)'
 
 if (-not $SkipVsBuildTools) {
-    $vsSetup = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\setup.exe"
-    if (-not (Test-Path $vsSetup)) {
-        Write-Host '  Installing Visual Studio Build Tools 2022 (C++ + ATL) — this can take 15–30 min ...'
-        Install-WingetPackage 'Microsoft.VisualStudio.2022.BuildTools' 'VS Build Tools 2022' @(
-            '--override',
-            '--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --add Microsoft.VisualStudio.Component.VC.ATLMFC'
-        )
+    # NOTE (2026-09-26): `winget install Microsoft.VisualStudio.2022.BuildTools --override "--passive ..."`
+    # FAILS on a fresh Windows 11 install ("Installer failed with exit code: 1", winget -1978335226):
+    # the bootstrapper cannot self-update inside a passive, non-interactive session. The official
+    # bootstrapper with --quiet --wait installs the C++ toolchain, the Windows SDK and ATL in one pass.
+    # Run this script from an ELEVATED PowerShell.
+    $vsVcVars = 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat'
+    $vsBootstrapper = Join-Path $env:TEMP 'vs_buildtools.exe'
+    if (Test-Path $vsVcVars) {
+        Write-Host '  VS Build Tools with the C++ workload already present.'
     } else {
-        Write-Host '  VS Installer present — ensuring ATL component ...'
+        Write-Host '  Downloading the VS 2022 Build Tools bootstrapper ...'
+        curl.exe -L -o $vsBootstrapper 'https://aka.ms/vs/17/release/vs_buildtools.exe'
+        Write-Host '  Installing C++ workload + ATL — this can take 15–40 min ...'
+        & $vsBootstrapper --quiet --wait --norestart --nocache `
+            --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended `
+            --add Microsoft.VisualStudio.Component.VC.ATLMFC
+        Write-Host "  Bootstrapper exit code: $LASTEXITCODE"
+    }
+
+    $atl = Get-ChildItem 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools' -Recurse -Filter 'atlstr.h' -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if (Test-Path $vsVcVars -and -not $atl) {
+        Write-Host '  ATL header missing — adding the C++ ATL component ...'
         & (Join-Path $PSScriptRoot 'install_windows_atl.ps1')
     }
 }
@@ -94,7 +110,7 @@ Write-Step 'Android SDK command-line tools'
 New-Item -ItemType Directory -Force -Path $AndroidSdk | Out-Null
 $cmdlineLatest = Join-Path $AndroidSdk 'cmdline-tools\latest'
 if (-not (Test-Path (Join-Path $cmdlineLatest 'bin\sdkmanager.bat'))) {
-    $zipUrl  = 'https://dl.google.com/android/repository/commandlinetools-win-11076708_latest.zip'
+    $zipUrl  = 'https://dl.google.com/android/repository/commandlinetools-win-13114758_latest.zip'
     $zipPath = Join-Path $env:TEMP 'commandlinetools-win.zip'
     Write-Host '  Downloading Android cmdline-tools ...'
     curl.exe -L -o $zipPath $zipUrl

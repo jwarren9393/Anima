@@ -62,8 +62,9 @@ High-value SillyTavern concepts to aim for over time:
 
 **Phase:** Post-roadmap tweaks
 
-**Last updated:** 2026-09-24    
-**Last agent action:** **Gave Anima an automatic Windows build, and proved it end to end.** Added **`.github/workflows/windows-release.yml`** (GitHub Actions `windows-latest` → launcher icons → `flutter build windows --release` → `Compress-Archive` → `softprops/action-gh-release` with `tag_name: v1.0.0`) plus **step 7/7 in `deploy.sh`** that dispatches it and waits (bounded, ~15 min) for a zip whose upload time is newer than the dispatch — previously the Windows zip was built by hand on the Windows PC and had gone stale at **2026-08-10**. The **first CI run failed** (`error C2338` / `STL1011`: `permission_handler_windows 0.2.2` sets `/await` + C++/WinRT, so the STL pulls in `<experimental/coroutine>`, which Visual Studio 18 / MSVC+STL 14.51 on the runner now rejects); fixed by `add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)` in `windows/CMakeLists.txt` **before** `include(flutter/generated_plugins.cmake)`. Re-run went **green** and attached a verified fresh `Anima-1.0.0-windows-x64.zip` (13.96 MB, `anima.exe` + plugin DLLs + `data/`, `unzip -t` clean) at 2026-09-25T04:58Z, with the release title/notes preserved. Step 7 also now reports a **failed** CI run immediately instead of polling out the full timeout, and a
+**Last updated:** 2026-09-26    
+**Last agent action:** **Rebuilt the whole dev environment on the new Windows laptop (`JAYS-DELL`).** The fresh Windows 11 install had no tools at all, so everything was installed and placed in its documented home: **Temurin JDK 17**, **GitHub CLI 2.101.0**, **Android platform-tools 37.0.1**, **Android cmdline-tools + platform 36 + build-tools 36.0.0** in `%LOCALAPPDATA%\Android\Sdk` (licences accepted), **Flutter stable** in `C:\src\flutter`, **VS 2022 Build Tools 17.14.41 + C++ workload + ATL** (needed for Windows desktop builds), **Developer Mode ON**, and the account environment (`JAVA_HOME`, `ANDROID_HOME`, `ANDROID_SDK_ROOT`, PATH entries). Both checkouts were already clean clones (`Documents\GitHub\Anima` on `main`, `Documents\GitHub\Journey` on `master`), so each got `flutter pub get`; the driver script (`C:\Users\jakwa\anima-setup\run_all.ps1`, log `setup.log`) also runs `flutter doctor` + `analyze` + `test` for both repos. Cursor already had the Dart/Flutter extensions and now has `dart.flutterSdkPath = C:/src/flutter`. The repo's own `scripts/setup_windows_dev.ps1` was corrected for this machine (repo-relative `safe.directory`, newer cmdline-tools zip) plus a `D:\AI\Anima` leftover in `install_windows_atl.ps1`, and the machine notes for this laptop were added to `AGENTS.md` and Journey's `AGENTS.md`. **Still owner-only:** the interactive `gh auth login --web` + `gh auth setup-git` sign-in (helper: `C:\Users\jakwa\anima-setup\github_login.ps1`), then restoring the Anima library from `Documents\Anima Backup\anima-sync.anima-backup` (or the copies on `W:` and `G:`) and re-entering the NanoGPT key.
+**Previous agent action:** **Gave Anima an automatic Windows build, and proved it end to end.** Added **`.github/workflows/windows-release.yml`** (GitHub Actions `windows-latest` → launcher icons → `flutter build windows --release` → `Compress-Archive` → `softprops/action-gh-release` with `tag_name: v1.0.0`) plus **step 7/7 in `deploy.sh`** that dispatches it and waits (bounded, ~15 min) for a zip whose upload time is newer than the dispatch — previously the Windows zip was built by hand on the Windows PC and had gone stale at **2026-08-10**. The **first CI run failed** (`error C2338` / `STL1011`: `permission_handler_windows 0.2.2` sets `/await` + C++/WinRT, so the STL pulls in `<experimental/coroutine>`, which Visual Studio 18 / MSVC+STL 14.51 on the runner now rejects); fixed by `add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)` in `windows/CMakeLists.txt` **before** `include(flutter/generated_plugins.cmake)`. Re-run went **green** and attached a verified fresh `Anima-1.0.0-windows-x64.zip` (13.96 MB, `anima.exe` + plugin DLLs + `data/`, `unzip -t` clean) at 2026-09-25T04:58Z, with the release title/notes preserved. Step 7 also now reports a **failed** CI run immediately instead of polling out the full timeout, and a
 full `./deploy.sh` afterwards was verified end to end — it printed
 `✅ Fresh Windows zip is on the release` after a 4 m 37 s green run, with all three release assets
 (APK + Linux zip + Windows zip) timestamped the same morning. Documented the Windows install (portable folder, no installer), the optional `AnimaData` folder beside `anima.exe`, the VS 18 caveat, and the `update_windows.ps1 -Release` trap that would overwrite the current APK asset. **Previous agent action:** **Verified and shipped the Android first-launch hang fix (build 71).** Ran `flutter analyze` (clean) + `flutter test` (**381 tests pass**), unblocked the phone with `adb shell appops set com.anima.anima MANAGE_EXTERNAL_STORAGE allow` and confirmed Anima now launches straight to **Home** with the `Documents/Anima` library intact (a screenshot showed the real chat list, so no data was lost), then ran `./deploy.sh "Fix Android first-launch hang when the library folder is not writable"` to commit/push, install build **71** over build 70 in place, rebuild the Linux desktop app, and refresh the GitHub release. Test count updated to **381** in this file, `README.md` and `PROJECT_REFERENCE.md`, and the "`AppDataRoot.load()` never throws" rule is now recorded in §6 and §8 of `PROJECT_REFERENCE.md`. **Previous agent action:** Rebuilt the **Linux Mint 22.3 dev environment from scratch** (the host was reinstalled, so no tools were left). Added **`scripts/setup_linux_dev.sh`** — one idempotent command that installs the apt build deps (clang/cmake/ninja/GTK 3/`libsecret-1-dev`/`libjsoncpp-dev`), **JDK 17** (Temurin, Ubuntu OpenJDK fallback), **Flutter stable** (`~/development/flutter`), the **Android SDK** (`~/Android/Sdk`: cmdline-tools, platform-tools, platform 36, build-tools 36.0.0, licences accepted), **GitHub CLI**, writes `JAVA_HOME`/`ANDROID_HOME`/PATH into `~/.bashrc` **and** `~/.config/environment.d/50-anima-dev.conf`, points Cursor's Dart extension at the SDK, accepts the GitHub sign-in (`--github`: `gh auth login --web`, `gh auth setup-git`, git identity), and refreshes package/pub state. Also added **`scripts/dev_copy_linux.sh`**, needed because **the project folder lives on an exFAT drive that cannot store symlinks** — Flutter creates its plugin links as symlinks and **rethrows** on failure (`flutter_plugins.dart` → `handleSymlinkException` only handles Windows), so `flutter pub get` and every build fail in that folder; the script creates a build-capable git working copy on the Linux drive. Both projects were then **moved out of the exFAT drive** to their intended home — **`~/Documents/App-Builds/Anima`** and **`~/Documents/App-Builds/Journey`** (1756 files each side, key files verified byte-identical, git remotes intact) — and the duplicate exFAT copies were deleted at the owner's request, so each project now has **exactly one working copy**. Environment verified end-to-end on the rebuilt host (`flutter doctor` clean, `flutter analyze` clean, **381 tests pass**, Linux release built and installed to `~/.local/share/anima/` with a menu entry), and everything is pushed: **`7979482`** (dev setup + docs) and **`ccf72f2`** (recovered pre-reinstall work). Two more fixes landed the same day: **(1) release signing** — Anima (and Journey) now sign with committed keystores (`android/keystore/*-release.jks` + `android/key.properties`); the stock template had signed releases with the *machine-local* debug key, which is why phone updates failed with `INSTALL_FAILED_UPDATE_INCOMPATIBLE` and why an APK built on the Windows PC could never update one built here; **(2) the Android first-launch hang** — reinstalling resets "All files access", so `AppDataRoot.load()` hit a `Documents/Anima` library it could not write to, threw `AppDataRootException`, and `main.dart`'s `_boot()` did not catch it, leaving the app on the loading spinner forever; `load()` now **returns "not configured" instead of throwing** and `_boot()`/`_onFolderReady()` fall back to the folder setup screen, with two regression tests in `test/app_data_root_test.dart`.
@@ -492,34 +493,76 @@ so the definition reaches every plugin target. Don't remove it unless the depend
 `deploy.sh` step 7/7 also now notices a **failed** run (compares the newest run's `createdAt` with the
 dispatch time) and reports it immediately instead of waiting out the 15-minute poll.
 
-### Windows (the other host — project at `D:\AI\Anima`)
+### Windows laptop — **JAYS-DELL** (current Windows host)
 
+A **fresh Windows 11 install** was rebuilt by the Cline agent on **2026-09-26**. Project checkout:
+**`C:\Users\jakwa\Documents\GitHub\Anima`** (normal `git clone`, remote `jwarren9393/Anima`, branch
+`main`, clean tree). Journey lives beside it at `C:\Users\jakwa\Documents\GitHub\Journey` (`master`).
+**One working copy each.** Never build from `W:` (**Jay-Ex-SSD**, exFAT) or `G:` (Google Drive) —
+Flutter writes plugin symlinks and fails on those filesystems.
 
 | Tool | Status |
 |------|--------|
-| Flutter | ✅ 3.44.9 stable at `C:\src\flutter` |
-| Dart | ✅ 3.12.2 |
-| JDK | ✅ Temurin 17 at `C:\Program Files\Eclipse Adoptium\jdk-17.0.20.8-hotspot` |
-| Android SDK | ✅ `%LOCALAPPDATA%\Android\Sdk` (platform 36, build-tools 36.0.0) — licenses accepted |
-| Android Studio | ❌ Not installed (SDK via cmdline-tools only — enough for `flutter build apk`) |
-| Visual Studio | ✅ Build Tools 2022 17.14 + C++ + ATLMFC |
-| Git | ✅ `C:\Program Files\Git\cmd\git.exe` — repo linked to `origin` `https://github.com/jwarren9393/Anima.git` |
-| GitHub CLI (`gh`) | ✅ installed — run `gh auth login` once after a PC reset |
-| Chrome | ❌ Not required for this app |
-| Developer Mode | ✅ Enabled (required for Flutter plugin symlinks on Windows) |
+| Flutter | ✅ stable in `C:\src\flutter` (`git clone -b stable --depth 1`) |
+| JDK | ✅ Temurin 17 at `C:\Program Files\Eclipse Adoptium\jdk-17.0.20.101-hotspot` |
+| Android SDK | ✅ `%LOCALAPPDATA%\Android\Sdk` — cmdline-tools, platform-tools 37.0.1, platform 36, build-tools 36.0.0, licences accepted |
+| Visual Studio | ✅ Build Tools 2022 **17.14.41** + **C++ workload + ATL** — `vcvarsall.bat` present, `VC\Tools\MSVC\14.44.35207\` (cl.exe + `atlmfc\include\atlstr.h`) |
+| Git | ✅ `C:\Program Files\Git\cmd\git.exe` (git-lfs 3.7.1 also installed) |
+| GitHub CLI (`gh`) | ✅ `C:\Program Files\GitHub CLI\gh.exe` 2.101.0 — **sign in once:** `gh auth login --web` then `gh auth setup-git` |
+| Cursor | ✅ Dart + Flutter extensions already installed; `dart.flutterSdkPath` set to `C:/src/flutter` |
+| Developer Mode | ✅ ON (needed for Flutter's Windows plugin symlinks) |
+| Android Studio | ❌ Not installed — cmdline-tools + platform-tools are enough for `flutter build apk` |
 | Physical Android phone | Plug in + USB debugging → `flutter devices` / `flutter run` |
+| Drives | `C:` internal (projects + toolchains), `W:` Jay-Ex-SSD (backups), `G:` Google Drive |
 
-User env (set for this account): `JAVA_HOME`, `ANDROID_HOME`, `ANDROID_SDK_ROOT`, and `PATH` include Flutter, JDK, Android tools, and GitHub CLI. **Restart Cursor / open a new terminal** after setup so PATH updates apply.
+User env for this account: `JAVA_HOME`, `ANDROID_HOME`, `ANDROID_SDK_ROOT`, and `PATH` entries for
+Flutter, the JDK, `platform-tools`, `cmdline-tools\latest\bin` and GitHub CLI. **Open a new terminal
+/ restart Cursor** after setup so PATH applies.
 
-Fresh install / re-run anytime:
+Fresh install / re-run anytime (idempotent; run elevated if VS Build Tools or Developer Mode fail):
 
 ```powershell
-cd D:\AI\Anima
+cd C:\Users\jakwa\Documents\GitHub\Anima
 powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows_dev.ps1
 flutter doctor
 flutter pub get
-flutter run -d windows
+flutter run -d windows        # or: flutter run  with the phone connected
 ```
+
+The 2026-09-26 rebuild was driven from `C:\Users\jakwa\anima-setup\` (`run_all.ps1` → step1 winget
+JDK/gh/platform-tools + Developer Mode, step2 Android SDK, step3 Flutter + `pub get` for **both**
+repos, step4 VS Build Tools, step5 `flutter doctor` + `analyze` + `test`; then `verify_final.ps1` →
+`verify_report.txt` for the end-to-end proof). Progress went to `setup.log`, the summary to
+`SUMMARY.txt` — those helpers still work on a machine with **no** toolchain at all.
+
+**Verified on this laptop (2026-09-26):** `flutter doctor` reports **No issues found** — Flutter
+3.47.5 / Dart 3.13.4, Windows 11, the Android toolchain (SDK 36, build-tools 36.0.0, licences
+accepted), **Visual Studio Build Tools 2022 17.14.41 for Windows apps**, Chrome and network resources.
+`flutter pub get` succeeds for both repos; **`flutter analyze` is clean** for both; **Anima 381 tests
+pass**, **Journey 49 tests pass**. `git ls-remote` on the private Anima repo answers without a prompt
+(Git Credential Manager already holds a GitHub credential), but **`gh` itself is not signed in yet** —
+`gh auth login --web` + `gh auth setup-git` (helper: `C:\Users\jakwa\anima-setup\github_login.ps1`)
+is needed for `deploy.sh`'s release/CI steps.
+
+**⚠️ VS Build Tools install caveat (learned 2026-09-26):** `winget install
+Microsoft.VisualStudio.2022.BuildTools --override "--passive …"` **fails** on a fresh Windows 11
+install (`Installer failed with exit code: 1`, winget exit `-1978335226`) because the bootstrapper
+cannot self-update in a passive, non-interactive session. Instead download
+`https://aka.ms/vs/17/release/vs_buildtools.exe` and run it **elevated** with
+`--quiet --wait --norestart --nocache --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --add Microsoft.VisualStudio.Component.VC.ATLMFC`
+— one pass installs the C++ toolchain (MSVC 14.44), the Windows 11 SDK and ATL.
+
+**Anima's own app data on this laptop:** the library folder `Documents\Anima` did not exist after the
+reinstall. A sync backup is sitting in `Documents\Anima Backup\anima-sync.anima-backup` (copies also
+on `W:\Anima Backup\` and `G:\My Drive\Anima Backup\`) — restore it in the app with
+**Settings → Backup, restore & sync → Restore**. The NanoGPT **API key is not inside that file**, so
+paste it again in **Settings → API** (it is written to the library folder as `api_key.txt`).
+
+**Windows line-ending quirk:** `flutter pub get` rewrites `linux/flutter/generated_*` and
+`windows/flutter/generated_*` (and Journey's `macos/Flutter/GeneratedPluginRegistrant.swift`) with
+CRLF line endings, so `git status` shows them as modified even though nothing really changed. Clear it
+with `git checkout -- linux/flutter/generated_* windows/flutter/generated_*` — or just ignore it.
+
 
 ### Phone USB debugging (owner checklist)
 
@@ -536,11 +579,11 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. **New/reinstalled Linux PC?** Run **`bash scripts/setup_linux_dev.sh --github`** — it installs the toolchain, connects GitHub, and creates the buildable working copy.
-2. Work in **`~/Documents/App-Builds/Anima`** (ext4), **not** the exFAT Jay-Storage copy (Flutter cannot build there — see Machine notes). Then **`flutter run -d linux`** (desktop) or plug in your Android phone + **`flutter run`**.
+1. **New/reinstalled PC?** Linux: **`bash scripts/setup_linux_dev.sh --github`** (installs the toolchain, connects GitHub, creates the buildable copy). Windows: from an **elevated** terminal in your checkout run **`powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows_dev.ps1`**, then reopen the terminal. The 2026-09-26 **JAYS-DELL** rebuild went further with the helper steps in `C:\Users\jakwa\anima-setup\` (`run_all.ps1`) — those also run `flutter pub get` for **Anima and Journey** and finish with `flutter doctor` + `analyze` + `test`.
+2. Work in the checkout on an **internal** disk — Linux **`~/Documents/App-Builds/Anima`** (ext4), Windows **`C:\Users\jakwa\Documents\GitHub\Anima`**. Never build on exFAT (`W:` / Jay-Storage) or a Google Drive mount (`G:`): Flutter writes plugin symlinks and fails there. Then **`flutter run -d windows`** / **`-d linux`** (desktop) or plug in your Android phone + **`flutter run`**.
 3. First launch: use **Documents/Anima** (or pick a folder). On Android, allow **All files access** so My Files can open it.
-4. Enter your NanoGPT API key in **Settings → API** (saved in that folder as `api_key.txt`). Your old library can be restored from the `.anima-backup` file in **Settings → Backup, restore & sync**.
-5. Optional on Windows: if Dart extension can't find Flutter, set user-level `"dart.flutterSdkPath": "C:\\src\\flutter"` (workspace no longer hardcodes a path).
+4. Enter your NanoGPT API key in **Settings → API** (saved in that folder as `api_key.txt`). Your old library can be restored from a `.anima-backup` file in **Settings → Backup, restore & sync** — on the Windows laptop one is waiting in `Documents\Anima Backup\`, `W:\Anima Backup\` and `G:\My Drive\Anima Backup\`.
+5. On Windows, Cursor already points the Dart extension at `C:/src/flutter` (`dart.flutterSdkPath`); set that user-level setting on any new machine if the Dart extension cannot find Flutter.
 6. **Release rule:** keep `pubspec.yaml` at **`1.0.0+<build>`** — only increment the number after `+`. Upload to the existing **`v1.0.0`** GitHub release (not a new tag per build). Current phone APK is **build 71** (signed with the committed release key). The **Windows** zip is built for you by GitHub Actions from the same command — nothing to run on the Windows PC unless you want a local build.
 
 ---

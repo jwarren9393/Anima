@@ -33,4 +33,4 @@ if (-not $installed) {
 }
 
 Write-Host "Success: $($installed.FullName)"
-Write-Host 'Now run:  cd D:\AI\Anima  then  flutter run -d windows'
+Write-Host 'Now run:  cd (your Anima checkout)  then  flutter run -d windows'
