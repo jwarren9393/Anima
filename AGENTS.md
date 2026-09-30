@@ -62,8 +62,9 @@ High-value SillyTavern concepts to aim for over time:
 
 **Phase:** Post-roadmap tweaks
 
-**Last updated:** 2026-09-26    
-**Last agent action:** **Rebuilt the whole dev environment on the new Windows laptop (`JAYS-DELL`).** The fresh Windows 11 install had no tools at all, so everything was installed and placed in its documented home: **Temurin JDK 17**, **GitHub CLI 2.101.0**, **Android platform-tools 37.0.1**, **Android cmdline-tools + platform 36 + build-tools 36.0.0** in `%LOCALAPPDATA%\Android\Sdk` (licences accepted), **Flutter stable** in `C:\src\flutter`, **VS 2022 Build Tools 17.14.41 + C++ workload + ATL** (needed for Windows desktop builds), **Developer Mode ON**, and the account environment (`JAVA_HOME`, `ANDROID_HOME`, `ANDROID_SDK_ROOT`, PATH entries). Both checkouts were already clean clones (`Documents\GitHub\Anima` on `main`, `Documents\GitHub\Journey` on `master`), so each got `flutter pub get`; the driver script (`C:\Users\jakwa\anima-setup\run_all.ps1`, log `setup.log`) also runs `flutter doctor` + `analyze` + `test` for both repos. Cursor already had the Dart/Flutter extensions and now has `dart.flutterSdkPath = C:/src/flutter`. The repo's own `scripts/setup_windows_dev.ps1` was corrected for this machine (repo-relative `safe.directory`, newer cmdline-tools zip) plus a `D:\AI\Anima` leftover in `install_windows_atl.ps1`, and the machine notes for this laptop were added to `AGENTS.md` and Journey's `AGENTS.md`. **Still owner-only:** the interactive `gh auth login --web` + `gh auth setup-git` sign-in (helper: `C:\Users\jakwa\anima-setup\github_login.ps1`), then restoring the Anima library from `Documents\Anima Backup\anima-sync.anima-backup` (or the copies on `W:` and `G:`) and re-entering the NanoGPT key.
+**Last updated:** 2026-09-30
+**Last agent action:** **Rebuilt the Linux dev environment from scratch on the reinstalled host — now Kubuntu 26.04.1 LTS — without ever needing the sudo password.** The repo was already cloned at `/home/jay/Documents/Git Projects/Anima` (ext4, `main` @ `6089d58`) and the machine had **no toolchain at all**. Added **`scripts/setup_linux_dev_noroot.sh`**: the same install as `setup_linux_dev.sh` but entirely inside `$HOME`, because `sudo` needs a password that an agent cannot type. It installs **Flutter stable → `~/development/flutter`** (3.47.5, shallow clone so `flutter upgrade` still works), **Temurin JDK 17 → `~/development/jdk-17`** (Adoptium API tarball instead of apt), **Android SDK → `~/Android/Sdk`** (cmdline-tools 23.0.0, platform-tools 37.0.1, platforms 36/35/34, build-tools 36.0.0, licences accepted), then writes the `PATH`/`JAVA_HOME`/`ANDROID_HOME` block into `~/.bashrc` **and** `~/.config/environment.d/50-flutter-dev.conf`, sets `dart.flutterSdkPath`, and restores the global git identity a fresh install forgets. Verified on the new host: **`flutter doctor` → Android toolchain ✓** (Temurin 17.0.20.1, "All Android licenses accepted"), **`flutter analyze` clean**, **381 tests pass**, and a **debug APK built end to end** (the first Gradle run also pulled NDK r28c, a one-time ~1 GB). **Still needs the owner's password:** the Linux *desktop* build libs (`clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev libjsoncpp-dev`) and the phone udev rules (`android-sdk-platform-tools-common`) — the script prints the exact `apt` line. Also owner-only: `gh auth login --web`, and no `Documents/Anima` library exists on this host yet, so the NanoGPT key must be entered again (a `.anima-backup` can be restored in Settings → Backup, restore & sync).
+**Previous agent action:** **Rebuilt the whole dev environment on the new Windows laptop (`JAYS-DELL`).** The fresh Windows 11 install had no tools at all, so everything was installed and placed in its documented home: **Temurin JDK 17**, **GitHub CLI 2.101.0**, **Android platform-tools 37.0.1**, **Android cmdline-tools + platform 36 + build-tools 36.0.0** in `%LOCALAPPDATA%\Android\Sdk` (licences accepted), **Flutter stable** in `C:\src\flutter`, **VS 2022 Build Tools 17.14.41 + C++ workload + ATL** (needed for Windows desktop builds), **Developer Mode ON**, and the account environment (`JAVA_HOME`, `ANDROID_HOME`, `ANDROID_SDK_ROOT`, PATH entries). Both checkouts were already clean clones (`Documents\GitHub\Anima` on `main`, `Documents\GitHub\Journey` on `master`), so each got `flutter pub get`; the driver script (`C:\Users\jakwa\anima-setup\run_all.ps1`, log `setup.log`) also runs `flutter doctor` + `analyze` + `test` for both repos. Cursor already had the Dart/Flutter extensions and now has `dart.flutterSdkPath = C:/src/flutter`. The repo's own `scripts/setup_windows_dev.ps1` was corrected for this machine (repo-relative `safe.directory`, newer cmdline-tools zip) plus a `D:\AI\Anima` leftover in `install_windows_atl.ps1`, and the machine notes for this laptop were added to `AGENTS.md` and Journey's `AGENTS.md`. **Still owner-only:** the interactive `gh auth login --web` + `gh auth setup-git` sign-in (helper: `C:\Users\jakwa\anima-setup\github_login.ps1`), then restoring the Anima library from `Documents\Anima Backup\anima-sync.anima-backup` (or the copies on `W:` and `G:`) and re-entering the NanoGPT key.
 **Previous agent action:** **Gave Anima an automatic Windows build, and proved it end to end.** Added **`.github/workflows/windows-release.yml`** (GitHub Actions `windows-latest` → launcher icons → `flutter build windows --release` → `Compress-Archive` → `softprops/action-gh-release` with `tag_name: v1.0.0`) plus **step 7/7 in `deploy.sh`** that dispatches it and waits (bounded, ~15 min) for a zip whose upload time is newer than the dispatch — previously the Windows zip was built by hand on the Windows PC and had gone stale at **2026-08-10**. The **first CI run failed** (`error C2338` / `STL1011`: `permission_handler_windows 0.2.2` sets `/await` + C++/WinRT, so the STL pulls in `<experimental/coroutine>`, which Visual Studio 18 / MSVC+STL 14.51 on the runner now rejects); fixed by `add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)` in `windows/CMakeLists.txt` **before** `include(flutter/generated_plugins.cmake)`. Re-run went **green** and attached a verified fresh `Anima-1.0.0-windows-x64.zip` (13.96 MB, `anima.exe` + plugin DLLs + `data/`, `unzip -t` clean) at 2026-09-25T04:58Z, with the release title/notes preserved. Step 7 also now reports a **failed** CI run immediately instead of polling out the full timeout, and a
 full `./deploy.sh` afterwards was verified end to end — it printed
 `✅ Fresh Windows zip is on the release` after a 4 m 37 s green run, with all three release assets
@@ -394,6 +395,7 @@ lib/
     nanogpt_service.dart          Streaming + text/image model catalogs + image generate + credit usage + sampling + plain-English errors
 scripts/
   setup_linux_dev.sh              Fresh Linux install: apt deps, JDK 17, Flutter, Android SDK, gh, env vars, Cursor Dart path
+  setup_linux_dev_noroot.sh       Same install WITHOUT any sudo password: Flutter + Temurin JDK 17 + Android SDK inside $HOME, env vars, Cursor path, git identity (prints the one apt line for the desktop libs)
   dev_copy_linux.sh               Build-capable copy on the internal disk (`~/Anima`) when the source sits on exFAT
   update_linux.sh                 One-command Linux build/install + launcher; optional Git pull
   update_windows.ps1              Windows build + optional zip / GitHub Release upload (`-Zip`, `-Release`)
@@ -421,34 +423,55 @@ scripts/
 
 ## Machine notes (developer PCs)
 
-### Linux Mint 22.3 Cinnamon — **current host** (`jay@jay-mint-laptop`)
+### Kubuntu 26.04.1 LTS (Ubuntu “Resolute Raccoon”) — **current host** (`jay@jaykubuntu`)
 
-Everything below is installed by **`bash scripts/setup_linux_dev.sh`** (idempotent — re-run it any time; `--github` also signs in to GitHub).
+Reinstalled from scratch on **2026-09-30** and rebuilt by the Cline agent with
+**`bash scripts/setup_linux_dev_noroot.sh`** — the no-password installer — plus the single `apt`
+command it prints. `scripts/setup_linux_dev.sh` still does the same job *with* sudo if you prefer
+one command; both are idempotent, so re-run either any time.
 
 | Tool | Status |
 |------|--------|
-| Flutter | ✅ **3.47.5** stable in `~/development/flutter` (git clone, so `flutter upgrade` works) |
+| Flutter | ✅ **3.47.5** stable in `~/development/flutter` (shallow git clone, so `flutter upgrade` works) |
 | Dart | ✅ **3.13.4** (ships with Flutter; satisfies `pubspec.yaml` `sdk: ^3.12.2`) |
-| JDK | ✅ **Temurin 17.0.20.1** at `/usr/lib/jvm/temurin-17-jdk-amd64` (falls back to Ubuntu `openjdk-17-jdk`) |
-| Android SDK | ✅ `~/Android/Sdk` — cmdline-tools, platform-tools, **platform 36**, **build-tools 36.0.0**, licences accepted |
-| Linux desktop toolchain | ✅ clang / cmake / ninja / GTK 3 + `libsecret-1-dev` + `libjsoncpp-dev` |
-| GitHub CLI (`gh`) | ✅ from Ubuntu apt — `gh auth login --hostname github.com --git-protocol https --web` then `gh auth setup-git` |
-| Cursor | ✅ 3.21.18 (.deb) with Dart-Code Dart/Flutter extensions + `dart.flutterSdkPath` set |
-| Physical Android phone | Samsung SM-S731U — udev rules come from `android-sdk-platform-tools-common`; check `adb devices` shows `device` |
-| Verified end-to-end | ✅ `flutter doctor` clean · `flutter analyze` clean · **381 tests pass** · Linux release built + installed to `~/.local/share/anima/` (menu entry + icon) via `./scripts/update_linux.sh` |
+| JDK | ✅ **Temurin 17.0.20.1** at **`~/development/jdk-17`** — a tarball from the Adoptium API, so no apt/sudo was needed (this path differs from the older `/usr/lib/jvm/temurin-17-jdk-amd64`) |
+| Android SDK | ✅ `~/Android/Sdk` — cmdline-tools 23.0.0, **platform-tools 37.0.1 (adb)**, platforms **36 / 35 / 34**, **build-tools 36.0.0**, licences accepted |
+| Linux desktop toolchain | ⏳ **not installed yet** — needs the one apt line below (clang / cmake / ninja / pkg-config / GTK 3 / `libsecret-1-dev` / `libjsoncpp-dev`). Android builds do **not** need it |
+| GitHub CLI (`gh`) | ⏳ not installed yet (it is apt-only, in the one-liner below) — plain `git` already works; after installing run `gh auth login --hostname github.com --git-protocol https --web` then `gh auth setup-git` |
+| Git identity | ✅ restored (`jwarren9393` / GitHub noreply e-mail) — a fresh install has no `~/.gitconfig`, so commits would otherwise fail |
+| Cursor | ✅ `dart.flutterSdkPath = /home/jay/development/flutter` (user-level setting) |
+| Physical Android phone | Samsung SM-S731U — udev rules come from `android-sdk-platform-tools-common` (in the apt line below); check `adb devices` shows `device` |
+| Verified end-to-end | ✅ `flutter doctor` (Android toolchain ✓, all licences accepted) · `flutter analyze` **clean** · **381 tests pass** · **debug APK built** (`flutter build apk --debug`; the first run also pulled NDK r28c, a one-time ~1 GB) |
 
-**Project home (canonical working copies): `/home/jay/Documents/App-Builds/`**
+**The one command that still needs the owner's password** (Linux desktop build libs + GitHub CLI + phone udev rules):
+
+```bash
+sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config \
+  libgtk-3-dev libsecret-1-dev libjsoncpp-dev gh android-sdk-platform-tools-common
+```
+
+Then sign in to GitHub once (needed by `deploy.sh`): `gh auth login --hostname github.com --git-protocol https --web` and `gh auth setup-git`.
+
+Sign out and back in once so menu-launched apps (Cursor, the Anima launcher) pick up the new
+`~/.config/environment.d/50-flutter-dev.conf` values; terminals only need a new tab.
+
+**Previous Linux host:** Linux Mint 22.3 Cinnamon (`jay@jay-mint-laptop`) — same layout, except its
+JDK came from apt at `/usr/lib/jvm/temurin-17-jdk-amd64`. That disk was wiped on 2026-09-30.
+
+**Project home (canonical working copy): `/home/jay/Documents/Git Projects/`**
 
 | Project | Path | Branch | Remote |
 |---------|------|--------|--------|
-| Anima | `~/Documents/App-Builds/Anima` | `main` | `jwarren9393/Anima` |
-| Journey | `~/Documents/App-Builds/Journey` | `master` | `jwarren9393/Journey` |
-| Packaged Windows builds | `~/Documents/App-Builds/AppBuilds/` | — | — |
+| Anima | `~/Documents/Git Projects/Anima` | `main` | `jwarren9393/Anima` |
+| Journey | *(not cloned on this host yet)* | `master` | `jwarren9393/Journey` |
 
-These live on the **ext4** root partition (`/dev/sdb2`) — exactly what Flutter needs.
+It lives on the **ext4** root partition (`/dev/nvme0n1p6`, ~423 GB free) — exactly what Flutter needs,
+so **no `dev_copy_linux.sh` copy is required** here: symlink probe `ln -s /tmp …` succeeds. The folder
+name contains a space, which is fine for Flutter/Gradle as long as it is quoted in shell commands.
 
-**One copy only.** The old exFAT copies on Jay-Storage (`/media/jay/Jay-Storage/App-Builds/…`) were
-deleted on 2026-09-24 so there is exactly one working copy of each project — the paths above.
+**One copy only.** The old exFAT copies on Jay-Storage were deleted on 2026-09-24, and the old
+`~/Documents/App-Builds/…` copies are gone with the 2026-09-30 reinstall — the paths above are the
+only working copies.
 
 **⚠️ Never build from an exFAT/FAT drive.** exFAT cannot store symlinks, and Flutter writes its plugin
 links as symlinks then **rethrows** when that fails (`flutter_tools/lib/src/flutter_plugins.dart` →
@@ -571,7 +594,7 @@ with `git checkout -- linux/flutter/generated_* windows/flutter/generated_*` —
 3. Plug phone into this PC with a data-capable USB cable.
 4. Accept the “Allow USB debugging?” prompt on the phone.
 5. In a terminal, run: `adb devices` — you should see your phone listed (not `unauthorized`).
-6. From the project folder (`~/Documents/App-Builds/Anima` on the Linux host): `flutter run`
+6. From the project folder (`~/Documents/Git Projects/Anima` on this Linux host): `flutter run`
 
 If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the prompt. On some Linux setups a udev rule may be needed later.
 
@@ -579,8 +602,11 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-1. **New/reinstalled PC?** Linux: **`bash scripts/setup_linux_dev.sh --github`** (installs the toolchain, connects GitHub, creates the buildable copy). Windows: from an **elevated** terminal in your checkout run **`powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows_dev.ps1`**, then reopen the terminal. The 2026-09-26 **JAYS-DELL** rebuild went further with the helper steps in `C:\Users\jakwa\anima-setup\` (`run_all.ps1`) — those also run `flutter pub get` for **Anima and Journey** and finish with `flutter doctor` + `analyze` + `test`.
-2. Work in the checkout on an **internal** disk — Linux **`~/Documents/App-Builds/Anima`** (ext4), Windows **`C:\Users\jakwa\Documents\GitHub\Anima`**. Never build on exFAT (`W:` / Jay-Storage) or a Google Drive mount (`G:`): Flutter writes plugin symlinks and fails there. Then **`flutter run -d windows`** / **`-d linux`** (desktop) or plug in your Android phone + **`flutter run`**.
+1. **New/reinstalled PC?** Linux — pick one:
+   - **`bash scripts/setup_linux_dev_noroot.sh`** — no admin password needed. Use this when `sudo` is unavailable or you would rather not type it. It prints the single `apt` line for the desktop libs.
+   - **`bash scripts/setup_linux_dev.sh --github`** — the sudo version; also installs `gh` from apt and signs you in.
+   Each installs Flutter (`~/development/flutter`), a JDK 17, the Android SDK (`~/Android/Sdk`), env vars, the Cursor Dart path, then runs `flutter pub get` + `flutter doctor`. Windows: from an **elevated** terminal in your checkout run **`powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows_dev.ps1`**, then reopen the terminal. The 2026-09-26 **JAYS-DELL** rebuild went further with the helper steps in `C:\Users\jakwa\anima-setup\` (`run_all.ps1`).
+2. Work in the checkout on an **internal** disk — Linux **`~/Documents/Git Projects/Anima`** (ext4), Windows **`C:\Users\jakwa\Documents\GitHub\Anima`**. Never build on exFAT (`W:` / Jay-Storage) or a Google Drive mount (`G:`): Flutter writes plugin symlinks and fails there. Then **`flutter run -d windows`** / **`-d linux`** (desktop) or plug in your Android phone + **`flutter run`**.
 3. First launch: use **Documents/Anima** (or pick a folder). On Android, allow **All files access** so My Files can open it.
 4. Enter your NanoGPT API key in **Settings → API** (saved in that folder as `api_key.txt`). Your old library can be restored from a `.anima-backup` file in **Settings → Backup, restore & sync** — on the Windows laptop one is waiting in `Documents\Anima Backup\`, `W:\Anima Backup\` and `G:\My Drive\Anima Backup\`.
 5. On Windows, Cursor already points the Dart extension at `C:/src/flutter` (`dart.flutterSdkPath`); set that user-level setting on any new machine if the Dart extension cannot find Flutter.

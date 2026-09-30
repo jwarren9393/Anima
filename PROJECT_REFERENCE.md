@@ -134,6 +134,7 @@ Anima/
   android/ linux/ windows/ # Platform runners
   scripts/
     setup_linux_dev.sh    # fresh Linux install: apt deps, JDK 17, Flutter, Android SDK, gh, env vars, Cursor
+    setup_linux_dev_noroot.sh # same, with NO sudo: Flutter + Temurin JDK 17 + Android SDK inside $HOME, env vars, Cursor path, git identity (prints the apt line for the desktop libs)
     setup_windows_dev.ps1 # fresh Windows install: winget JDK 17/gh/platform-tools, Flutter at C:\src\flutter, Android SDK, VS Build Tools, env vars, Developer Mode
     install_windows_atl.ps1 # adds C++ ATL to an existing VS Build Tools install (needed for Windows desktop builds)
     dev_copy_linux.sh     # buildable working copy at ~/Anima when the source sits on exFAT
@@ -725,7 +726,7 @@ Tests cover: lore scan, prompt builders, card codec, backup, sync stability, cha
 
 | Platform | Command |
 |----------|---------|
-| New Linux PC (toolchain) | `bash scripts/setup_linux_dev.sh [--github]` |
+| New Linux PC (toolchain) | `bash scripts/setup_linux_dev.sh [--github]` — or `bash scripts/setup_linux_dev_noroot.sh` when no admin password is available |
 | Buildable copy when the source is on exFAT | `bash scripts/dev_copy_linux.sh` |
 | Android APK | `flutter build apk --release` |
 | Windows (normal path) | **GitHub Actions** `.github/workflows/windows-release.yml` — dispatched by `./deploy.sh` step 7/7, attaches `Anima-<version>-windows-x64.zip` to **v1.0.0** |
@@ -737,12 +738,19 @@ Tests cover: lore scan, prompt builders, card codec, backup, sync stability, cha
   covers Windows). A checkout on an exFAT/FAT drive (e.g. the Jay-Storage copy of this repo)
   therefore cannot run `flutter pub get`, `flutter test`, or any build. Run those from **`~/Anima`**
   (created by `scripts/dev_copy_linux.sh`) and keep the two in step with git push/pull.
-  The canonical copies live at **`~/Documents/App-Builds/Anima`** (branch `main`) and
-  **`~/Documents/App-Builds/Journey`** (branch `master`) on the ext4 root partition.
-- Linux dev environment: Flutter at `~/development/flutter`, JDK 17, Android SDK at `~/Android/Sdk`
-  (platform 36 + build-tools 36.0.0, licences accepted), env vars written to `~/.bashrc` and
+  The current Linux checkout is **`~/Documents/Git Projects/Anima`** (branch `main`) on the ext4 root
+  partition, and it builds in place — no copy needed, because `ln -s` works there.
+- Linux dev environment (current host, Kubuntu 26.04, `jay@jaykubuntu`): Flutter at
+  `~/development/flutter`, **Temurin JDK 17 at `~/development/jdk-17`** (Adoptium tarball — the
+  no-sudo script cannot use apt), Android SDK at `~/Android/Sdk` (platform 36 + build-tools 36.0.0,
+  licences accepted), env vars written to `~/.bashrc` and
   `~/.config/environment.d/50-flutter-dev.conf` (shared with Journey), Cursor's
-  `dart.flutterSdkPath` set by the script.
+  `dart.flutterSdkPath` set by the script, and the git identity restored. The only apt packages the
+  app needs are the Linux *desktop* build libs (`clang cmake ninja-build pkg-config libgtk-3-dev
+  libsecret-1-dev libjsoncpp-dev`), `gh` for the release script, and `android-sdk-platform-tools-common`
+  for phone udev rules — Android builds work without any of them.
+- **Project checkout:** `~/Documents/Git Projects/Anima` on the ext4 root partition — the folder name
+  contains a space, so quote it in shell commands.
 - **Release signing:** `android/key.properties` + `android/keystore/anima-release.jks` are committed
   on purpose so every machine signs identically; `android/app/build.gradle.kts` falls back to debug
   signing when they are absent. A mismatched signature on the phone

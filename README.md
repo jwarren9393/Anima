@@ -99,12 +99,18 @@ bash scripts/setup_linux_dev.sh --github   # --github also signs you in to GitHu
 ./scripts/update_linux.sh                  # build + install Anima for this user
 ```
 
+> **No administrator password, or would rather not use sudo?** Run
+> `bash scripts/setup_linux_dev_noroot.sh` instead. It installs Flutter, JDK 17 and the Android SDK
+> entirely inside your home folder, sets up the PATH and Cursor for you, and then prints the single
+> `sudo apt` line needed for the Linux *desktop* window. Building for your Android phone works
+> without that line.
+
 Update later: `./scripts/update_linux.sh --pull`
 
 > **Keep the project folder on a normal Linux drive (ext4), not an exFAT/FAT USB drive.**
 > Flutter creates its plugin links as symlinks and exFAT cannot store symlinks, so
 > `flutter pub get` and every build fail there. On this PC the projects live at
-> **`~/Documents/App-Builds/Anima`** and **`~/Documents/App-Builds/Journey`**; if your source is on
+> **`~/Documents/Git Projects/Anima`** (on the ext4 disk, so it builds in place); if your source is on
 > an exFAT drive, run `bash scripts/dev_copy_linux.sh` once — it makes a buildable copy at
 > **`~/Documents/App-Builds/Anima`**, and git keeps that copy and the portable one in sync.
 
@@ -869,8 +875,9 @@ Read and update **`AGENTS.md`** after meaningful code changes.
 ## Developer quick start
 
 ```bash
-bash scripts/setup_linux_dev.sh   # once per Linux PC — installs every tool listed below
-cd ~/Documents/App-Builds/Anima    # Anima's home on the Linux drive (see the exFAT note above)
+bash scripts/setup_linux_dev_noroot.sh   # once per Linux PC — no admin password needed
+                                         # (setup_linux_dev.sh --github is the sudo version)
+cd ~/Documents/Git\ Projects/Anima       # this PC's checkout — quote the space in the name
 flutter doctor
 flutter pub get
 flutter test      # 381 tests
