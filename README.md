@@ -105,6 +105,10 @@ bash scripts/setup_linux_dev.sh --github   # --github also signs you in to GitHu
 > `sudo apt` line needed for the Linux *desktop* window. Building for your Android phone works
 > without that line.
 
+> **Want Google Drive in Anima's sync picker?** On KDE/Kubuntu GNOME Online Accounts is unreliable, so
+> the picker shows no cloud at all. Run `bash scripts/setup_gdrive_mount.sh` once and Drive appears as
+> the normal folder `~/GoogleDrive` (see **Cross-device sync** below).
+
 Update later: `./scripts/update_linux.sh --pull`
 
 > **Keep the project folder on a normal Linux drive (ext4), not an exFAT/FAT USB drive.**
@@ -764,6 +768,11 @@ Live preview; **Save** applies app-wide immediately via `AppearanceController`. 
 
 - Pick one sync file (Google Drive on Android; file path on desktop, including **Files → Google Drive** on Linux).
 - Linux: GNOME Drive stores the file under a hidden ID; Anima maps that so Push/Pull work.
+- **Linux without GNOME (KDE / Kubuntu):** GNOME Online Accounts is unreliable there, so Google Drive
+  never appears in the file picker and there is nothing to choose. Run
+  **`bash scripts/setup_gdrive_mount.sh`** once — it mounts Drive at **`~/GoogleDrive`** with rclone
+  (plus a systemd user service that remounts it at every login), so the picker can browse to
+  `~/GoogleDrive/Anima Backup/anima-sync.anima-backup` like any other folder.
 - **Create sync file** / **Choose sync folder/file**.
 - **Push to cloud** — overwrites sync file in place.
 - **Pull from cloud** — restore from sync file when switching phone ↔ PC.

@@ -135,6 +135,7 @@ Anima/
   scripts/
     setup_linux_dev.sh    # fresh Linux install: apt deps, JDK 17, Flutter, Android SDK, gh, env vars, Cursor
     setup_linux_dev_noroot.sh # same, with NO sudo: Flutter + Temurin JDK 17 + Android SDK inside $HOME, env vars, Cursor path, git identity (prints the apt line for the desktop libs)
+    setup_gdrive_mount.sh # mounts Google Drive at ~/GoogleDrive with rclone + a systemd user unit (KDE has no GNOME Drive in the picker)
     setup_windows_dev.ps1 # fresh Windows install: winget JDK 17/gh/platform-tools, Flutter at C:\src\flutter, Android SDK, VS Build Tools, env vars, Developer Mode
     install_windows_atl.ps1 # adds C++ ATL to an existing VS Build Tools install (needed for Windows desktop builds)
     dev_copy_linux.sh     # buildable working copy at ~/Anima when the source sits on exFAT
@@ -325,6 +326,15 @@ All library files live in **one user-owned folder** (`AppDataRoot`, default `Doc
 **Backup** (`AppBackupService`): single `.anima-backup` JSON with whitelist above + settings keys + base64 avatars. **No API key.** Copy the whole Anima folder to move the key too.
 
 **Sync** (`SyncService`): one user-chosen file (Google Drive on Android; path on desktop, including GNOME Files Google Drive). Linux gvfs uses Drive IDs — `resolveExistingSyncPath()` strips a picker-added `.anima-backup` suffix and remounts Drive with `gio mount` when the mount went idle. Push overwrites, pull restores. Pulls/peeks read the remote **stably** (`readStableBytes()` — repeat until two consecutive reads return identical non-empty bytes, ≤5 tries, 250 ms apart) so a just-remounted Drive/SAF file that is stale or still downloading cannot make the first pull restore old data.
+
+**Linux/KDE (no GNOME Drive):** `scripts/setup_gdrive_mount.sh` mounts Drive with **rclone** at
+`~/GoogleDrive` and enables a systemd user unit (`anima-gdrive`, `--vfs-cache-mode writes`,
+`--dir-cache-time 15s --poll-interval 15s` so another device's push shows up quickly). That is a real
+POSIX path, so the picker/dialog sees it and no gvfs code runs — `resolveExistingSyncPath()` simply
+finds the file. Stored setting for the desktop side is **`sync_file_path`** (`sync_content_uri` is the
+Android SAF URI; `sync_last_push_at` / `sync_last_pull_at` record handoffs). The chosen remote on this
+host is `gdrive` → `gdrive:Anima Backup/anima-sync.anima-backup`, i.e.
+`/home/jay/GoogleDrive/Anima Backup/anima-sync.anima-backup`.
 
 ---
 
@@ -727,6 +737,7 @@ Tests cover: lore scan, prompt builders, card codec, backup, sync stability, cha
 | Platform | Command |
 |----------|---------|
 | New Linux PC (toolchain) | `bash scripts/setup_linux_dev.sh [--github]` — or `bash scripts/setup_linux_dev_noroot.sh` when no admin password is available |
+| Google Drive for sync (KDE/Linux) | `bash scripts/setup_gdrive_mount.sh` — rclone mount at `~/GoogleDrive`, systemd user unit `anima-gdrive`, auto-remounts at login (`--uninstall` to remove) |
 | Buildable copy when the source is on exFAT | `bash scripts/dev_copy_linux.sh` |
 | Android APK | `flutter build apk --release` |
 | Windows (normal path) | **GitHub Actions** `.github/workflows/windows-release.yml` — dispatched by `./deploy.sh` step 7/7, attaches `Anima-<version>-windows-x64.zip` to **v1.0.0** |
