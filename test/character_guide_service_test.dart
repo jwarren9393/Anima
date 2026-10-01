@@ -4,6 +4,16 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   const service = CharacterGuideService();
 
+  test('defaultInstruction works as a guide note', () {
+    expect(CharacterGuideService.defaultInstruction.trim(), isNotEmpty);
+    final messages = service.buildGuideMessages(
+      instruction: CharacterGuideService.defaultInstruction,
+      characterName: 'Mira',
+      userName: 'Jay',
+    );
+    expect(messages.first['content'], contains('CHARACTER GUIDE'));
+  });
+
   test('buildGuideMessages puts player note in system law, not user speech', () {
     final messages = service.buildGuideMessages(
       instruction: '"You\'re disgusting" — she spits and backs away',

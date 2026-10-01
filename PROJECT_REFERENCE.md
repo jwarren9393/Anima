@@ -98,7 +98,7 @@
 | Paths | `path_provider` → app documents directory |
 | Files | `file_picker`, `share_plus`, Android `saf` for sync URIs |
 | Fonts | `google_fonts` |
-| Tests | `flutter_test` — 386 tests |
+| Tests | `flutter_test` — 390 tests |
 
 **Platforms:** Android (primary), Linux desktop, Windows desktop. macOS not targeted.
 
@@ -453,8 +453,14 @@ Special tuned sampling for: memory summarize, narrator generate, composer format
 
 - **Tap** bubble → edit text
 - **Tap narrator card** → reopen narrator sheet
-- **Long-press** → menu: Delete, Rewind, Branch, **Narrator**, Continue, Impersonate, Paths, Auto-reply, Rewrite/Regen/Swipe (AI only)
+- **Long-press** → menu: Delete, Rewind, Branch, **Narrator**, Continue, **Guide reply…**, Impersonate, Paths, Auto-reply, Rewrite/Regen/Swipe (AI only)
 - **Quick swipe** ◀ 1/N ▶ on latest AI message
+
+### Guide reply sheet
+
+- **Guide reply…** (long-press menu) opens `_GuideReplySheet` in `chat_screen.dart` — a one-shot alternative to entering the composer voice mode.
+- Pick the speaker (chips; solo chats hide the picker), type what they do or feel, then **Guide this reply** → `_sendCharacterGuide(instruction, asSpeaker: …)` with `CharacterGuideService.buildGuideMessages()`. An empty box falls back to `CharacterGuideService.defaultInstruction`.
+- **Just continue (no guidance)** returns `plain: true` and runs `_continueScene()` — identical to the ▶ Continue button.
 
 ### Auto-reply
 
@@ -466,6 +472,7 @@ Special tuned sampling for: memory summarize, narrator generate, composer format
 - Long-press → **Paths** sheet (`_PathsSheet` in `chat_screen.dart`).
 - `RoadwayService.buildMessages()` — first-person options only; recent chat labels player as **You (player):** not persona name.
 - `RoadwayService.generateSampling()` — capped tokens + repeat penalties; `parseOptions()` dedupes; `normalizeUserPerspective()` fixes `*Name*` leaks.
+- **Direction field** — the sheet's optional "Steer these paths" box is passed to `buildMessages(direction: …)`, which adds "The player asked for paths like this" plus *every option must follow that request — write N variations*; empty keeps the plain brainstorm.
 - Cached per chat in `anima_roadway_cache.json` until anchor message changes or refresh.
 - **Combine selected** — `buildCombineMessages()` merges 2+ picks into one composer draft.
 
@@ -714,7 +721,7 @@ Applied in `PromptBuilder.applyMacros()`.
 ## 26. Testing and quality
 
 ```bash
-flutter test      # 386 tests
+flutter test      # 390 tests
 flutter analyze
 ```
 

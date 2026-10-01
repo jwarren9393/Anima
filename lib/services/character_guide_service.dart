@@ -3,6 +3,11 @@
 class CharacterGuideService {
   const CharacterGuideService();
 
+  /// Used when the player asks for a reply but gives no direction at all, so
+  /// the mandatory guide block never has to be empty.
+  static const defaultInstruction =
+      'Continue the scene naturally — react to what just happened.';
+
   /// Mandatory late-prompt block (same priority pattern as Director notes).
   String formatGuideInstruction({
     required String instruction,

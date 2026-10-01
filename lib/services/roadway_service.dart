@@ -30,16 +30,21 @@ class RoadwayService {
     );
   }
 
+  /// [direction] steers *what* the options should be about — when the player
+  /// types e.g. "ways to leave politely", every option becomes a variation of
+  /// that instead of a general mix. Empty means the usual varied brainstorm.
   List<Map<String, String>> buildMessages({
     required String userName,
     required String characterName,
     required List<ChatMessage> recentMessages,
     String roadwayNote = defaultNote,
     int optionCount = defaultOptionCount,
+    String direction = '',
   }) {
     final guidance =
         roadwayNote.trim().isEmpty ? defaultNote : roadwayNote.trim();
     final count = optionCount.clamp(3, 9);
+    final steer = direction.trim();
 
     final system = StringBuffer()
       ..writeln(
@@ -48,7 +53,18 @@ class RoadwayService {
       )
       ..writeln()
       ..writeln('Roadway note:')
-      ..writeln(guidance)
+      ..writeln(guidance);
+    if (steer.isNotEmpty) {
+      system
+        ..writeln()
+        ..writeln('The player asked for paths like this:')
+        ..writeln(steer)
+        ..writeln(
+          'Every option must follow that request — write $count different '
+          'variations of it instead of general scene options.',
+        );
+    }
+    system
       ..writeln()
       ..writeln('Write exactly $count numbered options (1. 2. 3. …).')
       ..writeln(

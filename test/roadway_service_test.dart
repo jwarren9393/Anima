@@ -7,6 +7,43 @@ import 'package:anima/services/settings_service.dart';
 void main() {
   const service = RoadwayService();
 
+  test('buildMessages steers the paths when a direction is given', () {
+    final messages = service.buildMessages(
+      userName: 'Jay',
+      characterName: 'Mira',
+      recentMessages: const [],
+      direction: 'ways to leave politely',
+    );
+    final system = messages.first['content'] ?? '';
+    expect(system, contains('The player asked for paths like this:'));
+    expect(system, contains('ways to leave politely'));
+    expect(system, contains('variations of it'));
+  });
+
+  test('buildMessages leaves the options open when no direction is given', () {
+    final messages = service.buildMessages(
+      userName: 'Jay',
+      characterName: 'Mira',
+      recentMessages: const [],
+    );
+    final system = messages.first['content'] ?? '';
+    expect(system, isNot(contains('The player asked for paths like this:')));
+    expect(system, contains('Write exactly 6 numbered options'));
+  });
+
+  test('buildMessages keeps the roadway note and the direction together', () {
+    final messages = service.buildMessages(
+      userName: 'Jay',
+      characterName: 'Mira',
+      recentMessages: const [],
+      roadwayNote: 'Keep every option under 12 words.',
+      direction: 'asking about the unsigned letter',
+    );
+    final system = messages.first['content'] ?? '';
+    expect(system, contains('Keep every option under 12 words.'));
+    expect(system, contains('asking about the unsigned letter'));
+  });
+
   test('parseOptions reads numbered and bulleted lines', () {
     const raw = '''
 Here are ideas:

@@ -10,12 +10,13 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **Also builds** | Linux desktop (works); Windows desktop (needs a Windows host) |
 | **Distribution** | Personal use only — **not** published to app stores |
 | **Repo** | https://github.com/jwarren9393/Anima (private) |
-| **Version** | **1.0.0** build **72** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
+| **Version** | **1.0.0** build **73** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
 
 ### What’s new in recent builds (1.0.0)
 
 | Build | Highlights |
 |-------|------------|
+| **73** | **Guide reply…** — one-shot sheet from the long-press menu: pick who replies, say what they do or feel (or tap *Just continue* for a plain reply). **Paths steering** — an optional direction field makes the options variations of what you ask for; leave it empty for the usual varied mix. |
 | **72** | **Persona import** — upload a persona JSON file (app format, AI-written card, a list, or a whole backup) with a review sheet before saving. **Cloud sync removed** — backup / restore is local only; move the file yourself (or use `scripts/sync_phone_anima.sh` over adb). The rclone Google Drive mount and its background sync are gone too. |
 | **64** | **Character & persona builds** — one Settings menu: shared model + sampling; separate **character** and **persona** build prompts. **Creation Center export fix** — persona builds use persona prompt + full token budget; alias names (e.g. mortal name + true name) merge to one identity; long workshop drafts prioritized; **Enrich** keeps powers/abilities. **Model browse filters** — min context, min speed, max TTFT, sort. **Duplicate** character/persona from ⋮ menu. **Theme fix** — text scale no longer crashes on launch. |
 | **63** | **Guide AI fix** — character voice direction no longer posts as your persona dialogue; anti-moralizing system block. **Scene moods** — **Real voice (anti-script)** + expanded vocabulary law (bans porn-script tropes, em-dash spam, recycled *actions* on explicit moods). |
@@ -166,7 +167,7 @@ Living build notes for coding agents: [`AGENTS.md`](AGENTS.md) (status, roadmap,
 
 ## Feature summary (at a glance)
 
-**Chat & roleplay** — Solo and group chats; streaming; swipes; edit / delete / rewind / branch; Continue, Impersonate, Regenerate, **Rewrite reply…**; **Narrator** (nudge + Generate + post); **Director** (commands next reply); **presence / scene law** (always on in groups — who’s present, witness-tagged memory, per-character filtering); **Character voice** — long-press cast chip → **Write line** or **Guide AI**; **Scene moods** (sensual, anti-script, explicit, afterglow + vocabulary law); Paths (Roadway); auto-reply (default off); **auto-wrap dialogue on send**; memory summary + auto-summarize (background); Author’s Note; per-chat persona and World Info; context estimate; export/import chat; manage cast mid-chat (+ temporary NPCs); fullscreen avatars; **group-react** cards.
+**Chat & roleplay** — Solo and group chats; streaming; swipes; edit / delete / rewind / branch; Continue, Impersonate, Regenerate, **Rewrite reply…**, **Guide reply…** (direct the next line, or just continue); **Narrator** (nudge + Generate + post); **Director** (commands next reply); **presence / scene law** (always on in groups — who’s present, witness-tagged memory, per-character filtering); **Character voice** — long-press cast chip → **Write line** or **Guide AI**; **Scene moods** (sensual, anti-script, explicit, afterglow + vocabulary law); Paths (Roadway); auto-reply (default off); **auto-wrap dialogue on send**; memory summary + auto-summarize (background); Author’s Note; per-chat persona and World Info; context estimate; export/import chat; manage cast mid-chat (+ temporary NPCs); fullscreen avatars; **group-react** cards.
 
 **Characters & personas** — ST V1/V2/V3 JSON + PNG import/export; categories; **Duplicate** from ⋮ menu; AI wand (tap quick / long-press source); consistency check **+ review-before-apply fix**; **Compact / Expand** card & persona (AI shortens or enriches fields, review before apply); **Compact** lore; **AI card/persona builder**; temporary characters; **Full cards only** filter; embedded lorebooks; alternate greetings; **~token badges**; **Generate avatar** + history; group speaker chips.
 
@@ -326,6 +327,7 @@ Scrollable sheet (~55% screen height on wide displays).
 | **Narrator** | Same sheet as composer theater icon — nudge, Generate, Post |
 | **Director** | Same as composer Director chip — command the next AI reply |
 | **Continue** | Generate next reply |
+| **Guide reply…** | Pick who replies, type what they do or feel — or **Just continue** with no guidance |
 | **Impersonate** | AI drafts the next **user** message as the persona |
 | **Paths** | Roadway brainstorm sheet |
 | **Auto-reply on/off** | Per-chat toggle |
@@ -344,6 +346,7 @@ Scrollable sheet (~55% screen height on wide displays).
 
 - Long-press → **Paths**.
 - ✨ generates ~6 **first-person** next-move options for {{user}} (`*I…*` actions, not persona name in `*asterisks*`).
+- **Steer these paths** (optional) — type what the options should be about (e.g. *ways to leave politely*) and every option becomes a variation of that instead of a random mix. Leave it empty for the usual varied options.
 - Tap a path → composer; edit before send.
 - Check **two or more** → **Combine selected** → AI merges into one composer draft.
 - Options **stay cached** until the chat’s last message changes, you clear/refresh (↻), or the chat is deleted.
@@ -888,7 +891,7 @@ bash scripts/setup_linux_dev_noroot.sh   # once per Linux PC — no admin passwo
 cd ~/Documents/Git\ Projects/Anima       # this PC's checkout — quote the space in the name
 flutter doctor
 flutter pub get
-flutter test      # 386 tests
+flutter test      # 390 tests
 flutter analyze
 flutter run -d linux     # or -d windows / a connected Android device
 ```

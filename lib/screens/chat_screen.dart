@@ -1302,11 +1302,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     _refocusComposer();
   }
 
-  Future<void> _sendCharacterGuide(String text) async {
+  Future<void> _sendCharacterGuide(String text, {Character? asSpeaker}) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return;
 
-    final speaker = _composerVoiceCharacter;
+    final speaker = asSpeaker ?? _composerVoiceCharacter;
     if (speaker == null) {
       await _setComposerVoice(null);
       return;
@@ -2330,6 +2330,44 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         ),
       ),
     );
+  }
+
+  /// One-shot "who replies, and what should they do?" — either plain continue
+  /// or a guided reply, without switching the composer into voice mode.
+  Future<void> _showGuideReplySheet() async {
+    if (!_hasApiKey) {
+      setState(() {
+        _error = 'Add your NanoGPT API key in Settings before you can chat.';
+      });
+      return;
+    }
+    if (_participants.isEmpty) return;
+
+    final request = await showModalBottomSheet<_GuideReplyRequest>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => _GuideReplySheet(
+        participants: _participants,
+        initialCharacterId: _resolvedGroupSpeaker().id,
+        userName: _userName,
+      ),
+    );
+    if (request == null || !mounted) return;
+
+    if (request.plain) {
+      await _continueScene();
+      return;
+    }
+
+    final speaker = _participants.firstWhere(
+      (c) => c.id == request.characterId,
+      orElse: _resolvedGroupSpeaker,
+    );
+    final instruction = request.instruction.trim().isEmpty
+        ? CharacterGuideService.defaultInstruction
+        : request.instruction.trim();
+    await _sendCharacterGuide(instruction, asSpeaker: speaker);
   }
 
   Future<void> _showPathsSheet() async {
@@ -5001,6 +5039,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   onTap: () => Navigator.pop(context, 'continue'),
                 ),
                 ListTile(
+                  leading: const Icon(Icons.auto_awesome_outlined),
+                  title: const Text('Guide reply…'),
+                  subtitle: const Text(
+                    'Say what they do or feel next — or just continue',
+                  ),
+                  onTap: () => Navigator.pop(context, 'guide_reply'),
+                ),
+                ListTile(
                   leading: const Icon(Icons.record_voice_over_outlined),
                   title: const Text('Impersonate'),
                   subtitle: const Text('Write your next line as you'),
@@ -5079,6 +5125,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (action == 'branch') await _branchFromMessage(index);
     if (action == 'narrator') await _openNarratorSheet();
     if (action == 'continue') await _continueScene();
+    if (action == 'guide_reply') await _showGuideReplySheet();
     if (action == 'impersonate') await _impersonate();
     if (action == 'paths') await _showPathsSheet();
     if (action == 'group_react') await _openGroupReplySheet();
@@ -5549,11 +5596,20 @@ class _PathsSheetState extends State<_PathsSheet> {
   static const _roadway = RoadwayService();
   final _cache = RoadwayCacheService();
 
+  /// Optional "make the options about this" prompt — kept per sheet visit.
+  final _directionController = TextEditingController();
+
   bool _loading = false;
   bool _combining = false;
   bool _restoring = true;
   List<String> _options = const [];
   final Set<int> _selected = <int>{};
+
+  @override
+  void dispose() {
+    _directionController.dispose();
+    super.dispose();
+  }
 
   String get _anchorMessageId {
     if (widget.recentMessages.isEmpty) return '';
@@ -5638,6 +5694,7 @@ class _PathsSheetState extends State<_PathsSheet> {
         userName: widget.userName,
         characterName: widget.characterName,
         recentMessages: widget.recentMessages,
+        direction: _directionController.text,
         roadwayNote: collaborator.roadwayNote,
       );
       final raw = await widget.nanoGptService.complete(
@@ -5852,6 +5909,24 @@ class _PathsSheetState extends State<_PathsSheet> {
                 ),
               ),
             ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: TextField(
+                controller: _directionController,
+                enabled: !_busy,
+                minLines: 1,
+                maxLines: 3,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.alt_route, size: 18),
+                  hintText: 'Steer these paths (optional)',
+                  helperText: 'Empty = the usual varied options',
+                  helperMaxLines: 1,
+                ),
+              ),
+            ),
             Expanded(
               child: _options.isEmpty
                   ? Center(
@@ -5950,3 +6025,157 @@ class _PathsSheetState extends State<_PathsSheet> {
     );
   }
 }
+
+/// What the player asked for in [_GuideReplySheet]: who replies, with what
+/// guidance (empty = let the model decide), or simply "carry on".
+class _GuideReplyRequest {
+  const _GuideReplyRequest({
+    required this.characterId,
+    required this.instruction,
+    required this.plain,
+  });
+
+  final String? characterId;
+  final String instruction;
+
+  /// True when the player only wanted a normal continue.
+  final bool plain;
+}
+
+/// One-shot reply sheet: pick the character, optionally say what they do or
+/// feel next, or just continue the scene.
+class _GuideReplySheet extends StatefulWidget {
+  const _GuideReplySheet({
+    required this.participants,
+    required this.initialCharacterId,
+    required this.userName,
+  });
+
+  final List<Character> participants;
+  final String? initialCharacterId;
+  final String userName;
+
+  @override
+  State<_GuideReplySheet> createState() => _GuideReplySheetState();
+}
+
+class _GuideReplySheetState extends State<_GuideReplySheet> {
+  final _controller = TextEditingController();
+  String? _characterId;
+
+  @override
+  void initState() {
+    super.initState();
+    _characterId = widget.initialCharacterId ??
+        (widget.participants.isEmpty ? null : widget.participants.first.id);
+    // Rebuild so the main button reflects whether guidance was typed.
+    _controller.addListener(_onTextChanged);
+  }
+
+  void _onTextChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_onTextChanged);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final hasGuidance = _controller.text.trim().isNotEmpty;
+    final single = widget.participants.length <= 1;
+    final who = widget.participants
+        .where((c) => c.id == _characterId)
+        .map((c) => c.name)
+        .firstOrNull;
+
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + 20,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Guide the reply', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text(
+            'Type what happens next and the AI writes it in character — or '
+            'leave it blank and just continue.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          if (!single) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (final character in widget.participants)
+                  ChoiceChip(
+                    label: Text(character.name),
+                    selected: _characterId == character.id,
+                    onSelected: (_) =>
+                        setState(() => _characterId = character.id),
+                  ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 12),
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            minLines: 2,
+            maxLines: 5,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: InputDecoration(
+              border: const OutlineInputBorder(),
+              hintText: single
+                  ? 'e.g. she loses her temper and storms out'
+                  : 'e.g. $who gets defensive and changes the subject',
+            ),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: widget.participants.isEmpty
+                ? null
+                : () => Navigator.pop(
+                    context,
+                    _GuideReplyRequest(
+                      characterId: _characterId,
+                      instruction: _controller.text,
+                      plain: false,
+                    ),
+                  ),
+            icon: const Icon(Icons.auto_awesome),
+            label: Text(
+              hasGuidance ? 'Guide this reply' : 'Generate a reply',
+            ),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.pop(
+              context,
+              const _GuideReplyRequest(
+                characterId: null,
+                instruction: '',
+                plain: true,
+              ),
+            ),
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('Just continue (no guidance)'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
