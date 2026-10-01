@@ -34,7 +34,7 @@
 19. [Settings hub — complete menu](#19-settings-hub--complete-menu)
 20. [AI collaborator utilities](#20-ai-collaborator-utilities)
 21. [Theming and chat experience](#21-theming-and-chat-experience)
-22. [Backup, restore, and cross-device sync](#22-backup-restore-and-cross-device-sync)
+22. [Backup and restore (local only)](#22-backup-and-restore-local-only)
 23. [Import and export](#23-import-and-export)
 24. [Avatars and image generation](#24-avatars-and-image-generation)
 25. [Macros](#25-macros)
@@ -98,7 +98,7 @@
 | Paths | `path_provider` → app documents directory |
 | Files | `file_picker`, `share_plus`, Android `saf` for sync URIs |
 | Fonts | `google_fonts` |
-| Tests | `flutter_test` — 381 tests |
+| Tests | `flutter_test` — 386 tests |
 
 **Platforms:** Android (primary), Linux desktop, Windows desktop. macOS not targeted.
 
@@ -135,7 +135,6 @@ Anima/
   scripts/
     setup_linux_dev.sh    # fresh Linux install: apt deps, JDK 17, Flutter, Android SDK, gh, env vars, Cursor
     setup_linux_dev_noroot.sh # same, with NO sudo: Flutter + Temurin JDK 17 + Android SDK inside $HOME, env vars, Cursor path, git identity (prints the apt line for the desktop libs)
-    setup_gdrive_mount.sh # mounts Google Drive at ~/GoogleDrive with rclone + a systemd user unit (KDE has no GNOME Drive in the picker)
     sync_phone_anima.sh   # no-cloud transfer: copies the backup file (or the whole library) to/from the phone over USB/Wi-Fi adb
     setup_windows_dev.ps1 # fresh Windows install: winget JDK 17/gh/platform-tools, Flutter at C:\src\flutter, Android SDK, VS Build Tools, env vars, Developer Mode
     install_windows_atl.ps1 # adds C++ ATL to an existing VS Build Tools install (needed for Windows desktop builds)
@@ -171,7 +170,6 @@ Anima/
 | `theme_palette.dart` | Colors, fonts, 8 presets |
 | `anima_presets.dart` | Sampling + text presets (Author's Note, guidance) |
 | `workshop_chat_import_options.dart` | Toggles when seeding workshop from chat |
-| `sync_target.dart` | Desktop path or Android content URI for sync file |
 
 **Screens** (`lib/screens/`)
 
@@ -196,7 +194,7 @@ Anima/
 | `character_build_settings_screen.dart` | Slim card JSON generation model |
 | `global_chat_prompts_screen.dart` | App-wide system + post-history |
 | `appearance_settings_screen.dart` | Theme Studio |
-| `backup_restore_screen.dart` | Backup + cross-device sync |
+| `backup_restore_screen.dart` | Backup + restore (local only) |
 
 **Services** (`lib/services/`)
 
@@ -227,8 +225,8 @@ Anima/
 | `composer_draft_service.dart` | Per-chat composer autosave |
 | `chat_transcript_codec.dart` | Chat JSON / plain export |
 | `character_card_codec.dart` | ST V1/V2/V3 + PNG chara chunk |
+| `persona_card_codec.dart` | Persona JSON import — app format, AI-written cards, aliases, lists, backups |
 | `app_backup_service.dart` | `.anima-backup` whitelist |
-| `sync_service.dart` | Single-file phone ↔ PC sync |
 | `avatar_service.dart` | Local avatar files |
 | `avatar_prompt_builder.dart` | Image prompt from card/persona text |
 | `chat_background_service.dart` | User chat background images |
@@ -326,36 +324,8 @@ All library files live in **one user-owned folder** (`AppDataRoot`, default `Doc
 
 **Backup** (`AppBackupService`): single `.anima-backup` JSON with whitelist above + settings keys + base64 avatars. **No API key.** Copy the whole Anima folder to move the key too.
 
-**Sync** (`SyncService`): one user-chosen file (Google Drive on Android; path on desktop, including GNOME Files Google Drive). Linux gvfs uses Drive IDs — `resolveExistingSyncPath()` strips a picker-added `.anima-backup` suffix and remounts Drive with `gio mount` when the mount went idle. Push overwrites, pull restores. Pulls/peeks read the remote **stably** (`readStableBytes()` — repeat until two consecutive reads return identical non-empty bytes, ≤5 tries, 250 ms apart) so a just-remounted Drive/SAF file that is stale or still downloading cannot make the first pull restore old data.
+**Sync — removed in build 72.** There is no cloud feature in the app any more: no `SyncService`, no sync file, no rclone mount, no Google. See §22 for how data moves between devices now (`scripts/sync_phone_anima.sh` optionally copies a `.anima-backup` over adb).
 
-**Linux/KDE (no GNOME Drive):** `scripts/setup_gdrive_mount.sh` mounts Drive with **rclone** at
-`~/GoogleDrive` (systemd user unit `anima-gdrive`, `--vfs-cache-mode full --dir-cache-time 4h
---poll-interval 3m --vfs-fast-fingerprint`), which is a real POSIX path, so the picker sees it and no
-gvfs code runs — `resolveExistingSyncPath()` simply finds the file.
-**Anima itself does not read that mount.** It reads a local mirror,
-`~/AnimaCloud/anima-sync.anima-backup`, kept in step with `gdrive:Anima Backup/anima-sync.anima-backup`
-by `~/.local/bin/anima-drive-sync` (newest write wins; never deletes; refuses to upload while size+mtime
-are still changing; `flock`-guarded), driven by `anima-cloud-sync.timer` (every 45 s — picks up pushes
-from the phone) and `anima-cloud-sync.path` (`PathModified`, so a local Push uploads within seconds).
-That keeps Pull/Push instant and immune to rclone's rate-limited **shared client_id** (which stalled
-some requests for 30–45 s). On 2026-10-01 the remote was moved to a **personal client_id** (Google
-Cloud project `app-builds-510305`; `client_id` + `client_secret` live in `~/.config/rclone/rclone.conf`,
-the downloaded JSON stays in `~/Downloads` and is git-ignored): the same worst-case 1.7 MB photo went
-from **34 s → 4 s** and six test files all came down at **1.2–1.8 MB/s with no stalls**. Caveat: while
-that Google project is in **Testing** publishing status, test-user authorisations (including the
-refresh token) expire **7 days** after consent — publish the app, or re-run
-`rclone config reconnect gdrive:` when it lapses.
-
-**No cloud at all (phone and PC always together):** `scripts/sync_phone_anima.sh` copies the sync file —
-or the whole library with `--library` — directly over **adb** (USB or Wi-Fi). `--auto` compares mtimes and
-copies whichever side is newer, `--push` / `--pull` force a direction, `--dry-run` previews, and the
-script **refuses to overwrite** without confirmation so it can never silently clobber a device. The
-phone's app needs its sync folder pointed at `Documents/Anima` once; after that the flow is "run the
-script, then tap **Pull from cloud**". Measured: the whole 15-file library (6.1 MB) in ~2 s (~3 MB/s),
-entirely offline from Google.
-Stored setting for the desktop side is **`sync_file_path`** (`sync_content_uri` is the Android SAF URI;
-`sync_last_push_at` / `sync_last_pull_at` record handoffs). On this host `sync_file_path` =
-`/home/jay/AnimaCloud/anima-sync.anima-backup`.
 
 ---
 
@@ -632,7 +602,7 @@ Workshops listed on Home horizontal row + Settings → Creation Center.
 | Character & persona builds | Settings | Shared build model + sampling; character + persona JSON prompts |
 | Global chat prompts | Settings | System + post-history |
 | Appearance | Settings | Theme Studio |
-| Backup & sync | Settings | .anima-backup + sync file |
+| Backup & restore | Settings | .anima-backup (local only) |
 
 ---
 
@@ -699,11 +669,11 @@ Plus **Enter to send** toggle (desktop).
 
 ---
 
-## 22. Backup, restore, and cross-device sync
+## 22. Backup and restore (local only)
 
 See §8. User must **re-enter API key** after restore.
 
-**Pull from cloud** reads the remote through `SyncService.readStableBytes()` (two identical consecutive non-empty reads, ≤5 attempts, 250 ms apart) before restoring — a freshly (re)mounted Google Drive / SAF file that returns stale or partially downloaded bytes can no longer make the first pull a silent no-op ("confirmation but nothing changed").
+**No cloud sync.** The cross-device sync feature was **removed** in build 72 (with `SyncService`, `SyncTarget`, the four `sync_*` settings keys and the `saf` dependency), because the owner's phone and laptop are always together and the cloud path only added rate-limit stalls and Google tokens that expired every 7 days. `Create backup` writes one `.anima-backup` file and `Restore backup` applies it; moving the file between devices is up to the user. `scripts/sync_phone_anima.sh` automates that copy over USB/Wi-Fi adb (`--auto` newest-wins, `--library` for the whole library, `--dry-run` to preview, and it refuses to overwrite without confirmation). API key: never in the backup; each device keeps its own.
 
 ---
 
@@ -714,6 +684,7 @@ See §8. User must **re-enter API key** after restore.
 | Character card | ST JSON, PNG with embedded JSON |
 | Chat | `anima_chat_v1` JSON or plain `Name: text` |
 | Lorebook | ST World Info JSON |
+| Persona | Anima persona JSON (app format, or an AI-written card with `identity`/`looks`/`backstory`/`motivations`) |
 | Full app | `.anima-backup` |
 | Workshop | World bundle (hub) |
 
@@ -743,7 +714,7 @@ Applied in `PromptBuilder.applyMacros()`.
 ## 26. Testing and quality
 
 ```bash
-flutter test      # 381 tests
+flutter test      # 386 tests
 flutter analyze
 ```
 
@@ -758,7 +729,6 @@ Tests cover: lore scan, prompt builders, card codec, backup, sync stability, cha
 | Platform | Command |
 |----------|---------|
 | New Linux PC (toolchain) | `bash scripts/setup_linux_dev.sh [--github]` — or `bash scripts/setup_linux_dev_noroot.sh` when no admin password is available |
-| Google Drive for sync (KDE/Linux) | `bash scripts/setup_gdrive_mount.sh` — rclone mount at `~/GoogleDrive`, systemd user unit `anima-gdrive`, auto-remounts at login (`--uninstall` to remove) |
 | Phone ↔ PC with **no cloud** | `bash scripts/sync_phone_anima.sh --auto` (adb transfer; `--push` / `--pull` / `--library` / `--dry-run`) |
 | Buildable copy when the source is on exFAT | `bash scripts/dev_copy_linux.sh` |
 | Android APK | `flutter build apk --release` |

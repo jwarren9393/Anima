@@ -10,12 +10,13 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **Also builds** | Linux desktop (works); Windows desktop (needs a Windows host) |
 | **Distribution** | Personal use only — **not** published to app stores |
 | **Repo** | https://github.com/jwarren9393/Anima (private) |
-| **Version** | **1.0.0** build **64** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
+| **Version** | **1.0.0** build **72** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
 
 ### What’s new in recent builds (1.0.0)
 
 | Build | Highlights |
 |-------|------------|
+| **72** | **Persona import** — upload a persona JSON file (app format, AI-written card, a list, or a whole backup) with a review sheet before saving. **Cloud sync removed** — backup / restore is local only; move the file yourself (or use `scripts/sync_phone_anima.sh` over adb). The rclone Google Drive mount and its background sync are gone too. |
 | **64** | **Character & persona builds** — one Settings menu: shared model + sampling; separate **character** and **persona** build prompts. **Creation Center export fix** — persona builds use persona prompt + full token budget; alias names (e.g. mortal name + true name) merge to one identity; long workshop drafts prioritized; **Enrich** keeps powers/abilities. **Model browse filters** — min context, min speed, max TTFT, sort. **Duplicate** character/persona from ⋮ menu. **Theme fix** — text scale no longer crashes on launch. |
 | **63** | **Guide AI fix** — character voice direction no longer posts as your persona dialogue; anti-moralizing system block. **Scene moods** — **Real voice (anti-script)** + expanded vocabulary law (bans porn-script tropes, em-dash spam, recycled *actions* on explicit moods). |
 | **62** | **Group speaker handoff** — tapping a cast chip after another character spoke picks the right speaker from scene context. **Character voice** — long-press cast chip → **Write line** (manual) or **Guide AI** (loose direction → fresh reply for that character). **Google Drive sync** — auto-remount when GNOME Drive went idle. |
@@ -105,10 +106,6 @@ bash scripts/setup_linux_dev.sh --github   # --github also signs you in to GitHu
 > `sudo apt` line needed for the Linux *desktop* window. Building for your Android phone works
 > without that line.
 
-> **Want Google Drive in Anima's sync picker?** On KDE/Kubuntu GNOME Online Accounts is unreliable, so
-> the picker shows no cloud at all. Run `bash scripts/setup_gdrive_mount.sh` once and Drive appears as
-> the normal folder `~/GoogleDrive` (see **Cross-device sync** below).
-
 Update later: `./scripts/update_linux.sh --pull`
 
 > **Keep the project folder on a normal Linux drive (ext4), not an exFAT/FAT USB drive.**
@@ -153,7 +150,7 @@ publish only a zip you built locally, use
 Use **Settings → Backup, restore & sync**:
 
 - **Create backup** — one `.anima-backup` JSON file (no API key).
-- **Cross-device sync** — one sync file in Google Drive or a synced desktop folder; **Push to cloud** overwrites it; **Pull from cloud** restores on another device.
+- **Backup & restore (local only)** — one `.anima-backup` file; **there is no cloud/sync feature in the app** — move the file to the other device yourself (USB, KDE Connect, a shared folder) and use **Restore backup** there. `scripts/sync_phone_anima.sh` automates that copy over adb.
 
 ---
 
@@ -378,7 +375,7 @@ Opened from Home or Chat ⋮ → **Settings**. Top banner: **API & connection** 
 | **AI** | **Character & persona builds** | Shared model + sampling; separate character and persona JSON build prompts |
 | **App** | **Data folder** | Visible library location (open / copy / move) |
 | **App** | **Appearance** | Theme Studio — presets, layout, colors, fonts, chat experience, avatars |
-| **App** | **Backup, restore & sync** | `.anima-backup` export + cross-device sync file |
+| **App** | **Backup & restore** | `.anima-backup` export (local only — no cloud feature) |
 
 Detailed sections below follow this order where possible.
 
@@ -764,37 +761,22 @@ Live preview; **Save** applies app-wide immediately via `AppearanceController`. 
 
 - Replaces only Anima data (whitelist); returns to Home.
 
-**Cross-device sync**
+**Moving data between devices**
 
-- Pick one sync file (Google Drive on Android; file path on desktop, including **Files → Google Drive** on Linux).
-- Linux: GNOME Drive stores the file under a hidden ID; Anima maps that so Push/Pull work.
-- **Linux without GNOME (KDE / Kubuntu):** GNOME Online Accounts is unreliable there, so Google Drive
-  never appears in the file picker and there is nothing to choose. Run
-  **`bash scripts/setup_gdrive_mount.sh`** once. It mounts Drive at **`~/GoogleDrive`** with rclone (so
-  Drive is browsable like any folder) **and** keeps an ordinary local file at
-  **`~/AnimaCloud/anima-sync.anima-backup`** in step with Drive — pick *that* file, because a local
-  file is instant to read and can never be a half-finished download. A Push uploads in a few seconds;
-  changes pushed from the phone arrive within ~45 s. Force it any time with
-  `bash scripts/setup_gdrive_mount.sh --sync`.
-- *Heads-up about Drive speed:* the first version of this used rclone's **shared** Google client_id,
-  which Google rate-limits hard (30–45 s stalls — a file manager could freeze for a minute). It was
-  moved to a **personal client_id** on 2026-10-01, which measured **6–9× faster with no stalls**, so
-  browsing `~/GoogleDrive` now behaves. If your own Google Cloud project is still in **Testing**
-  status, Google expires test-user authorisations (including the refresh token) **7 days** after
-  consent — either click **Publish app** on the project's Audience page or re-run
-  `rclone config reconnect gdrive:` when it lapses.
-- **No cloud at all (the phone is always with you):** run **`bash scripts/sync_phone_anima.sh --auto`** —
-  it copies the backup file straight between the phone and this PC over USB or Wi-Fi (adb), picks
-  whichever side is newer, and finishes in a couple of seconds. Add `--library` to move the whole
-  library folder instead of just the backup file, or `--dry-run` to see what it would do first.
-  One-time setup on the phone: set the app's sync folder to `Documents/Anima`. After that the workflow
-  is: run the script, then tap **Pull from cloud** on the device that received it. No account, no
-  consent screen, no tokens that expire.
-- **Create sync file** / **Choose sync folder/file**.
-- **Push to cloud** — overwrites sync file in place.
-- **Pull from cloud** — restore from sync file when switching phone ↔ PC.
-- **Forget sync file** — stop using saved location.
-- Shows last push / pull times.
+- **Create backup** writes one `.anima-backup` file (chats, characters, personas, categories,
+  lorebooks, workshops, drafts, Paths cache, avatars, settings — never the API key).
+- Move that file to the other device however you like — USB, **KDE Connect**, a shared folder, a USB
+  stick — then open Anima there and use **Restore backup**.
+- **Optional helper (PC):** `bash scripts/sync_phone_anima.sh --auto` copies the file — or the whole
+  library with `--library` — straight over USB/Wi-Fi **adb**, picking whichever side is newer. Add
+  `--dry-run` to preview; it refuses to overwrite without confirmation. Two seconds for a full library,
+  and no account, consent screen or token involved.
+- On Android, **Create backup** uses the share sheet, so you can send it straight to the other device
+  with KDE Connect or any app you already use.
+- **There is no in-app cloud sync any more** (removed in build 72) — the phone and laptop are always
+  together in this setup, and the Google Drive path meant rate-limit stalls and tokens that expired
+  every 7 days for a job a file copy does in seconds.
+
 
 Not encrypted — treat like a private export.
 
@@ -859,7 +841,7 @@ A tiny pointer file still sits in hidden app storage so the next launch knows wh
 | `avatars/` | Local portrait files |
 | `chat_backgrounds/` | User-picked chat backgrounds |
 | `README.txt` | Short note that this folder is the library |
-| `.anima-backup` / sync file | Optional shareable export (**no** API key) |
+| `.anima-backup` | Optional shareable export (**no** API key) |
 
 ---
 
@@ -906,7 +888,7 @@ bash scripts/setup_linux_dev_noroot.sh   # once per Linux PC — no admin passwo
 cd ~/Documents/Git\ Projects/Anima       # this PC's checkout — quote the space in the name
 flutter doctor
 flutter pub get
-flutter test      # 381 tests
+flutter test      # 386 tests
 flutter analyze
 flutter run -d linux     # or -d windows / a connected Android device
 ```

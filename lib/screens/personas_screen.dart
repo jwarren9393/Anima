@@ -1,7 +1,12 @@
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../models/persona.dart';
 import '../services/nanogpt_service.dart';
+import '../services/persona_card_codec.dart';
 import '../services/persona_service.dart';
 import '../services/persona_token_service.dart';
 import '../services/settings_service.dart';
@@ -35,10 +40,12 @@ class PersonasScreen extends StatefulWidget {
 
 class _PersonasScreenState extends State<PersonasScreen> {
   static const _tokenService = PersonaTokenService();
+  static const _codec = PersonaCardCodec();
 
   List<Persona> _personas = [];
   String? _activeId;
   bool _loading = true;
+  bool _busy = false;
 
   @override
   void initState() {
@@ -127,6 +134,126 @@ class _PersonasScreenState extends State<PersonasScreen> {
     await _load();
   }
 
+  /// Import one or more persona cards from a JSON file.
+  ///
+  /// Works with this app's own persona JSON, a persona an AI collaborator
+  /// produced (`description`, `identity`, `backstory`, …), a list of personas,
+  /// or a whole `.anima-backup` file.
+  Future<void> _import() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['json'],
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+
+      final file = result.files.first;
+      Uint8List? bytes = file.bytes;
+      if (bytes == null && file.path != null) {
+        bytes = await File(file.path!).readAsBytes();
+      }
+      if (bytes == null) {
+        throw const FormatException('Could not read the selected file.');
+      }
+
+      final parsed = _codec.parseBytes(
+        bytes,
+        newId: widget.personaService.newId,
+      );
+      if (!mounted) return;
+      final approved = await _confirmImport(parsed);
+      if (approved != true) return;
+
+      for (final persona in parsed) {
+        await widget.personaService.upsert(persona);
+      }
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            parsed.length == 1
+                ? 'Imported “${parsed.first.name}”'
+                : 'Imported ${parsed.length} personas',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      final message = error is FormatException ? error.message : '$error';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Import failed: $message')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Shows what was found before anything is saved.
+  Future<bool?> _confirmImport(List<Persona> personas) {
+    final title = personas.length == 1
+        ? 'Import “${personas.first.name}”'
+        : 'Import ${personas.length} personas';
+    return showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+              child: Text(
+                title,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: personas.length,
+                itemBuilder: (context, index) {
+                  final persona = personas[index];
+                  final text = persona.promptText.replaceAll('\n', ' ');
+                  return ListTile(
+                    dense: true,
+                    leading: AnimaAvatar(
+                      fileName: persona.avatarFileName,
+                      label: persona.name,
+                      radius: 18,
+                    ),
+                    title: Text(persona.name),
+                    subtitle: Text(
+                      text.isEmpty ? 'No details' : text,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+              child: FilledButton.icon(
+                onPressed: () => Navigator.pop(context, true),
+                icon: const Icon(Icons.download_done),
+                label: Text(
+                  personas.length == 1
+                      ? 'Import'
+                      : 'Import all ${personas.length}',
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _onTap(Persona persona) {
     if (widget.pickForChat) {
       Navigator.of(context).pop(persona);
@@ -145,6 +272,13 @@ class _PersonasScreenState extends State<PersonasScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.pickForChat ? 'Choose persona' : 'Personas'),
+        actions: [
+          IconButton(
+            onPressed: _loading || _busy ? null : _import,
+            tooltip: 'Import persona JSON',
+            icon: const Icon(Icons.upload_file),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _loading ? null : _create,
