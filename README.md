@@ -770,9 +770,16 @@ Live preview; **Save** applies app-wide immediately via `AppearanceController`. 
 - Linux: GNOME Drive stores the file under a hidden ID; Anima maps that so Push/Pull work.
 - **Linux without GNOME (KDE / Kubuntu):** GNOME Online Accounts is unreliable there, so Google Drive
   never appears in the file picker and there is nothing to choose. Run
-  **`bash scripts/setup_gdrive_mount.sh`** once — it mounts Drive at **`~/GoogleDrive`** with rclone
-  (plus a systemd user service that remounts it at every login), so the picker can browse to
-  `~/GoogleDrive/Anima Backup/anima-sync.anima-backup` like any other folder.
+  **`bash scripts/setup_gdrive_mount.sh`** once. It mounts Drive at **`~/GoogleDrive`** with rclone (so
+  Drive is browsable like any folder) **and** keeps an ordinary local file at
+  **`~/AnimaCloud/anima-sync.anima-backup`** in step with Drive — pick *that* file, because a local
+  file is instant to read and can never be a half-finished download. A Push uploads in a few seconds;
+  changes pushed from the phone arrive within ~45 s. Force it any time with
+  `bash scripts/setup_gdrive_mount.sh --sync`.
+- *Heads-up about Drive speed:* rclone's **shared** Google client_id is rate-limited by Google, so the
+  first download of a large file through `~/GoogleDrive` can stall for a while (Anima's own sync is not
+  affected, since it uses the local copy). Making your own free client_id — rclone.org → Google Drive →
+  "Making your own client_id" — removes that limit.
 - **Create sync file** / **Choose sync folder/file**.
 - **Push to cloud** — overwrites sync file in place.
 - **Pull from cloud** — restore from sync file when switching phone ↔ PC.

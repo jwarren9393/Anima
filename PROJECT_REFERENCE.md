@@ -328,13 +328,19 @@ All library files live in **one user-owned folder** (`AppDataRoot`, default `Doc
 **Sync** (`SyncService`): one user-chosen file (Google Drive on Android; path on desktop, including GNOME Files Google Drive). Linux gvfs uses Drive IDs — `resolveExistingSyncPath()` strips a picker-added `.anima-backup` suffix and remounts Drive with `gio mount` when the mount went idle. Push overwrites, pull restores. Pulls/peeks read the remote **stably** (`readStableBytes()` — repeat until two consecutive reads return identical non-empty bytes, ≤5 tries, 250 ms apart) so a just-remounted Drive/SAF file that is stale or still downloading cannot make the first pull restore old data.
 
 **Linux/KDE (no GNOME Drive):** `scripts/setup_gdrive_mount.sh` mounts Drive with **rclone** at
-`~/GoogleDrive` and enables a systemd user unit (`anima-gdrive`, `--vfs-cache-mode writes`,
-`--dir-cache-time 15s --poll-interval 15s` so another device's push shows up quickly). That is a real
-POSIX path, so the picker/dialog sees it and no gvfs code runs — `resolveExistingSyncPath()` simply
-finds the file. Stored setting for the desktop side is **`sync_file_path`** (`sync_content_uri` is the
-Android SAF URI; `sync_last_push_at` / `sync_last_pull_at` record handoffs). The chosen remote on this
-host is `gdrive` → `gdrive:Anima Backup/anima-sync.anima-backup`, i.e.
-`/home/jay/GoogleDrive/Anima Backup/anima-sync.anima-backup`.
+`~/GoogleDrive` (systemd user unit `anima-gdrive`, `--vfs-cache-mode full --dir-cache-time 4h
+--poll-interval 3m --vfs-fast-fingerprint`), which is a real POSIX path, so the picker sees it and no
+gvfs code runs — `resolveExistingSyncPath()` simply finds the file.
+**Anima itself does not read that mount.** It reads a local mirror,
+`~/AnimaCloud/anima-sync.anima-backup`, kept in step with `gdrive:Anima Backup/anima-sync.anima-backup`
+by `~/.local/bin/anima-drive-sync` (newest write wins; never deletes; refuses to upload while size+mtime
+are still changing; `flock`-guarded), driven by `anima-cloud-sync.timer` (every 45 s — picks up pushes
+from the phone) and `anima-cloud-sync.path` (`PathModified`, so a local Push uploads within seconds).
+That keeps Pull/Push instant and immune to rclone's rate-limited **shared client_id** (which stalls some
+requests for 30–45 s; a personal client_id removes the limit).
+Stored setting for the desktop side is **`sync_file_path`** (`sync_content_uri` is the Android SAF URI;
+`sync_last_push_at` / `sync_last_pull_at` record handoffs). On this host `sync_file_path` =
+`/home/jay/AnimaCloud/anima-sync.anima-backup`.
 
 ---
 
