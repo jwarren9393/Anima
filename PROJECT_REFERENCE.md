@@ -336,8 +336,14 @@ gvfs code runs — `resolveExistingSyncPath()` simply finds the file.
 by `~/.local/bin/anima-drive-sync` (newest write wins; never deletes; refuses to upload while size+mtime
 are still changing; `flock`-guarded), driven by `anima-cloud-sync.timer` (every 45 s — picks up pushes
 from the phone) and `anima-cloud-sync.path` (`PathModified`, so a local Push uploads within seconds).
-That keeps Pull/Push instant and immune to rclone's rate-limited **shared client_id** (which stalls some
-requests for 30–45 s; a personal client_id removes the limit).
+That keeps Pull/Push instant and immune to rclone's rate-limited **shared client_id** (which stalled
+some requests for 30–45 s). On 2026-10-01 the remote was moved to a **personal client_id** (Google
+Cloud project `app-builds-510305`; `client_id` + `client_secret` live in `~/.config/rclone/rclone.conf`,
+the downloaded JSON stays in `~/Downloads` and is git-ignored): the same worst-case 1.7 MB photo went
+from **34 s → 4 s** and six test files all came down at **1.2–1.8 MB/s with no stalls**. Caveat: while
+that Google project is in **Testing** publishing status, test-user authorisations (including the
+refresh token) expire **7 days** after consent — publish the app, or re-run
+`rclone config reconnect gdrive:` when it lapses.
 Stored setting for the desktop side is **`sync_file_path`** (`sync_content_uri` is the Android SAF URI;
 `sync_last_push_at` / `sync_last_pull_at` record handoffs). On this host `sync_file_path` =
 `/home/jay/AnimaCloud/anima-sync.anima-backup`.

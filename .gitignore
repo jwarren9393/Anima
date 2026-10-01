@@ -59,3 +59,8 @@ app.*.map.json
 
 # Linux release zip (published via GitHub Releases, rebuilt by deploy.sh)
 /*.zip
+
+# Google OAuth client secrets (downloaded from the Google Cloud Console — never commit)
+client_secret_*.json
+client_secrets.json
+

@@ -776,10 +776,13 @@ Live preview; **Save** applies app-wide immediately via `AppearanceController`. 
   file is instant to read and can never be a half-finished download. A Push uploads in a few seconds;
   changes pushed from the phone arrive within ~45 s. Force it any time with
   `bash scripts/setup_gdrive_mount.sh --sync`.
-- *Heads-up about Drive speed:* rclone's **shared** Google client_id is rate-limited by Google, so the
-  first download of a large file through `~/GoogleDrive` can stall for a while (Anima's own sync is not
-  affected, since it uses the local copy). Making your own free client_id — rclone.org → Google Drive →
-  "Making your own client_id" — removes that limit.
+- *Heads-up about Drive speed:* the first version of this used rclone's **shared** Google client_id,
+  which Google rate-limits hard (30–45 s stalls — a file manager could freeze for a minute). It was
+  moved to a **personal client_id** on 2026-10-01, which measured **6–9× faster with no stalls**, so
+  browsing `~/GoogleDrive` now behaves. If your own Google Cloud project is still in **Testing**
+  status, Google expires test-user authorisations (including the refresh token) **7 days** after
+  consent — either click **Publish app** on the project's Audience page or re-run
+  `rclone config reconnect gdrive:` when it lapses.
 - **Create sync file** / **Choose sync folder/file**.
 - **Push to cloud** — overwrites sync file in place.
 - **Pull from cloud** — restore from sync file when switching phone ↔ PC.

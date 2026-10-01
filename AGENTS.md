@@ -469,13 +469,24 @@ fetched same-size ~2 MB photos at **50, 2169, 177, 1106 and 2394 KB/s** — a 75
 was made worse by the first version's flags (`--dir-cache-time 15s --poll-interval 15s`, chosen for
 freshness), which made every folder listing expire immediately, and by `--vfs-cache-mode writes`, which
 re-downloaded a file on every read — so a Dolphin thumbnail pass could take minutes.
-**The real fix is a personal client_id** (free, ~5 min, browser):
-console.cloud.google.com → new project → enable **Google Drive API** → OAuth consent screen
-(External, add your own address as a test user) → Credentials → **OAuth client ID → Desktop app** →
-then
-`rclone config update gdrive client_id <id> client_secret <secret>` and
-`rclone config reconnect gdrive:` (re-authorises in the browser). Until that happens, *first* downloads
-can still stall; after it, browsing and sync should be fast.
+**FIXED 2026-10-01 with a personal client_id.** The owner created one in Google Cloud project
+`app-builds-510305` (Desktop-app client `57942272017-…apps.googleusercontent.com`; the downloaded JSON
+stays in `~/Downloads`, and `client_secret_*.json` is now git-ignored). Applied with
+`rclone config update gdrive client_id … client_secret …` followed by `rclone config reconnect gdrive:`
+(the browser step needs account → **Advanced** → continue, because the app is unverified).
+Getting past Google's hard *"Access blocked"* screen (the one with **no Advanced link**) needed **two**
+project settings: adding the owner's address under **Test users** on the Audience page, and enabling the
+**Google Drive API**. Verified after: the same worst-case 1.7 MB photo went **34 s → 3.95 s**, and six
+test files came down at a steady **1.2–1.8 MB/s with no stalls** (previously 50–177 KB/s with 30–45 s
+backoff). `rclone lsd` no longer prints the shared-client notice.
+⚠️ The project is still in **Testing** publishing status (the owner could not click Publish), and Google
+expires test-user authorisations **7 days** after consent — including the refresh token. When Drive
+suddenly stops working (the sync log says "Drive not reachable"), fix it with
+`rclone config reconnect gdrive:` (answer y twice, then approve in the browser). To stop the weekly
+chore: fill in **Branding** (app name, support email, developer contact) and **Data access** (declare
+`https://www.googleapis.com/auth/drive`), click **Audience → Publish app**, then re-run
+`rclone config reconnect gdrive:` once so the fresh token has no 7-day limit. A service account with the
+folder shared to it would also sidestep the consent screen entirely.
 
 What is installed now:
 
@@ -652,7 +663,7 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 4. Enter your NanoGPT API key in **Settings → API** (saved in that folder as `api_key.txt`). Your old library can be restored from a `.anima-backup` file in **Settings → Backup, restore & sync** — on the Windows laptop one is waiting in `Documents\Anima Backup\`, `W:\Anima Backup\` and `G:\My Drive\Anima Backup\`.
 5. On Windows, Cursor already points the Dart extension at `C:/src/flutter` (`dart.flutterSdkPath`); set that user-level setting on any new machine if the Dart extension cannot find Flutter.
 6. **Release rule:** keep `pubspec.yaml` at **`1.0.0+<build>`** — only increment the number after `+`. Upload to the existing **`v1.0.0`** GitHub release (not a new tag per build). Current phone APK is **build 71** (signed with the committed release key). The **Windows** zip is built for you by GitHub Actions from the same command — nothing to run on the Windows PC unless you want a local build.
-7. **Before rclone's shared Google client_id is retired (sometime during 2026):** Anima's Google Drive sync on Linux will stop working until you create a personal OAuth client_id (see rclone.org/drive) and run `rclone config update gdrive client_id <id> client_secret <secret>`. The mount script warns about this every time it runs.
+7. **Google Drive re-auth reminder (Linux):** a personal OAuth client_id is in use since 2026-10-01, which removed the shared-ID stalls. Because that Google project is still in **Testing** status, Google expires test-user tokens **7 days** after consent — when Drive stops syncing (`Drive not reachable` in the sync log), run `rclone config reconnect gdrive:`. To make it permanent, publish the app in the console (Branding + Data access, then Audience → Publish app) as described in the machine notes.
 
 ---
 
