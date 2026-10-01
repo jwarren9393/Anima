@@ -475,7 +475,7 @@ JDK came from apt at `/usr/lib/jvm/temurin-17-jdk-amd64`. That disk was wiped on
 | Project | Path | Branch | Remote |
 |---------|------|--------|--------|
 | Anima | `~/Documents/Git Projects/Anima` | `main` | `jwarren9393/Anima` |
-| Journey | *(not cloned on this host yet)* | `master` | `jwarren9393/Journey` |
+| Journey | `~/Documents/Git Projects/Journey` | `master` | `jwarren9393/Journey` (**public**) |
 
 It lives on the **ext4** root partition (`/dev/nvme0n1p6`, ~423 GB free) — exactly what Flutter needs,
 so **no `dev_copy_linux.sh` copy is required** here: symlink probe `ln -s /tmp …` succeeds. The folder
@@ -484,6 +484,15 @@ name contains a space, which is fine for Flutter/Gradle as long as it is quoted 
 **One copy only.** The old exFAT copies on Jay-Storage were deleted on 2026-09-24, and the old
 `~/Documents/App-Builds/…` copies are gone with the 2026-09-30 reinstall — the paths above are the
 only working copies.
+
+**Journey — cloned alongside Anima on 2026-10-01.** Same dev environment, no extra installs: verified on
+this host with `flutter analyze` clean, **49 tests pass**, a debug APK
+(`build/app/outputs/flutter-apk/app-debug.apk`) and a Linux desktop bundle
+(`build/linux/x64/debug/bundle/journey`). Its `scripts/setup_linux_dev.sh` also installs
+`libsqlite3-dev` (Journey uses drift/sqlite) but the Linux build succeeds **without** it here, so it is
+not required. Journey keeps its **own** living docs (`docs/PROJECT_STATUS.md`,
+`docs/PROJECT_REFERENCE.md`, `docs/ROADMAP.md`) and its **own** `deploy.sh`, which tags `build-N` on its
+own GitHub release — different from Anima's single `v1.0.0`. Its repo is **public**.
 
 **⚠️ Never build from an exFAT/FAT drive.** exFAT cannot store symlinks, and Flutter writes its plugin
 links as symlinks then **rethrows** when that fails (`flutter_tools/lib/src/flutter_plugins.dart` →
