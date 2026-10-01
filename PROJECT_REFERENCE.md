@@ -136,6 +136,7 @@ Anima/
     setup_linux_dev.sh    # fresh Linux install: apt deps, JDK 17, Flutter, Android SDK, gh, env vars, Cursor
     setup_linux_dev_noroot.sh # same, with NO sudo: Flutter + Temurin JDK 17 + Android SDK inside $HOME, env vars, Cursor path, git identity (prints the apt line for the desktop libs)
     setup_gdrive_mount.sh # mounts Google Drive at ~/GoogleDrive with rclone + a systemd user unit (KDE has no GNOME Drive in the picker)
+    sync_phone_anima.sh   # no-cloud transfer: copies the backup file (or the whole library) to/from the phone over USB/Wi-Fi adb
     setup_windows_dev.ps1 # fresh Windows install: winget JDK 17/gh/platform-tools, Flutter at C:\src\flutter, Android SDK, VS Build Tools, env vars, Developer Mode
     install_windows_atl.ps1 # adds C++ ATL to an existing VS Build Tools install (needed for Windows desktop builds)
     dev_copy_linux.sh     # buildable working copy at ~/Anima when the source sits on exFAT
@@ -344,6 +345,14 @@ from **34 s → 4 s** and six test files all came down at **1.2–1.8 MB/s with 
 that Google project is in **Testing** publishing status, test-user authorisations (including the
 refresh token) expire **7 days** after consent — publish the app, or re-run
 `rclone config reconnect gdrive:` when it lapses.
+
+**No cloud at all (phone and PC always together):** `scripts/sync_phone_anima.sh` copies the sync file —
+or the whole library with `--library` — directly over **adb** (USB or Wi-Fi). `--auto` compares mtimes and
+copies whichever side is newer, `--push` / `--pull` force a direction, `--dry-run` previews, and the
+script **refuses to overwrite** without confirmation so it can never silently clobber a device. The
+phone's app needs its sync folder pointed at `Documents/Anima` once; after that the flow is "run the
+script, then tap **Pull from cloud**". Measured: the whole 15-file library (6.1 MB) in ~2 s (~3 MB/s),
+entirely offline from Google.
 Stored setting for the desktop side is **`sync_file_path`** (`sync_content_uri` is the Android SAF URI;
 `sync_last_push_at` / `sync_last_pull_at` record handoffs). On this host `sync_file_path` =
 `/home/jay/AnimaCloud/anima-sync.anima-backup`.
@@ -750,6 +759,7 @@ Tests cover: lore scan, prompt builders, card codec, backup, sync stability, cha
 |----------|---------|
 | New Linux PC (toolchain) | `bash scripts/setup_linux_dev.sh [--github]` — or `bash scripts/setup_linux_dev_noroot.sh` when no admin password is available |
 | Google Drive for sync (KDE/Linux) | `bash scripts/setup_gdrive_mount.sh` — rclone mount at `~/GoogleDrive`, systemd user unit `anima-gdrive`, auto-remounts at login (`--uninstall` to remove) |
+| Phone ↔ PC with **no cloud** | `bash scripts/sync_phone_anima.sh --auto` (adb transfer; `--push` / `--pull` / `--library` / `--dry-run`) |
 | Buildable copy when the source is on exFAT | `bash scripts/dev_copy_linux.sh` |
 | Android APK | `flutter build apk --release` |
 | Windows (normal path) | **GitHub Actions** `.github/workflows/windows-release.yml` — dispatched by `./deploy.sh` step 7/7, attaches `Anima-<version>-windows-x64.zip` to **v1.0.0** |

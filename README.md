@@ -783,6 +783,13 @@ Live preview; **Save** applies app-wide immediately via `AppearanceController`. 
   status, Google expires test-user authorisations (including the refresh token) **7 days** after
   consent — either click **Publish app** on the project's Audience page or re-run
   `rclone config reconnect gdrive:` when it lapses.
+- **No cloud at all (the phone is always with you):** run **`bash scripts/sync_phone_anima.sh --auto`** —
+  it copies the backup file straight between the phone and this PC over USB or Wi-Fi (adb), picks
+  whichever side is newer, and finishes in a couple of seconds. Add `--library` to move the whole
+  library folder instead of just the backup file, or `--dry-run` to see what it would do first.
+  One-time setup on the phone: set the app's sync folder to `Documents/Anima`. After that the workflow
+  is: run the script, then tap **Pull from cloud** on the device that received it. No account, no
+  consent screen, no tokens that expire.
 - **Create sync file** / **Choose sync folder/file**.
 - **Push to cloud** — overwrites sync file in place.
 - **Pull from cloud** — restore from sync file when switching phone ↔ PC.
