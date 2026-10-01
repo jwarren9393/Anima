@@ -38,6 +38,7 @@ import '../services/director_service.dart';
 import '../services/narrator_service.dart';
 import '../services/nanogpt_service.dart';
 import '../services/persona_service.dart';
+import '../services/persona_guide_service.dart';
 import '../services/prompt_builder.dart';
 import '../services/roadway_cache_service.dart';
 import '../services/roadway_service.dart';
@@ -134,6 +135,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   static const _narrator = NarratorService();
   static const _director = DirectorService();
   static const _characterGuide = CharacterGuideService();
+  static const _personaGuide = PersonaGuideService();
   static const _presence = PresenceService();
   static const _groupReply = GroupReplyService();
   static const _groupSpeakerInference = GroupSpeakerInference();
@@ -1302,11 +1304,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     _refocusComposer();
   }
 
-  Future<void> _sendCharacterGuide(String text, {Character? asSpeaker}) async {
+  Future<void> _sendCharacterGuide(String text) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return;
 
-    final speaker = asSpeaker ?? _composerVoiceCharacter;
+    final speaker = _composerVoiceCharacter;
     if (speaker == null) {
       await _setComposerVoice(null);
       return;
@@ -2332,42 +2334,38 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
-  /// One-shot "who replies, and what should they do?" — either plain continue
-  /// or a guided reply, without switching the composer into voice mode.
-  Future<void> _showGuideReplySheet() async {
+  /// The player's own next message — plain Impersonate, or steered by a note.
+  ///
+  /// This is the persona-side counterpart of Guide AI: `_impersonate()` writes
+  /// *your* line, and [guideNote] says what that line should be.
+  Future<void> _showMyLineSheet() async {
+    if (_busy) return;
     if (!_hasApiKey) {
       setState(() {
         _error = 'Add your NanoGPT API key in Settings before you can chat.';
       });
       return;
     }
-    if (_participants.isEmpty) return;
 
-    final request = await showModalBottomSheet<_GuideReplyRequest>(
+    final request = await showModalBottomSheet<_MyLineRequest>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
-      builder: (context) => _GuideReplySheet(
-        participants: _participants,
-        initialCharacterId: _resolvedGroupSpeaker().id,
+      builder: (context) => _MyLineSheet(
         userName: _userName,
+        characterName: _character?.name ?? '',
       ),
     );
     if (request == null || !mounted) return;
 
     if (request.plain) {
-      await _continueScene();
+      await _impersonate();
       return;
     }
-
-    final speaker = _participants.firstWhere(
-      (c) => c.id == request.characterId,
-      orElse: _resolvedGroupSpeaker,
-    );
-    final instruction = request.instruction.trim().isEmpty
-        ? CharacterGuideService.defaultInstruction
+    final note = request.instruction.trim().isEmpty
+        ? PersonaGuideService.defaultInstruction
         : request.instruction.trim();
-    await _sendCharacterGuide(instruction, asSpeaker: speaker);
+    await _impersonate(guideNote: note);
   }
 
   Future<void> _showPathsSheet() async {
@@ -2406,7 +2404,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     _inputController.selection = TextSelection.collapsed(offset: chosen.length);
   }
 
-  Future<void> _impersonate() async {
+  /// Writes the player's next message as their persona.
+  ///
+  /// [guideNote] steers it ("she pushes back and leaves") — the persona-side
+  /// counterpart of Guide AI, used by the **My line…** sheet. Empty = plain
+  /// Impersonate, exactly as before.
+  Future<void> _impersonate({String? guideNote}) async {
     if (_busy || _session == null || _character == null) return;
     if (!_hasApiKey) {
       setState(() {
@@ -2431,6 +2434,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     await _streamIntoLastAssistant(
       excludeLastAssistant: true,
       mode: PromptMode.impersonate,
+      playerGuideNote: guideNote,
     );
   }
 
@@ -3352,6 +3356,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     int? historyEndExclusive,
     List<Map<String, String>>? rewriteMessages,
     String? targetAssistantId,
+    String? playerGuideNote,
   }) async {
     final character = speakingAs ?? _resolvedGroupSpeaker();
     final userName = _userName;
@@ -3534,6 +3539,18 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           'content':
               '(Write only $userName\'s next message. Do not write ${character.name}\'s lines.)',
         });
+        // "Guide my line" — the player's own direction for their persona.
+        final playerGuide = playerGuideNote?.trim() ?? '';
+        if (playerGuide.isNotEmpty) {
+          msgs.add({
+            'role': 'system',
+            'content': _personaGuide.formatPlayerDirection(
+              instruction: playerGuide,
+              userName: userName,
+              characterName: character.name,
+            ),
+          });
+        }
       }
     }
 
@@ -3626,6 +3643,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     PromptMode mode = PromptMode.normal,
     Character? speakingAs,
     bool advanceGroupSpeaker = false,
+    String? playerGuideNote,
   }) async {
     if (_messages.isEmpty) return;
     await _streamAssistantReply(
@@ -3635,6 +3653,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       mode: mode,
       speakingAs: speakingAs,
       advanceGroupSpeaker: advanceGroupSpeaker,
+      playerGuideNote: playerGuideNote,
     );
   }
 
@@ -3646,6 +3665,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     Character? speakingAs,
     bool advanceGroupSpeaker = false,
     List<Map<String, String>>? rewriteMessages,
+    String? playerGuideNote,
   }) async {
     if (assistantIndex < 0 || assistantIndex >= _messages.length) return;
     try {
@@ -3663,6 +3683,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         historyEndExclusive: rewriteMessages != null ? assistantIndex : null,
         rewriteMessages: rewriteMessages,
         targetAssistantId: assistantId,
+        playerGuideNote: playerGuideNote,
       );
       final buffer = StringBuffer();
       await for (final chunk in widget.nanoGptService.streamCompletion(
@@ -5039,18 +5060,18 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   onTap: () => Navigator.pop(context, 'continue'),
                 ),
                 ListTile(
-                  leading: const Icon(Icons.auto_awesome_outlined),
-                  title: const Text('Guide reply…'),
-                  subtitle: const Text(
-                    'Say what they do or feel next — or just continue',
-                  ),
-                  onTap: () => Navigator.pop(context, 'guide_reply'),
-                ),
-                ListTile(
                   leading: const Icon(Icons.record_voice_over_outlined),
                   title: const Text('Impersonate'),
                   subtitle: const Text('Write your next line as you'),
                   onTap: () => Navigator.pop(context, 'impersonate'),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.edit_note),
+                  title: const Text('My line…'),
+                  subtitle: const Text(
+                    'AI writes your next message — or steer what you say',
+                  ),
+                  onTap: () => Navigator.pop(context, 'my_line'),
                 ),
                 if (_isGroup && _participants.length >= 2)
                   ListTile(
@@ -5125,7 +5146,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (action == 'branch') await _branchFromMessage(index);
     if (action == 'narrator') await _openNarratorSheet();
     if (action == 'continue') await _continueScene();
-    if (action == 'guide_reply') await _showGuideReplySheet();
+    if (action == 'my_line') await _showMyLineSheet();
     if (action == 'impersonate') await _impersonate();
     if (action == 'paths') await _showPathsSheet();
     if (action == 'group_react') await _openGroupReplySheet();
@@ -6026,49 +6047,36 @@ class _PathsSheetState extends State<_PathsSheet> {
   }
 }
 
-/// What the player asked for in [_GuideReplySheet]: who replies, with what
-/// guidance (empty = let the model decide), or simply "carry on".
-class _GuideReplyRequest {
-  const _GuideReplyRequest({
-    required this.characterId,
-    required this.instruction,
-    required this.plain,
-  });
+/// What the player asked for in [_MyLineSheet]: their own next message, either
+/// written for them or steered by a note.
+class _MyLineRequest {
+  const _MyLineRequest({required this.instruction, required this.plain});
 
-  final String? characterId;
   final String instruction;
 
-  /// True when the player only wanted a normal continue.
+  /// True when the player only wanted a plain line (= Impersonate).
   final bool plain;
 }
 
-/// One-shot reply sheet: pick the character, optionally say what they do or
-/// feel next, or just continue the scene.
-class _GuideReplySheet extends StatefulWidget {
-  const _GuideReplySheet({
-    required this.participants,
-    required this.initialCharacterId,
-    required this.userName,
-  });
+/// "My line…" — the AI writes the player's next message as their persona,
+/// optionally steered by a short note. The persona-side counterpart of Guide AI.
+class _MyLineSheet extends StatefulWidget {
+  const _MyLineSheet({required this.userName, required this.characterName});
 
-  final List<Character> participants;
-  final String? initialCharacterId;
   final String userName;
+  final String characterName;
 
   @override
-  State<_GuideReplySheet> createState() => _GuideReplySheetState();
+  State<_MyLineSheet> createState() => _MyLineSheetState();
 }
 
-class _GuideReplySheetState extends State<_GuideReplySheet> {
+class _MyLineSheetState extends State<_MyLineSheet> {
   final _controller = TextEditingController();
-  String? _characterId;
 
   @override
   void initState() {
     super.initState();
-    _characterId = widget.initialCharacterId ??
-        (widget.participants.isEmpty ? null : widget.participants.first.id);
-    // Rebuild so the main button reflects whether guidance was typed.
+    // Rebuild so the main button reflects whether a note was typed.
     _controller.addListener(_onTextChanged);
   }
 
@@ -6087,12 +6095,8 @@ class _GuideReplySheetState extends State<_GuideReplySheet> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final hasGuidance = _controller.text.trim().isNotEmpty;
-    final single = widget.participants.length <= 1;
-    final who = widget.participants
-        .where((c) => c.id == _characterId)
-        .map((c) => c.name)
-        .firstOrNull;
+    final hasNote = _controller.text.trim().isNotEmpty;
+    final who = widget.userName.trim().isEmpty ? 'you' : widget.userName.trim();
 
     return Padding(
       padding: EdgeInsets.only(
@@ -6104,31 +6108,15 @@ class _GuideReplySheetState extends State<_GuideReplySheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Guide the reply', style: theme.textTheme.titleMedium),
+          Text('My line', style: theme.textTheme.titleMedium),
           const SizedBox(height: 4),
           Text(
-            'Type what happens next and the AI writes it in character — or '
-            'leave it blank and just continue.',
+            'The AI writes $who\'s next message as your persona. Add a note to '
+            'steer what you say or do — or leave it blank.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: colorScheme.onSurfaceVariant,
             ),
           ),
-          if (!single) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                for (final character in widget.participants)
-                  ChoiceChip(
-                    label: Text(character.name),
-                    selected: _characterId == character.id,
-                    onSelected: (_) =>
-                        setState(() => _characterId = character.id),
-                  ),
-              ],
-            ),
-          ],
           const SizedBox(height: 12),
           TextField(
             controller: _controller,
@@ -6136,46 +6124,38 @@ class _GuideReplySheetState extends State<_GuideReplySheet> {
             minLines: 2,
             maxLines: 5,
             textCapitalization: TextCapitalization.sentences,
-            decoration: InputDecoration(
-              border: const OutlineInputBorder(),
-              hintText: single
-                  ? 'e.g. she loses her temper and storms out'
-                  : 'e.g. $who gets defensive and changes the subject',
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              hintText: 'e.g. I get defensive and change the subject',
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Your note describes what YOU say or do — it is not sent as dialogue.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 12),
           FilledButton.icon(
-            onPressed: widget.participants.isEmpty
-                ? null
-                : () => Navigator.pop(
-                    context,
-                    _GuideReplyRequest(
-                      characterId: _characterId,
-                      instruction: _controller.text,
-                      plain: false,
-                    ),
-                  ),
-            icon: const Icon(Icons.auto_awesome),
-            label: Text(
-              hasGuidance ? 'Guide this reply' : 'Generate a reply',
+            onPressed: () => Navigator.pop(
+              context,
+              _MyLineRequest(instruction: _controller.text, plain: false),
             ),
+            icon: const Icon(Icons.auto_awesome),
+            label: Text(hasNote ? 'Steer my line' : 'Write my line'),
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
             onPressed: () => Navigator.pop(
               context,
-              const _GuideReplyRequest(
-                characterId: null,
-                instruction: '',
-                plain: true,
-              ),
+              const _MyLineRequest(instruction: '', plain: true),
             ),
-            icon: const Icon(Icons.play_arrow),
-            label: const Text('Just continue (no guidance)'),
+            icon: const Icon(Icons.record_voice_over_outlined),
+            label: const Text('Just write it (no steers)'),
           ),
         ],
       ),
     );
   }
 }
-

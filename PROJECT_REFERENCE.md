@@ -98,7 +98,7 @@
 | Paths | `path_provider` → app documents directory |
 | Files | `file_picker`, `share_plus`, Android `saf` for sync URIs |
 | Fonts | `google_fonts` |
-| Tests | `flutter_test` — 390 tests |
+| Tests | `flutter_test` — 394 tests |
 
 **Platforms:** Android (primary), Linux desktop, Windows desktop. macOS not targeted.
 
@@ -226,6 +226,7 @@ Anima/
 | `chat_transcript_codec.dart` | Chat JSON / plain export |
 | `character_card_codec.dart` | ST V1/V2/V3 + PNG chara chunk |
 | `persona_card_codec.dart` | Persona JSON import — app format, AI-written cards, aliases, lists, backups |
+| `persona_guide_service.dart` | Player-direction block for the player's own next line (My line…) |
 | `app_backup_service.dart` | `.anima-backup` whitelist |
 | `avatar_service.dart` | Local avatar files |
 | `avatar_prompt_builder.dart` | Image prompt from card/persona text |
@@ -453,14 +454,15 @@ Special tuned sampling for: memory summarize, narrator generate, composer format
 
 - **Tap** bubble → edit text
 - **Tap narrator card** → reopen narrator sheet
-- **Long-press** → menu: Delete, Rewind, Branch, **Narrator**, Continue, **Guide reply…**, Impersonate, Paths, Auto-reply, Rewrite/Regen/Swipe (AI only)
+- **Long-press** → menu: Delete, Rewind, Branch, **Narrator**, Continue, Impersonate, **My line…**, Paths, Auto-reply, Rewrite/Regen/Swipe (AI only)
 - **Quick swipe** ◀ 1/N ▶ on latest AI message
 
-### Guide reply sheet
+### My line sheet (player side)
 
-- **Guide reply…** (long-press menu) opens `_GuideReplySheet` in `chat_screen.dart` — a one-shot alternative to entering the composer voice mode.
-- Pick the speaker (chips; solo chats hide the picker), type what they do or feel, then **Guide this reply** → `_sendCharacterGuide(instruction, asSpeaker: …)` with `CharacterGuideService.buildGuideMessages()`. An empty box falls back to `CharacterGuideService.defaultInstruction`.
-- **Just continue (no guidance)** returns `plain: true` and runs `_continueScene()` — identical to the ▶ Continue button.
+- **My line…** (long-press menu) opens `_MyLineSheet` in `chat_screen.dart` — writes the **player's own** next message, the persona-side counterpart of Guide AI. It exists because `PromptMode.impersonate` had no way to steer the line.
+- **Steer my line** → `_impersonate(guideNote: …)`; the note reaches the API through `_streamIntoLastAssistant` → `_streamAssistantReply` → `_buildApiMessages(playerGuideNote:)`, which appends `PersonaGuideService.formatPlayerDirection()` as a late mandatory system block right after the impersonate nudge (so the note is direction, never dialogue). An empty box → `PersonaGuideService.defaultInstruction`.
+- **Just write it (no steers)** → plain `_impersonate()`, i.e. the old Impersonate behaviour.
+- Guide AI (cast chip → composer) is unchanged and still steers an *AI character's* line.
 
 ### Auto-reply
 
@@ -721,7 +723,7 @@ Applied in `PromptBuilder.applyMacros()`.
 ## 26. Testing and quality
 
 ```bash
-flutter test      # 390 tests
+flutter test      # 394 tests
 flutter analyze
 ```
 

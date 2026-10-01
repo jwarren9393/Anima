@@ -16,6 +16,7 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 
 | Build | Highlights |
 |-------|------------|
+| **74** | **My line…** — the long-press menu now writes **your own** next message as your persona: add a note to steer what *you* say or do, or tap *Just write it* for a plain Impersonate. (The build-73 entry below steered the AI character instead — that entry was replaced, since Guide AI already did it.) |
 | **73** | **Guide reply…** — one-shot sheet from the long-press menu: pick who replies, say what they do or feel (or tap *Just continue* for a plain reply). **Paths steering** — an optional direction field makes the options variations of what you ask for; leave it empty for the usual varied mix. |
 | **72** | **Persona import** — upload a persona JSON file (app format, AI-written card, a list, or a whole backup) with a review sheet before saving. **Cloud sync removed** — backup / restore is local only; move the file yourself (or use `scripts/sync_phone_anima.sh` over adb). The rclone Google Drive mount and its background sync are gone too. |
 | **64** | **Character & persona builds** — one Settings menu: shared model + sampling; separate **character** and **persona** build prompts. **Creation Center export fix** — persona builds use persona prompt + full token budget; alias names (e.g. mortal name + true name) merge to one identity; long workshop drafts prioritized; **Enrich** keeps powers/abilities. **Model browse filters** — min context, min speed, max TTFT, sort. **Duplicate** character/persona from ⋮ menu. **Theme fix** — text scale no longer crashes on launch. |
@@ -167,7 +168,7 @@ Living build notes for coding agents: [`AGENTS.md`](AGENTS.md) (status, roadmap,
 
 ## Feature summary (at a glance)
 
-**Chat & roleplay** — Solo and group chats; streaming; swipes; edit / delete / rewind / branch; Continue, Impersonate, Regenerate, **Rewrite reply…**, **Guide reply…** (direct the next line, or just continue); **Narrator** (nudge + Generate + post); **Director** (commands next reply); **presence / scene law** (always on in groups — who’s present, witness-tagged memory, per-character filtering); **Character voice** — long-press cast chip → **Write line** or **Guide AI**; **Scene moods** (sensual, anti-script, explicit, afterglow + vocabulary law); Paths (Roadway); auto-reply (default off); **auto-wrap dialogue on send**; memory summary + auto-summarize (background); Author’s Note; per-chat persona and World Info; context estimate; export/import chat; manage cast mid-chat (+ temporary NPCs); fullscreen avatars; **group-react** cards.
+**Chat & roleplay** — Solo and group chats; streaming; swipes; edit / delete / rewind / branch; Continue, Impersonate, Regenerate, **Rewrite reply…**, **My line…** (write or steer *your* next message); **Narrator** (nudge + Generate + post); **Director** (commands next reply); **presence / scene law** (always on in groups — who’s present, witness-tagged memory, per-character filtering); **Character voice** — long-press cast chip → **Write line** or **Guide AI**; **Scene moods** (sensual, anti-script, explicit, afterglow + vocabulary law); Paths (Roadway); auto-reply (default off); **auto-wrap dialogue on send**; memory summary + auto-summarize (background); Author’s Note; per-chat persona and World Info; context estimate; export/import chat; manage cast mid-chat (+ temporary NPCs); fullscreen avatars; **group-react** cards.
 
 **Characters & personas** — ST V1/V2/V3 JSON + PNG import/export; categories; **Duplicate** from ⋮ menu; AI wand (tap quick / long-press source); consistency check **+ review-before-apply fix**; **Compact / Expand** card & persona (AI shortens or enriches fields, review before apply); **Compact** lore; **AI card/persona builder**; temporary characters; **Full cards only** filter; embedded lorebooks; alternate greetings; **~token badges**; **Generate avatar** + history; group speaker chips.
 
@@ -327,7 +328,7 @@ Scrollable sheet (~55% screen height on wide displays).
 | **Narrator** | Same sheet as composer theater icon — nudge, Generate, Post |
 | **Director** | Same as composer Director chip — command the next AI reply |
 | **Continue** | Generate next reply |
-| **Guide reply…** | Pick who replies, type what they do or feel — or **Just continue** with no guidance |
+| **My line…** | The AI writes **your** next line as your persona — add a note to steer what you say or do, or *Just write it* |
 | **Impersonate** | AI drafts the next **user** message as the persona |
 | **Paths** | Roadway brainstorm sheet |
 | **Auto-reply on/off** | Per-chat toggle |
@@ -891,7 +892,7 @@ bash scripts/setup_linux_dev_noroot.sh   # once per Linux PC — no admin passwo
 cd ~/Documents/Git\ Projects/Anima       # this PC's checkout — quote the space in the name
 flutter doctor
 flutter pub get
-flutter test      # 390 tests
+flutter test      # 394 tests
 flutter analyze
 flutter run -d linux     # or -d windows / a connected Android device
 ```
