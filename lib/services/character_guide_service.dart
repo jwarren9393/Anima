@@ -32,7 +32,9 @@ Do not have $name react to $user as if $user said the note's dialogue. Do not mo
 Follow the player's intent; you may flesh out staging from chat context.
 Write a completely NEW in-character reply as $name — not a light edit of any prior line.
 Do not speak for $user. Do not add a preamble, label, or "$name:" prefix.
-Use *actions* and "dialogue" as appropriate for roleplay.
+Write in FIRST PERSON as $name: *actions* and thoughts use I/my/me
+(e.g. *I glance away*), speech in "double quotes".
+Never third-person for $name (*he…* / *$name…*).
 '''
         .trim();
   }
@@ -60,8 +62,9 @@ Use *actions* and "dialogue" as appropriate for roleplay.
       {
         'role': 'user',
         'content':
-            '(Write only $name\'s next reply now, following the CHARACTER GUIDE '
-            'above. The guide describes $name — not $user.)',
+            '(Write only $name\'s next reply now in first person (*I* actions, '
+            '"dialogue"), following the CHARACTER GUIDE above. The guide '
+            'describes $name — not $user.)',
       },
     ];
   }

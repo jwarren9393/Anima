@@ -3333,6 +3333,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   void _ensureApiHasInteractiveTurn(
     List<Map<String, String>> msgs, {
     required String characterName,
+    String userName = 'User',
+    PromptMode mode = PromptMode.normal,
   }) {
     final hasTurn = msgs.any(
       (m) => m['role'] == 'user' || m['role'] == 'assistant',
@@ -3341,10 +3343,21 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     final char =
         characterName.trim().isEmpty ? 'Character' : characterName.trim();
+    final user = userName.trim().isEmpty ? 'User' : userName.trim();
+    if (mode == PromptMode.impersonate) {
+      msgs.add({
+        'role': 'user',
+        'content':
+            '(Write ONLY $user\'s next message as $user — first person '
+            '*I* actions and "dialogue". Do not write $char\'s lines.)',
+      });
+      return;
+    }
     msgs.add({
       'role': 'user',
       'content':
-          '(Continue. Write only the next reply as $char from what $char already knows in this scene.)',
+          '(Continue. Write only the next reply as $char from what $char already knows in this scene. '
+          'First person — *I* actions, "dialogue".)',
     });
   }
 
@@ -3409,6 +3422,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       userName: userName,
       authorsNote: _effectiveAuthorsNote(),
       globalPostHistory: globalPrompts.postHistoryInstructions,
+      mode: mode,
     );
 
     final msgs = <Map<String, String>>[
@@ -3515,7 +3529,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       }
     }
 
-    _ensureApiHasInteractiveTurn(msgs, characterName: character.name);
+    _ensureApiHasInteractiveTurn(
+      msgs,
+      characterName: character.name,
+      userName: userName,
+      mode: mode,
+    );
 
     if (rewriteMessages == null) {
       if (allowGreetingNudge && msgs.length <= 1) {
@@ -3530,27 +3549,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         msgs.add({
           'role': 'user',
           'content':
-              '(Continue. Write only the next reply as ${character.name}.)',
+              '(Continue. Write only the next reply as ${character.name} in '
+              'first person — *I* actions, "dialogue".)',
         });
       }
       if (mode == PromptMode.impersonate) {
         msgs.add({
           'role': 'user',
           'content':
-              '(Write only $userName\'s next message. Do not write ${character.name}\'s lines.)',
+              '(Write ONLY $userName\'s next message as $userName — first person '
+              '*I* actions and "dialogue". Do not write ${character.name}\'s lines.)',
         });
-        // "Guide my line" — the player's own direction for their persona.
-        final playerGuide = playerGuideNote?.trim() ?? '';
-        if (playerGuide.isNotEmpty) {
-          msgs.add({
-            'role': 'system',
-            'content': _personaGuide.formatPlayerDirection(
-              instruction: playerGuide,
-              userName: userName,
-              characterName: character.name,
-            ),
-          });
-        }
       }
     }
 
@@ -3564,10 +3573,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       if (idx >= 0) excludeMessageIndex = idx;
     }
 
+    // During Impersonate the model is the player — address scene law to them,
+    // not to the AI character (that was pulling replies back to {{char}}).
     final narratorBlock = _narratorActiveBlock(
       charName: character.name,
       endExclusive: end,
-      speakingAsName: character.name,
+      speakingAsName:
+          mode == PromptMode.impersonate ? userName : character.name,
       excludeMessageIndex: excludeMessageIndex,
     );
     if (narratorBlock != null && narratorBlock.trim().isNotEmpty) {
@@ -3586,7 +3598,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     // Scene law + director are injected late (mandatory). If the player just
     // spoke after a narrator card, their line sits above this stack and the
     // model no longer has a user turn to answer — add one last.
-    if (rewriteMessages == null) {
+    // Skip for Impersonate: those nudges force a character reply and override
+    // the "write as {{user}}" instruction.
+    if (rewriteMessages == null && mode != PromptMode.impersonate) {
       _appendPostSceneLawReplyNudge(
         msgs,
         messages: _messages,
@@ -3596,7 +3610,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       );
     }
 
-    if (rewriteMessages == null && others.isNotEmpty) {
+    if (rewriteMessages == null &&
+        others.isNotEmpty &&
+        mode != PromptMode.impersonate) {
       final handoff = _groupSpeakerInference.buildHandoffNudge(
         messages: _messages,
         endExclusive: end,
@@ -3609,6 +3625,29 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     if (rewriteMessages != null && rewriteMessages.isNotEmpty) {
       msgs.addAll(rewriteMessages);
+    }
+
+    // Final Impersonate lock after every other late block, so nothing later
+    // can yank the model back into writing as {{char}}.
+    if (rewriteMessages == null && mode == PromptMode.impersonate) {
+      final playerGuide = playerGuideNote?.trim() ?? '';
+      if (playerGuide.isNotEmpty) {
+        msgs.add({
+          'role': 'system',
+          'content': _personaGuide.formatPlayerDirection(
+            instruction: playerGuide,
+            userName: userName,
+            characterName: character.name,
+          ),
+        });
+      }
+      msgs.add({
+        'role': 'user',
+        'content':
+            '(Final reminder: output ONLY $userName\'s next message in first '
+            'person — *I* actions, "dialogue". Never write as '
+            '${character.name}.)',
+      });
     }
 
     return msgs;
@@ -3633,7 +3672,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     msgs.add({
       'role': 'user',
       'content':
-          '(Write only $char\'s next reply to $user\'s last message. Stay in character.)',
+          '(Write only $char\'s next reply to $user\'s last message. '
+          'Stay in character as $char in first person — *I* actions, "dialogue".)',
     });
   }
 
@@ -3674,7 +3714,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       final baseUrl = await widget.settingsService.getApiBaseUrl();
       final speaker = speakingAs ?? _resolvedGroupSpeaker();
       final assistantId = _messages[assistantIndex].id;
-      _bindPendingDirectorToAssistant(assistantId);
+      final writingAsUser = mode == PromptMode.impersonate ||
+          _messages[assistantIndex].isUser;
+      // Impersonate fills a user bubble — never bind / consume a pending
+      // Director note meant for the next AI character reply.
+      if (!writingAsUser) {
+        _bindPendingDirectorToAssistant(assistantId);
+      }
       final messages = await _buildApiMessages(
         excludeLastAssistant: excludeLastAssistant,
         allowGreetingNudge: allowGreetingNudge,
@@ -3682,7 +3728,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         speakingAs: speaker,
         historyEndExclusive: rewriteMessages != null ? assistantIndex : null,
         rewriteMessages: rewriteMessages,
-        targetAssistantId: assistantId,
+        targetAssistantId: writingAsUser ? null : assistantId,
         playerGuideNote: playerGuideNote,
       );
       final buffer = StringBuffer();
@@ -3694,7 +3740,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       )) {
         if (!mounted) return;
         buffer.write(chunk);
-        final speakerLabel = speaker.name;
+        final speakerLabel =
+            writingAsUser ? _userName : speaker.name;
         final text = stripLeadingSpeakerPrefix(buffer.toString(), speakerLabel);
         setState(() {
           final updated = List<ChatMessage>.from(_session!.messages);
@@ -3717,8 +3764,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             text: text,
             swipes: swipes,
             swipeIndex: swipeIndex,
-            speakerId: current.speakerId ?? speaker.id,
-            speakerName: current.speakerName ?? speaker.name,
+            // User bubbles (Impersonate / My line…) must stay unlabeled as
+            // cast — stamping the AI character here made later turns think
+            // that bubble was theirs.
+            speakerId: writingAsUser
+                ? current.speakerId
+                : (current.speakerId ?? speaker.id),
+            speakerName: writingAsUser
+                ? current.speakerName
+                : (current.speakerName ?? speaker.name),
           );
           _session = _session!.copyWith(messages: updated);
         });
@@ -3731,7 +3785,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       final current = updated[index];
       final cleaned = stripLeadingSpeakerPrefix(
         current.text.trim(),
-        current.speakerName ?? speaker.name,
+        writingAsUser
+            ? _userName
+            : (current.speakerName ?? speaker.name),
       );
       if (cleaned != current.text) {
         setState(() {
@@ -3749,8 +3805,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             text: cleaned,
             swipes: swipes.isEmpty ? [cleaned] : swipes,
             swipeIndex: swipeIndex,
-            speakerId: current.speakerId ?? speaker.id,
-            speakerName: current.speakerName ?? speaker.name,
+            speakerId: writingAsUser
+                ? current.speakerId
+                : (current.speakerId ?? speaker.id),
+            speakerName: writingAsUser
+                ? current.speakerName
+                : (current.speakerName ?? speaker.name),
           );
           _session = _session!.copyWith(messages: updated);
         });

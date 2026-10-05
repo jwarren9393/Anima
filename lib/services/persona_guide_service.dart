@@ -31,7 +31,9 @@ $note
 
 You are writing $user's next message. The direction above is what $user says, does, or feels — it is NOT dialogue from $name.
 Follow that intent, and flesh it out naturally from the chat context.
-Write ONLY $user's message: use *actions* and "dialogue" as fits the scene.
+Write ONLY $user's message in FIRST PERSON: *actions* and thoughts use I/my/me
+(e.g. *I cross my arms*), speech in "double quotes".
+Never third-person for $user (*he…* / *$user…*).
 Do not write $name's lines, do not reply as $name, and do not mention or quote this guide.
 Do not start with "$user:" — the app already labels who is speaking.
 '''

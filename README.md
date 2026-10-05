@@ -16,6 +16,7 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 
 | Build | Highlights |
 |-------|------------|
+| **75** | **Impersonate fix** — Impersonate / **My line…** stay in your persona (no more writing as the AI character). **First-person voice** — `*actions*` and thoughts use *I/my/me* for whoever is speaking (you or the character), not “he/she did”. |
 | **74** | **My line…** — the long-press menu now writes **your own** next message as your persona: add a note to steer what *you* say or do, or tap *Just write it* for a plain Impersonate. (The build-73 entry below steered the AI character instead — that entry was replaced, since Guide AI already did it.) |
 | **73** | **Guide reply…** — one-shot sheet from the long-press menu: pick who replies, say what they do or feel (or tap *Just continue* for a plain reply). **Paths steering** — an optional direction field makes the options variations of what you ask for; leave it empty for the usual varied mix. |
 | **72** | **Persona import** — upload a persona JSON file (app format, AI-written card, a list, or a whole backup) with a review sheet before saving. **Cloud sync removed** — backup / restore is local only; move the file yourself (or use `scripts/sync_phone_anima.sh` over adb). The rclone Google Drive mount and its background sync are gone too. |
@@ -329,7 +330,7 @@ Scrollable sheet (~55% screen height on wide displays).
 | **Director** | Same as composer Director chip — command the next AI reply |
 | **Continue** | Generate next reply |
 | **My line…** | The AI writes **your** next line as your persona — add a note to steer what you say or do, or *Just write it* |
-| **Impersonate** | AI drafts the next **user** message as the persona |
+| **Impersonate** | AI drafts the next **user** message as the persona (first person — `*I…*` actions) |
 | **Paths** | Roadway brainstorm sheet |
 | **Auto-reply on/off** | Per-chat toggle |
 | **Rewrite reply…** | On AI bubbles — shorten / expand / mood / custom — replace or new swipe |
@@ -892,7 +893,7 @@ bash scripts/setup_linux_dev_noroot.sh   # once per Linux PC — no admin passwo
 cd ~/Documents/Git\ Projects/Anima       # this PC's checkout — quote the space in the name
 flutter doctor
 flutter pub get
-flutter test      # 394 tests
+flutter test      # 398 tests
 flutter analyze
 flutter run -d linux     # or -d windows / a connected Android device
 ```

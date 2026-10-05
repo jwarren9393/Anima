@@ -24,6 +24,17 @@ Knowledge boundaries (absolute — never break these):
 - {{user}}'s agency stays intact; do not speak for {{user}}.
 ''';
 
+  /// Used by Impersonate / My line… — the model is writing as the player.
+  static const playerPerspectiveBoundaryPrompt = '''
+Player perspective (absolute — never break these):
+- You are writing ONLY as {{user}} (the player). You are NOT {{char}}.
+- Write {{user}}'s next message only — never {{char}}'s lines, thoughts, or reactions.
+- You only know what {{user}} personally witnessed in-scene or was told directly.
+- Do not invent {{char}}'s private thoughts or off-screen knowledge for {{user}}.
+- Narrator scene facts {{user}} would know remain true; honor them from {{user}}'s point of view.
+- Other character card text below is identity reference for people in the scene — not your voice.
+''';
+
   /// Strips omniscient staging (narrator / director) that [focusCharacterName]
   /// must not treat as personal knowledge.
   String sanitizeStagingTextForCharacter({
@@ -74,6 +85,19 @@ Knowledge boundaries (absolute — never break these):
     final char = charName.trim().isEmpty ? 'Character' : charName.trim();
     final user = userName.trim().isEmpty ? 'User' : userName.trim();
     return knowledgeBoundaryPrompt
+        .replaceAll('{{char}}', char)
+        .replaceAll('{{user}}', user)
+        .trim();
+  }
+
+  /// Impersonate / My line… — knowledge rules for writing as the player.
+  String formatPlayerPerspectiveBoundary({
+    required String charName,
+    required String userName,
+  }) {
+    final char = charName.trim().isEmpty ? 'Character' : charName.trim();
+    final user = userName.trim().isEmpty ? 'User' : userName.trim();
+    return playerPerspectiveBoundaryPrompt
         .replaceAll('{{char}}', char)
         .replaceAll('{{user}}', user)
         .trim();

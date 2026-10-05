@@ -28,11 +28,14 @@ void main() {
     expect(system, contains('You\'re disgusting'));
     expect(system, contains('Jay did NOT speak'));
     expect(system, contains('Do not moralize'));
+    expect(system, contains('FIRST PERSON'));
+    expect(system, contains('I/my/me'));
 
     final user = messages.last['content'] ?? '';
     expect(user, isNot(contains('You\'re disgusting')));
     expect(user, contains('Mira'));
     expect(user, contains('not Jay'));
+    expect(user, contains('first person'));
   });
 
   test('formatGuideInstruction rejects empty instruction', () {

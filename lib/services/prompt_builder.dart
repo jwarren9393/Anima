@@ -24,7 +24,9 @@ class PromptBuilder {
 
   /// Default fallback system line when the card has no `system_prompt`.
   static const defaultSystemSeed =
-      'Write {{char}}\'s next reply in a fictional chat between {{char}} and {{user}}.';
+      'Write {{char}}\'s next reply in a fictional chat between {{char}} and {{user}}. '
+      'Stay in FIRST PERSON as {{char}}: *actions* use I/my/me; speech in "quotes". '
+      'Do not speak for {{user}}.';
 
   /// Replace `{{user}}` / `{{char}}` (and common aliases) case-insensitively.
   String applyMacros(
@@ -66,15 +68,21 @@ class PromptBuilder {
         character.name.trim().isEmpty ? 'Character' : character.name.trim();
     final safeUser = userName.trim().isEmpty ? 'User' : userName.trim();
 
+    final impersonating = mode == PromptMode.impersonate;
+
     String seed;
     switch (mode) {
       case PromptMode.impersonate:
         seed =
             'Write {{user}}\'s next message in a fictional chat between {{char}} and {{user}}. '
-            'Reply only as {{user}} — do not write {{char}}\'s lines.';
+            'You are writing ONLY as {{user}} (the player) — never as {{char}}. '
+            'FIRST PERSON only: *actions* and thoughts use I/my/me '
+            '(e.g. *I look at her*); speech in "double quotes". '
+            'Do not write {{char}}\'s lines, narration, or reactions.';
       case PromptMode.continueScene:
         seed =
             'Continue the scene as {{char}}. Write {{char}}\'s next reply only. '
+            'FIRST PERSON as {{char}}: *actions* use I/my/me, speech in "quotes". '
             'Do not speak for {{user}}.';
       case PromptMode.normal:
         seed = character.systemPrompt.trim().isEmpty
@@ -92,14 +100,25 @@ class PromptBuilder {
           .map((c) => c.name.trim())
           .where((n) => n.isNotEmpty)
           .join(', ');
-      chunks.add(
-        'This is a group chat. Other people present: $names. '
-        'Right now you are only writing as $charName. '
-        'Card summaries below are identity reference only — not what you know '
-        'they did in scenes you missed. '
-        'Do not start your reply with "$charName:" or your name — '
-        'the app already labels who is speaking.',
-      );
+      if (impersonating) {
+        chunks.add(
+          'This is a group chat. Other people present: $names. '
+          'Right now you are only writing as $safeUser (the player). '
+          'Card summaries below are identity reference for people in the scene — '
+          'not your voice. '
+          'Do not start your reply with "$safeUser:" or your name — '
+          'the app already labels who is speaking.',
+        );
+      } else {
+        chunks.add(
+          'This is a group chat. Other people present: $names. '
+          'Right now you are only writing as $charName. '
+          'Card summaries below are identity reference only — not what you know '
+          'they did in scenes you missed. '
+          'Do not start your reply with "$charName:" or your name — '
+          'the app already labels who is speaking.',
+        );
+      }
       for (final other in others) {
         final summary = _shortCard(other);
         if (summary.isNotEmpty) {
@@ -113,16 +132,25 @@ class PromptBuilder {
     }
 
     if (character.description.trim().isNotEmpty) {
-      chunks.add('Description:\n${character.description.trim()}');
+      chunks.add(
+        impersonating
+            ? 'About $charName (other person in the scene — not your voice):\n'
+                '${character.description.trim()}'
+            : 'Description:\n${character.description.trim()}',
+      );
     }
     if (character.personality.trim().isNotEmpty) {
-      chunks.add('Personality:\n${character.personality.trim()}');
+      chunks.add(
+        impersonating
+            ? '$charName\'s personality (reference only):\n'
+                '${character.personality.trim()}'
+            : 'Personality:\n${character.personality.trim()}',
+      );
     }
     if (character.scenario.trim().isNotEmpty) {
       chunks.add('Scenario:\n${character.scenario.trim()}');
     }
-    if (character.mesExample.trim().isNotEmpty &&
-        mode != PromptMode.impersonate) {
+    if (character.mesExample.trim().isNotEmpty && !impersonating) {
       chunks.add(
         'Example dialogue:\n${character.mesExample.trim()}',
       );
@@ -134,10 +162,17 @@ class PromptBuilder {
 
     if (userPersona.trim().isNotEmpty) {
       chunks.add(
-        'The user is $safeUser.\nPersona:\n${userPersona.trim()}',
+        impersonating
+            ? 'You are $safeUser. Write in this persona\'s voice:\n'
+                '${userPersona.trim()}'
+            : 'The user is $safeUser.\nPersona:\n${userPersona.trim()}',
       );
     } else {
-      chunks.add('The user is called $safeUser.');
+      chunks.add(
+        impersonating
+            ? 'You are writing as $safeUser.'
+            : 'The user is called $safeUser.',
+      );
     }
 
     final global = globalSystemPrompt.trim();
@@ -148,10 +183,15 @@ class PromptBuilder {
     }
 
     chunks.add(
-      _presence.formatKnowledgeBoundary(
-        charName: charName,
-        userName: safeUser,
-      ),
+      impersonating
+          ? _presence.formatPlayerPerspectiveBoundary(
+              charName: charName,
+              userName: safeUser,
+            )
+          : _presence.formatKnowledgeBoundary(
+              charName: charName,
+              userName: safeUser,
+            ),
     );
 
     return applyMacros(
@@ -166,10 +206,13 @@ class PromptBuilder {
     required String userName,
     String authorsNote = '',
     String globalPostHistory = '',
+    PromptMode mode = PromptMode.normal,
   }) {
     final charName =
         character.name.trim().isEmpty ? 'Character' : character.name.trim();
     final safeUser = userName.trim().isEmpty ? 'User' : userName.trim();
+    final speakerName =
+        mode == PromptMode.impersonate ? safeUser : charName;
     final parts = <String>[];
 
     final global = globalPostHistory.trim();
@@ -177,8 +220,10 @@ class PromptBuilder {
       parts.add(applyMacros(global, charName: charName, userName: safeUser));
     }
 
+    // Card post-history is written for the AI character — skip it when the
+    // model is drafting the player's line so it cannot pull voice back to {{char}}.
     final cardNote = character.postHistoryInstructions.trim();
-    if (cardNote.isNotEmpty) {
+    if (cardNote.isNotEmpty && mode != PromptMode.impersonate) {
       parts.add(applyMacros(cardNote, charName: charName, userName: safeUser));
     }
 
@@ -198,6 +243,10 @@ class PromptBuilder {
         charName: charName,
         userName: safeUser,
       ),
+    );
+
+    parts.add(
+      _chatStyle.formatFirstPersonPerspectiveRule(speakerName: speakerName),
     );
 
     return parts.join('\n\n');

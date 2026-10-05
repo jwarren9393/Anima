@@ -16,6 +16,8 @@ void main() {
     expect(block, contains('I lose my temper and walk out'));
     // It must be clear this is the player's own line, not the character's.
     expect(block, contains("Write ONLY Jay's message"));
+    expect(block, contains('FIRST PERSON'));
+    expect(block, contains('I/my/me'));
     expect(block, contains("Do not write Mira's lines"));
     expect(block, contains('NOT dialogue from Mira'));
   });

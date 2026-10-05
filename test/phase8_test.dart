@@ -78,14 +78,61 @@ void main() {
     });
 
     test('impersonate mode asks for user-only line', () {
-      final character = Character(id: 'c1', name: 'Aiko');
+      final character = Character(
+        id: 'c1',
+        name: 'Aiko',
+        description: 'A barista.',
+        postHistoryInstructions: 'Stay cozy as Aiko.',
+      );
       final system = builder.buildSystemPrompt(
         character: character,
         userName: 'Sam',
+        userPersona: 'Quiet photographer.',
         mode: PromptMode.impersonate,
       );
       expect(system.toLowerCase(), contains('sam'));
       expect(system.toLowerCase(), contains('only'));
+      expect(system, contains('FIRST PERSON'));
+      expect(system, contains('Player perspective'));
+      expect(system, contains('You are writing ONLY as Sam'));
+      expect(system, isNot(contains('You are Aiko.')));
+      expect(system, isNot(contains('do not speak for Sam')));
+      expect(system, contains('Write in this persona'));
+      expect(system, contains('Quiet photographer.'));
+      expect(system, contains('not your voice'));
+
+      final post = builder.buildPostHistory(
+        character: character,
+        userName: 'Sam',
+        mode: PromptMode.impersonate,
+      );
+      expect(post, contains('Perspective'));
+      expect(post, contains('Write ONLY as Sam'));
+      expect(post, isNot(contains('Stay cozy as Aiko.')));
+    });
+
+    test('group impersonate writes as the player, not the cast', () {
+      final aiko = Character(id: 'a', name: 'Aiko', description: 'Barista.');
+      final luna = Character(id: 'b', name: 'Luna', description: 'Regular.');
+      final system = builder.buildSystemPrompt(
+        character: aiko,
+        userName: 'Sam',
+        others: [luna],
+        mode: PromptMode.impersonate,
+      );
+      expect(system, contains('writing as Sam (the player)'));
+      expect(system, isNot(contains('writing as Aiko')));
+    });
+
+    test('normal post-history requires first person for the character', () {
+      final character = Character(id: 'c1', name: 'Aiko');
+      final post = builder.buildPostHistory(
+        character: character,
+        userName: 'Sam',
+      );
+      expect(post, contains('Perspective'));
+      expect(post, contains('Write ONLY as Aiko'));
+      expect(post, contains('I/my/me'));
     });
 
     test('group prompt lists other members', () {

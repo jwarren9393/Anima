@@ -7,7 +7,7 @@
 >
 > **Living documents:** `AGENTS.md` + this file + `README.md` are kept current together — see §29 for the upkeep rule every agent must follow.
 
-**Last updated:** 2026-09-24 · **Version:** 1.0.0 build **71** · **Tests:** 381 (`flutter test`)
+**Last updated:** 2026-10-04 · **Version:** 1.0.0 build **75** · **Tests:** 398 (`flutter test`)
 
 ---
 
@@ -98,7 +98,7 @@
 | Paths | `path_provider` → app documents directory |
 | Files | `file_picker`, `share_plus`, Android `saf` for sync URIs |
 | Fonts | `google_fonts` |
-| Tests | `flutter_test` — 394 tests |
+| Tests | `flutter_test` — 398 tests |
 
 **Platforms:** Android (primary), Linux desktop, Windows desktop. macOS not targeted.
 
@@ -400,13 +400,16 @@ All library files live in **one user-owned folder** (`AppDataRoot`, default `Doc
 
 5. **Optional nudges** (if not rewriting):
    - Greeting nudge (alternate opening)
-   - Continue: `(Continue. Write only the next reply as …)`
-   - Impersonate: `(Write only User's next message…)`
+   - Continue: `(Continue. Write only the next reply as …)` (first person)
+   - Impersonate: early user nudge — then **no** character-forcing late nudges (post-scene-law / group handoff are skipped)
 
 6. **System:** `PromptBuilder.buildPostHistory()`  
    - Global post-history  
-   - Per-card post-history  
-   - Author's Note
+   - Per-card post-history (skipped during Impersonate so card voice cannot pull the model back to {{char}})  
+   - Author's Note  
+   - Modern chat tone + **first-person perspective** for the speaker of this turn
+
+7. **Late mandatory blocks:** narrator scene law (addressed to the **player** during Impersonate), Director (skipped during Impersonate), then for Impersonate only: optional `PLAYER GUIDE` + final “write ONLY {{user}}” lock
 
 ### Sampling
 
@@ -428,7 +431,7 @@ Special tuned sampling for: memory summarize, narrator generate, composer format
 | **Memory summary** | `ChatSession.memorySummary` | System before history (clinical bullets; reference-only wrapper) | Long-term facts, not voice |
 | **Lore hits** | Injected in system prompt | World info sections | Keyword-triggered facts |
 | **Continue** | No new user line | Continue nudge user message | Next char reply |
-| **Impersonate** | No user line | Impersonate nudge | AI writes {{user}} line |
+| **Impersonate** | Empty `ChatRole.user` bubble (no cast speaker stamp) | Player-perspective system + Impersonate nudges + final lock | AI writes {{user}} line in first person |
 | **Rewrite reply** | After AI bubble exists | Extra rewrite messages | Fix/regenerate that bubble only |
 | **Paths** | Composer only | Not sent until user sends | Brainstorm {{user}} options |
 | **Global prompts** | Settings | System + post-history | App-wide steer |
@@ -460,9 +463,11 @@ Special tuned sampling for: memory summarize, narrator generate, composer format
 ### My line sheet (player side)
 
 - **My line…** (long-press menu) opens `_MyLineSheet` in `chat_screen.dart` — writes the **player's own** next message, the persona-side counterpart of Guide AI. It exists because `PromptMode.impersonate` had no way to steer the line.
-- **Steer my line** → `_impersonate(guideNote: …)`; the note reaches the API through `_streamIntoLastAssistant` → `_streamAssistantReply` → `_buildApiMessages(playerGuideNote:)`, which appends `PersonaGuideService.formatPlayerDirection()` as a late mandatory system block right after the impersonate nudge (so the note is direction, never dialogue). An empty box → `PersonaGuideService.defaultInstruction`.
-- **Just write it (no steers)** → plain `_impersonate()`, i.e. the old Impersonate behaviour.
-- Guide AI (cast chip → composer) is unchanged and still steers an *AI character's* line.
+- **Steer my line** → `_impersonate(guideNote: …)`; the note reaches the API through `_streamIntoLastAssistant` → `_streamAssistantReply` → `_buildApiMessages(playerGuideNote:)`, which appends `PersonaGuideService.formatPlayerDirection()` as a **final** late mandatory system block (after narrator/post-history) plus a last Impersonate lock so nothing can yank the model back to {{char}}. An empty box → `PersonaGuideService.defaultInstruction`.
+- **Just write it (no steers)** → plain `_impersonate()` with the same player-perspective stack (no guide note).
+- Impersonate system prompt uses `PresenceService.formatPlayerPerspectiveBoundary()` instead of the normal “You are {{char}}” knowledge boundary, skips card post-history, and labels character card fields as “other person / reference only”.
+- Guide AI (cast chip → composer) is unchanged and still steers an *AI character's* line — also first person (`*I…*` actions).
+- **First-person law:** `ChatStyleRules.formatFirstPersonPerspectiveRule()` is injected in every post-history block for the speaker of that turn.
 
 ### Auto-reply
 
@@ -723,7 +728,7 @@ Applied in `PromptBuilder.applyMacros()`.
 ## 26. Testing and quality
 
 ```bash
-flutter test      # 394 tests
+flutter test      # 398 tests
 flutter analyze
 ```
 

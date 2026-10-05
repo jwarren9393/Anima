@@ -125,9 +125,10 @@ class GroupSpeakerInference {
         'role': 'user',
         'content':
             '($prev just spoke. Write ONLY $targetName\'s next reply now — '
-            'in $targetName\'s voice and perspective. Do not continue as $prev '
-            'or any other cast member. Do not speak for the user. Do not '
-            'prefix your reply with "$targetName:" — the app labels the speaker.)',
+            'in $targetName\'s voice, first person (*I* actions, "dialogue"). '
+            'Do not continue as $prev or any other cast member. Do not speak '
+            'for the user. Do not prefix your reply with "$targetName:" — '
+            'the app labels the speaker.)',
       };
     }
 

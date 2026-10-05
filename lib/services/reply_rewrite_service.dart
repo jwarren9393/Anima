@@ -316,8 +316,9 @@ class ReplyRewriteService {
       user.writeln();
     }
     user.writeln(
-      'Write ONLY $name\'s replacement reply. Use *actions* and "dialogue" as '
-      'appropriate. Do not write for the user. Do not add preamble.',
+      'Write ONLY $name\'s replacement reply in FIRST PERSON: *actions* use '
+      'I/my/me, speech in "quotes". Do not write for the user. Do not add '
+      'preamble.',
     );
 
     return [
@@ -325,7 +326,8 @@ class ReplyRewriteService {
         'role': 'system',
         'content':
             'You rewrite one assistant roleplay reply in a private chat app. '
-            'Follow the instruction exactly. Stay in character as $name.',
+            'Follow the instruction exactly. Stay in character as $name in '
+            'FIRST PERSON (*I* actions, not he/she/$name).',
       },
       {'role': 'user', 'content': user.toString().trim()},
     ];
