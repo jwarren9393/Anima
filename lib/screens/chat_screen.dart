@@ -1339,6 +1339,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           swipeIndex: 0,
           speakerId: speaker.id,
           speakerName: speaker.name,
+          generationKind: MessageGenerationKind.characterGuide,
+          generationGuide: trimmed,
         ),
       );
       final speakerIndex =
@@ -2417,6 +2419,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       });
       return;
     }
+    final note = guideNote?.trim();
     setState(() {
       _error = null;
       _busy = true;
@@ -2427,6 +2430,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           text: '',
           swipes: const [''],
           swipeIndex: 0,
+          generationKind: MessageGenerationKind.impersonate,
+          // Empty string = plain Impersonate; non-empty = My line… steer.
+          generationGuide: note ?? '',
         ),
       );
     });
@@ -2434,7 +2440,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     await _streamIntoLastAssistant(
       excludeLastAssistant: true,
       mode: PromptMode.impersonate,
-      playerGuideNote: guideNote,
+      playerGuideNote: (note == null || note.isEmpty) ? null : note,
     );
   }
 
@@ -3211,30 +3217,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     ChatMessage message, {
     required bool asNewSwipe,
   }) {
-    if (asNewSwipe) {
-      return ChatMessage(
-        id: message.id,
-        role: message.role,
-        text: '',
-        swipes: [...message.swipes, ''],
-        swipeIndex: message.swipes.length,
-        speakerId: message.speakerId,
-        speakerName: message.speakerName,
-      );
-    }
-    final swipes = List<String>.from(message.swipes);
-    if (swipes.isEmpty) swipes.add('');
-    final swipeIndex = message.swipeIndex.clamp(0, swipes.length - 1);
-    swipes[swipeIndex] = '';
-    return ChatMessage(
-      id: message.id,
-      role: message.role,
-      text: '',
-      swipes: swipes,
-      swipeIndex: swipeIndex,
-      speakerId: message.speakerId,
-      speakerName: message.speakerName,
-    );
+    return message.prepareEmptySwipe(asNewSwipe: asNewSwipe);
   }
 
   Future<void> _rewriteMessageAt(int index) async {
@@ -3264,6 +3247,51 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (_busy || _session == null) return;
     if (index < 0 || index >= _messages.length) return;
     final message = _messages[index];
+
+    // Impersonate / My line… bubbles are user-role but AI-generated — regen
+    // reuses the saved steer (if any) instead of asking the player to retype it.
+    if (message.generationKind == MessageGenerationKind.impersonate) {
+      if (rewrite != null) {
+        _showChatError('Rewrite is for character replies — use Regenerate or New swipe.');
+        return;
+      }
+      if (!_hasApiKey) {
+        setState(() {
+          _error = 'Add your NanoGPT API key in Settings before you can chat.';
+        });
+        return;
+      }
+      if (_character == null) return;
+
+      var messages = List<ChatMessage>.from(_session!.messages);
+      if (index < messages.length - 1) {
+        messages = messages.sublist(0, index + 1);
+      }
+      messages[index] = _prepareAssistantForRegeneration(
+        messages[index],
+        asNewSwipe: asNewSwipe,
+      );
+
+      setState(() {
+        _error = null;
+        _busy = true;
+        _session = _session!.copyWith(messages: messages);
+      });
+      await _persist();
+
+      final guide = messages[index].generationGuide?.trim();
+      await _streamAssistantReply(
+        assistantIndex: index,
+        excludeLastAssistant: true,
+        allowGreetingNudge: false,
+        mode: PromptMode.impersonate,
+        speakingAs: _character,
+        advanceGroupSpeaker: false,
+        playerGuideNote: (guide == null || guide.isEmpty) ? null : guide,
+      );
+      return;
+    }
+
     if (message.isUser) {
       setState(() {
         _error = 'Send a message first so there is an AI reply to regenerate.';
@@ -3310,6 +3338,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         contextMessages: messages.sublist(0, index),
         customInstruction: rewrite.customInstruction,
       );
+    } else if (message.generationKind == MessageGenerationKind.characterGuide &&
+        message.hasGenerationGuide) {
+      // Re-apply the original Guide AI note on regenerate / new swipe.
+      rewriteMessages = _characterGuide.buildGuideMessages(
+        instruction: message.generationGuide!.trim(),
+        characterName: speaker.name,
+        userName: _userName,
+      );
     }
 
     setState(() {
@@ -3321,10 +3357,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     await _streamAssistantReply(
       assistantIndex: index,
-      allowGreetingNudge: rewrite == null,
+      allowGreetingNudge: rewrite == null &&
+          message.generationKind != MessageGenerationKind.characterGuide,
       speakingAs: speaker,
       advanceGroupSpeaker: false,
       rewriteMessages: rewriteMessages,
+      mode: message.generationKind == MessageGenerationKind.characterGuide
+          ? PromptMode.continueScene
+          : PromptMode.normal,
     );
   }
 
@@ -3758,9 +3798,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           } else {
             swipes[swipeIndex] = text;
           }
-          updated[index] = ChatMessage(
-            id: current.id,
-            role: current.role,
+          updated[index] = current.copyWith(
             text: text,
             swipes: swipes,
             swipeIndex: swipeIndex,
@@ -3799,9 +3837,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           if (swipes.isNotEmpty) {
             swipes[swipeIndex] = cleaned;
           }
-          updated[index] = ChatMessage(
-            id: current.id,
-            role: current.role,
+          updated[index] = current.copyWith(
             text: cleaned,
             swipes: swipes.isEmpty ? [cleaned] : swipes,
             swipeIndex: swipeIndex,
@@ -4625,13 +4661,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         final isLast = index == _messages.length - 1;
                         final thinking =
                             _busy && isLast && message.text.isEmpty;
-                        final isLastAi = isLast && !message.isUser;
+                        final isLastAi =
+                            isLast && message.isAiGenerated;
                         final canGoPrev =
-                            !message.isUser &&
+                            message.isAiGenerated &&
                             message.swipes.length > 1 &&
                             message.swipeIndex > 0;
                         final canGoNextExisting =
-                            !message.isUser &&
+                            message.isAiGenerated &&
                             message.swipes.length > 1 &&
                             message.swipeIndex < message.swipes.length - 1;
                         // On the latest AI bubble, ▶ past the last swipe = new generation.
@@ -4649,7 +4686,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                             message: message,
                             showThinking: thinking,
                             showSwipePager:
-                                !message.isUser &&
+                                message.isAiGenerated &&
                                 !thinking &&
                                 (message.canSwipe || isLastAi),
                             avatarFileName: _avatarForMessage(message),
@@ -5030,7 +5067,18 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final message = _messages[index];
     final canRewind = index < _messages.length - 1;
     final isLast = index == _messages.length - 1;
-    final canSwipeNav = !message.isUser && message.swipes.length > 1;
+    final isImpersonateBubble =
+        message.generationKind == MessageGenerationKind.impersonate;
+    final canSwipeNav = message.isAiGenerated && message.swipes.length > 1;
+    final canRegenAi =
+        (!message.isUser && !message.isNarrator) || isImpersonateBubble;
+    final steerHint = () {
+      if (!message.hasGenerationGuide) return null;
+      final g = message.generationGuide!.trim().replaceAll('\n', ' ');
+      if (g.isEmpty) return null;
+      final short = g.length <= 56 ? g : '${g.substring(0, 53)}…';
+      return 'Keeps your steer: $short';
+    }();
     final action = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -5069,24 +5117,43 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   ),
                   onTap: () => Navigator.pop(context, 'paths'),
                 ),
-                if (!message.isUser && !message.isNarrator) ...[
+                ListTile(
+                  leading: const Icon(Icons.record_voice_over_outlined),
+                  title: const Text('Impersonate'),
+                  subtitle: const Text('Write your next line as you'),
+                  onTap: () => Navigator.pop(context, 'impersonate'),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.edit_note),
+                  title: const Text('My line…'),
+                  subtitle: const Text(
+                    'AI writes your next message — or steer what you say',
+                  ),
+                  onTap: () => Navigator.pop(context, 'my_line'),
+                ),
+                if (canRegenAi) ...[
                   ListTile(
                     leading: const Icon(Icons.refresh),
                     title: Text(
                       message.isGroupBeat
                           ? 'Regenerate group react'
-                          : 'Regenerate',
+                          : isImpersonateBubble
+                              ? 'Regenerate my line'
+                              : 'Regenerate',
                     ),
                     subtitle: Text(
-                      isLast
-                          ? message.isGroupBeat
-                              ? 'Generate this group react again'
-                              : 'Generate this reply again'
-                          : 'Removes later messages, then regenerates',
+                      steerHint ??
+                          (isLast
+                              ? message.isGroupBeat
+                                  ? 'Generate this group react again'
+                                  : isImpersonateBubble
+                                      ? 'Generate your line again'
+                                      : 'Generate this reply again'
+                              : 'Removes later messages, then regenerates'),
                     ),
                     onTap: () => Navigator.pop(context, 'regen'),
                   ),
-                  if (!message.isGroupBeat)
+                  if (!message.isGroupBeat && !isImpersonateBubble)
                     ListTile(
                       leading: const Icon(Icons.tune),
                       title: const Text('Rewrite reply…'),
@@ -5119,20 +5186,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   subtitle: const Text('Generate the next reply'),
                   onTap: () => Navigator.pop(context, 'continue'),
                 ),
-                ListTile(
-                  leading: const Icon(Icons.record_voice_over_outlined),
-                  title: const Text('Impersonate'),
-                  subtitle: const Text('Write your next line as you'),
-                  onTap: () => Navigator.pop(context, 'impersonate'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.edit_note),
-                  title: const Text('My line…'),
-                  subtitle: const Text(
-                    'AI writes your next message — or steer what you say',
-                  ),
-                  onTap: () => Navigator.pop(context, 'my_line'),
-                ),
+
                 if (_isGroup && _participants.length >= 2)
                   ListTile(
                     leading: const Icon(Icons.groups_outlined),
@@ -5160,16 +5214,21 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   ),
                   onTap: () => Navigator.pop(context, 'auto_reply'),
                 ),
-                if (!message.isUser && !message.isNarrator)
+                if (canRegenAi)
                   ListTile(
                     leading: const Icon(Icons.auto_awesome),
                     title: Text(
-                      message.isGroupBeat ? 'New group react swipe' : 'New swipe',
+                      message.isGroupBeat
+                          ? 'New group react swipe'
+                          : isImpersonateBubble
+                              ? 'New swipe of my line'
+                              : 'New swipe',
                     ),
                     subtitle: Text(
-                      message.isGroupBeat
-                          ? 'Generate another alternate group react'
-                          : 'Generate another alternate reply',
+                      steerHint ??
+                          (message.isGroupBeat
+                              ? 'Generate another alternate group react'
+                              : 'Generate another alternate reply'),
                     ),
                     onTap: () => Navigator.pop(context, 'swipe'),
                   ),
@@ -5716,14 +5775,17 @@ class _PathsSheetState extends State<_PathsSheet> {
   }
 
   Future<void> _restoreCached() async {
-    final cached = await _cache.loadOptions(
+    final cached = await _cache.loadEntry(
       widget.chatId,
       anchorMessageId: _anchorMessageId,
     );
     if (!mounted) return;
     setState(() {
-      if (cached != null && cached.isNotEmpty) {
-        _options = cached;
+      if (cached != null && cached.options.isNotEmpty) {
+        _options = cached.options;
+        if (cached.direction.isNotEmpty) {
+          _directionController.text = cached.direction;
+        }
       }
       _selected.clear();
       _restoring = false;
@@ -5735,6 +5797,7 @@ class _PathsSheetState extends State<_PathsSheet> {
       widget.chatId,
       options: options,
       anchorMessageId: _anchorMessageId,
+      direction: _directionController.text,
     );
   }
 
@@ -5742,6 +5805,7 @@ class _PathsSheetState extends State<_PathsSheet> {
     setState(() {
       _options = const [];
       _selected.clear();
+      _directionController.clear();
     });
     await _cache.clearOptions(widget.chatId);
   }

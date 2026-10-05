@@ -35,6 +35,41 @@ void main() {
     expect(loaded, ['*Look around*', 'Ask a question']);
   });
 
+  test('save then loadEntry restores the Paths steer direction', () async {
+    await service.saveOptions(
+      'chat_1',
+      options: const ['*I leave politely*', '*I excuse myself*'],
+      anchorMessageId: 'msg_a',
+      direction: 'ways to leave politely',
+    );
+
+    final entry = await service.loadEntry(
+      'chat_1',
+      anchorMessageId: 'msg_a',
+    );
+    expect(entry, isNotNull);
+    expect(entry!.options, ['*I leave politely*', '*I excuse myself*']);
+    expect(entry.direction, 'ways to leave politely');
+  });
+
+  test('legacy cache entries without direction still load', () async {
+    final file = File('${tempDir.path}/anima_roadway_cache.json');
+    await file.writeAsString('''
+{
+  "chat_1": {
+    "options": ["Old path"],
+    "anchorMessageId": "msg_a"
+  }
+}
+''');
+    final entry = await service.loadEntry(
+      'chat_1',
+      anchorMessageId: 'msg_a',
+    );
+    expect(entry!.options, ['Old path']);
+    expect(entry.direction, '');
+  });
+
   test('load returns null and drops entry when scene moved on', () async {
     await service.saveOptions(
       'chat_1',

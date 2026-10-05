@@ -1,6 +1,16 @@
 import 'group_beat_part.dart';
 import '../services/group_beat_codec.dart';
 
+/// How an AI-filled bubble was produced — kept so Regenerate / New swipe can
+/// re-apply the same direction (My line… steer or Guide AI note).
+enum MessageGenerationKind {
+  /// AI wrote the player's next line (Impersonate / My line…).
+  impersonate,
+
+  /// Guide AI wrote this character reply from a player direction note.
+  characterGuide,
+}
+
 /// One bubble in the chat: either from you or from the AI.
 ///
 /// Assistant messages can store several “swipes” (alternate generations),
@@ -17,6 +27,8 @@ class ChatMessage {
     this.swipeIndex = 0,
     this.speakerId,
     this.speakerName,
+    this.generationKind,
+    this.generationGuide,
     List<GroupBeatPart>? beatLines,
     List<List<GroupBeatPart>>? beatSwipes,
   }) : beatLines = beatLines == null
@@ -63,6 +75,13 @@ class ChatMessage {
   final String? speakerId;
   final String? speakerName;
 
+  /// Why the AI filled this bubble (Impersonate / Guide AI), if applicable.
+  final MessageGenerationKind? generationKind;
+
+  /// Player steer / Guide AI note used to produce this bubble (may be empty for
+  /// plain Impersonate). Survives so regen and new swipes reuse the same note.
+  final String? generationGuide;
+
   /// Lines in the visible group-beat swipe.
   final List<GroupBeatPart>? beatLines;
 
@@ -80,8 +99,20 @@ class ChatMessage {
 
   bool get isAssistant => role == ChatRole.assistant;
 
+  /// AI wrote this bubble (character reply, Guide AI, or Impersonate / My line…).
+  bool get isAiGenerated =>
+      isAssistant ||
+      isGroupBeat ||
+      generationKind == MessageGenerationKind.impersonate;
+
+  bool get hasGenerationGuide =>
+      generationGuide != null && generationGuide!.trim().isNotEmpty;
+
   bool get canSwipe {
-    if (isUser || isNarrator || isDirector) return false;
+    if (isNarrator || isDirector) return false;
+    if (isUser && generationKind != MessageGenerationKind.impersonate) {
+      return false;
+    }
     if (isGroupBeat) {
       return (beatSwipes?.length ?? swipes.length) > 1;
     }
@@ -118,6 +149,9 @@ class ChatMessage {
     String? speakerId,
     String? speakerName,
     bool clearSpeaker = false,
+    MessageGenerationKind? generationKind,
+    String? generationGuide,
+    bool clearGeneration = false,
     List<GroupBeatPart>? beatLines,
     List<List<GroupBeatPart>>? beatSwipes,
     bool clearBeat = false,
@@ -142,6 +176,10 @@ class ChatMessage {
       swipeIndex: nextIndex.clamp(0, (nextSwipes.length - 1).clamp(0, 9999)),
       speakerId: clearSpeaker ? null : (speakerId ?? this.speakerId),
       speakerName: clearSpeaker ? null : (speakerName ?? this.speakerName),
+      generationKind:
+          clearGeneration ? null : (generationKind ?? this.generationKind),
+      generationGuide:
+          clearGeneration ? null : (generationGuide ?? this.generationGuide),
       beatLines: nextBeatLines,
       beatSwipes: nextBeatSwipes,
     );
@@ -156,15 +194,7 @@ class ChatMessage {
     final updated = List<String>.from(swipes);
     final index = swipeIndex.clamp(0, updated.length - 1);
     updated[index] = trimmed;
-    return ChatMessage(
-      id: id,
-      role: role,
-      text: trimmed,
-      swipes: updated,
-      swipeIndex: index,
-      speakerId: speakerId,
-      speakerName: speakerName,
-    );
+    return copyWith(text: trimmed, swipes: updated, swipeIndex: index);
   }
 
   ChatMessage withEditedBeatLines(List<GroupBeatPart> lines) {
@@ -184,14 +214,10 @@ class ChatMessage {
     if (isGroupBeat) return this;
     final trimmed = newText.trim();
     final updated = [...swipes, trimmed];
-    return ChatMessage(
-      id: id,
-      role: role,
+    return copyWith(
       text: trimmed,
       swipes: updated,
       swipeIndex: updated.length - 1,
-      speakerId: speakerId,
-      speakerName: speakerName,
     );
   }
 
@@ -220,45 +246,23 @@ class ChatMessage {
     }
     if (swipes.isEmpty) return this;
     final clamped = index.clamp(0, swipes.length - 1);
-    return ChatMessage(
-      id: id,
-      role: role,
-      text: swipes[clamped],
-      swipes: swipes,
-      swipeIndex: clamped,
-      speakerId: speakerId,
-      speakerName: speakerName,
-      beatLines: beatLines,
-      beatSwipes: beatSwipes,
-    );
+    return copyWith(text: swipes[clamped], swipeIndex: clamped);
   }
 
   ChatMessage prepareEmptySwipe({required bool asNewSwipe}) {
     if (!isGroupBeat) {
       if (asNewSwipe) {
-        return ChatMessage(
-          id: id,
-          role: role,
+        return copyWith(
           text: '',
           swipes: [...swipes, ''],
           swipeIndex: swipes.length,
-          speakerId: speakerId,
-          speakerName: speakerName,
         );
       }
       final nextSwipes = List<String>.from(swipes);
       if (nextSwipes.isEmpty) nextSwipes.add('');
       final idx = swipeIndex.clamp(0, nextSwipes.length - 1);
       nextSwipes[idx] = '';
-      return ChatMessage(
-        id: id,
-        role: role,
-        text: '',
-        swipes: nextSwipes,
-        swipeIndex: idx,
-        speakerId: speakerId,
-        speakerName: speakerName,
-      );
+      return copyWith(text: '', swipes: nextSwipes, swipeIndex: idx);
     }
 
     final lines = beatLines;
@@ -322,6 +326,24 @@ class ChatMessage {
     }
   }
 
+  static String? generationKindToJson(MessageGenerationKind? kind) =>
+      switch (kind) {
+        MessageGenerationKind.impersonate => 'impersonate',
+        MessageGenerationKind.characterGuide => 'characterGuide',
+        null => null,
+      };
+
+  static MessageGenerationKind? generationKindFromJson(String? raw) {
+    switch ((raw ?? '').trim()) {
+      case 'impersonate':
+        return MessageGenerationKind.impersonate;
+      case 'characterGuide':
+        return MessageGenerationKind.characterGuide;
+      default:
+        return null;
+    }
+  }
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'role': roleToJson(role),
@@ -331,6 +353,11 @@ class ChatMessage {
         if (speakerId != null && speakerId!.isNotEmpty) 'speakerId': speakerId,
         if (speakerName != null && speakerName!.isNotEmpty)
           'speakerName': speakerName,
+        if (generationKind != null)
+          'generationKind': generationKindToJson(generationKind),
+        // Persist even when empty — plain Impersonate still needs the kind flag
+        // and an empty guide means "no steer" on regen.
+        if (generationKind != null) 'generationGuide': generationGuide ?? '',
         if (beatLines != null)
           'beatLines': beatLines!.map((l) => l.toJson()).toList(),
         if (beatSwipes != null)
@@ -343,6 +370,13 @@ class ChatMessage {
     final roleRaw = json['role'] as String? ?? 'assistant';
     final role = roleFromJson(roleRaw);
     final text = (json['text'] as String? ?? '').trim();
+    final generationKind = generationKindFromJson(
+      json['generationKind'] as String?,
+    );
+    final generationGuideRaw = json['generationGuide'];
+    final generationGuide = generationKind == null
+        ? null
+        : (generationGuideRaw == null ? '' : '$generationGuideRaw');
 
     List<GroupBeatPart>? beatLines;
     List<List<GroupBeatPart>>? beatSwipes;
@@ -410,6 +444,8 @@ class ChatMessage {
       swipeIndex: json['swipeIndex'] as int? ?? 0,
       speakerId: (json['speakerId'] as String?)?.trim(),
       speakerName: (json['speakerName'] as String?)?.trim(),
+      generationKind: generationKind,
+      generationGuide: generationGuide,
       beatLines: beatLines,
       beatSwipes: beatSwipes,
     );

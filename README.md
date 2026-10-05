@@ -16,6 +16,7 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 
 | Build | Highlights |
 |-------|------------|
+| **76** | **Saved steers for regen** — My line… / Guide AI notes stick to the bubble, so Regenerate and New swipe reuse them. **Paths** remembers the steer box too. Long-press menu: Impersonate + My line… moved up near Paths / Regenerate. |
 | **75** | **Impersonate fix** — Impersonate / **My line…** stay in your persona (no more writing as the AI character). **First-person voice** — `*actions*` and thoughts use *I/my/me* for whoever is speaking (you or the character), not “he/she did”. |
 | **74** | **My line…** — the long-press menu now writes **your own** next message as your persona: add a note to steer what *you* say or do, or tap *Just write it* for a plain Impersonate. (The build-73 entry below steered the AI character instead — that entry was replaced, since Guide AI already did it.) |
 | **73** | **Guide reply…** — one-shot sheet from the long-press menu: pick who replies, say what they do or feel (or tap *Just continue* for a plain reply). **Paths steering** — an optional direction field makes the options variations of what you ask for; leave it empty for the usual varied mix. |
@@ -893,7 +894,7 @@ bash scripts/setup_linux_dev_noroot.sh   # once per Linux PC — no admin passwo
 cd ~/Documents/Git\ Projects/Anima       # this PC's checkout — quote the space in the name
 flutter doctor
 flutter pub get
-flutter test      # 398 tests
+flutter test      # 404 tests
 flutter analyze
 flutter run -d linux     # or -d windows / a connected Android device
 ```

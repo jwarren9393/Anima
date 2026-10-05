@@ -7,7 +7,7 @@
 >
 > **Living documents:** `AGENTS.md` + this file + `README.md` are kept current together — see §29 for the upkeep rule every agent must follow.
 
-**Last updated:** 2026-10-04 · **Version:** 1.0.0 build **75** · **Tests:** 398 (`flutter test`)
+**Last updated:** 2026-10-05 · **Version:** 1.0.0 build **76** · **Tests:** 404 (`flutter test`)
 
 ---
 
@@ -98,7 +98,7 @@
 | Paths | `path_provider` → app documents directory |
 | Files | `file_picker`, `share_plus`, Android `saf` for sync URIs |
 | Fonts | `google_fonts` |
-| Tests | `flutter_test` — 398 tests |
+| Tests | `flutter_test` — 404 tests |
 
 **Platforms:** Android (primary), Linux desktop, Windows desktop. macOS not targeted.
 
@@ -463,11 +463,14 @@ Special tuned sampling for: memory summarize, narrator generate, composer format
 ### My line sheet (player side)
 
 - **My line…** (long-press menu) opens `_MyLineSheet` in `chat_screen.dart` — writes the **player's own** next message, the persona-side counterpart of Guide AI. It exists because `PromptMode.impersonate` had no way to steer the line.
-- **Steer my line** → `_impersonate(guideNote: …)`; the note reaches the API through `_streamIntoLastAssistant` → `_streamAssistantReply` → `_buildApiMessages(playerGuideNote:)`, which appends `PersonaGuideService.formatPlayerDirection()` as a **final** late mandatory system block (after narrator/post-history) plus a last Impersonate lock so nothing can yank the model back to {{char}}. An empty box → `PersonaGuideService.defaultInstruction`.
-- **Just write it (no steers)** → plain `_impersonate()` with the same player-perspective stack (no guide note).
+- **Steer my line** → `_impersonate(guideNote: …)`; the note is stored on the bubble as `generationKind: impersonate` + `generationGuide`, and also reaches the API through `_streamIntoLastAssistant` → `_streamAssistantReply` → `_buildApiMessages(playerGuideNote:)`, which appends `PersonaGuideService.formatPlayerDirection()` as a **final** late mandatory system block (after narrator/post-history) plus a last Impersonate lock so nothing can yank the model back to {{char}}. An empty box → `PersonaGuideService.defaultInstruction`.
+- **Just write it (no steers)** → plain `_impersonate()` with `generationKind: impersonate` and an empty guide (still regenerable as plain Impersonate).
+- **Regenerate / New swipe** on that bubble reuses the saved `generationGuide` (menu subtitle shows “Keeps your steer: …”). Same for **Guide AI** character replies (`generationKind: characterGuide`).
 - Impersonate system prompt uses `PresenceService.formatPlayerPerspectiveBoundary()` instead of the normal “You are {{char}}” knowledge boundary, skips card post-history, and labels character card fields as “other person / reference only”.
-- Guide AI (cast chip → composer) is unchanged and still steers an *AI character's* line — also first person (`*I…*` actions).
+- Guide AI (cast chip → composer) is unchanged for sending — also first person (`*I…*` actions) — and now persists the note for regen/swipe.
 - **First-person law:** `ChatStyleRules.formatFirstPersonPerspectiveRule()` is injected in every post-history block for the speaker of that turn.
+- Long-press menu order (top cluster): Paths · Impersonate · My line… · Regenerate · Rewrite reply…
+- **Paths direction** is stored in `RoadwayCacheEntry.direction` with the options; reopening the sheet restores the steer box so Refresh keeps the same prompt.
 
 ### Auto-reply
 
@@ -728,7 +731,7 @@ Applied in `PromptBuilder.applyMacros()`.
 ## 26. Testing and quality
 
 ```bash
-flutter test      # 398 tests
+flutter test      # 404 tests
 flutter analyze
 ```
 

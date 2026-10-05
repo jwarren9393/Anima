@@ -8,6 +8,7 @@ class RoadwayCacheEntry {
   const RoadwayCacheEntry({
     required this.options,
     required this.anchorMessageId,
+    this.direction = '',
   });
 
   final List<String> options;
@@ -16,9 +17,14 @@ class RoadwayCacheEntry {
   /// If the chat has moved on (new last message), the cache is stale.
   final String anchorMessageId;
 
+  /// Optional "Steer these paths" text used when the options were generated.
+  /// Restored into the Paths sheet so Refresh can reuse the same steer.
+  final String direction;
+
   Map<String, dynamic> toJson() => {
         'options': options,
         'anchorMessageId': anchorMessageId,
+        if (direction.trim().isNotEmpty) 'direction': direction.trim(),
       };
 
   factory RoadwayCacheEntry.fromJson(Map<String, dynamic> json) {
@@ -33,6 +39,7 @@ class RoadwayCacheEntry {
     return RoadwayCacheEntry(
       options: options,
       anchorMessageId: '${json['anchorMessageId'] ?? ''}'.trim(),
+      direction: '${json['direction'] ?? ''}'.trim(),
     );
   }
 }
@@ -95,7 +102,7 @@ class RoadwayCacheService {
   ///
   /// Pass the chat’s current last message id. Mismatched or empty caches return
   /// null (and drop the stale entry so it does not linger).
-  Future<List<String>?> loadOptions(
+  Future<RoadwayCacheEntry?> loadEntry(
     String chatId, {
     required String anchorMessageId,
   }) async {
@@ -112,14 +119,34 @@ class RoadwayCacheService {
       await _writeAll(all);
       return null;
     }
-    return List<String>.from(entry.options);
+    return RoadwayCacheEntry(
+      options: List<String>.from(entry.options),
+      anchorMessageId: entry.anchorMessageId,
+      direction: entry.direction,
+    );
+  }
+
+  /// Convenience wrapper — options only (older call sites).
+  Future<List<String>?> loadOptions(
+    String chatId, {
+    required String anchorMessageId,
+  }) async {
+    final entry = await loadEntry(
+      chatId,
+      anchorMessageId: anchorMessageId,
+    );
+    return entry?.options;
   }
 
   /// Saves [options] for [chatId], anchored to the newest message id.
+  ///
+  /// [direction] is the optional Paths steer box — restored when the sheet
+  /// reopens so Refresh keeps the same prompt.
   Future<void> saveOptions(
     String chatId, {
     required List<String> options,
     required String anchorMessageId,
+    String direction = '',
   }) async {
     final id = chatId.trim();
     final anchor = anchorMessageId.trim();
@@ -137,6 +164,7 @@ class RoadwayCacheService {
       all[id] = RoadwayCacheEntry(
         options: cleaned,
         anchorMessageId: anchor,
+        direction: direction.trim(),
       );
     }
     await _writeAll(all);
