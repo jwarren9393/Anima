@@ -102,17 +102,27 @@ else
 fi
 
 # ==============================================================================
-# 4. BUILD + INSTALL LINUX DESKTOP (bundle, icon and menu entry) — one code path
+# 4. BUILD + INSTALL LINUX DESKTOP (bundle, icon and menu entry) — Linux hosts only
 # ==============================================================================
-echo -e "\n💻 [4/7] Building and installing the Linux desktop app..."
-./scripts/update_linux.sh
-echo "✅ Desktop app updated in-place!"
+SKIP_LINUX=0
+case "$(uname -s 2>/dev/null)" in
+  MINGW*|MSYS*|CYGWIN*|Windows_NT) SKIP_LINUX=1 ;;
+esac
+if [ -n "${OS:-}" ] && echo "$OS" | grep -qi 'windows'; then
+  SKIP_LINUX=1
+fi
 
-# ==============================================================================
-# 5. PACKAGE DESKTOP ZIP FOR GITHUB RELEASE
-# ==============================================================================
-echo -e "\n🗜️  [5/7] Packaging Linux Release Zip..."
-(cd build/linux/x64/release/bundle && zip -rq "${PROJECT_ROOT}/Anima-${VERSION}-linux-x64.zip" .)
+if [ "$SKIP_LINUX" = "1" ]; then
+  echo -e "\n💻 [4/7] Skipping Linux desktop build (this host is Windows)."
+  echo -e "\n🗜️  [5/7] Skipping Linux release zip (Windows host)."
+else
+  echo -e "\n💻 [4/7] Building and installing the Linux desktop app..."
+  ./scripts/update_linux.sh
+  echo "✅ Desktop app updated in-place!"
+
+  echo -e "\n🗜️  [5/7] Packaging Linux Release Zip..."
+  (cd build/linux/x64/release/bundle && zip -rq "${PROJECT_ROOT}/Anima-${VERSION}-linux-x64.zip" .)
+fi
 
 # ==============================================================================
 # 6. PUBLISH / UPDATE GITHUB RELEASE (IN-PLACE ON v1.0.0)
@@ -130,7 +140,11 @@ if command -v gh &> /dev/null; then
   gh release edit "$TAG" --title "$RELEASE_TITLE" --notes "$RELEASE_BODY" || \
   gh release create "$TAG" --title "$RELEASE_TITLE" --notes "$RELEASE_BODY"
 
-  gh release upload "$TAG" "Anima-${VERSION}.apk" "Anima-${VERSION}-linux-x64.zip" --clobber
+  UPLOAD_ASSETS=("Anima-${VERSION}.apk")
+  if [ -f "Anima-${VERSION}-linux-x64.zip" ]; then
+    UPLOAD_ASSETS+=("Anima-${VERSION}-linux-x64.zip")
+  fi
+  gh release upload "$TAG" "${UPLOAD_ASSETS[@]}" --clobber
   echo "✅ GitHub Release updated: https://github.com/jwarren9393/Anima/releases/tag/${TAG}"
 else
   echo "⚠️ GitHub CLI (gh) not found. Upload binaries manually if needed."
