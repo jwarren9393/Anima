@@ -16,6 +16,7 @@ import '../services/persona_token_service.dart';
 import '../services/ai_field_changes.dart';
 import '../services/settings_service.dart';
 import '../widgets/character_token_badge.dart';
+import '../widgets/ai_busy_banner.dart';
 import '../widgets/ai_field_changes_sheet.dart';
 import '../widgets/cross_reference_source_sheet.dart';
 import '../services/world_workshop_builder.dart';
@@ -78,11 +79,48 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
   bool _expandBusy = false;
   PersonaCollaboratorField? _wandBusy;
   String? _avatarFileName;
+  /// Shown under the AppBar while AI drafts/edits this persona.
+  String? _aiBusyMessage;
   late final String _personaId;
 
   bool get _isEditing => widget.existing != null;
   bool get _busy =>
       _saving || _avatarBusy || _wandBusy != null || _aiCardBusy || _compactBusy || _expandBusy;
+  bool get _showsAiBusy => _aiBusyMessage != null;
+
+  void _beginAiBusy(
+    String message, {
+    bool expand = false,
+    bool compact = false,
+    bool aiCard = false,
+  }) {
+    setState(() {
+      _aiBusyMessage = message;
+      if (expand) _expandBusy = true;
+      if (compact) _compactBusy = true;
+      if (aiCard) _aiCardBusy = true;
+    });
+  }
+
+  void _endAiBusy({
+    bool expand = false,
+    bool compact = false,
+    bool aiCard = false,
+  }) {
+    if (!mounted) return;
+    setState(() {
+      _aiBusyMessage = null;
+      if (expand) _expandBusy = false;
+      if (compact) _compactBusy = false;
+      if (aiCard) _aiCardBusy = false;
+    });
+  }
+
+  /// Hide the spinner once the AI reply is in and a review UI is about to open.
+  void _hideAiBusyBanner() {
+    if (!mounted || _aiBusyMessage == null) return;
+    setState(() => _aiBusyMessage = null);
+  }
 
   bool get _hasPersonaContent =>
       _descriptionController.text.trim().isNotEmpty ||
@@ -128,7 +166,7 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
       return;
     }
 
-    setState(() => _aiCardBusy = true);
+    _beginAiBusy('Generating persona…', aiCard: true);
     try {
       final build = await widget.settingsService.resolveCharacterBuild();
       final baseUrl = await widget.settingsService.getApiBaseUrl();
@@ -188,7 +226,7 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
         SnackBar(content: Text('AI persona builder failed: $error')),
       );
     } finally {
-      if (mounted) setState(() => _aiCardBusy = false);
+      _endAiBusy(aiCard: true);
     }
   }
 
@@ -204,7 +242,7 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
       return;
     }
 
-    setState(() => _aiCardBusy = true);
+    _beginAiBusy('Updating persona…', aiCard: true);
     try {
       final build = await widget.settingsService.resolveCharacterBuild();
       final baseUrl = await widget.settingsService.getApiBaseUrl();
@@ -262,7 +300,7 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
         SnackBar(content: Text('AI persona update failed: $error')),
       );
     } finally {
-      if (mounted) setState(() => _aiCardBusy = false);
+      _endAiBusy(aiCard: true);
     }
   }
 
@@ -338,7 +376,7 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
     );
     if (confirmed != true || !mounted) return;
 
-    setState(() => _compactBusy = true);
+    _beginAiBusy('Compacting persona…', compact: true);
     try {
       final before = _personaFromDraft();
       final collaborator =
@@ -388,6 +426,7 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
         return;
       }
 
+      _hideAiBusyBanner();
       final selected = await showAiFieldChangesSheet(
         context: context,
         title: 'Review compacted persona',
@@ -425,7 +464,7 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
         SnackBar(content: Text('Compact failed: $error')),
       );
     } finally {
-      if (mounted) setState(() => _compactBusy = false);
+      _endAiBusy(compact: true);
     }
   }
 
@@ -469,7 +508,7 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
     );
     if (confirmed != true || !mounted) return;
 
-    setState(() => _expandBusy = true);
+    _beginAiBusy('Expanding persona…', expand: true);
     try {
       final before = _personaFromDraft();
       final collaborator =
@@ -519,6 +558,7 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
         return;
       }
 
+      _hideAiBusyBanner();
       final selected = await showAiFieldChangesSheet(
         context: context,
         title: 'Review expanded persona',
@@ -556,7 +596,7 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
         SnackBar(content: Text('Expand failed: $error')),
       );
     } finally {
-      if (mounted) setState(() => _expandBusy = false);
+      _endAiBusy(expand: true);
     }
   }
 
@@ -600,7 +640,7 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
     );
     if (confirmed != true || !mounted) return;
 
-    setState(() => _expandBusy = true);
+    _beginAiBusy('Drafting persona from source…', expand: true);
     try {
       final before = _personaFromDraft();
       final draft = _draftContext();
@@ -657,6 +697,7 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
         return;
       }
 
+      _hideAiBusyBanner();
       final selected = await showAiFieldChangesSheet(
         context: context,
         title: 'Review cross-referenced persona',
@@ -695,7 +736,7 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
         SnackBar(content: Text('Cross-reference failed: $error')),
       );
     } finally {
-      if (mounted) setState(() => _expandBusy = false);
+      _endAiBusy(expand: true);
     }
   }
 
@@ -1051,6 +1092,7 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
               : (_isEditing ? 'Edit persona' : 'New persona'),
         ),
         actions: [
+          if (_showsAiBusy) const AiBusyAppBarSpinner(),
           PopupMenuButton<String>(
             enabled: !_busy,
             onSelected: (value) {
@@ -1075,7 +1117,11 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
           ),
         ],
       ),
-      body: ListView(
+      body: Column(
+        children: [
+          if (_aiBusyMessage != null) AiBusyBanner(message: _aiBusyMessage!),
+          Expanded(
+            child: ListView(
         padding: SettingsUi.listPadding,
         children: [
           SettingsUi.sectionHint(
@@ -1281,6 +1327,9 @@ class _PersonaEditScreenState extends State<PersonaEditScreen> {
                 ? 'Save to Personas'
                 : (_isEditing ? 'Save persona' : 'Create persona'),
             onPressed: _busy ? null : _save,
+          ),
+        ],
+            ),
           ),
         ],
       ),

@@ -448,7 +448,7 @@ Multiple **{{user}}** identities.
 - **Set as default** for new chats (long-press on list also works).
 - Per-chat persona via chat ⋮ (can differ from default).
 - Tap **your** avatar in chat → persona editor.
-- **⋮ editor menu** → **Compact persona…** (AI shortens fields, review before apply), **Expand persona…** (AI invents new interesting details/ideas from what’s already there — no description needed; review before apply), or **Base on another card…** (cross-reference — AI drafts this persona from another character/persona’s shared world so your cast fits together; optional connection note; review before apply).
+- **⋮ editor menu** → **Compact persona…** (AI shortens fields, review before apply), **Expand persona…** (AI invents new interesting details/ideas from what’s already there — no description needed; review before apply), or **Base on another card…** (cross-reference — AI drafts this persona from another character/persona’s shared world so your cast fits together; optional connection note; review before apply). A spinning progress banner shows while those AI drafts run.
 
 ### 4.3 Characters
 
@@ -490,7 +490,7 @@ One section visible at a time: **Identity** · **Story** · **Chat** · **Lore**
 - **Fix inconsistencies** — after a check, review AI-proposed field changes and **Update card** in one tap (card text fields only; lorebook unchanged).
 - **Compact card…** — AI shortens verbose fields (review before apply).
 - **Expand card…** — AI adds new interesting details, ideas, and texture from what’s already on the card (no description needed; review before apply).
-- **Base on another card…** — cross-reference: pick another character or persona and the AI drafts **this** card grounded in that card’s shared world (factions, places, history, relationships re-pointed at this card). Optional “How should they connect?” note (e.g. *“make her Mira’s estranged sister”*). The card you’re editing keeps its identity — the source is reference material, never a replacement. Review before apply.
+- **Base on another card…** — cross-reference: pick another character or persona and the AI drafts **this** card grounded in that card’s shared world (factions, places, history, relationships re-pointed at this card). Optional “How should they connect?” note (e.g. *“make her Mira’s estranged sister”*). The card you’re editing keeps its identity — the source is reference material, never a replacement. Review before apply. A spinning progress banner (and AppBar spinner) shows while the AI is drafting so the screen doesn’t look frozen.
 - **Generate avatar** — NanoGPT image sheet.
 
 **AI card builder** (plain-English generate/update slim fields: description, personality, mes_example, tags — not scenario, greetings, or per-card system/post-history).

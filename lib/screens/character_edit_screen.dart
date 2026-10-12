@@ -18,6 +18,7 @@ import '../services/nanogpt_service.dart';
 import '../services/settings_service.dart';
 import '../services/world_workshop_builder.dart';
 import '../widgets/anima_avatar.dart';
+import '../widgets/ai_busy_banner.dart';
 import '../widgets/ai_field_changes_sheet.dart';
 import '../widgets/cross_reference_source_sheet.dart';
 import '../widgets/avatar_history_sheet.dart';
@@ -98,6 +99,8 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
   bool _avatarBusy = false;
   bool _aiCardBusy = false;
   CharacterCollaboratorField? _wandBusy;
+  /// Shown under the AppBar while AI drafts/edits this card.
+  String? _aiBusyMessage;
   Lorebook? _lorebook;
   Map<String, dynamic> _extensions = const {};
   String? _avatarFileName;
@@ -113,6 +116,31 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
   bool _isTemporary = false;
 
   _CharacterSection _section = _CharacterSection.identity;
+
+  bool get _showsAiBusy => _aiBusyMessage != null;
+
+  void _beginAiBusy(String message, {bool consistency = false, bool aiCard = false}) {
+    setState(() {
+      _aiBusyMessage = message;
+      if (consistency) _consistencyBusy = true;
+      if (aiCard) _aiCardBusy = true;
+    });
+  }
+
+  void _endAiBusy({bool consistency = false, bool aiCard = false}) {
+    if (!mounted) return;
+    setState(() {
+      _aiBusyMessage = null;
+      if (consistency) _consistencyBusy = false;
+      if (aiCard) _aiCardBusy = false;
+    });
+  }
+
+  /// Hide the spinner once the AI reply is in and a review UI is about to open.
+  void _hideAiBusyBanner() {
+    if (!mounted || _aiBusyMessage == null) return;
+    setState(() => _aiBusyMessage = null);
+  }
 
   bool get _isEditing =>
       widget.existing != null &&
@@ -204,7 +232,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
       return;
     }
 
-    setState(() => _aiCardBusy = true);
+    _beginAiBusy('Generating card…', aiCard: true);
     try {
       final build = await widget.settingsService.resolveCharacterBuild();
       final baseUrl = await widget.settingsService.getApiBaseUrl();
@@ -251,6 +279,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         return;
       }
 
+      _hideAiBusyBanner();
       final selected = await showAiFieldChangesSheet(
         context: context,
         title: 'Review generated card',
@@ -286,7 +315,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         SnackBar(content: Text('AI card builder failed: $error')),
       );
     } finally {
-      if (mounted) setState(() => _aiCardBusy = false);
+      _endAiBusy(aiCard: true);
     }
   }
 
@@ -302,7 +331,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
       return;
     }
 
-    setState(() => _aiCardBusy = true);
+    _beginAiBusy('Updating card…', aiCard: true);
     try {
       final build = await widget.settingsService.resolveCharacterBuild();
       final baseUrl = await widget.settingsService.getApiBaseUrl();
@@ -348,6 +377,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         return;
       }
 
+      _hideAiBusyBanner();
       final selected = await showAiFieldChangesSheet(
         context: context,
         title: 'Review card updates',
@@ -383,7 +413,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         SnackBar(content: Text('AI card update failed: $error')),
       );
     } finally {
-      if (mounted) setState(() => _aiCardBusy = false);
+      _endAiBusy(aiCard: true);
     }
   }
 
@@ -553,7 +583,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
 
   Future<void> _runConsistencyCheck() async {
     if (_wandBusy != null || _consistencyBusy) return;
-    setState(() => _consistencyBusy = true);
+    _beginAiBusy('Checking consistency…', consistency: true);
     try {
       final collaborator =
           await widget.settingsService.getCollaboratorSettings();
@@ -573,6 +603,8 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         sampling: sampling,
       );
       if (!mounted) return;
+      // Checking is done — hide the spinner while the report is read.
+      _hideAiBusyBanner();
       final trimmedReport = report.trim();
       final truncated = _reportLooksTruncated(trimmedReport);
       final fixRequested = await showDialog<bool>(
@@ -629,13 +661,13 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         SnackBar(content: Text('Consistency check failed: $error')),
       );
     } finally {
-      if (mounted) setState(() => _consistencyBusy = false);
+      _endAiBusy(consistency: true);
     }
   }
 
   Future<void> _runConsistencyFix(String consistencyReport) async {
     if (_wandBusy != null) return;
-    setState(() => _consistencyBusy = true);
+    _beginAiBusy('Fixing inconsistencies…', consistency: true);
     try {
       final before = _characterFromDraft();
       final collaborator =
@@ -686,6 +718,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         return;
       }
 
+      _hideAiBusyBanner();
       final selected = await showAiFieldChangesSheet(
         context: context,
         title: 'Review card fixes',
@@ -723,7 +756,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         SnackBar(content: Text('Consistency fix failed: $error')),
       );
     } finally {
-      if (mounted) setState(() => _consistencyBusy = false);
+      _endAiBusy(consistency: true);
     }
   }
 
@@ -772,7 +805,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
     );
     if (confirmed != true || !mounted) return;
 
-    setState(() => _consistencyBusy = true);
+    _beginAiBusy('Compacting card…', consistency: true);
     try {
       final before = _characterFromDraft();
       final collaborator =
@@ -822,6 +855,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         return;
       }
 
+      _hideAiBusyBanner();
       final selected = await showAiFieldChangesSheet(
         context: context,
         title: 'Review compacted card',
@@ -859,7 +893,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         SnackBar(content: Text('Compact failed: $error')),
       );
     } finally {
-      if (mounted) setState(() => _consistencyBusy = false);
+      _endAiBusy(consistency: true);
     }
   }
 
@@ -902,7 +936,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
     );
     if (confirmed != true || !mounted) return;
 
-    setState(() => _consistencyBusy = true);
+    _beginAiBusy('Expanding card…', consistency: true);
     try {
       final before = _characterFromDraft();
       final collaborator =
@@ -952,6 +986,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         return;
       }
 
+      _hideAiBusyBanner();
       final selected = await showAiFieldChangesSheet(
         context: context,
         title: 'Review expanded card',
@@ -989,7 +1024,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         SnackBar(content: Text('Expand failed: $error')),
       );
     } finally {
-      if (mounted) setState(() => _consistencyBusy = false);
+      _endAiBusy(consistency: true);
     }
   }
 
@@ -1033,7 +1068,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
     );
     if (confirmed != true || !mounted) return;
 
-    setState(() => _consistencyBusy = true);
+    _beginAiBusy('Drafting card from source…', consistency: true);
     try {
       final before = _characterFromDraft();
       final draft = _draftContext();
@@ -1090,6 +1125,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         return;
       }
 
+      _hideAiBusyBanner();
       final selected = await showAiFieldChangesSheet(
         context: context,
         title: 'Review cross-referenced card',
@@ -1128,7 +1164,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
         SnackBar(content: Text('Cross-reference failed: $error')),
       );
     } finally {
-      if (mounted) setState(() => _consistencyBusy = false);
+      _endAiBusy(consistency: true);
     }
   }
 
@@ -1474,6 +1510,7 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
       appBar: AppBar(
         title: Text(title),
         actions: [
+          if (_showsAiBusy) const AiBusyAppBarSpinner(),
           PopupMenuButton<String>(
             enabled: !_saving &&
                 _wandBusy == null &&
@@ -1528,7 +1565,11 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
           ),
         ],
       ),
-      body: ListView(
+      body: Column(
+        children: [
+          if (_aiBusyMessage != null) AiBusyBanner(message: _aiBusyMessage!),
+          Expanded(
+            child: ListView(
         padding: const EdgeInsets.all(20),
         children: [
           if (intro.isNotEmpty)
@@ -1632,6 +1673,9 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
                   ),
           ),
           const SizedBox(height: 24),
+        ],
+            ),
+          ),
         ],
       ),
     );
