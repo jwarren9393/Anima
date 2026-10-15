@@ -60,10 +60,11 @@ High-value SillyTavern concepts to aim for over time:
 
 ## Current status
 
-**Phase:** Post-roadmap tweaks
+**Phase:** Post-roadmap tweaks → **Living World experiment next** (see [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md))
 
-**Last updated:** 2026-10-12
-**Last agent action:** **AI busy spinner on character/persona editors (build 77).** While Base on another card… / Expand / Compact / Consistency / AI builder runs, the editor shows a spinning progress banner under the AppBar plus a small AppBar spinner (`ai_busy_banner.dart`) with a plain-English status (e.g. "Drafting card from source…") so the screen no longer looks frozen during the wait.
+**Last updated:** 2026-10-15
+**Last agent action:** **Living World handoff on main.** Added [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md) — chat-native structured world memory (people/places/events/flags; ~20–50 named cast); feature-branch plan; Creation Center is *not* the world factory yet. Removed the older Chronicle-oriented handoff. Chronicle side project retired; Anima remains the product. No Living World product code on main yet — next agent starts Phase 0 from that handoff, then branches only after owner approval.
+**Previous agent action:** **AI busy spinner on character/persona editors (build 77).** While Base on another card… / Expand / Compact / Consistency / AI builder runs, the editor shows a spinning progress banner under the AppBar plus a small AppBar spinner (`ai_busy_banner.dart`) with a plain-English status (e.g. "Drafting card from source…") so the screen no longer looks frozen during the wait.
 **Previous agent action:** **Saved steer notes for regen/swipe + Paths direction (build 76).** My line… / Impersonate and Guide AI now store the player's note on the bubble (`generationKind` + `generationGuide`), so Regenerate / New swipe / ◀▶ reuse the same steer instead of dropping it. Paths cache also keeps the "Steer these paths" text and restores it when you reopen the sheet. Long-press menu: Impersonate + My line… moved up next to Paths / Regenerate / Rewrite. Verified: `flutter analyze` clean, **404 tests pass**.
 **Previous agent action:** **Shipped build 75 from the Windows laptop** — commit `62151db` + phone APK install (both adb links), GitHub release APK refreshed, Windows zip CI green. Also patched `deploy.sh` so Linux desktop steps are **skipped on Windows** (`d9d2fe8`). First Windows APK build also pulled NDK 28.2 + platforms 35/34 + CMake (one-time).
 **Previous agent action:** **Fixed Impersonate writing as the AI character + enforced first-person *I* actions (build 75).** Root causes: (1) `PresenceService` knowledge boundary still said "You are {{char}}… do not speak for {{user}}" during Impersonate; (2) late group handoff / post-scene-law nudges after the Impersonate nudge forced a character reply; (3) narrator scene law was addressed to the AI character; (4) streaming stamped the character's `speakerName` onto the user bubble and could consume a pending Director binding. Fix: Impersonate now uses `formatPlayerPerspectiveBoundary`, skips character-forcing late nudges, addresses narrator law to the player, keeps the PLAYER GUIDE + a final Impersonate lock at the end of the stack, and leaves user bubbles unlabeled. Also added always-on first-person perspective via `ChatStyleRules` (post-history for whoever is speaking — persona on Impersonate/My line…, character otherwise), plus matching wording in Guide AI, Continuations, rewrite, and group handoff. Verified: `flutter analyze` clean, **398 tests pass** (+2 impersonate/perspective prompt tests, +2 chat-style tests).
@@ -629,6 +630,7 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
+0. **Living World (new direction):** Open a new agent chat and follow [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md). Phase 0 explore first; create `experiment/living-world` only after owner approval; never put Living World product code on `main` until merge. Classic Anima on `main` stays the daily driver.
 1. **New/reinstalled PC?** Linux — pick one:
    - **`bash scripts/setup_linux_dev_noroot.sh`** — no admin password needed. Use this when `sudo` is unavailable or you would rather not type it. It prints the single `apt` line for the desktop libs.
    - **`bash scripts/setup_linux_dev.sh --github`** — the sudo version; also installs `gh` from apt and signs you in.
@@ -649,6 +651,7 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 | [`PROJECT_REFERENCE.md`](PROJECT_REFERENCE.md) | Complete encyclopedia for external AI — architecture, data, UI, prompts, mechanics |
 | [`README.md`](README.md) | User-facing feature catalog and install guide |
 | [`AGENTS.md`](AGENTS.md) | This file — agent status, roadmap, code map |
+| [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md) | Brief for the Living World experiment (structured canon + chat-native play) — start a **new** agent with this; work on a feature branch after Phase 0 approval |
 
 ---
 
