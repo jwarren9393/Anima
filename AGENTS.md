@@ -60,10 +60,10 @@ High-value SillyTavern concepts to aim for over time:
 
 ## Current status
 
-**Phase:** Post-roadmap tweaks → **Living World experiment next** (see [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md))
+**Phase:** Living World experiment — **Phase 1 vertical slice on `experiment/living-world`** (see [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md))
 
 **Last updated:** 2026-10-15
-**Last agent action:** **Living World handoff on main.** Added [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md) — chat-native structured world memory (people/places/events/flags; ~20–50 named cast); feature-branch plan; Creation Center is *not* the world factory yet. Removed the older Chronicle-oriented handoff. Chronicle side project retired; Anima remains the product. No Living World product code on main yet — next agent starts Phase 0 from that handoff, then branches only after owner approval.
+**Last agent action:** **Phase 1 Living World slice on `experiment/living-world` (not main).** Structured world notebooks under library `worlds/<id>.json` (people/places/relationships/events/flags + optional liveState door to B). Per-chat `worldId` bind (⋮ → Living World; off by default). Solo replies retrieve a small relevant pack and inject it as an early system message beside Memory summary. Sample harbor world + import/empty create. Tests: parse/validate/retrieve/persist. Creation Center untouched. No canon write path yet (Phase 2). Ask before commit/push.
 **Previous agent action:** **AI busy spinner on character/persona editors (build 77).** While Base on another card… / Expand / Compact / Consistency / AI builder runs, the editor shows a spinning progress banner under the AppBar plus a small AppBar spinner (`ai_busy_banner.dart`) with a plain-English status (e.g. "Drafting card from source…") so the screen no longer looks frozen during the wait.
 **Previous agent action:** **Saved steer notes for regen/swipe + Paths direction (build 76).** My line… / Impersonate and Guide AI now store the player's note on the bubble (`generationKind` + `generationGuide`), so Regenerate / New swipe / ◀▶ reuse the same steer instead of dropping it. Paths cache also keeps the "Steer these paths" text and restores it when you reopen the sheet. Long-press menu: Impersonate + My line… moved up next to Paths / Regenerate / Rewrite. Verified: `flutter analyze` clean, **404 tests pass**.
 **Previous agent action:** **Shipped build 75 from the Windows laptop** — commit `62151db` + phone APK install (both adb links), GitHub release APK refreshed, Windows zip CI green. Also patched `deploy.sh` so Linux desktop steps are **skipped on Windows** (`d9d2fe8`). First Windows APK build also pulled NDK 28.2 + platforms 35/34 + CMake (one-time).
@@ -141,7 +141,8 @@ full `./deploy.sh` afterwards was verified end to end — it printed
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar; **Scene moods** (mood icon + **+** menu) — includes **Sensual / intimate**, **Real voice (anti-script)**, **Intimate build-up**, **Explicit / graphic**, **Afterglow** with hard-coded **vocabulary law** (plain adult words; bans LLM euphemisms, porn-script dialogue, em-dash spam, recycled *actions* when those moods are on); **Chat copies** — per-chat character/persona overrides + **Chat lore** (thread-only World Info merged with global picks); long-press avatar edits chat copy (library unchanged)
 - **Linux install/update** — `./scripts/update_linux.sh` builds and installs the desktop app; add `--pull` to download GitHub changes first
 - **Windows app** — built for you by **GitHub Actions** on every `./deploy.sh` (Flutter can't build Windows from Linux); download `Anima-1.0.0-windows-x64.zip` from the release and run it as a portable folder — no installer
-- **Smoke:** `flutter test` (404) + `flutter analyze` pass; Android + Windows + Linux desktop debug work
+- **Living World (experiment branch)** — optional per-chat bind to a structured notebook in `worlds/`; solo replies inject a retrieved canon pack; off when unbound; no silent canon writes yet
+- **Smoke:** `flutter test` (418) + `flutter analyze` pass; Android + Windows + Linux desktop debug work
 
 ### What does NOT work yet / limits
 
@@ -262,8 +263,9 @@ lib/
   models/
     chat_message.dart             Bubble + swipes + optional speaker + groupBeat lines
     group_beat_part.dart          One character line inside a group-react card
-    chat_session.dart             Thread + authorsNote + group + lorebookIds + autoReply + memorySummary + activeSceneMoodIds + characterOverrides + personaOverride + chatLorebook
+    chat_session.dart             Thread + authorsNote + group + lorebookIds + autoReply + memorySummary + activeSceneMoodIds + characterOverrides + personaOverride + chatLorebook + worldId
     memory_summary.dart           Scene + Ledger parse/encode + [pin] restore after summarize
+    living_world.dart             Living World notebook (people/places/relationships/events/flags/liveState)
     character.dart                ST-compatible card fields (+ Anima id)
     character_category.dart       Anima-only category lists + memberships
     new_chat_pick.dart            Character + persona bundle for solo new chat
@@ -345,6 +347,7 @@ lib/
     update_character_from_chat_sheet.dart Pick saved card + optional notes → merge update from chat
     scene_mood_sheet.dart         Per-chat scene mood toggle sheet (composer mood icon + ⋮ menu)
     memory_summary_sheet.dart     Scene/Ledger editor with pin toggles (chat ⋮ → Memory summary)
+    living_world_picker.dart      Per-chat Living World bind / create sample / import JSON
     reply_rewrite_sheet.dart      Rewrite reply mode picker (custom first + moods / style options)
   utils/
     platform_utils.dart           Desktop platform detection (Windows / Linux / macOS)
@@ -392,6 +395,8 @@ lib/
     prompt_builder.dart           System prompt, modes, group, authors note
     lorebook_service.dart         Keyword scan, budget, merge global + character books
     world_info_service.dart       Persist global lorebooks (anima_lorebooks.json)
+    living_world_service.dart     Load/save Living World notebooks under library worlds/
+    living_world_retriever.dart   Select relevant canon pack + format for prompt injection
     world_workshop_service.dart   Persist Creation Center workshops + last-opened id
     workshop_hub_service.dart     Hub ops: play plan, bundle, duplicate, merge, status
     workshop_hub_controller.dart  AI hub actions (summarize, glossary, scenes, export)
@@ -630,7 +635,7 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-0. **Living World (new direction):** Open a new agent chat and follow [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md). Phase 0 explore first; create `experiment/living-world` only after owner approval; never put Living World product code on `main` until merge. Classic Anima on `main` stays the daily driver.
+0. **Living World (active on `experiment/living-world`):** Phase 1 retrieve-into-solo is in the tree — ask owner before commit/push. Next: Phase 2 canon write path (propose + review before apply). Then group retrieve, cast scale, world factory later. Never commit Living World to `main` until owner merges. Classic Anima on `main` stays the daily driver. See [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md).
 1. **New/reinstalled PC?** Linux — pick one:
    - **`bash scripts/setup_linux_dev_noroot.sh`** — no admin password needed. Use this when `sudo` is unavailable or you would rather not type it. It prints the single `apt` line for the desktop libs.
    - **`bash scripts/setup_linux_dev.sh --github`** — the sudo version; also installs `gh` from apt and signs you in.

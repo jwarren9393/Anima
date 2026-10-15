@@ -33,6 +33,8 @@ import '../services/group_beat_codec.dart';
 import '../services/group_reply_service.dart';
 import '../services/group_speaker_inference.dart';
 import '../services/lorebook_service.dart';
+import '../services/living_world_retriever.dart';
+import '../services/living_world_service.dart';
 import '../services/presence_service.dart';
 import '../services/director_service.dart';
 import '../services/narrator_service.dart';
@@ -46,6 +48,7 @@ import '../services/reply_rewrite_service.dart';
 import '../services/settings_service.dart';
 import '../services/speaker_prefix.dart';
 import '../services/world_info_service.dart';
+import '../widgets/living_world_picker.dart';
 import '../models/world_workshop.dart';
 import '../models/workshop_chat_import_options.dart';
 import '../services/world_workshop_service.dart';
@@ -131,6 +134,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   static const _tokenService = CharacterTokenService();
   final _transcriptCodec = ChatTranscriptCodec();
   final _draftService = ComposerDraftService();
+  final _livingWorldService = LivingWorldService();
+  static const _livingWorldRetriever = LivingWorldRetriever();
   static const _replyRewrite = ReplyRewriteService();
   static const _narrator = NarratorService();
   static const _director = DirectorService();
@@ -220,6 +225,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   List<Character> _participants = const [];
   ChatSession? _session;
   Persona? _persona;
+  /// Cached title for the chat's bound Living World (menu label).
+  String? _boundWorldTitle;
   Timer? _draftSaveTimer;
   Timer? _toastTimer;
   OverlayEntry? _toastEntry;
@@ -420,6 +427,18 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     });
     _scrollToBottom(jump: true);
     unawaited(_syncChatBackgroundPath());
+    unawaited(_refreshBoundWorldTitle());
+  }
+
+  Future<void> _refreshBoundWorldTitle() async {
+    final id = _session?.worldId?.trim();
+    if (id == null || id.isEmpty) {
+      if (mounted) setState(() => _boundWorldTitle = null);
+      return;
+    }
+    final world = await _livingWorldService.getById(id);
+    if (!mounted) return;
+    setState(() => _boundWorldTitle = world?.title);
   }
 
   @override
@@ -2560,6 +2579,111 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     await _persist();
   }
 
+  Future<void> _pickLivingWorld() async {
+    final session = _session;
+    if (session == null || _busy) return;
+    final worlds = await _livingWorldService.listSummaries();
+    if (!mounted) return;
+    final result = await pickLivingWorld(
+      context,
+      worlds: worlds,
+      currentWorldId: session.worldId,
+    );
+    if (result == null || !mounted) return;
+
+    try {
+      if (result.importFile) {
+        final pick = await FilePicker.platform.pickFiles(
+          type: FileType.custom,
+          allowedExtensions: const ['json'],
+          withData: true,
+        );
+        if (pick == null || !mounted) return;
+        final file = pick.files.single;
+        final bytes = file.bytes;
+        if (bytes == null) {
+          setState(() => _error = 'Could not read that world file.');
+          return;
+        }
+        final world = await _livingWorldService.importFromBytes(
+          bytes,
+          fileName: file.name,
+        );
+        setState(() {
+          _session = session.copyWith(worldId: world.id);
+          _boundWorldTitle = world.title;
+          _error = null;
+        });
+        await _persist();
+        return;
+      }
+
+      if (result.createEmpty) {
+        final world = await _livingWorldService.createEmpty(title: 'New world');
+        setState(() {
+          _session = session.copyWith(worldId: world.id);
+          _boundWorldTitle = world.title;
+          _error = null;
+        });
+        await _persist();
+        return;
+      }
+
+      if (result.createSample) {
+        final world =
+            await _livingWorldService.save(buildSampleHarborWorld());
+        setState(() {
+          _session = session.copyWith(worldId: world.id);
+          _boundWorldTitle = world.title;
+          _error = null;
+        });
+        await _persist();
+        return;
+      }
+
+      if (result.clearBinding) {
+        setState(() {
+          _session = session.copyWith(clearWorldId: true);
+          _boundWorldTitle = null;
+        });
+        await _persist();
+        return;
+      }
+
+      final id = result.worldId?.trim();
+      if (id == null || id.isEmpty) return;
+      final world = await _livingWorldService.getById(id);
+      setState(() {
+        _session = session.copyWith(worldId: id);
+        _boundWorldTitle = world?.title;
+      });
+      await _persist();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = 'Living World: $e');
+    }
+  }
+
+  /// Solo-only Phase 1: retrieve a small world pack when this chat is bound.
+  Future<String?> _livingWorldPromptBlock({
+    required Character speaker,
+    required List<ChatMessage> recentForScan,
+  }) async {
+    if (_isGroup) return null;
+    final worldId = _session?.worldId?.trim();
+    if (worldId == null || worldId.isEmpty) return null;
+    final world = await _livingWorldService.getById(worldId);
+    if (world == null) return null;
+    final pack = _livingWorldRetriever.retrieve(
+      world: world,
+      recentMessages: recentForScan,
+      speakerName: speaker.name,
+      userName: _userName,
+    );
+    final block = _livingWorldRetriever.formatForPrompt(pack);
+    return block.trim().isEmpty ? null : block;
+  }
+
   Future<void> _editMemorySummary() async {
     final session = _session;
     if (session == null || _busy) return;
@@ -3487,6 +3611,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       }
     }
 
+    final worldBlock = await _livingWorldPromptBlock(
+      speaker: character,
+      recentForScan: historyForScan,
+    );
+    if (worldBlock != null && worldBlock.isNotEmpty) {
+      msgs.add({'role': 'system', 'content': worldBlock});
+    }
+
     final joinIndex = _joinIndexFor(character);
     if (joinIndex > 0) {
       final catchUp = _buildCatchUpBlock(joinIndex);
@@ -4372,6 +4504,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               if (value == 'persona') _pickPersona();
               if (value == 'authors_note') _editAuthorsNote();
               if (value == 'lorebooks') _pickChatLorebooks();
+              if (value == 'living_world') _pickLivingWorld();
               if (value == 'chat_lore') _openChatLorebook();
               if (value == 'chat_copies') _openChatOverrides();
               if (value == 'memory') _editMemorySummary();
@@ -4406,6 +4539,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 value: 'lorebooks',
                 child: Text(chatLorebookMenuLabel(_session?.lorebookIds)),
               ),
+              if (!_isGroup)
+                PopupMenuItem(
+                  value: 'living_world',
+                  child: Text(
+                    livingWorldMenuLabel(
+                      _session?.worldId,
+                      _boundWorldTitle,
+                    ),
+                  ),
+                ),
               PopupMenuItem(
                 value: 'chat_lore',
                 child: Text(

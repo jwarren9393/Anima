@@ -27,6 +27,7 @@ class ChatSession {
     this.personaOverride,
     this.chatLorebook,
     Map<String, int>? castJoinedAt,
+    this.worldId,
   })  : messages = List<ChatMessage>.from(messages ?? const []),
         participantIds = List<String>.from(participantIds ?? const []),
         lorebookIds =
@@ -103,7 +104,13 @@ class ChatSession {
   /// Empty for legacy chats or when everyone started together.
   final Map<String, int> castJoinedAt;
 
+  /// Optional Living World notebook id (`worlds/<id>.json`).
+  /// Null / empty = Living World off for this chat (default).
+  final String? worldId;
+
   bool get hasCharacterOverrides => characterOverrides.isNotEmpty;
+
+  bool get hasLivingWorld => worldId != null && worldId!.trim().isNotEmpty;
 
   Character? characterOverrideFor(String characterId) =>
       characterOverrides[characterId];
@@ -153,6 +160,8 @@ class ChatSession {
     Lorebook? chatLorebook,
     bool clearChatLorebook = false,
     Map<String, int>? castJoinedAt,
+    String? worldId,
+    bool clearWorldId = false,
   }) {
     return ChatSession(
       id: id ?? this.id,
@@ -191,6 +200,7 @@ class ChatSession {
           ? null
           : (chatLorebook ?? this.chatLorebook),
       castJoinedAt: castJoinedAt ?? this.castJoinedAt,
+      worldId: clearWorldId ? null : (worldId ?? this.worldId),
     );
   }
 
@@ -226,7 +236,8 @@ class ChatSession {
         if (personaOverride != null) 'personaOverride': personaOverride!.toJson(),
         if (chatLorebook != null && !chatLorebook!.isEmpty)
           'chatLorebook': chatLorebook!.toJson(),
-      if (castJoinedAt.isNotEmpty) 'castJoinedAt': castJoinedAt,
+        if (castJoinedAt.isNotEmpty) 'castJoinedAt': castJoinedAt,
+        if (worldId != null && worldId!.trim().isNotEmpty) 'worldId': worldId,
       };
 
   factory ChatSession.fromJson(Map<String, dynamic> json) {
@@ -319,6 +330,8 @@ class ChatSession {
       };
     }
 
+    final worldRaw = '${json['worldId'] ?? ''}'.trim();
+
     return ChatSession(
       id: json['id'] as String? ?? '',
       characterId: json['characterId'] as String? ?? '',
@@ -353,6 +366,7 @@ class ChatSession {
       personaOverride: personaOverride,
       chatLorebook: chatLorebook,
       castJoinedAt: castJoinedAt,
+      worldId: worldRaw.isEmpty ? null : worldRaw,
     );
   }
 

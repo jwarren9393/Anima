@@ -67,14 +67,18 @@ class AppDataRoot {
     activePersonaFileName,
   ];
 
-  static const librarySubdirs = <String>['avatars', 'chat_backgrounds'];
+  static const librarySubdirs = <String>[
+    'avatars',
+    'chat_backgrounds',
+    'worlds',
+  ];
 
   static const readmeText =
       'This folder is your Anima library.\n'
       '\n'
-      'Characters, chats, avatars, lorebooks, workshops, settings, and your\n'
-      'NanoGPT API key live here. Copy this whole folder to back up Anima or\n'
-      'move it to another phone or PC.\n'
+      'Characters, chats, avatars, lorebooks, workshops, Living World notebooks\n'
+      '(worlds/), settings, and your NanoGPT API key live here. Copy this whole\n'
+      'folder to back up Anima or move it to another phone or PC.\n'
       '\n'
       'Do not share this folder publicly — api_key.txt is your NanoGPT key.\n';
 
