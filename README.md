@@ -263,6 +263,7 @@ Minimal chrome: **Close** · title · **⋮** menu. **Voice row** above composer
 | **Author’s Note** | Per-chat instructions injected after history every turn (+ presets, macros) |
 | **World Info: …** | Use Settings default, pick specific global lorebooks, or turn global lore **off** for this thread (character card lore still applies) |
 | **Living World: Off / …** | *(Experiment branch)* Optional structured world notebook for this solo chat — retrieve canon into replies; Off by default. Create empty / sample harbor / import JSON |
+| **Update world from chat…** | *(Experiment — when a world is bound)* AI proposes events/flags/relationships/locations from recent chat; you review and apply — nothing saves silently |
 | **Chat lore (this thread)** | Thread-only lorebook (starts empty — not your Settings books) |
 | **Chat copies…** | Reset per-chat character/persona/lore overrides (only shows when you have some) |
 | **Memory summary** / **Memory summary (set)** | Scene (now) + Ledger (durable plot); pin facts so summarize never drops them |
@@ -862,7 +863,7 @@ A tiny pointer file still sits in hidden app storage so the next launch knows wh
 - No TTS (removed).
 - Paths only on long-press menu (not permanent composer button).
 - Backup/sync plain JSON, not encrypted; API key excluded on purpose.
-- Living World (experiment): solo retrieve-into-prompt only; no auto canon writes yet; `.anima-backup` does not pack `worlds/` yet (copying the whole Anima folder still includes them).
+- Living World (experiment): solo retrieve + explicit **Update world from chat…** with review; no auto-write every turn; `.anima-backup` does not pack `worlds/` yet (copying the whole Anima folder still includes them).
 - PNG card export: JPEG/WebP avatars may use placeholder; PNG avatars embed correctly.
 - **Presence / scene law** is always on (no toggle) — uses narrator name mentions; very old memory without witness tags may leak until re-summarized; honorifics don’t match names — use the **Narrator** control to establish who’s present.
 - NanoGPT website **Intelligence** scores not available via API (Anima shows catalog + routing stats instead).
@@ -898,7 +899,7 @@ bash scripts/setup_linux_dev_noroot.sh   # once per Linux PC — no admin passwo
 cd ~/Documents/Git\ Projects/Anima       # this PC's checkout — quote the space in the name
 flutter doctor
 flutter pub get
-flutter test      # 418 tests
+flutter test      # 426 tests
 flutter analyze
 flutter run -d linux     # or -d windows / a connected Android device
 ```

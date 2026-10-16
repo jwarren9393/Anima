@@ -35,6 +35,7 @@ import '../services/group_speaker_inference.dart';
 import '../services/lorebook_service.dart';
 import '../services/living_world_retriever.dart';
 import '../services/living_world_service.dart';
+import '../services/living_world_update_service.dart';
 import '../services/presence_service.dart';
 import '../services/director_service.dart';
 import '../services/narrator_service.dart';
@@ -49,6 +50,7 @@ import '../services/settings_service.dart';
 import '../services/speaker_prefix.dart';
 import '../services/world_info_service.dart';
 import '../widgets/living_world_picker.dart';
+import '../widgets/living_world_update_sheet.dart';
 import '../models/world_workshop.dart';
 import '../models/workshop_chat_import_options.dart';
 import '../services/world_workshop_service.dart';
@@ -136,6 +138,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final _draftService = ComposerDraftService();
   final _livingWorldService = LivingWorldService();
   static const _livingWorldRetriever = LivingWorldRetriever();
+  static const _livingWorldUpdates = LivingWorldUpdateService();
   static const _replyRewrite = ReplyRewriteService();
   static const _narrator = NarratorService();
   static const _director = DirectorService();
@@ -2684,6 +2687,92 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     return block.trim().isEmpty ? null : block;
   }
 
+  /// Phase 2: propose canon updates from recent chat → review → save.
+  Future<void> _updateLivingWorldFromChat() async {
+    final session = _session;
+    if (session == null || _busy || _isGroup) return;
+    final worldId = session.worldId?.trim();
+    if (worldId == null || worldId.isEmpty) {
+      setState(() => _error = 'Bind a Living World first (⋮ → Living World).');
+      return;
+    }
+    if (!_hasApiKey) {
+      setState(() => _error = 'Add your NanoGPT API key in Settings first.');
+      return;
+    }
+
+    final world = await _livingWorldService.getById(worldId);
+    if (world == null) {
+      if (!mounted) return;
+      setState(() => _error = 'That Living World file is missing.');
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+
+    try {
+      final model = await widget.settingsService.getModel();
+      final sampling = (await widget.settingsService.getSampling()).copyWith(
+        temperature: 0.2,
+        maxTokens: 1200,
+      );
+      final speaker = _character;
+      final messages = _livingWorldUpdates.buildProposeMessages(
+        world: world,
+        recentMessages: _messages,
+        userName: _userName,
+        speakerName: speaker?.name ?? '',
+      );
+      final raw = await widget.nanoGptService.complete(
+        model: model,
+        messages: messages,
+        sampling: sampling,
+      );
+      final proposed = _livingWorldUpdates.parseProposal(raw, world: world);
+      if (!mounted) return;
+
+      if (proposed.isEmpty) {
+        setState(() {
+          _busy = false;
+          _error = null;
+        });
+        _showLocalToast('No new Living World facts found in recent chat.');
+        return;
+      }
+
+      setState(() => _busy = false);
+      final selected = await showLivingWorldUpdateSheet(
+        context: context,
+        updates: proposed,
+        title: 'Update ${world.title}',
+      );
+      if (selected == null || selected.isEmpty || !mounted) return;
+
+      setState(() => _busy = true);
+      final updated = _livingWorldUpdates.applyUpdates(world, selected);
+      await _livingWorldService.save(updated);
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _boundWorldTitle = updated.title;
+        _error = null;
+      });
+      _showLocalToast(
+        'Saved ${selected.length} Living World '
+        '${selected.length == 1 ? 'update' : 'updates'}.',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = 'Living World update: $e';
+      });
+    }
+  }
+
   Future<void> _editMemorySummary() async {
     final session = _session;
     if (session == null || _busy) return;
@@ -4505,6 +4594,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               if (value == 'authors_note') _editAuthorsNote();
               if (value == 'lorebooks') _pickChatLorebooks();
               if (value == 'living_world') _pickLivingWorld();
+              if (value == 'living_world_update') _updateLivingWorldFromChat();
               if (value == 'chat_lore') _openChatLorebook();
               if (value == 'chat_copies') _openChatOverrides();
               if (value == 'memory') _editMemorySummary();
@@ -4548,6 +4638,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       _boundWorldTitle,
                     ),
                   ),
+                ),
+              if (!_isGroup && (_session?.hasLivingWorld ?? false))
+                const PopupMenuItem(
+                  value: 'living_world_update',
+                  child: Text('Update world from chat…'),
                 ),
               PopupMenuItem(
                 value: 'chat_lore',

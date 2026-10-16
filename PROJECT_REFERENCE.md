@@ -7,7 +7,7 @@
 >
 > **Living documents:** `AGENTS.md` + this file + `README.md` are kept current together — see §29 for the upkeep rule every agent must follow.
 
-**Last updated:** 2026-10-15 · **Version:** 1.0.0 build **77** · **Tests:** 418 (`flutter test`) · Living World Phase 1 on branch `experiment/living-world`
+**Last updated:** 2026-10-15 · **Version:** 1.0.0 build **77** · **Tests:** 426 (`flutter test`) · Living World Phase 1–2 on branch `experiment/living-world`
 
 ---
 
@@ -99,7 +99,7 @@
 | Paths | `path_provider` → app documents directory |
 | Files | `file_picker`, `share_plus`, Android `saf` for sync URIs |
 | Fonts | `google_fonts` |
-| Tests | `flutter_test` — 418 tests |
+| Tests | `flutter_test` — 426 tests |
 
 **Platforms:** Android (primary), Linux desktop, Windows desktop. macOS not targeted.
 
@@ -213,6 +213,7 @@ Anima/
 | `lorebook_service.dart` | Keyword scan, budget, injection |
 | `living_world_service.dart` | Load/save `worlds/<id>.json` notebooks |
 | `living_world_retriever.dart` | Relevant canon pack + prompt format |
+| `living_world_update_service.dart` | Propose / parse / apply typed canon updates |
 | `world_info_service.dart` | `anima_lorebooks.json` |
 | `narrator_service.dart` | Chat Narrator generate + prompt injection + output cleanup |
 | `roadway_service.dart` | Paths brainstorm + combine |
@@ -579,9 +580,18 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 | Chat ⋮ → **Living World** | Solo chats only: Off / pick / create empty / sample harbor / import JSON |
 | Prompt injection | Solo `_buildApiMessages`: early system block after Memory summary when bound |
 
-**Not yet:** group retrieve, post-turn canon writes (Phase 2 — review before apply), world factory / Creation Center rewrite, `.anima-backup` inclusion of `worlds/` (folder copy still moves them via `librarySubdirs`).
+### Phase 2 (shipped on the experiment branch)
 
-**Invariant:** Lorebooks + Memory summary stay; Living World is the authoritative layer for *tracked* facts when bound.
+| Piece | Role |
+|-------|------|
+| `LivingWorldUpdateService` | Build propose prompt; parse/validate JSON ops; apply selected ops in memory |
+| Chat ⋮ → **Update world from chat…** | Solo + bound world only; NanoGPT proposes; **review sheet**; save only applied rows |
+| Ops | `addEvent`, `setFlag`, `setRelationship`, `setActivePlace`, `setPersonLocation` |
+| Safety | Unknown person/place ids dropped; no new people/places invented; nothing written until Apply |
+
+**Not yet:** group retrieve, auto-propose after every turn, world factory / Creation Center rewrite, `.anima-backup` inclusion of `worlds/` (folder copy still moves them via `librarySubdirs`).
+
+**Invariant:** Lorebooks + Memory summary stay; Living World is the authoritative layer for *tracked* facts when bound. AI never silently overwrites hard state.
 
 ---
 
@@ -768,7 +778,7 @@ Applied in `PromptBuilder.applyMacros()`.
 ## 26. Testing and quality
 
 ```bash
-flutter test      # 418 tests
+flutter test      # 426 tests
 flutter analyze
 ```
 
@@ -840,7 +850,7 @@ Tests cover: lore scan, prompt builders, card codec, backup, sync stability, cha
 - Backup not encrypted.
 - PNG export needs PNG avatar for embedded image.
 - Windows build requires Windows host.
-- **Living World (experiment):** Phase 1 retrieve-into-solo only; no post-turn canon writes yet; group chats ignore `worldId` for injection; `.anima-backup` does not yet pack `worlds/` (copying the whole Anima folder still includes them).
+- **Living World (experiment):** Phase 1–2 solo only (retrieve + explicit update-with-review); no auto-write after every turn; group chats ignore `worldId` for injection; `.anima-backup` does not yet pack `worlds/` (copying the whole Anima folder still includes them).
 - Back-burner: undo send, last-chat resume, pinned mood chips, memory preview panel, etc.
 
 ---
