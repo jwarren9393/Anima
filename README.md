@@ -9,7 +9,7 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **Primary platform** | Android |
 | **Also builds** | Linux desktop (works); Windows desktop (needs a Windows host) |
 | **Distribution** | Personal use only — **not** published to app stores |
-| **Repo** | https://github.com/jwarren9393/Anima (private) |
+| **Repo** | https://github.com/jwarren9393/Anima |
 | **Version** | **1.0.0** build **73** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
 
 ### What’s new in recent builds (1.0.0)
