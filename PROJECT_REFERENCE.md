@@ -7,7 +7,7 @@
 >
 > **Living documents:** `AGENTS.md` + this file + `README.md` are kept current together — see §29 for the upkeep rule every agent must follow.
 
-**Last updated:** 2026-10-19 · **Version:** 1.0.0 build **77** · **Tests:** 436 (`flutter test`) · Living World Phase 1–4 on branch `experiment/living-world`
+**Last updated:** 2026-10-20 · **Version:** 1.0.0 build **78** · **Tests:** 436 (`flutter test`) · Living World Phase 1–4 on branch `experiment/living-world`
 
 ---
 
