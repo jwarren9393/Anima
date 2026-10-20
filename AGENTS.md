@@ -60,10 +60,12 @@ High-value SillyTavern concepts to aim for over time:
 
 ## Current status
 
-**Phase:** Living World experiment — **Phase 1 vertical slice on `experiment/living-world`** (see [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md))
+**Phase:** Living World experiment — **Phases 1–4 on `experiment/living-world`** (see [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md))
 
-**Last updated:** 2026-10-15
-**Last agent action:** **Phase 2 Living World canon write path on `experiment/living-world`.** Solo ⋮ → **Update world from chat…** asks NanoGPT for typed proposals (events / flags / relationships / active place / who-where), shows a review sheet, and saves only what you apply — no silent overwrites. Unknown person/place ids rejected. Phase 1 retrieve-into-prompt unchanged. Creation Center still untouched. Ask before commit/push.
+**Last updated:** 2026-10-19
+**Last agent action:** **Phase 4 Living World factory + Worlds hub on `experiment/living-world`.** New **Settings → Living Worlds** hub (list / empty / sample / import / export / edit notebook). **World factory** multi-pass compile (outline → places → people → relationships → events/flags) writes validated JSON under `worlds/` — not Creation Center chat. Simple tabbed editor for people/places/links/canon. Uses Character & persona build model settings for drafting. Creation Center unchanged. Ask before commit/push.
+**Previous agent action:** **Phase 3 Living World cast scale + group retrieve on `experiment/living-world`.** Retriever now scores people/places (speaker, linked character card, name mentions, active place, strong relationships) and caps the pack so a ~40–50 person notebook does not dump into the prompt. Living World bind / retrieve / **Update world from chat…** work in **group** chats too (cast names feed relevance). Prompt marks `[speaking]` / `[linked card]`. Creation Center still untouched. Ask before commit/push.
+**Previous agent action:** **Phase 2 Living World canon write path on `experiment/living-world`.** Solo ⋮ → **Update world from chat…** asks NanoGPT for typed proposals (events / flags / relationships / active place / who-where), shows a review sheet, and saves only what you apply — no silent overwrites. Unknown person/place ids rejected. Phase 1 retrieve-into-prompt unchanged. Creation Center still untouched. Ask before commit/push.
 **Previous agent action:** **AI busy spinner on character/persona editors (build 77).** While Base on another card… / Expand / Compact / Consistency / AI builder runs, the editor shows a spinning progress banner under the AppBar plus a small AppBar spinner (`ai_busy_banner.dart`) with a plain-English status (e.g. "Drafting card from source…") so the screen no longer looks frozen during the wait.
 **Previous agent action:** **Saved steer notes for regen/swipe + Paths direction (build 76).** My line… / Impersonate and Guide AI now store the player's note on the bubble (`generationKind` + `generationGuide`), so Regenerate / New swipe / ◀▶ reuse the same steer instead of dropping it. Paths cache also keeps the "Steer these paths" text and restores it when you reopen the sheet. Long-press menu: Impersonate + My line… moved up next to Paths / Regenerate / Rewrite. Verified: `flutter analyze` clean, **404 tests pass**.
 **Previous agent action:** **Shipped build 75 from the Windows laptop** — commit `62151db` + phone APK install (both adb links), GitHub release APK refreshed, Windows zip CI green. Also patched `deploy.sh` so Linux desktop steps are **skipped on Windows** (`d9d2fe8`). First Windows APK build also pulled NDK 28.2 + platforms 35/34 + CMake (one-time).
@@ -141,8 +143,8 @@ full `./deploy.sh` afterwards was verified end to end — it printed
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar; **Scene moods** (mood icon + **+** menu) — includes **Sensual / intimate**, **Real voice (anti-script)**, **Intimate build-up**, **Explicit / graphic**, **Afterglow** with hard-coded **vocabulary law** (plain adult words; bans LLM euphemisms, porn-script dialogue, em-dash spam, recycled *actions* when those moods are on); **Chat copies** — per-chat character/persona overrides + **Chat lore** (thread-only World Info merged with global picks); long-press avatar edits chat copy (library unchanged)
 - **Linux install/update** — `./scripts/update_linux.sh` builds and installs the desktop app; add `--pull` to download GitHub changes first
 - **Windows app** — built for you by **GitHub Actions** on every `./deploy.sh` (Flutter can't build Windows from Linux); download `Anima-1.0.0-windows-x64.zip` from the release and run it as a portable folder — no installer
-- **Living World (experiment branch)** — optional per-chat bind to a structured notebook in `worlds/`; solo replies inject a retrieved canon pack; off when unbound; **Update world from chat…** proposes typed updates with review-before-apply (no silent writes)
-- **Smoke:** `flutter test` (426) + `flutter analyze` pass; Android + Windows + Linux desktop debug work
+- **Living World (experiment branch)** — optional per-chat bind to a structured notebook in `worlds/`; scored retrieve-and-inject for **solo and group** (large casts stay mostly off-prompt); off when unbound; **Update world from chat…** proposes typed updates with review-before-apply (no silent writes); **Settings → Living Worlds** hub + multi-pass **world factory** + notebook editor/export
+- **Smoke:** `flutter test` (436) + `flutter analyze` pass; Android + Windows + Linux desktop debug work
 
 ### What does NOT work yet / limits
 
@@ -637,7 +639,7 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-0. **Living World (active on `experiment/living-world`):** Phase 1 retrieve + Phase 2 review-before-apply write path are in the tree — ask owner before commit/push. Next: Phase 3 cast scale / group retrieve, then world factory. Never commit Living World to `main` until owner merges. Classic Anima on `main` stays the daily driver. See [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md).
+0. **Living World (active on `experiment/living-world`):** Phases 1–4 are in the tree (retrieve, review-before-apply writes, cast-scale + group retrieve, Worlds hub + multi-pass factory) — ask owner before commit/push. Next: playtest / polish / merge when ready. Never commit Living World to `main` until owner merges. Classic Anima on `main` stays the daily driver. See [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md).
 1. **New/reinstalled PC?** Linux — pick one:
    - **`bash scripts/setup_linux_dev_noroot.sh`** — no admin password needed. Use this when `sudo` is unavailable or you would rather not type it. It prints the single `apt` line for the desktop libs.
    - **`bash scripts/setup_linux_dev.sh --github`** — the sudo version; also installs `gh` from apt and signs you in.

@@ -185,6 +185,96 @@ void main() {
       expect(slim.renderBody().length, lessThan(fat.renderBody().length));
       expect(slim.events.length, lessThan(fat.events.length));
     });
+
+    test('large cast stays capped — most people stay off-prompt', () {
+      final world = buildLargeCastWorld(personCount: 40);
+      final pack = retriever.retrieve(
+        world: world,
+        recentMessages: [
+          ChatMessage(
+            id: 'm1',
+            role: ChatRole.user,
+            text: 'Person_07, what do you know about the sealed letter?',
+          ),
+        ],
+        speakerName: 'Person_07',
+        userName: 'Jay',
+      );
+
+      expect(pack.people.length, lessThanOrEqualTo(LivingWorldRetriever.maxPeople));
+      expect(pack.people.length, lessThan(world.people.length));
+      expect(pack.people.map((p) => p.name), contains('Person_07'));
+      // Neighbor via relationship should be pullable without dumping the cast.
+      expect(pack.people.length, greaterThanOrEqualTo(2));
+      final prompt = retriever.formatForPrompt(pack);
+      expect(prompt, contains('relevant only'));
+      expect(prompt, contains('[speaking]'));
+      // Far-away names should not all appear.
+      expect(prompt.contains('Person_30'), isFalse);
+    });
+
+    test('people at the active place score in without a name mention', () {
+      final world = buildSampleHarborWorld();
+      final pack = retriever.retrieve(
+        world: world,
+        recentMessages: const [],
+        speakerName: 'Traveler',
+        userName: 'Jay',
+      );
+      expect(pack.places.map((p) => p.name), contains('South Pier'));
+      expect(pack.people.map((p) => p.name), contains('Mira'));
+      expect(pack.people.map((p) => p.name), contains('Edric'));
+      // Lena is at the market, not the active pier — stay off unless related.
+      expect(pack.people.map((p) => p.name), isNot(contains('Lena')));
+    });
+
+    test('character card link boosts the matching world person', () {
+      final world = LivingWorld(
+        id: 'w_link',
+        title: 'Linked',
+        people: const [
+          WorldPerson(
+            id: 'p1',
+            name: 'Mira',
+            summary: 'Clerk',
+            characterCardId: 'card_mira',
+          ),
+          WorldPerson(id: 'p2', name: 'Other', summary: 'Bystander'),
+        ],
+        places: const [
+          WorldPlace(id: 'pl1', name: 'Pier'),
+        ],
+        liveState: const WorldLiveState(activePlaceId: 'pl1'),
+      );
+      final pack = retriever.retrieve(
+        world: world,
+        recentMessages: const [],
+        speakerName: 'Mira',
+        speakerCharacterId: 'card_mira',
+        userName: 'Jay',
+      );
+      expect(pack.speakingPersonId, 'p1');
+      expect(pack.people.first.name, 'Mira');
+      expect(retriever.formatForPrompt(pack), contains('[linked card]'));
+    });
+
+    test('castNames pulls group cast members into relevance', () {
+      final world = buildSampleHarborWorld();
+      final pack = retriever.retrieve(
+        world: world,
+        recentMessages: [
+          ChatMessage(
+            id: 'm1',
+            role: ChatRole.user,
+            text: 'Tell me about the night market.',
+          ),
+        ],
+        speakerName: 'Edric',
+        userName: 'Jay',
+        castNames: const ['Mira', 'Lena'],
+      );
+      expect(pack.people.map((p) => p.name), containsAll(['Edric', 'Mira', 'Lena']));
+    });
   });
 
   group('LivingWorldService', () {
@@ -252,4 +342,68 @@ void main() {
       );
     });
   });
+}
+
+/// Synthetic town with [personCount] people for Phase 3 cast-scale tests.
+LivingWorld buildLargeCastWorld({int personCount = 40}) {
+  final people = <WorldPerson>[
+    for (var i = 0; i < personCount; i++)
+      WorldPerson(
+        id: 'p_$i',
+        name: 'Person_${i.toString().padLeft(2, '0')}',
+        summary: 'Townsperson number $i.',
+      ),
+  ];
+  final places = <WorldPlace>[
+    const WorldPlace(
+      id: 'pl_square',
+      name: 'Town Square',
+      description: 'Central plaza.',
+      connectedPlaceIds: ['pl_docks'],
+    ),
+    const WorldPlace(
+      id: 'pl_docks',
+      name: 'Docks',
+      description: 'Working waterfront.',
+      connectedPlaceIds: ['pl_square'],
+    ),
+  ];
+  final relationships = <WorldRelationship>[
+    for (var i = 0; i < personCount - 1; i++)
+      WorldRelationship(
+        fromId: 'p_$i',
+        toId: 'p_${i + 1}',
+        score: 10,
+        labels: const ['neighbor'],
+      ),
+  ];
+  final events = <WorldEvent>[
+    WorldEvent(
+      id: 'e_letter',
+      text: 'Person_07 received a sealed letter at the Town Square.',
+      at: 'turn-1',
+      placeId: 'pl_square',
+      personIds: const ['p_7'],
+    ),
+  ];
+  final locations = <String, String>{
+    for (var i = 0; i < personCount; i++)
+      'p_$i': i % 2 == 0 ? 'pl_square' : 'pl_docks',
+  };
+  return LivingWorld(
+    id: 'world_large_cast',
+    title: 'Large Cast Town',
+    genreNote: 'Phase 3 scale test — dozens of named people',
+    people: people,
+    places: places,
+    relationships: relationships,
+    events: events,
+    flags: const [
+      WorldFlag(id: 'f1', key: 'person_07_has_letter', value: true),
+    ],
+    liveState: WorldLiveState(
+      activePlaceId: 'pl_square',
+      personLocations: locations,
+    ),
+  );
 }

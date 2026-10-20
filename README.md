@@ -170,7 +170,7 @@ Living build notes for coding agents: [`AGENTS.md`](AGENTS.md) (status, roadmap,
 
 ## Feature summary (at a glance)
 
-**Chat & roleplay** — Solo and group chats; streaming; swipes; edit / delete / rewind / branch; Continue, Impersonate, Regenerate, **Rewrite reply…**, **My line…** (write or steer *your* next message); **Narrator** (nudge + Generate + post); **Director** (commands next reply); **presence / scene law** (always on in groups — who’s present, witness-tagged memory, per-character filtering); **Character voice** — long-press cast chip → **Write line** or **Guide AI**; **Scene moods** (sensual, anti-script, explicit, afterglow + vocabulary law); Paths (Roadway); auto-reply (default off); **auto-wrap dialogue on send**; memory summary + auto-summarize (background); Author’s Note; per-chat persona and World Info; optional **Living World** notebook bind (solo — experiment branch); context estimate; export/import chat; manage cast mid-chat (+ temporary NPCs); fullscreen avatars; **group-react** cards.
+**Chat & roleplay** — Solo and group chats; streaming; swipes; edit / delete / rewind / branch; Continue, Impersonate, Regenerate, **Rewrite reply…**, **My line…** (write or steer *your* next message); **Narrator** (nudge + Generate + post); **Director** (commands next reply); **presence / scene law** (always on in groups — who’s present, witness-tagged memory, per-character filtering); **Character voice** — long-press cast chip → **Write line** or **Guide AI**; **Scene moods** (sensual, anti-script, explicit, afterglow + vocabulary law); Paths (Roadway); auto-reply (default off); **auto-wrap dialogue on send**; memory summary + auto-summarize (background); Author’s Note; per-chat persona and World Info; optional **Living World** notebook bind + **Settings → Living Worlds** hub/factory (solo/group — experiment branch); context estimate; export/import chat; manage cast mid-chat (+ temporary NPCs); fullscreen avatars; **group-react** cards.
 
 **Characters & personas** — ST V1/V2/V3 JSON + PNG import/export; categories; **Duplicate** from ⋮ menu; AI wand (tap quick / long-press source); consistency check **+ review-before-apply fix**; **Compact / Expand** card & persona (AI shortens or enriches fields, review before apply); **Compact** lore; **AI card/persona builder**; temporary characters; **Full cards only** filter; embedded lorebooks; alternate greetings; **~token badges**; **Generate avatar** + history; group speaker chips.
 
@@ -262,7 +262,7 @@ Minimal chrome: **Close** · title · **⋮** menu. **Voice row** above composer
 | **Persona: …** / **Switch persona** | Who {{user}} is for **this thread only** (saved on the chat) |
 | **Author’s Note** | Per-chat instructions injected after history every turn (+ presets, macros) |
 | **World Info: …** | Use Settings default, pick specific global lorebooks, or turn global lore **off** for this thread (character card lore still applies) |
-| **Living World: Off / …** | *(Experiment branch)* Optional structured world notebook for this solo chat — retrieve canon into replies; Off by default. Create empty / sample harbor / import JSON |
+| **Living World: Off / …** | *(Experiment branch)* Optional structured world notebook for this chat (solo or group) — retrieves a small scored pack of relevant canon into replies (large casts stay mostly off-prompt); Off by default. Create empty / sample harbor / import JSON |
 | **Update world from chat…** | *(Experiment — when a world is bound)* AI proposes events/flags/relationships/locations from recent chat; you review and apply — nothing saves silently |
 | **Chat lore (this thread)** | Thread-only lorebook (starts empty — not your Settings books) |
 | **Chat copies…** | Reset per-chat character/persona/lore overrides (only shows when you have some) |
@@ -816,7 +816,7 @@ Rough assembly order:
 6. Persona name + structured persona text.
 7. **Narrator / Director** timeline cards (latest narrator beat is broadcast as scene law; the pending Director note is a mandatory override for the next reply — both filtered per speaking character).
 8. Memory summary (if any; filtered per speaking character; private facts need witness tags).
-8b. **Living World pack** (solo chats with a bound world — experiment branch): small retrieved canon scraps from `worlds/<id>.json`.
+8b. **Living World pack** (solo or group chats with a bound world — experiment branch): small scored/capped canon scraps from `worlds/<id>.json`.
 9. Recent history packed to **context size** budget — **filtered per speaking character** by **presence / scene law** (narrator resets who’s present; named messages target only those characters; unnamed messages go only to present cast; character lines visible only to those present when sent; includes **Narrator** and **Director** timeline messages as system blocks).
 10. Global post-history + per-card post-history + Author’s Note.
 
@@ -863,7 +863,7 @@ A tiny pointer file still sits in hidden app storage so the next launch knows wh
 - No TTS (removed).
 - Paths only on long-press menu (not permanent composer button).
 - Backup/sync plain JSON, not encrypted; API key excluded on purpose.
-- Living World (experiment): solo retrieve + explicit **Update world from chat…** with review; no auto-write every turn; `.anima-backup` does not pack `worlds/` yet (copying the whole Anima folder still includes them).
+- Living World (experiment): scored retrieve (solo/group) + explicit **Update world from chat…** with review; **Settings → Living Worlds** hub + multi-pass world factory + notebook editor; large casts stay mostly off-prompt; no auto-write every turn; `.anima-backup` does not pack `worlds/` yet (copying the whole Anima folder still includes them).
 - PNG card export: JPEG/WebP avatars may use placeholder; PNG avatars embed correctly.
 - **Presence / scene law** is always on (no toggle) — uses narrator name mentions; very old memory without witness tags may leak until re-summarized; honorifics don’t match names — use the **Narrator** control to establish who’s present.
 - NanoGPT website **Intelligence** scores not available via API (Anima shows catalog + routing stats instead).
@@ -899,7 +899,7 @@ bash scripts/setup_linux_dev_noroot.sh   # once per Linux PC — no admin passwo
 cd ~/Documents/Git\ Projects/Anima       # this PC's checkout — quote the space in the name
 flutter doctor
 flutter pub get
-flutter test      # 426 tests
+flutter test      # 436 tests
 flutter analyze
 flutter run -d linux     # or -d windows / a connected Android device
 ```

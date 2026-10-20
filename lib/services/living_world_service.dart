@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
 
@@ -135,6 +136,21 @@ class LivingWorldService {
     if (await file.exists()) {
       await file.delete();
     }
+  }
+
+  /// UTF-8 JSON bytes for export / share (pretty-printed, validated).
+  Uint8List exportBytes(LivingWorld world) {
+    final cleaned = world.validated();
+    return Uint8List.fromList(
+      utf8.encode(
+        const JsonEncoder.withIndent('  ').convert(cleaned.toJson()),
+      ),
+    );
+  }
+
+  String exportFileName(LivingWorld world) {
+    final stem = _safeFileStem(world.title.trim().isEmpty ? world.id : world.title);
+    return '$stem.world.json';
   }
 
   static String _safeFileStem(String id) {

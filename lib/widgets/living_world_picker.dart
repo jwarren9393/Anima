@@ -76,7 +76,8 @@ Future<LivingWorldPickResult?> pickLivingWorld(
                     const SizedBox(height: 6),
                     Text(
                       'Optional. When bound, Anima retrieves a small pack of '
-                      'world facts into solo replies. Off by default — classic '
+                      'relevant world facts into replies (solo or group) — most '
+                      'of a large cast stays off-prompt. Off by default — classic '
                       'Anima stays unchanged. Lorebooks and Memory summary still '
                       'work as usual.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(

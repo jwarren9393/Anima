@@ -23,6 +23,7 @@ import 'lore_settings_screen.dart';
 import 'personas_screen.dart';
 import 'sampling_settings_screen.dart';
 import 'world_workshop_list_screen.dart';
+import 'worlds_hub_screen.dart';
 
 /// Top-level settings menu — each area opens its own screen.
 class SettingsScreen extends StatefulWidget {
@@ -215,6 +216,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   settingsService: widget.settingsService,
                   nanoGptService: widget.nanoGptService,
                   appearanceController: widget.appearanceController,
+                ),
+              ),
+            ),
+          ),
+          _SettingsTile(
+            icon: Icons.public_outlined,
+            title: 'Living Worlds',
+            subtitle: 'Notebooks + world factory (not Creation Center)',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => WorldsHubScreen(
+                  settingsService: widget.settingsService,
+                  nanoGptService: widget.nanoGptService,
                 ),
               ),
             ),

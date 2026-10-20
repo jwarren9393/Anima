@@ -2667,12 +2667,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
   }
 
-  /// Solo-only Phase 1: retrieve a small world pack when this chat is bound.
+  /// Retrieve a small world pack when this chat is bound (solo or group).
   Future<String?> _livingWorldPromptBlock({
     required Character speaker,
     required List<ChatMessage> recentForScan,
   }) async {
-    if (_isGroup) return null;
     final worldId = _session?.worldId?.trim();
     if (worldId == null || worldId.isEmpty) return null;
     final world = await _livingWorldService.getById(worldId);
@@ -2682,6 +2681,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       recentMessages: recentForScan,
       speakerName: speaker.name,
       userName: _userName,
+      speakerCharacterId: speaker.id,
+      castNames: _participants.map((c) => c.name).toList(),
     );
     final block = _livingWorldRetriever.formatForPrompt(pack);
     return block.trim().isEmpty ? null : block;
@@ -2690,7 +2691,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   /// Phase 2: propose canon updates from recent chat → review → save.
   Future<void> _updateLivingWorldFromChat() async {
     final session = _session;
-    if (session == null || _busy || _isGroup) return;
+    if (session == null || _busy) return;
     final worldId = session.worldId?.trim();
     if (worldId == null || worldId.isEmpty) {
       setState(() => _error = 'Bind a Living World first (⋮ → Living World).');
@@ -4629,17 +4630,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 value: 'lorebooks',
                 child: Text(chatLorebookMenuLabel(_session?.lorebookIds)),
               ),
-              if (!_isGroup)
-                PopupMenuItem(
-                  value: 'living_world',
-                  child: Text(
-                    livingWorldMenuLabel(
-                      _session?.worldId,
-                      _boundWorldTitle,
-                    ),
+              PopupMenuItem(
+                value: 'living_world',
+                child: Text(
+                  livingWorldMenuLabel(
+                    _session?.worldId,
+                    _boundWorldTitle,
                   ),
                 ),
-              if (!_isGroup && (_session?.hasLivingWorld ?? false))
+              ),
+              if (_session?.hasLivingWorld ?? false)
                 const PopupMenuItem(
                   value: 'living_world_update',
                   child: Text('Update world from chat…'),
