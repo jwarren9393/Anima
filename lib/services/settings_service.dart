@@ -491,6 +491,8 @@ class SettingsService {
   static const _favoriteModelsKey = 'nanogpt_favorite_models';
   static const _legacyContextMaxHistoryKey = 'context_max_history_messages';
   static const _livingWorldUpdatePolicyKey = 'living_world_update_policy';
+  static const _livingWorldResolveBeforeNarrateKey =
+      'living_world_resolve_before_narrate';
 
   /// Preference keys included in a full-app backup (never the API key).
   static const backupPreferenceKeys = <String>[
@@ -535,6 +537,7 @@ class SettingsService {
     _contextKeepRecentKey,
     _favoriteModelsKey,
     _livingWorldUpdatePolicyKey,
+    _livingWorldResolveBeforeNarrateKey,
   ];
 
   static const storedKeys = <String>[
@@ -1177,6 +1180,22 @@ class SettingsService {
     await _storage.write(
       key: _livingWorldUpdatePolicyKey,
       value: policy.storageValue,
+    );
+  }
+
+  /// Phase 6: resolve/persist safe canon before streaming the reply (opt-in).
+  ///
+  /// Default off — costs an extra API call. Needs a non-manual play policy to
+  /// actually write; otherwise it no-ops and Phase 5 after-turn still applies.
+  Future<bool> getLivingWorldResolveBeforeNarrate() async {
+    final raw = await _storage.read(key: _livingWorldResolveBeforeNarrateKey);
+    return raw == '1' || raw == 'true';
+  }
+
+  Future<void> setLivingWorldResolveBeforeNarrate(bool enabled) async {
+    await _storage.write(
+      key: _livingWorldResolveBeforeNarrateKey,
+      value: enabled ? '1' : '0',
     );
   }
 

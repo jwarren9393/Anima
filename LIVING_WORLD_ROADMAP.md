@@ -1,7 +1,7 @@
 # Living World roadmap — toward a true “living” under-the-hood world
 
 > **For every agent:** Read this **after** [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md).  
-> Phases **1–4 are shipped** on `experiment/living-world` (build 78+).  
+> Phases **1–6 are shipped** on `experiment/living-world` (build 78+).  
 > This file is the plan from **today → end-goal**. Update checkboxes when a phase lands.  
 > Keep plain English. **Do not merge to `main` until Phase 12 / owner says so.**
 
@@ -82,7 +82,7 @@ Silent, unvalidated AI overwrites of hard canon are **always** out of scope — 
 
 ---
 
-## Where we are now (Phases 1–4 — DONE)
+## Where we are now (Phases 1–6 — DONE through turn spine)
 
 Shipped on `experiment/living-world` (see [`AGENTS.md`](AGENTS.md) / [`PROJECT_REFERENCE.md`](PROJECT_REFERENCE.md) §15b):
 
@@ -168,7 +168,7 @@ Update checkboxes as phases complete. Each phase must leave `flutter analyze` cl
 
 ---
 
-### Phase 6 — Turn resolution spine (engine before prose when it matters)
+### Phase 6 — Turn resolution spine (engine before prose when it matters) ✅
 
 **Goal:** Separate **what changed in the world** from **how it was narrated**. Move toward the handoff invariant with a real resolve step.
 
@@ -176,14 +176,14 @@ Update checkboxes as phases complete. Each phase must leave `flutter analyze` cl
 
 **Deliverables:**
 
-- [ ] `TurnResolution` (or similar) model: structured deltas the engine accepts (typed ops, already partly exist).
-- [ ] Optional **two-step generation** behind a flag (costly — make it opt-in / “Living mode”):
+- [x] `TurnResolution` model: structured deltas (wraps typed `LivingWorldCanonUpdate` ops) + kind (resolve-before / after-turn / manual).
+- [x] Optional **two-step generation** behind Settings / chat ⋮ **Resolve before reply (Living mode)**:
   1. Resolve/propose deltas from player intent + prior pack + last messages  
-  2. Persist validated deltas  
-  3. Generate roleplay **with the updated pack** in-prompt  
-- [ ] Fallback: single-call reply + post-hoc extract (Phase 5) when two-step is off or fails.
-- [ ] Logging for debug (“what the engine applied this turn”) — owner-visible in a simple “World log” list.
-- [ ] Tests for ordering: persist-before-narrate when two-step on.
+  2. Persist validated **safe** deltas (relationships deferred)  
+  3. Generate roleplay **with the updated pack** + optional “as of this turn” block  
+- [x] Fallback: single-call reply + post-hoc extract (Phase 5) when two-step is off or fails.
+- [x] Logging: `LivingWorldLogService` (`worlds/<id>.log.json`) + chat ⋮ → **World log…**
+- [x] Tests for ordering: persist-before-narrate when two-step on (`living_world_phase6_test.dart`).
 
 **Acceptance:**
 
@@ -191,6 +191,8 @@ Update checkboxes as phases complete. Each phase must leave `flutter analyze` cl
 - With two-step off: Phase 5 behavior still works.
 
 **Agent notes:** Don’t break streaming UX — either resolve before stream starts, or stream then reconcile carefully. Prefer resolve-before-stream for correctness when two-step is on.
+
+**Shipped:** 2026-10-20 on `experiment/living-world`. Living mode is opt-in (extra API call); needs Propose or Auto-safe play mode to write. Resolve runs before stream; relationships still review after the reply when deferred.
 
 ---
 

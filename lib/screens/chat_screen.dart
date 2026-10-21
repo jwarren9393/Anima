@@ -34,8 +34,11 @@ import '../services/group_reply_service.dart';
 import '../services/group_speaker_inference.dart';
 import '../services/lorebook_service.dart';
 import '../models/living_world_update_policy.dart';
+import '../models/turn_resolution.dart';
+import '../services/living_world_log_service.dart';
 import '../services/living_world_retriever.dart';
 import '../services/living_world_service.dart';
+import '../services/living_world_turn_resolver.dart';
 import '../services/living_world_undo_service.dart';
 import '../services/living_world_update_service.dart';
 import '../services/presence_service.dart';
@@ -51,6 +54,7 @@ import '../services/reply_rewrite_service.dart';
 import '../services/settings_service.dart';
 import '../services/speaker_prefix.dart';
 import '../services/world_info_service.dart';
+import '../widgets/living_world_log_sheet.dart';
 import '../widgets/living_world_picker.dart';
 import '../widgets/living_world_update_sheet.dart';
 import '../models/world_workshop.dart';
@@ -140,9 +144,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final _draftService = ComposerDraftService();
   final _livingWorldService = LivingWorldService();
   final _livingWorldUndo = LivingWorldUndoService();
+  final _livingWorldLog = LivingWorldLogService();
   static const _livingWorldRetriever = LivingWorldRetriever();
   static const _livingWorldUpdates = LivingWorldUpdateService();
+  static const _livingWorldResolver = LivingWorldTurnResolver();
   bool _livingWorldAfterTurnBusy = false;
+  /// Phase 6: set when resolve-before-narrate ran this stream (skip re-propose).
+  bool _livingWorldResolvedThisTurn = false;
+  /// Relationships deferred from resolve-before for after-turn review.
+  List<LivingWorldCanonUpdate> _pendingLivingWorldRisky = const [];
+  /// Injected into the same reply's prompt after engine apply.
+  String? _livingWorldAsOfTurnBlock;
   static const _replyRewrite = ReplyRewriteService();
   static const _narrator = NarratorService();
   static const _director = DirectorService();
@@ -2692,6 +2704,91 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     return block.trim().isEmpty ? null : block;
   }
 
+  /// Phase 6: resolve safe facts before the reply streams (Living mode).
+  ///
+  /// On success, notebook + as-of-turn block feed the same reply's pack.
+  /// On failure / off / manual policy: no-op; Phase 5 after-turn still runs.
+  Future<void> _resolveLivingWorldBeforeNarrate({
+    required Character speaker,
+  }) async {
+    _livingWorldResolvedThisTurn = false;
+    _pendingLivingWorldRisky = const [];
+    _livingWorldAsOfTurnBlock = null;
+
+    final session = _session;
+    final worldId = session?.worldId?.trim();
+    if (session == null || worldId == null || worldId.isEmpty) return;
+    if (!_hasApiKey) return;
+
+    final enabled =
+        await widget.settingsService.getLivingWorldResolveBeforeNarrate();
+    if (!enabled) return;
+
+    final policy = await widget.settingsService.getLivingWorldUpdatePolicy();
+    if (policy == LivingWorldUpdatePolicy.manual) return;
+
+    try {
+      final world = await _livingWorldService.getById(worldId);
+      if (world == null || !mounted) return;
+
+      final model = await widget.settingsService.getModel();
+      final sampling = (await widget.settingsService.getSampling()).copyWith(
+        temperature: 0.2,
+        maxTokens: 1200,
+      );
+      final proposeMessages = _livingWorldUpdates.buildProposeMessages(
+        world: world,
+        recentMessages: _messages,
+        userName: _userName,
+        speakerName: speaker.name,
+      );
+      final raw = await widget.nanoGptService.complete(
+        model: model,
+        messages: proposeMessages,
+        sampling: sampling,
+      );
+      final proposed = _livingWorldUpdates.parseProposal(raw, world: world);
+      if (!mounted) return;
+
+      final result = _livingWorldResolver.resolveBeforeNarrate(
+        world: world,
+        proposed: proposed,
+        policy: policy,
+        chatId: session.id,
+      );
+      _pendingLivingWorldRisky = result.resolution.deferred;
+      _livingWorldResolvedThisTurn = true;
+
+      if (result.resolution.applied.isNotEmpty) {
+        await _livingWorldUndo.pushSnapshot(world);
+        await _livingWorldService.save(result.world);
+        _livingWorldAsOfTurnBlock = result.resolution.asOfTurnBlock;
+        if (mounted) {
+          setState(() => _boundWorldTitle = result.world.title);
+        }
+      }
+      await _livingWorldLog.append(result.resolution);
+    } catch (e) {
+      // Soft-fail: stream continues; Phase 5 after-turn remains the fallback.
+      _livingWorldResolvedThisTurn = false;
+      _pendingLivingWorldRisky = const [];
+      _livingWorldAsOfTurnBlock = null;
+      debugPrint('Living World resolve-before-narrate skipped: $e');
+      final id = _session?.worldId?.trim();
+      if (id != null && id.isNotEmpty) {
+        await _livingWorldLog.append(
+          TurnResolution(
+            worldId: id,
+            at: DateTime.now(),
+            kind: TurnResolutionKind.resolveBeforeNarrate,
+            error: '$e',
+            chatId: _session?.id,
+          ),
+        );
+      }
+    }
+  }
+
   /// Phase 2: propose canon updates from recent chat → review → save.
   Future<void> _updateLivingWorldFromChat() async {
     final session = _session;
@@ -2760,6 +2857,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       await _livingWorldUndo.pushSnapshot(world);
       final updated = _livingWorldUpdates.applyUpdates(world, selected);
       await _livingWorldService.save(updated);
+      await _livingWorldLog.append(
+        TurnResolution(
+          worldId: world.id,
+          at: DateTime.now(),
+          kind: TurnResolutionKind.manual,
+          proposed: proposed,
+          applied: selected,
+          chatId: session.id,
+        ),
+      );
       if (!mounted) return;
       setState(() {
         _busy = false;
@@ -2780,6 +2887,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   /// Phase 5: after a successful reply, propose / auto-apply per app policy.
+  ///
+  /// When Phase 6 resolve-before already ran, skip a second propose call and
+  /// only review deferred relationship ops (if any).
   Future<void> _maybeLivingWorldAfterTurn() async {
     if (!mounted || _livingWorldAfterTurnBusy) return;
     final session = _session;
@@ -2788,10 +2898,55 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (!_hasApiKey) return;
 
     final policy = await widget.settingsService.getLivingWorldUpdatePolicy();
-    if (policy == LivingWorldUpdatePolicy.manual) return;
+    if (policy == LivingWorldUpdatePolicy.manual) {
+      _livingWorldResolvedThisTurn = false;
+      _pendingLivingWorldRisky = const [];
+      _livingWorldAsOfTurnBlock = null;
+      return;
+    }
 
     _livingWorldAfterTurnBusy = true;
     try {
+      // Phase 6 already resolved this turn — only review deferred risky ops.
+      if (_livingWorldResolvedThisTurn) {
+        final deferred = List<LivingWorldCanonUpdate>.from(
+          _pendingLivingWorldRisky,
+        );
+        _livingWorldResolvedThisTurn = false;
+        _pendingLivingWorldRisky = const [];
+        _livingWorldAsOfTurnBlock = null;
+        if (deferred.isEmpty || !mounted) return;
+
+        final world = await _livingWorldService.getById(worldId);
+        if (world == null || !mounted) return;
+        final selected = await showLivingWorldUpdateSheet(
+          context: context,
+          updates: deferred,
+          title: 'Review relationship updates — ${world.title}',
+        );
+        if (selected == null || selected.isEmpty || !mounted) return;
+        await _livingWorldUndo.pushSnapshot(world);
+        final updated = _livingWorldUpdates.applyUpdates(world, selected);
+        await _livingWorldService.save(updated);
+        await _livingWorldLog.append(
+          TurnResolution(
+            worldId: world.id,
+            at: DateTime.now(),
+            kind: TurnResolutionKind.afterTurn,
+            proposed: deferred,
+            applied: selected,
+            chatId: session.id,
+          ),
+        );
+        if (!mounted) return;
+        setState(() => _boundWorldTitle = updated.title);
+        _showLocalToast(
+          'Saved ${selected.length} relationship '
+          '${selected.length == 1 ? 'update' : 'updates'}.',
+        );
+        return;
+      }
+
       final world = await _livingWorldService.getById(worldId);
       if (world == null || !mounted) return;
 
@@ -2825,6 +2980,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         await _livingWorldUndo.pushSnapshot(world);
         final updated = _livingWorldUpdates.applyUpdates(world, selected);
         await _livingWorldService.save(updated);
+        await _livingWorldLog.append(
+          TurnResolution(
+            worldId: world.id,
+            at: DateTime.now(),
+            kind: TurnResolutionKind.afterTurn,
+            proposed: proposed,
+            applied: selected,
+            chatId: session.id,
+          ),
+        );
         if (!mounted) return;
         setState(() => _boundWorldTitle = updated.title);
         _showLocalToast(
@@ -2837,10 +3002,23 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       // autoSafe
       final parts = _livingWorldUpdates.partitionForAutoSafe(proposed);
       var working = world;
+      var snapped = false;
       if (parts.safe.isNotEmpty) {
         await _livingWorldUndo.pushSnapshot(working);
+        snapped = true;
         working = _livingWorldUpdates.applyUpdates(working, parts.safe);
         await _livingWorldService.save(working);
+        await _livingWorldLog.append(
+          TurnResolution(
+            worldId: working.id,
+            at: DateTime.now(),
+            kind: TurnResolutionKind.afterTurn,
+            proposed: proposed,
+            applied: parts.safe,
+            deferred: parts.risky,
+            chatId: session.id,
+          ),
+        );
         if (!mounted) return;
         setState(() => _boundWorldTitle = working.title);
         _showLocalToast(
@@ -2855,12 +3033,21 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         title: 'Review relationship updates — ${working.title}',
       );
       if (selected == null || selected.isEmpty || !mounted) return;
-      // Snapshot again only if we didn't already snapshot for safe ops.
-      if (parts.safe.isEmpty) {
+      if (!snapped) {
         await _livingWorldUndo.pushSnapshot(working);
       }
       working = _livingWorldUpdates.applyUpdates(working, selected);
       await _livingWorldService.save(working);
+      await _livingWorldLog.append(
+        TurnResolution(
+          worldId: working.id,
+          at: DateTime.now(),
+          kind: TurnResolutionKind.afterTurn,
+          proposed: parts.risky,
+          applied: selected,
+          chatId: session.id,
+        ),
+      );
       if (!mounted) return;
       setState(() => _boundWorldTitle = working.title);
       _showLocalToast(
@@ -2873,6 +3060,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       debugPrint('Living World after-turn skipped: $e');
     } finally {
       _livingWorldAfterTurnBusy = false;
+      _livingWorldResolvedThisTurn = false;
+      _pendingLivingWorldRisky = const [];
+      _livingWorldAsOfTurnBlock = null;
     }
   }
 
@@ -2912,38 +3102,58 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   Future<void> _pickLivingWorldUpdatePolicy() async {
     final current = await widget.settingsService.getLivingWorldUpdatePolicy();
+    var livingMode =
+        await widget.settingsService.getLivingWorldResolveBeforeNarrate();
     if (!mounted) return;
     final picked = await showModalBottomSheet<LivingWorldUpdatePolicy>(
       context: context,
       showDragHandle: true,
       builder: (context) {
         return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Living World during play',
-                    style: Theme.of(context).textTheme.titleMedium,
+          child: StatefulBuilder(
+            builder: (context, setModalState) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Living World during play',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              for (final policy in LivingWorldUpdatePolicy.values)
-                ListTile(
-                  leading: Icon(
-                    policy == current
-                        ? Icons.check_circle
-                        : Icons.circle_outlined,
+                  for (final policy in LivingWorldUpdatePolicy.values)
+                    ListTile(
+                      leading: Icon(
+                        policy == current
+                            ? Icons.check_circle
+                            : Icons.circle_outlined,
+                      ),
+                      title: Text(policy.menuLabel),
+                      subtitle: Text(policy.helpText),
+                      onTap: () => Navigator.pop(context, policy),
+                    ),
+                  SwitchListTile(
+                    secondary: const Icon(Icons.sync_alt),
+                    title: const Text('Resolve before reply'),
+                    subtitle: const Text(
+                      'Living mode — decide safe facts before the AI speaks '
+                      '(extra API call). Needs Propose or Auto-safe.',
+                    ),
+                    value: livingMode,
+                    onChanged: (v) async {
+                      await widget.settingsService
+                          .setLivingWorldResolveBeforeNarrate(v);
+                      setModalState(() => livingMode = v);
+                    },
                   ),
-                  title: Text(policy.menuLabel),
-                  subtitle: Text(policy.helpText),
-                  onTap: () => Navigator.pop(context, policy),
-                ),
-              const SizedBox(height: 8),
-            ],
+                  const SizedBox(height: 8),
+                ],
+              );
+            },
           ),
         );
       },
@@ -2952,6 +3162,21 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     await widget.settingsService.setLivingWorldUpdatePolicy(picked);
     if (!mounted) return;
     _showLocalToast('Living World play mode: ${picked.shortLabel}');
+  }
+
+  Future<void> _showLivingWorldLog() async {
+    final worldId = _session?.worldId?.trim();
+    if (worldId == null || worldId.isEmpty) return;
+    final title = _boundWorldTitle?.trim().isNotEmpty == true
+        ? _boundWorldTitle!.trim()
+        : 'Living World';
+    if (!mounted) return;
+    await showLivingWorldLogSheet(
+      context: context,
+      worldId: worldId,
+      worldTitle: title,
+      logService: _livingWorldLog,
+    );
   }
 
   Future<void> _editMemorySummary() async {
@@ -3888,6 +4113,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (worldBlock != null && worldBlock.isNotEmpty) {
       msgs.add({'role': 'system', 'content': worldBlock});
     }
+    final asOfTurn = _livingWorldAsOfTurnBlock?.trim();
+    if (asOfTurn != null && asOfTurn.isNotEmpty) {
+      msgs.add({'role': 'system', 'content': asOfTurn});
+    }
 
     final joinIndex = _joinIndexFor(character);
     if (joinIndex > 0) {
@@ -4163,6 +4392,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       if (!writingAsUser) {
         _bindPendingDirectorToAssistant(assistantId);
       }
+      // Phase 6: optional resolve → persist → narrate (before stream).
+      // Soft-fails to Phase 5 after-turn when off or on error.
+      await _resolveLivingWorldBeforeNarrate(speaker: speaker);
       final messages = await _buildApiMessages(
         excludeLastAssistant: excludeLastAssistant,
         allowGreetingNudge: allowGreetingNudge,
@@ -4778,6 +5010,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               if (value == 'living_world') _pickLivingWorld();
               if (value == 'living_world_update') _updateLivingWorldFromChat();
               if (value == 'living_world_policy') _pickLivingWorldUpdatePolicy();
+              if (value == 'living_world_log') _showLivingWorldLog();
               if (value == 'living_world_undo') _undoLastLivingWorldUpdate();
               if (value == 'chat_lore') _openChatLorebook();
               if (value == 'chat_copies') _openChatOverrides();
@@ -4831,6 +5064,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 const PopupMenuItem(
                   value: 'living_world_policy',
                   child: Text('World play mode…'),
+                ),
+              if (_session?.hasLivingWorld ?? false)
+                const PopupMenuItem(
+                  value: 'living_world_log',
+                  child: Text('World log…'),
                 ),
               if (_session?.hasLivingWorld ?? false)
                 const PopupMenuItem(

@@ -7,7 +7,7 @@
 >
 > **Living documents:** `AGENTS.md` + this file + `README.md` are kept current together — see §29 for the upkeep rule every agent must follow.
 
-**Last updated:** 2026-10-20 · **Version:** 1.0.0 build **78** · **Tests:** 440 (`flutter test`) · Living World Phases 1–5 shipped; next Phase 6 in `LIVING_WORLD_ROADMAP.md`
+**Last updated:** 2026-10-20 · **Version:** 1.0.0 build **78** · **Tests:** 448 (`flutter test`) · Living World Phases 1–6 shipped; next Phase 7 in `LIVING_WORLD_ROADMAP.md`
 
 ---
 
@@ -99,7 +99,7 @@
 | Paths | `path_provider` → app documents directory |
 | Files | `file_picker`, `share_plus`, Android `saf` for sync URIs |
 | Fonts | `google_fonts` |
-| Tests | `flutter_test` — 440 tests |
+| Tests | `flutter_test` — 448 tests |
 
 **Platforms:** Android (primary), Linux desktop, Windows desktop. macOS not targeted.
 
@@ -162,6 +162,8 @@ Anima/
 | `character.dart` | ST-compatible card fields + Anima id + embedded lorebook |
 | `persona.dart` | Structured {{user}} identity fields |
 | `living_world.dart` | Living World notebook (people/places/relationships/events/flags/liveState) |
+| `living_world_update_policy.dart` | Play modes: manual / proposeAfterTurn / autoSafe |
+| `turn_resolution.dart` | Phase 6 resolve result (applied / deferred / as-of-turn) |
 | `lorebook.dart` | World Info entries (ST import shapes) |
 | `global_lorebook.dart` | Standalone lorebook id + enabled flag |
 | `character_category.dart` | Anima-only category lists (not ST tags) |
@@ -216,6 +218,9 @@ Anima/
 | `living_world_service.dart` | Load/save/export `worlds/<id>.json` notebooks |
 | `living_world_retriever.dart` | Scored/capped canon pack + prompt format |
 | `living_world_update_service.dart` | Propose / parse / apply typed canon updates |
+| `living_world_turn_resolver.dart` | Phase 6: select/apply safe ops before narrate |
+| `living_world_log_service.dart` | World log under `worlds/<id>.log.json` |
+| `living_world_undo_service.dart` | Undo snapshots (`worlds/<id>.undo.json`) |
 | `living_world_factory_service.dart` | Multi-pass world factory (outline→places→people→links→seed) |
 | `world_info_service.dart` | `anima_lorebooks.json` |
 | `narrator_service.dart` | Chat Narrator generate + prompt injection + output cleanup |
@@ -622,7 +627,18 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 | Auto-safe split | Events/flags/active place/who-where auto-apply; relationships still reviewed |
 | `LivingWorldUndoService` | `worlds/<id>.undo.json` snapshots; ⋮ → Undo last world update |
 
-**Not yet (see roadmap Phases 6–12):** turn resolve-before-narrate, light systems, near-scene ticks, threads/secrets, `.anima-backup` inclusion of `worlds/` (folder copy still moves them via `librarySubdirs`), Creation Center rewrite (not required for living engine).
+### Phase 6 (shipped on the experiment branch)
+
+| Piece | Role |
+|-------|------|
+| `TurnResolution` | Structured resolve result (proposed / applied / deferred + as-of-turn prompt block) |
+| `LivingWorldTurnResolver` | Partition + apply safe ops for resolve-before-narrate (no NanoGPT call) |
+| Living mode setting | `getLivingWorldResolveBeforeNarrate` — opt-in; Settings hub + chat World play mode sheet |
+| Resolve-before-stream | `_resolveLivingWorldBeforeNarrate` before `_buildApiMessages`; then stream with updated pack |
+| Fallback | Living mode off or soft-fail → Phase 5 after-turn unchanged |
+| `LivingWorldLogService` | `worlds/<id>.log.json` (last 50); chat ⋮ → **World log…** |
+
+**Not yet (see roadmap Phases 7–12):** light systems (relationship drift, schedules), near-scene ticks, threads/secrets, `.anima-backup` inclusion of `worlds/` (folder copy still moves them via `librarySubdirs`), Creation Center rewrite (not required for living engine).
 
 **Invariant:** Lorebooks + Memory summary stay; Living World is the authoritative layer for *tracked* facts when bound. AI never silently overwrites hard state (even when auto-apply lands — validation + policy required).
 
@@ -811,7 +827,7 @@ Applied in `PromptBuilder.applyMacros()`.
 ## 26. Testing and quality
 
 ```bash
-flutter test      # 440 tests
+flutter test      # 448 tests
 flutter analyze
 ```
 
@@ -883,7 +899,7 @@ Tests cover: lore scan, prompt builders, card codec, backup, sync stability, cha
 - Backup not encrypted.
 - PNG export needs PNG avatar for embedded image.
 - Windows build requires Windows host.
-- **Living World (experiment):** Phase 1–4 (scored retrieve + explicit update-with-review; solo/group; Worlds hub + multi-pass factory); no auto-write after every turn; `.anima-backup` does not yet pack `worlds/` (copying the whole Anima folder still includes them).
+- **Living World (experiment):** Phases 1–6 (scored retrieve; update-with-review; after-turn policy; opt-in resolve-before-narrate + World log; solo/group; Worlds hub + factory); `.anima-backup` does not yet pack `worlds/` (copying the whole Anima folder still includes them).
 - Back-burner: undo send, last-chat resume, pinned mood chips, memory preview panel, etc.
 
 ---

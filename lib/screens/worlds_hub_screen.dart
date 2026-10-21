@@ -37,6 +37,7 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
   bool _loading = true;
   String? _error;
   LivingWorldUpdatePolicy _policy = LivingWorldUpdatePolicy.manual;
+  bool _resolveBeforeNarrate = false;
 
   @override
   void initState() {
@@ -52,10 +53,13 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
     try {
       final worlds = await widget.worldService.listSummaries();
       final policy = await widget.settingsService.getLivingWorldUpdatePolicy();
+      final livingMode =
+          await widget.settingsService.getLivingWorldResolveBeforeNarrate();
       if (!mounted) return;
       setState(() {
         _worlds = worlds;
         _policy = policy;
+        _resolveBeforeNarrate = livingMode;
         _loading = false;
       });
     } catch (e) {
@@ -71,6 +75,12 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
     await widget.settingsService.setLivingWorldUpdatePolicy(policy);
     if (!mounted) return;
     setState(() => _policy = policy);
+  }
+
+  Future<void> _setResolveBeforeNarrate(bool enabled) async {
+    await widget.settingsService.setLivingWorldResolveBeforeNarrate(enabled);
+    if (!mounted) return;
+    setState(() => _resolveBeforeNarrate = enabled);
   }
 
   Future<void> _open(LivingWorldSummary summary) async {
@@ -127,7 +137,8 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
       );
       if (pick == null || !mounted) return;
       final file = pick.files.single;
-      final bytes = file.bytes ??
+      final bytes =
+          file.bytes ??
           (file.path != null ? await File(file.path!).readAsBytes() : null);
       if (bytes == null) {
         setState(() => _error = 'Could not read that file.');
@@ -230,8 +241,8 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
                       'play. The factory builds one on disk in passes — this is '
                       'not Creation Center workshop chat.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
                   Padding(
@@ -252,6 +263,17 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
                       subtitle: Text(policy.helpText),
                       onTap: () => _setPolicy(policy),
                     ),
+                  SwitchListTile(
+                    secondary: const Icon(Icons.sync_alt),
+                    title: const Text('Resolve before reply (Living mode)'),
+                    subtitle: const Text(
+                      'Extra API call: decide safe facts, save them, then '
+                      'roleplay from the updated world. Needs Propose or '
+                      'Auto-safe play mode. Off = Phase 5 after-turn only.',
+                    ),
+                    value: _resolveBeforeNarrate,
+                    onChanged: _setResolveBeforeNarrate,
+                  ),
                   const Divider(),
                   if (_error != null)
                     ListTile(

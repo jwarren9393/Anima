@@ -60,10 +60,11 @@ High-value SillyTavern concepts to aim for over time:
 
 ## Current status
 
-**Phase:** Living World experiment — **Phases 1–5 shipped; next = Phase 6** on `experiment/living-world` (see [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md))
+**Phase:** Living World experiment — **Phases 1–6 shipped; next = Phase 7** on `experiment/living-world` (see [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md))
 
 **Last updated:** 2026-10-20
-**Last agent action:** **Phase 5 Living World organic write loop.** App-wide play policy (Manual / Propose after turn / Auto-safe) in Settings → Living Worlds and chat ⋮ → World play mode…. After each successful reply when bound + non-manual, proposes canon updates (auto-applies safe ops; relationships still reviewed). Undo last pack via ⋮ + `LivingWorldUndoService`. Standing “go ahead with next phase” playbook at top of roadmap. Ask before merge to main.
+**Last agent action:** **Phase 6 Living World turn resolution spine.** Opt-in **Resolve before reply (Living mode)** — before the AI streams, propose → persist safe ops → inject updated pack + “as of this turn” block; relationships deferred to after-turn review. Phase 5 after-turn remains the fallback when Living mode is off or fails. **World log…** (chat ⋮) + `LivingWorldLogService`. `TurnResolution` + `LivingWorldTurnResolver`. Ask before merge to main.
+**Previous agent action:** **Phase 5 Living World organic write loop.** App-wide play policy (Manual / Propose after turn / Auto-safe) in Settings → Living Worlds and chat ⋮ → World play mode…. After each successful reply when bound + non-manual, proposes canon updates (auto-applies safe ops; relationships still reviewed). Undo last pack via ⋮ + `LivingWorldUndoService`. Standing “go ahead with next phase” playbook at top of roadmap. Ask before merge to main.
 **Previous agent action:** **Living World end-goal roadmap written.** Added [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md) — phased plan from today’s static-during-play notebooks to organic after-turn validated world updates (DF-lite under Anima chat, not a fortress clone). Next build work starts at **Phase 5** (auto propose / auto-safe after turn + undo). Phases 1–4 unchanged.
 **Previous agent action:** **Phase 4 Living World factory + Worlds hub on `experiment/living-world`.** New **Settings → Living Worlds** hub (list / empty / sample / import / export / edit notebook). **World factory** multi-pass compile (outline → places → people → relationships → events/flags) writes validated JSON under `worlds/` — not Creation Center chat. Simple tabbed editor for people/places/links/canon. Uses Character & persona build model settings for drafting. Creation Center unchanged. Ask before commit/push.
 **Previous agent action:** **Phase 3 Living World cast scale + group retrieve on `experiment/living-world`.** Retriever now scores people/places (speaker, linked character card, name mentions, active place, strong relationships) and caps the pack so a ~40–50 person notebook does not dump into the prompt. Living World bind / retrieve / **Update world from chat…** work in **group** chats too (cast names feed relevance). Prompt marks `[speaking]` / `[linked card]`. Creation Center still untouched. Ask before commit/push.
@@ -145,8 +146,8 @@ full `./deploy.sh` afterwards was verified end to end — it printed
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar; **Scene moods** (mood icon + **+** menu) — includes **Sensual / intimate**, **Real voice (anti-script)**, **Intimate build-up**, **Explicit / graphic**, **Afterglow** with hard-coded **vocabulary law** (plain adult words; bans LLM euphemisms, porn-script dialogue, em-dash spam, recycled *actions* when those moods are on); **Chat copies** — per-chat character/persona overrides + **Chat lore** (thread-only World Info merged with global picks); long-press avatar edits chat copy (library unchanged)
 - **Linux install/update** — `./scripts/update_linux.sh` builds and installs the desktop app; add `--pull` to download GitHub changes first
 - **Windows app** — built for you by **GitHub Actions** on every `./deploy.sh` (Flutter can't build Windows from Linux); download `Anima-1.0.0-windows-x64.zip` from the release and run it as a portable folder — no installer
-- **Living World (experiment branch)** — optional per-chat bind to a structured notebook in `worlds/`; scored retrieve-and-inject for **solo and group**; **play policy** Manual / Propose-after-turn / Auto-safe (events/flags/who-where auto; relationships reviewed); **Undo last world update**; **Update world from chat…** still available; **Settings → Living Worlds** hub + factory + editor
-- **Smoke:** `flutter test` (440) + `flutter analyze` pass; Android + Windows + Linux desktop debug work
+- **Living World (experiment branch)** — optional per-chat bind to a structured notebook in `worlds/`; scored retrieve-and-inject for **solo and group**; **play policy** Manual / Propose-after-turn / Auto-safe; opt-in **Resolve before reply (Living mode)** (facts first, then prose); **World log…**; **Undo last world update**; **Update world from chat…**; **Settings → Living Worlds** hub + factory + editor
+- **Smoke:** `flutter test` (448) + `flutter analyze` pass; Android + Windows + Linux desktop debug work
 
 ### What does NOT work yet / limits
 
@@ -270,6 +271,8 @@ lib/
     chat_session.dart             Thread + authorsNote + group + lorebookIds + autoReply + memorySummary + activeSceneMoodIds + characterOverrides + personaOverride + chatLorebook + worldId
     memory_summary.dart           Scene + Ledger parse/encode + [pin] restore after summarize
     living_world.dart             Living World notebook (people/places/relationships/events/flags/liveState)
+    living_world_update_policy.dart  Play modes: manual / propose / autoSafe
+    turn_resolution.dart          Phase 6 resolve result (applied / deferred / as-of-turn block)
     character.dart                ST-compatible card fields (+ Anima id)
     character_category.dart       Anima-only category lists + memberships
     new_chat_pick.dart            Character + persona bundle for solo new chat
@@ -353,6 +356,7 @@ lib/
     memory_summary_sheet.dart     Scene/Ledger editor with pin toggles (chat ⋮ → Memory summary)
     living_world_picker.dart      Per-chat Living World bind / create sample / import JSON
     living_world_update_sheet.dart Review sheet for proposed Living World updates
+    living_world_log_sheet.dart   Owner-visible World log (what the engine applied)
     reply_rewrite_sheet.dart      Rewrite reply mode picker (custom first + moods / style options)
   utils/
     platform_utils.dart           Desktop platform detection (Windows / Linux / macOS)
@@ -404,7 +408,8 @@ lib/
     living_world_retriever.dart   Select relevant canon pack + format for prompt injection
     living_world_update_service.dart  Propose/parse/apply typed canon updates (+ safe/risky split)
     living_world_undo_service.dart Undo snapshots after applied update packs
-    living_world_update_policy.dart Manual / propose-after-turn / auto-safe play modes
+    living_world_turn_resolver.dart Phase 6: select/apply safe ops before narrate
+    living_world_log_service.dart World log entries under worlds/<id>.log.json
     world_workshop_service.dart   Persist Creation Center workshops + last-opened id
     workshop_hub_service.dart     Hub ops: play plan, bundle, duplicate, merge, status
     workshop_hub_controller.dart  AI hub actions (summarize, glossary, scenes, export)
