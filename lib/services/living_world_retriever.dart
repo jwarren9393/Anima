@@ -470,6 +470,8 @@ class LivingWorldPack {
           if (person.summary.trim().isNotEmpty) person.summary.trim(),
           if (person.personalityNotes.trim().isNotEmpty)
             person.personalityNotes.trim(),
+          if (person.routineHints.trim().isNotEmpty)
+            'routine: ${person.routineHints.trim()}',
         ];
         if (bits.isNotEmpty) buf.write(': ${bits.join(' · ')}');
         buf.writeln();

@@ -2,8 +2,8 @@
 
 Copy everything below the line into a **new Agent chat** opened in the **Anima** workspace.
 
-> **Status (2026-10-20):** Phases **1–6 are done** on `experiment/living-world`.  
-> For **what to build next**, follow **[`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md)** starting at **Phase 7**.  
+> **Status (2026-10-20):** Phases **1–7 are done** on `experiment/living-world`.  
+> For **what to build next**, follow **[`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md)** starting at **Phase 8**.  
 > This handoff stays the **philosophy / locked scope** document — do not ignore its out-of-scope list.
 
 ---

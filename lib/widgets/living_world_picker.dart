@@ -196,18 +196,21 @@ LivingWorld buildSampleHarborWorld() {
         name: 'Mira',
         summary: 'Harbor clerk who keeps the pier ledger.',
         personalityNotes: 'Dry humor; remembers favors.',
+        routineHints: 'Days at the pier ledger; evenings at the Harbor Inn.',
       ),
       WorldPerson(
         id: 'p_edric',
         name: 'Edric',
         summary: 'Boat repair lead on the south dock.',
         personalityNotes: 'Blunt; loyal to the pier crew.',
+        routineHints: 'Dawn to dusk on the south dock.',
       ),
       WorldPerson(
         id: 'p_lena',
         name: 'Lena',
         summary: 'Runs the night market stall by the lanterns.',
         personalityNotes: 'Curious; trades gossip carefully.',
+        routineHints: 'Night Market after sunset; sleeps late.',
       ),
     ],
     places: const [

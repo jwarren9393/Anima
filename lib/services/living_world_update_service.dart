@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../models/chat_message.dart';
 import '../models/living_world.dart';
+import 'living_world_systems_service.dart';
 
 /// One proposed change to Living World canon (never applied until review).
 enum LivingWorldUpdateOp {
@@ -60,7 +61,11 @@ class LivingWorldCanonUpdate {
 
 /// Propose structured canon updates from recent chat; apply only after review.
 class LivingWorldUpdateService {
-  const LivingWorldUpdateService();
+  const LivingWorldUpdateService({
+    this.systems = const LivingWorldSystemsService(),
+  });
+
+  final LivingWorldSystemsService systems;
 
   static const maxTranscriptMessages = 24;
   static const maxProposedUpdates = 12;
@@ -88,7 +93,10 @@ class LivingWorldUpdateService {
             '- Do NOT invent new people or places. Use only ids from the roster.\n'
             '- Prefer short factual event text (who decided/did what, where).\n'
             '- Flags: stable keys like snake_case; value bool or short string.\n'
+            '  Prefer recipe-style keys when they fit: knows_<person>, '
+            'banished_from_<place>, <personId>_deceased.\n'
             '- Relationships: fromId/toId must be person ids; score -100..100; optional labels[].\n'
+            '  Labels may include aid / betrayal / promise when the chat clearly shows that.\n'
             '- setActivePlace: placeId from roster.\n'
             '- setPersonLocation: personId + placeId from roster.\n'
             '- Skip vibes, dialogue flavor, and things already in the notebook.\n'
@@ -174,10 +182,14 @@ class LivingWorldUpdateService {
   }
 
   /// Apply selected updates onto [world]. Does not save to disk.
+  ///
+  /// After validated ops land, Phase 7 light systems may nudge relationships
+  /// and set recipe flags from newly added events (still clamped / id-checked).
   LivingWorld applyUpdates(
     LivingWorld world,
-    List<LivingWorldCanonUpdate> selected,
-  ) {
+    List<LivingWorldCanonUpdate> selected, {
+    bool runSystems = true,
+  }) {
     if (selected.isEmpty) return world;
 
     var people = List<WorldPerson>.from(world.people);
@@ -236,7 +248,7 @@ class LivingWorldUpdateService {
       }
     }
 
-    return LivingWorld(
+    final after = LivingWorld(
       id: world.id,
       title: world.title,
       schemaVersion: world.schemaVersion,
@@ -248,6 +260,13 @@ class LivingWorldUpdateService {
       flags: flags,
       liveState: live,
     ).validated();
+
+    if (!runSystems) return after;
+    return systems.enrichAfterApply(
+      before: world,
+      after: after,
+      applied: selected,
+    );
   }
 
   /// Pull a JSON object from model text (fences or balanced braces).

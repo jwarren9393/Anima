@@ -1,6 +1,6 @@
 import '../services/living_world_update_service.dart';
 
-/// How a Living World turn resolution was produced (Phase 6).
+/// How a Living World turn resolution was produced (Phase 6+).
 enum TurnResolutionKind {
   /// Facts decided and persisted before the roleplay reply streamed.
   resolveBeforeNarrate,
@@ -10,6 +10,9 @@ enum TurnResolutionKind {
 
   /// Explicit ⋮ → Update world from chat….
   manual,
+
+  /// Narrator scene → who/where sync (Phase 7 presence).
+  presenceSync,
 }
 
 /// Structured result of one Living World resolve / apply pass.
@@ -87,6 +90,7 @@ class TurnResolution {
         TurnResolutionKind.resolveBeforeNarrate => 'Resolve before reply',
         TurnResolutionKind.afterTurn => 'After turn',
         TurnResolutionKind.manual => 'Manual update',
+        TurnResolutionKind.presenceSync => 'Presence sync',
       };
 
   Map<String, dynamic> toJson() => {

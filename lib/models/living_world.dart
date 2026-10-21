@@ -214,6 +214,7 @@ class WorldPerson {
     required this.name,
     this.summary = '',
     this.personalityNotes = '',
+    this.routineHints = '',
     this.characterCardId,
   });
 
@@ -221,6 +222,10 @@ class WorldPerson {
   final String name;
   final String summary;
   final String personalityNotes;
+
+  /// Soft schedule / time-of-day habits (Phase 7) — not a full calendar sim.
+  /// Example: "mornings at the pier; evenings at the inn".
+  final String routineHints;
 
   /// Optional link to an Anima character card id.
   final String? characterCardId;
@@ -230,6 +235,7 @@ class WorldPerson {
     String? name,
     String? summary,
     String? personalityNotes,
+    String? routineHints,
     String? characterCardId,
     bool clearCharacterCardId = false,
   }) {
@@ -238,6 +244,7 @@ class WorldPerson {
       name: name ?? this.name,
       summary: summary ?? this.summary,
       personalityNotes: personalityNotes ?? this.personalityNotes,
+      routineHints: routineHints ?? this.routineHints,
       characterCardId: clearCharacterCardId
           ? null
           : (characterCardId ?? this.characterCardId),
@@ -250,6 +257,8 @@ class WorldPerson {
         if (summary.trim().isNotEmpty) 'summary': summary.trim(),
         if (personalityNotes.trim().isNotEmpty)
           'personalityNotes': personalityNotes.trim(),
+        if (routineHints.trim().isNotEmpty)
+          'routineHints': routineHints.trim(),
         if (characterCardId != null && characterCardId!.trim().isNotEmpty)
           'characterCardId': characterCardId!.trim(),
       };
@@ -266,6 +275,7 @@ class WorldPerson {
       name: name,
       summary: '${json['summary'] ?? ''}'.trim(),
       personalityNotes: '${json['personalityNotes'] ?? ''}'.trim(),
+      routineHints: '${json['routineHints'] ?? ''}'.trim(),
       characterCardId: card.isEmpty ? null : card,
     );
   }

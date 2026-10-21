@@ -7,7 +7,7 @@
 >
 > **Living documents:** `AGENTS.md` + this file + `README.md` are kept current together — see §29 for the upkeep rule every agent must follow.
 
-**Last updated:** 2026-10-20 · **Version:** 1.0.0 build **78** · **Tests:** 448 (`flutter test`) · Living World Phases 1–6 shipped; next Phase 7 in `LIVING_WORLD_ROADMAP.md`
+**Last updated:** 2026-10-20 · **Version:** 1.0.0 build **78** · **Tests:** 458 (`flutter test`) · Living World Phases 1–7 shipped; next Phase 8 in `LIVING_WORLD_ROADMAP.md`
 
 ---
 
@@ -161,7 +161,7 @@ Anima/
 | `chat_session.dart` | Thread: messages, note, persona, lore picks, memory, group cast, optional `worldId` |
 | `character.dart` | ST-compatible card fields + Anima id + embedded lorebook |
 | `persona.dart` | Structured {{user}} identity fields |
-| `living_world.dart` | Living World notebook (people/places/relationships/events/flags/liveState) |
+| `living_world.dart` | Living World notebook (people/places/relationships/events/flags/liveState; `routineHints` on people) |
 | `living_world_update_policy.dart` | Play modes: manual / proposeAfterTurn / autoSafe |
 | `turn_resolution.dart` | Phase 6 resolve result (applied / deferred / as-of-turn) |
 | `lorebook.dart` | World Info entries (ST import shapes) |
@@ -219,6 +219,7 @@ Anima/
 | `living_world_retriever.dart` | Scored/capped canon pack + prompt format |
 | `living_world_update_service.dart` | Propose / parse / apply typed canon updates |
 | `living_world_turn_resolver.dart` | Phase 6: select/apply safe ops before narrate |
+| `living_world_systems_service.dart` | Phase 7: relationship drift, flag recipes, narrator presence sync |
 | `living_world_log_service.dart` | World log under `worlds/<id>.log.json` |
 | `living_world_undo_service.dart` | Undo snapshots (`worlds/<id>.undo.json`) |
 | `living_world_factory_service.dart` | Multi-pass world factory (outline→places→people→links→seed) |
@@ -638,7 +639,17 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 | Fallback | Living mode off or soft-fail → Phase 5 after-turn unchanged |
 | `LivingWorldLogService` | `worlds/<id>.log.json` (last 50); chat ⋮ → **World log…** |
 
-**Not yet (see roadmap Phases 7–12):** light systems (relationship drift, schedules), near-scene ticks, threads/secrets, `.anima-backup` inclusion of `worlds/` (folder copy still moves them via `librarySubdirs`), Creation Center rewrite (not required for living engine).
+### Phase 7 (shipped on the experiment branch)
+
+| Piece | Role |
+|-------|------|
+| `LivingWorldSystemsService` | Rule tables after validated `applyUpdates`: relationship drift + flag recipes |
+| Relationship drift | Event text tags (aid / betrayal / promise / deceit / warmth) nudge scores ± with −100…100 clamp; skips pairs that got an explicit `setRelationship` in the same batch |
+| Flag recipes | Explicit keys only (`knows_<name>`, `banished_from_<place>`, `<personId>_deceased`) — no freeform silent invention |
+| `WorldPerson.routineHints` | Soft schedule string; editor + factory + retrieve prompt (“routine: …”) |
+| Narrator presence sync | After Narrator post (non-manual play mode): arrivals → `setPersonLocation` at active place; leavers cleared from `personLocations`; World log kind `presenceSync` |
+
+**Not yet (see roadmap Phases 8–12):** near-scene ticks, threads/secrets, `.anima-backup` inclusion of `worlds/` (folder copy still moves them via `librarySubdirs`), Creation Center rewrite (not required for living engine).
 
 **Invariant:** Lorebooks + Memory summary stay; Living World is the authoritative layer for *tracked* facts when bound. AI never silently overwrites hard state (even when auto-apply lands — validation + policy required).
 
@@ -899,7 +910,7 @@ Tests cover: lore scan, prompt builders, card codec, backup, sync stability, cha
 - Backup not encrypted.
 - PNG export needs PNG avatar for embedded image.
 - Windows build requires Windows host.
-- **Living World (experiment):** Phases 1–6 (scored retrieve; update-with-review; after-turn policy; opt-in resolve-before-narrate + World log; solo/group; Worlds hub + factory); `.anima-backup` does not yet pack `worlds/` (copying the whole Anima folder still includes them).
+- **Living World (experiment):** Phases 1–7 (scored retrieve; update-with-review; after-turn policy; opt-in resolve-before-narrate + World log; relationship drift / flag recipes / Narrator presence sync / routineHints; solo/group; Worlds hub + factory); `.anima-backup` does not yet pack `worlds/` (copying the whole Anima folder still includes them).
 - Back-burner: undo send, last-chat resume, pinned mood chips, memory preview panel, etc.
 
 ---

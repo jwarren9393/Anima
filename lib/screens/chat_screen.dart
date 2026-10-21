@@ -38,6 +38,7 @@ import '../models/turn_resolution.dart';
 import '../services/living_world_log_service.dart';
 import '../services/living_world_retriever.dart';
 import '../services/living_world_service.dart';
+import '../services/living_world_systems_service.dart';
 import '../services/living_world_turn_resolver.dart';
 import '../services/living_world_undo_service.dart';
 import '../services/living_world_update_service.dart';
@@ -148,6 +149,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   static const _livingWorldRetriever = LivingWorldRetriever();
   static const _livingWorldUpdates = LivingWorldUpdateService();
   static const _livingWorldResolver = LivingWorldTurnResolver();
+  static const _livingWorldSystems = LivingWorldSystemsService();
   bool _livingWorldAfterTurnBusy = false;
   /// Phase 6: set when resolve-before-narrate ran this stream (skip re-propose).
   bool _livingWorldResolvedThisTurn = false;
@@ -1810,6 +1812,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     });
     _scrollToBottom(jump: true);
     await _persist();
+    // Phase 7: Narrator leavers/arrivals → validated who/where (non-manual).
+    unawaited(_syncLivingWorldPresenceFromNarrator());
     if (!autoReply) {
       _refocusComposer();
       return;
@@ -1820,6 +1824,89 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       speakingAs: speaker,
       advanceGroupSpeaker: _shouldAdvanceGroupSpeaker,
     );
+  }
+
+  /// Phase 7: after a Narrator card, sync liveState who/where from the scene.
+  Future<void> _syncLivingWorldPresenceFromNarrator() async {
+    if (!mounted) return;
+    final session = _session;
+    final worldId = session?.worldId?.trim();
+    if (session == null || worldId == null || worldId.isEmpty) return;
+
+    try {
+      final policy = await widget.settingsService.getLivingWorldUpdatePolicy();
+      if (policy == LivingWorldUpdatePolicy.manual) return;
+
+      final world = await _livingWorldService.getById(worldId);
+      if (world == null || !mounted) return;
+
+      // Parse presence using world people names (plus chat cast / you).
+      final worldCast = [
+        for (final p in world.people) Character(id: p.id, name: p.name),
+        ..._participants,
+      ];
+      final snapshot = _presence.sceneSnapshotFromLatestNarrator(
+        messages: _messages,
+        participants: worldCast,
+        userName: _userName,
+      );
+
+      final ops = _livingWorldSystems.presenceOpsFromNarrator(
+        world: world,
+        presentNames: snapshot.present,
+        arrivingNames: snapshot.arriving,
+      );
+      final departedIds = _livingWorldSystems.resolveDepartedPersonIds(
+        world: world,
+        departedNames: snapshot.departed,
+      );
+      if (ops.isEmpty && departedIds.isEmpty) return;
+
+      await _livingWorldUndo.pushSnapshot(world);
+      var next = world;
+      if (ops.isNotEmpty) {
+        next = _livingWorldUpdates.applyUpdates(
+          next,
+          ops,
+          runSystems: false,
+        );
+      }
+      next = _livingWorldSystems.clearDeparted(
+        world: next,
+        departedPersonIds: departedIds,
+      );
+      await _livingWorldService.save(next);
+
+      String personName(String id) {
+        for (final p in world.people) {
+          if (p.id == id) return p.name;
+        }
+        return id;
+      }
+
+      final clearSummaries = <LivingWorldCanonUpdate>[
+        for (final id in departedIds)
+          LivingWorldCanonUpdate(
+            op: LivingWorldUpdateOp.setPersonLocation,
+            summary: '${personName(id)} left (cleared location)',
+            personId: id,
+          ),
+      ];
+      await _livingWorldLog.append(
+        TurnResolution(
+          worldId: world.id,
+          at: DateTime.now(),
+          kind: TurnResolutionKind.presenceSync,
+          proposed: [...ops, ...clearSummaries],
+          applied: [...ops, ...clearSummaries],
+          chatId: session.id,
+        ),
+      );
+      if (!mounted) return;
+      setState(() => _boundWorldTitle = next.title);
+    } catch (_) {
+      // Soft-fail — Narrator post already succeeded.
+    }
   }
 
   void _toggleDirectorMode() {

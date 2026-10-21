@@ -194,9 +194,10 @@ class LivingWorldFactoryService {
         '$shared'
             'Shape:\n'
             '{"people":[{"id":"p_...","name":"...","summary":"...",'
-            '"personalityNotes":"..."}]}\n'
+            '"personalityNotes":"...","routineHints":"optional soft schedule"}]}\n'
             'Fill about ${request.clampedPeople} named people. summary = role/'
-            'what they do; personalityNotes = temperament/voice (short). '
+            'what they do; personalityNotes = temperament/voice (short); '
+            'routineHints = soft time-of-day habits (optional, 1 short phrase). '
             'Do not invent places here.',
       LivingWorldFactoryPass.relationships =>
         '$shared'

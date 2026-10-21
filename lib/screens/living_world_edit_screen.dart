@@ -554,6 +554,8 @@ class _LivingWorldEditScreenState extends State<LivingWorldEditScreen>
     final summary = TextEditingController(text: existing?.summary ?? '');
     final notes =
         TextEditingController(text: existing?.personalityNotes ?? '');
+    final routine =
+        TextEditingController(text: existing?.routineHints ?? '');
     final card =
         TextEditingController(text: existing?.characterCardId ?? '');
     return showDialog<WorldPerson>(
@@ -587,6 +589,15 @@ class _LivingWorldEditScreenState extends State<LivingWorldEditScreen>
                 maxLines: 3,
               ),
               TextField(
+                controller: routine,
+                decoration: const InputDecoration(
+                  labelText: 'Routine hints (optional)',
+                  hintText: 'Mornings at the pier; evenings at the inn',
+                ),
+                minLines: 1,
+                maxLines: 2,
+              ),
+              TextField(
                 controller: card,
                 decoration: const InputDecoration(
                   labelText: 'Linked character card id (optional)',
@@ -613,6 +624,7 @@ class _LivingWorldEditScreenState extends State<LivingWorldEditScreen>
                   name: n,
                   summary: summary.text.trim(),
                   personalityNotes: notes.text.trim(),
+                  routineHints: routine.text.trim(),
                   characterCardId: cardId.isEmpty ? null : cardId,
                 ),
               );

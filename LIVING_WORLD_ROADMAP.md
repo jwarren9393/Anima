@@ -1,7 +1,7 @@
 # Living World roadmap — toward a true “living” under-the-hood world
 
 > **For every agent:** Read this **after** [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md).  
-> Phases **1–6 are shipped** on `experiment/living-world` (build 78+).  
+> Phases **1–7 are shipped** on `experiment/living-world` (build 78+).  
 > This file is the plan from **today → end-goal**. Update checkboxes when a phase lands.  
 > Keep plain English. **Do not merge to `main` until Phase 12 / owner says so.**
 
@@ -82,7 +82,7 @@ Silent, unvalidated AI overwrites of hard canon are **always** out of scope — 
 
 ---
 
-## Where we are now (Phases 1–6 — DONE through turn spine)
+## Where we are now (Phases 1–7 — DONE through light systems)
 
 Shipped on `experiment/living-world` (see [`AGENTS.md`](AGENTS.md) / [`PROJECT_REFERENCE.md`](PROJECT_REFERENCE.md) §15b):
 
@@ -92,9 +92,12 @@ Shipped on `experiment/living-world` (see [`AGENTS.md`](AGENTS.md) / [`PROJECT_R
 | **2** | Explicit **Update world from chat…** → propose → **review sheet** → save |
 | **3** | Cast-scale scoring/caps; group retrieve; card-link boosts |
 | **4** | Worlds hub + multi-pass **world factory** + notebook editor/export |
+| **5** | After-turn propose / auto-safe + undo |
+| **6** | Resolve-before-narrate spine + World log |
+| **7** | Relationship drift, narrator presence sync, routineHints, flag recipes |
 
 **Honest gap vs end-goal:**  
-The factory can author a rich world, and play **reads** it well — but canon is **mostly static during play** unless the owner manually updates or runs the review sheet. The “game loop” that rewrites state after each turn is **not built yet**. That is what Phases **5+** are for.
+Play can now update canon (after turn / Living mode) and light **systems** nudge trust/presence from events — still no near-scene ticks (Phase 8) or long-run threads/secrets (Phase 9).
 
 Creation Center remains a workshop chat — **not** the living engine. Do not rewrite it as a substitute for this roadmap.
 
@@ -196,7 +199,7 @@ Update checkboxes as phases complete. Each phase must leave `flutter analyze` cl
 
 ---
 
-### Phase 7 — Light world systems (relationships, presence, schedules)
+### Phase 7 — Light world systems (relationships, presence, schedules) ✅
 
 **Goal:** Some state changes come from **rules + events**, not only LLM extraction — closer to DF “systems.”
 
@@ -204,11 +207,11 @@ Update checkboxes as phases complete. Each phase must leave `flutter analyze` cl
 
 **Deliverables (genre-agnostic):**
 
-- [ ] Relationship drift hooks: applying an event with person ids can nudge scores by tags (aid / betrayal / promise) with clamps.
-- [ ] Presence sync: Narrator / liveState / “who is where” stay consistent; leavers/arrivals update `personLocations` via validated ops.
-- [ ] Simple **schedules** optional on people (`routineHints` or time-of-day intents) — soft, not a full calendar sim.
-- [ ] Flag recipes: e.g. event text/types can set known keys (`knows_X`, `banished_from_Y`) through explicit rule tables + AI propose, not freeform silent edits.
-- [ ] Tests for drift clamps and id validation.
+- [x] Relationship drift hooks: applying an event with person ids can nudge scores by tags (aid / betrayal / promise) with clamps.
+- [x] Presence sync: Narrator / liveState / “who is where” stay consistent; leavers/arrivals update `personLocations` via validated ops.
+- [x] Simple **schedules** optional on people (`routineHints` or time-of-day intents) — soft, not a full calendar sim.
+- [x] Flag recipes: e.g. event text/types can set known keys (`knows_X`, `banished_from_Y`) through explicit rule tables + AI propose, not freeform silent edits.
+- [x] Tests for drift clamps and id validation.
 
 **Acceptance:**
 
@@ -216,6 +219,8 @@ Update checkboxes as phases complete. Each phase must leave `flutter analyze` cl
 - Moving a person in liveState shows up in retrieve without hand-editing JSON.
 
 **Out for this phase:** combat engines, economy, hunger/thirst sims.
+
+**Shipped:** 2026-10-20 on `experiment/living-world`. Systems run after validated `applyUpdates`; Narrator presence sync when play mode is non-manual; relationships still reviewable when proposed explicitly.
 
 ---
 
