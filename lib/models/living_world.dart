@@ -1,4 +1,5 @@
-/// One playable world notebook (people, places, relationships, events, flags).
+/// One playable world notebook (people, places, relationships, events, flags,
+/// continuity objects).
 ///
 /// Structured Living World canon — genre-agnostic (no fantasy/dwarf assumptions).
 /// Schema version [LivingWorld.currentSchemaVersion] — bump when fields change.
@@ -13,10 +14,15 @@ class LivingWorld {
     this.relationships = const [],
     this.events = const [],
     this.flags = const [],
+    this.threads = const [],
+    this.promises = const [],
+    this.secrets = const [],
     this.liveState,
   });
 
-  static const currentSchemaVersion = 1;
+  /// Schema 1 = people/places/rels/events/flags/liveState.
+  /// Schema 2 = + threads / promises / secrets + person inventory-lite.
+  static const currentSchemaVersion = 2;
 
   final String id;
   final String title;
@@ -30,7 +36,16 @@ class LivingWorld {
   final List<WorldEvent> events;
   final List<WorldFlag> flags;
 
-  /// Optional light live state — door to Phase B (who/where now).
+  /// Open story loops (Phase 9).
+  final List<WorldThread> threads;
+
+  /// Commitments between people (Phase 9).
+  final List<WorldPromise> promises;
+
+  /// Who-knows-what facts (Phase 9).
+  final List<WorldSecret> secrets;
+
+  /// Optional light live state — who/where now.
   final WorldLiveState? liveState;
 
   LivingWorld copyWith({
@@ -43,6 +58,9 @@ class LivingWorld {
     List<WorldRelationship>? relationships,
     List<WorldEvent>? events,
     List<WorldFlag>? flags,
+    List<WorldThread>? threads,
+    List<WorldPromise>? promises,
+    List<WorldSecret>? secrets,
     WorldLiveState? liveState,
     bool clearLiveState = false,
   }) {
@@ -56,6 +74,9 @@ class LivingWorld {
       relationships: relationships ?? this.relationships,
       events: events ?? this.events,
       flags: flags ?? this.flags,
+      threads: threads ?? this.threads,
+      promises: promises ?? this.promises,
+      secrets: secrets ?? this.secrets,
       liveState: clearLiveState ? null : (liveState ?? this.liveState),
     );
   }
@@ -70,10 +91,19 @@ class LivingWorld {
         'relationships': relationships.map((r) => r.toJson()).toList(),
         'events': events.map((e) => e.toJson()).toList(),
         'flags': flags.map((f) => f.toJson()).toList(),
+        if (threads.isNotEmpty)
+          'threads': threads.map((t) => t.toJson()).toList(),
+        if (promises.isNotEmpty)
+          'promises': promises.map((p) => p.toJson()).toList(),
+        if (secrets.isNotEmpty)
+          'secrets': secrets.map((s) => s.toJson()).toList(),
         if (liveState != null) 'liveState': liveState!.toJson(),
       };
 
   /// Parse and validate. Throws [FormatException] on hard failures.
+  ///
+  /// Schema 1 notebooks migrate in-memory to [currentSchemaVersion] (empty
+  /// continuity lists; inventories empty) so the next save upgrades the file.
   factory LivingWorld.fromJson(Map<String, dynamic> json) {
     final id = '${json['id'] ?? ''}'.trim();
     if (id.isEmpty) {
@@ -85,12 +115,12 @@ class LivingWorld {
     }
 
     final versionRaw = json['schemaVersion'];
-    final version = versionRaw is int
+    final parsedVersion = versionRaw is int
         ? versionRaw
-        : int.tryParse('$versionRaw') ?? currentSchemaVersion;
-    if (version < 1 || version > currentSchemaVersion) {
+        : int.tryParse('$versionRaw') ?? 1;
+    if (parsedVersion < 1 || parsedVersion > currentSchemaVersion) {
       throw FormatException(
-        'Unsupported Living World schema version $version '
+        'Unsupported Living World schema version $parsedVersion '
         '(this app supports 1–$currentSchemaVersion).',
       );
     }
@@ -101,6 +131,9 @@ class LivingWorld {
         _mapList(json['relationships'], WorldRelationship.fromJson);
     final events = _mapList(json['events'], WorldEvent.fromJson);
     final flags = _mapList(json['flags'], WorldFlag.fromJson);
+    final threads = _mapList(json['threads'], WorldThread.fromJson);
+    final promises = _mapList(json['promises'], WorldPromise.fromJson);
+    final secrets = _mapList(json['secrets'], WorldSecret.fromJson);
 
     WorldLiveState? liveState;
     final rawLive = json['liveState'];
@@ -111,13 +144,17 @@ class LivingWorld {
     final world = LivingWorld(
       id: id,
       title: title,
-      schemaVersion: version,
+      // Always persist as current after load (v1 → v2 upgrade on next save).
+      schemaVersion: currentSchemaVersion,
       genreNote: '${json['genreNote'] ?? ''}'.trim(),
       people: people,
       places: places,
       relationships: relationships,
       events: events,
       flags: flags,
+      threads: threads,
+      promises: promises,
+      secrets: secrets,
       liveState: liveState,
     );
     return world.validated();
@@ -130,7 +167,13 @@ class LivingWorld {
 
     final cleanPeople = [
       for (final p in people)
-        if (p.id.isNotEmpty && p.name.trim().isNotEmpty) p,
+        if (p.id.isNotEmpty && p.name.trim().isNotEmpty)
+          p.copyWith(
+            inventory: [
+              for (final item in p.inventory)
+                if (item.trim().isNotEmpty) item.trim(),
+            ],
+          ),
     ];
     final cleanPlaces = [
       for (final p in places)
@@ -165,6 +208,53 @@ class LivingWorld {
         if (f.id.isNotEmpty && f.key.trim().isNotEmpty) f,
     ];
 
+    final cleanThreads = [
+      for (final t in threads)
+        if (t.id.isNotEmpty && t.title.trim().isNotEmpty)
+          t.copyWith(
+            placeId: t.placeId != null && placeIds.contains(t.placeId)
+                ? t.placeId
+                : null,
+            personIds: [
+              for (final id in t.personIds)
+                if (personIds.contains(id)) id,
+            ],
+            witnessIds: [
+              for (final id in t.witnessIds)
+                if (personIds.contains(id)) id,
+            ],
+          ),
+    ];
+    final cleanPromises = [
+      for (final p in promises)
+        if (p.id.isNotEmpty &&
+            p.text.trim().isNotEmpty &&
+            personIds.contains(p.fromId) &&
+            personIds.contains(p.toId))
+          p.copyWith(
+            placeId: p.placeId != null && placeIds.contains(p.placeId)
+                ? p.placeId
+                : null,
+          ),
+    ];
+    final cleanSecrets = [
+      for (final s in secrets)
+        if (s.id.isNotEmpty && s.text.trim().isNotEmpty)
+          s.copyWith(
+            placeId: s.placeId != null && placeIds.contains(s.placeId)
+                ? s.placeId
+                : null,
+            subjectIds: [
+              for (final id in s.subjectIds)
+                if (personIds.contains(id)) id,
+            ],
+            witnessIds: [
+              for (final id in s.witnessIds)
+                if (personIds.contains(id)) id,
+            ],
+          ),
+    ];
+
     WorldLiveState? live = liveState;
     if (live != null) {
       final active = live.activePlaceId;
@@ -193,6 +283,9 @@ class LivingWorld {
       relationships: cleanRels,
       events: cleanEvents,
       flags: cleanFlags,
+      threads: cleanThreads,
+      promises: cleanPromises,
+      secrets: cleanSecrets,
       liveState: live,
     );
   }
@@ -208,6 +301,20 @@ class LivingWorld {
   }
 }
 
+/// Open / closed status for continuity objects (Phase 9).
+enum WorldContinuityStatus {
+  open,
+  closed;
+
+  static WorldContinuityStatus parse(Object? raw) {
+    final s = '$raw'.trim().toLowerCase();
+    if (s == 'closed') return WorldContinuityStatus.closed;
+    return WorldContinuityStatus.open;
+  }
+
+  String get wire => name;
+}
+
 class WorldPerson {
   const WorldPerson({
     required this.id,
@@ -215,6 +322,7 @@ class WorldPerson {
     this.summary = '',
     this.personalityNotes = '',
     this.routineHints = '',
+    this.inventory = const [],
     this.characterCardId,
   });
 
@@ -227,6 +335,9 @@ class WorldPerson {
   /// Example: "mornings at the pier; evenings at the inn".
   final String routineHints;
 
+  /// Inventory-lite: short item names only (Phase 9). No crafting tree.
+  final List<String> inventory;
+
   /// Optional link to an Anima character card id.
   final String? characterCardId;
 
@@ -236,6 +347,7 @@ class WorldPerson {
     String? summary,
     String? personalityNotes,
     String? routineHints,
+    List<String>? inventory,
     String? characterCardId,
     bool clearCharacterCardId = false,
   }) {
@@ -245,6 +357,7 @@ class WorldPerson {
       summary: summary ?? this.summary,
       personalityNotes: personalityNotes ?? this.personalityNotes,
       routineHints: routineHints ?? this.routineHints,
+      inventory: inventory ?? this.inventory,
       characterCardId: clearCharacterCardId
           ? null
           : (characterCardId ?? this.characterCardId),
@@ -259,6 +372,7 @@ class WorldPerson {
           'personalityNotes': personalityNotes.trim(),
         if (routineHints.trim().isNotEmpty)
           'routineHints': routineHints.trim(),
+        if (inventory.isNotEmpty) 'inventory': inventory,
         if (characterCardId != null && characterCardId!.trim().isNotEmpty)
           'characterCardId': characterCardId!.trim(),
       };
@@ -270,12 +384,21 @@ class WorldPerson {
       throw const FormatException('World person needs id and name.');
     }
     final card = '${json['characterCardId'] ?? ''}'.trim();
+    final inventory = <String>[];
+    final rawInv = json['inventory'];
+    if (rawInv is List) {
+      for (final item in rawInv) {
+        final v = '$item'.trim();
+        if (v.isNotEmpty) inventory.add(v);
+      }
+    }
     return WorldPerson(
       id: id,
       name: name,
       summary: '${json['summary'] ?? ''}'.trim(),
       personalityNotes: '${json['personalityNotes'] ?? ''}'.trim(),
       routineHints: '${json['routineHints'] ?? ''}'.trim(),
+      inventory: inventory,
       characterCardId: card.isEmpty ? null : card,
     );
   }
@@ -508,6 +631,218 @@ class WorldFlag {
   }
 }
 
+/// Open story loop (Phase 9) — e.g. "the missing crate".
+class WorldThread {
+  const WorldThread({
+    required this.id,
+    required this.title,
+    this.summary = '',
+    this.status = WorldContinuityStatus.open,
+    this.personIds = const [],
+    this.placeId,
+    this.witnessIds = const [],
+  });
+
+  final String id;
+  final String title;
+  final String summary;
+  final WorldContinuityStatus status;
+  final List<String> personIds;
+  final String? placeId;
+  final List<String> witnessIds;
+
+  bool get isOpen => status == WorldContinuityStatus.open;
+
+  WorldThread copyWith({
+    String? id,
+    String? title,
+    String? summary,
+    WorldContinuityStatus? status,
+    List<String>? personIds,
+    String? placeId,
+    bool clearPlaceId = false,
+    List<String>? witnessIds,
+  }) {
+    return WorldThread(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      summary: summary ?? this.summary,
+      status: status ?? this.status,
+      personIds: personIds ?? this.personIds,
+      placeId: clearPlaceId ? null : (placeId ?? this.placeId),
+      witnessIds: witnessIds ?? this.witnessIds,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        if (summary.trim().isNotEmpty) 'summary': summary.trim(),
+        'status': status.wire,
+        if (personIds.isNotEmpty) 'personIds': personIds,
+        if (placeId != null && placeId!.trim().isNotEmpty) 'placeId': placeId,
+        if (witnessIds.isNotEmpty) 'witnessIds': witnessIds,
+      };
+
+  factory WorldThread.fromJson(Map<String, dynamic> json) {
+    final id = '${json['id'] ?? ''}'.trim();
+    final title = '${json['title'] ?? ''}'.trim();
+    if (id.isEmpty || title.isEmpty) {
+      throw const FormatException('World thread needs id and title.');
+    }
+    final placeId = '${json['placeId'] ?? ''}'.trim();
+    return WorldThread(
+      id: id,
+      title: title,
+      summary: '${json['summary'] ?? ''}'.trim(),
+      status: WorldContinuityStatus.parse(json['status']),
+      personIds: _stringIdList(json['personIds']),
+      placeId: placeId.isEmpty ? null : placeId,
+      witnessIds: _stringIdList(json['witnessIds']),
+    );
+  }
+}
+
+/// Commitment between two people (Phase 9).
+class WorldPromise {
+  const WorldPromise({
+    required this.id,
+    required this.text,
+    required this.fromId,
+    required this.toId,
+    this.status = WorldContinuityStatus.open,
+    this.placeId,
+  });
+
+  final String id;
+  final String text;
+  final String fromId;
+  final String toId;
+  final WorldContinuityStatus status;
+  final String? placeId;
+
+  bool get isOpen => status == WorldContinuityStatus.open;
+
+  WorldPromise copyWith({
+    String? id,
+    String? text,
+    String? fromId,
+    String? toId,
+    WorldContinuityStatus? status,
+    String? placeId,
+    bool clearPlaceId = false,
+  }) {
+    return WorldPromise(
+      id: id ?? this.id,
+      text: text ?? this.text,
+      fromId: fromId ?? this.fromId,
+      toId: toId ?? this.toId,
+      status: status ?? this.status,
+      placeId: clearPlaceId ? null : (placeId ?? this.placeId),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'text': text,
+        'fromId': fromId,
+        'toId': toId,
+        'status': status.wire,
+        if (placeId != null && placeId!.trim().isNotEmpty) 'placeId': placeId,
+      };
+
+  factory WorldPromise.fromJson(Map<String, dynamic> json) {
+    final id = '${json['id'] ?? ''}'.trim();
+    final text = '${json['text'] ?? ''}'.trim();
+    final fromId = '${json['fromId'] ?? ''}'.trim();
+    final toId = '${json['toId'] ?? ''}'.trim();
+    if (id.isEmpty || text.isEmpty || fromId.isEmpty || toId.isEmpty) {
+      throw const FormatException(
+        'World promise needs id, text, fromId, and toId.',
+      );
+    }
+    final placeId = '${json['placeId'] ?? ''}'.trim();
+    return WorldPromise(
+      id: id,
+      text: text,
+      fromId: fromId,
+      toId: toId,
+      status: WorldContinuityStatus.parse(json['status']),
+      placeId: placeId.isEmpty ? null : placeId,
+    );
+  }
+}
+
+/// Who-knows-what fact (Phase 9).
+class WorldSecret {
+  const WorldSecret({
+    required this.id,
+    required this.text,
+    this.status = WorldContinuityStatus.open,
+    this.subjectIds = const [],
+    this.witnessIds = const [],
+    this.placeId,
+  });
+
+  final String id;
+  final String text;
+  final WorldContinuityStatus status;
+
+  /// People the secret is about.
+  final List<String> subjectIds;
+
+  /// People who know it.
+  final List<String> witnessIds;
+  final String? placeId;
+
+  bool get isOpen => status == WorldContinuityStatus.open;
+
+  WorldSecret copyWith({
+    String? id,
+    String? text,
+    WorldContinuityStatus? status,
+    List<String>? subjectIds,
+    List<String>? witnessIds,
+    String? placeId,
+    bool clearPlaceId = false,
+  }) {
+    return WorldSecret(
+      id: id ?? this.id,
+      text: text ?? this.text,
+      status: status ?? this.status,
+      subjectIds: subjectIds ?? this.subjectIds,
+      witnessIds: witnessIds ?? this.witnessIds,
+      placeId: clearPlaceId ? null : (placeId ?? this.placeId),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'text': text,
+        'status': status.wire,
+        if (subjectIds.isNotEmpty) 'subjectIds': subjectIds,
+        if (witnessIds.isNotEmpty) 'witnessIds': witnessIds,
+        if (placeId != null && placeId!.trim().isNotEmpty) 'placeId': placeId,
+      };
+
+  factory WorldSecret.fromJson(Map<String, dynamic> json) {
+    final id = '${json['id'] ?? ''}'.trim();
+    final text = '${json['text'] ?? ''}'.trim();
+    if (id.isEmpty || text.isEmpty) {
+      throw const FormatException('World secret needs id and text.');
+    }
+    final placeId = '${json['placeId'] ?? ''}'.trim();
+    return WorldSecret(
+      id: id,
+      text: text,
+      status: WorldContinuityStatus.parse(json['status']),
+      subjectIds: _stringIdList(json['subjectIds']),
+      witnessIds: _stringIdList(json['witnessIds']),
+      placeId: placeId.isEmpty ? null : placeId,
+    );
+  }
+}
+
 /// Optional live scene state — kept for Phase B without requiring it in A.
 class WorldLiveState {
   const WorldLiveState({
@@ -569,6 +904,16 @@ class LivingWorldSummary {
   final String title;
   final int personCount;
   final int placeCount;
+}
+
+List<String> _stringIdList(Object? raw) {
+  if (raw is! List) return const [];
+  final out = <String>[];
+  for (final item in raw) {
+    final v = '$item'.trim();
+    if (v.isNotEmpty) out.add(v);
+  }
+  return out;
 }
 
 List<T> _mapList<T>(

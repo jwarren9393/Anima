@@ -197,6 +197,7 @@ LivingWorld buildSampleHarborWorld() {
         summary: 'Harbor clerk who keeps the pier ledger.',
         personalityNotes: 'Dry humor; remembers favors.',
         routineHints: 'Days at the pier ledger; evenings at the Harbor Inn.',
+        inventory: ['pier ledger'],
       ),
       WorldPerson(
         id: 'p_edric',
@@ -280,6 +281,37 @@ LivingWorld buildSampleHarborWorld() {
       WorldFlag(id: 'f1', key: 'mira_knows_crate_missing', value: true),
       WorldFlag(id: 'f2', key: 'edric_promised_dawn_check', value: true),
       WorldFlag(id: 'f3', key: 'letter_rumor_at_market', value: true),
+    ],
+    threads: const [
+      WorldThread(
+        id: 'th_crate',
+        title: 'Missing crate',
+        summary: 'A crate went missing from the South Pier ledger.',
+        status: WorldContinuityStatus.open,
+        personIds: ['p_mira', 'p_edric'],
+        placeId: 'pl_pier',
+        witnessIds: ['p_mira'],
+      ),
+    ],
+    promises: const [
+      WorldPromise(
+        id: 'pr_dawn_check',
+        text: 'Edric will check the crate seals at dawn.',
+        fromId: 'p_edric',
+        toId: 'p_mira',
+        status: WorldContinuityStatus.open,
+        placeId: 'pl_pier',
+      ),
+    ],
+    secrets: const [
+      WorldSecret(
+        id: 'sec_letter',
+        text: 'A sealed letter for Mira is being talked about at the market.',
+        status: WorldContinuityStatus.open,
+        subjectIds: ['p_mira'],
+        witnessIds: ['p_lena'],
+        placeId: 'pl_market',
+      ),
     ],
     liveState: const WorldLiveState(
       activePlaceId: 'pl_pier',

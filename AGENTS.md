@@ -60,10 +60,11 @@ High-value SillyTavern concepts to aim for over time:
 
 ## Current status
 
-**Phase:** Living World experiment — **Phases 1–8 shipped; next = Phase 9** on `experiment/living-world` (see [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md))
+**Phase:** Living World experiment — **Phases 1–9 shipped; next = Phase 10** on `experiment/living-world` (see [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md))
 
 **Last updated:** 2026-10-21
-**Last agent action:** **Phase 8 Living World near-scene ticks.** `LivingWorldSimulator` — BFS radius from active place + connected places; capped people/ops; short ambient events + soft who/where from `routineHints` (rules-first, no API). Settings **Near-scene ticks** Off / After each turn / Every N + caps; chat ⋮ + Worlds hub **Advance world a beat…**; World log kind `nearSceneTick`. Auto ticks run after the after-turn pipeline when enabled; unbound chats never tick. Ask before merge to main.
+**Last agent action:** **Phase 9 Living World continuity objects.** Schema **v2**: `threads` / `promises` / `secrets` (open/closed + witnesses) + `WorldPerson.inventory` (item names). v1 notebooks migrate on load (empty continuity; next save upgrades). Propose/apply ops upsert/close/setInventory (auto-safe); retriever scores open loops by cast/mention/witness; factory seedCanon + editor Canon tab + person inventory. Sample harbor ships one thread/promise/secret + Mira’s ledger. Ask before merge to main.
+**Previous agent action:** **Phase 8 Living World near-scene ticks.** `LivingWorldSimulator` — BFS radius from active place + connected places; capped people/ops; short ambient events + soft who/where from `routineHints` (rules-first, no API). Settings **Near-scene ticks** Off / After each turn / Every N + caps; chat ⋮ + Worlds hub **Advance world a beat…**; World log kind `nearSceneTick`. Auto ticks run after the after-turn pipeline when enabled; unbound chats never tick. Ask before merge to main.
 **Previous agent action:** **Phase 7 Living World light systems.** `LivingWorldSystemsService` — relationship drift (aid/betrayal/promise/…) with score clamps after validated event apply; explicit flag recipes (`knows_*`, `banished_from_*`, `*_deceased`); Narrator post → presence sync into `personLocations` when play mode is non-manual (World log `presenceSync`); optional `WorldPerson.routineHints` in editor/factory/retrieve. Ask before merge to main.
 **Previous agent action:** **Phase 5 Living World organic write loop.** App-wide play policy (Manual / Propose after turn / Auto-safe) in Settings → Living Worlds and chat ⋮ → World play mode…. After each successful reply when bound + non-manual, proposes canon updates (auto-applies safe ops; relationships still reviewed). Undo last pack via ⋮ + `LivingWorldUndoService`. Standing “go ahead with next phase” playbook at top of roadmap. Ask before merge to main.
 **Previous agent action:** **Living World end-goal roadmap written.** Added [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md) — phased plan from today’s static-during-play notebooks to organic after-turn validated world updates (DF-lite under Anima chat, not a fortress clone). Next build work starts at **Phase 5** (auto propose / auto-safe after turn + undo). Phases 1–4 unchanged.
@@ -147,8 +148,8 @@ full `./deploy.sh` afterwards was verified end to end — it printed
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar; **Scene moods** (mood icon + **+** menu) — includes **Sensual / intimate**, **Real voice (anti-script)**, **Intimate build-up**, **Explicit / graphic**, **Afterglow** with hard-coded **vocabulary law** (plain adult words; bans LLM euphemisms, porn-script dialogue, em-dash spam, recycled *actions* when those moods are on); **Chat copies** — per-chat character/persona overrides + **Chat lore** (thread-only World Info merged with global picks); long-press avatar edits chat copy (library unchanged)
 - **Linux install/update** — `./scripts/update_linux.sh` builds and installs the desktop app; add `--pull` to download GitHub changes first
 - **Windows app** — built for you by **GitHub Actions** on every `./deploy.sh` (Flutter can't build Windows from Linux); download `Anima-1.0.0-windows-x64.zip` from the release and run it as a portable folder — no installer
-- **Living World (experiment branch)** — optional per-chat bind to a structured notebook in `worlds/`; scored retrieve-and-inject for **solo and group**; **play policy** Manual / Propose-after-turn / Auto-safe; opt-in **Resolve before reply (Living mode)** (facts first, then prose); **near-scene ticks** (Off / after turn / every N — default Off) + **Advance world a beat…**; **World log…**; **Undo last world update**; **Update world from chat…**; light systems (relationship drift, Narrator presence → who/where, routineHints, flag recipes); **Settings → Living Worlds** hub + factory + editor
-- **Smoke:** `flutter test` (470) + `flutter analyze` pass; Android + Windows + Linux desktop debug work
+- **Living World (experiment branch)** — optional per-chat bind to a structured notebook in `worlds/`; scored retrieve-and-inject for **solo and group**; **play policy** Manual / Propose-after-turn / Auto-safe; opt-in **Resolve before reply (Living mode)** (facts first, then prose); **near-scene ticks** (Off / after turn / every N — default Off) + **Advance world a beat…**; **World log…**; **Undo last world update**; **Update world from chat…**; light systems (relationship drift, Narrator presence → who/where, routineHints, flag recipes); **continuity** (threads / promises / secrets / inventory-lite, schema v2); **Settings → Living Worlds** hub + factory + editor
+- **Smoke:** `flutter test` (480) + `flutter analyze` pass; Android + Windows + Linux desktop debug work
 
 ### What does NOT work yet / limits
 
@@ -271,7 +272,7 @@ lib/
     group_beat_part.dart          One character line inside a group-react card
     chat_session.dart             Thread + authorsNote + group + lorebookIds + autoReply + memorySummary + activeSceneMoodIds + characterOverrides + personaOverride + chatLorebook + worldId
     memory_summary.dart           Scene + Ledger parse/encode + [pin] restore after summarize
-    living_world.dart             Living World notebook (people/places/relationships/events/flags/liveState; routineHints)
+    living_world.dart             Living World notebook v2 (people/places/relationships/events/flags/threads/promises/secrets/liveState; routineHints + inventory)
     living_world_update_policy.dart  Play modes: manual / propose / autoSafe
     living_world_tick_settings.dart  Phase 8 tick trigger (off / afterTurn / everyN) + caps
     turn_resolution.dart          Phase 6+ resolve result (applied / deferred / as-of-turn / presenceSync / nearSceneTick)
@@ -652,7 +653,7 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-0. **Living World (active on `experiment/living-world`):** Owner says **“go ahead with next phase”** → follow the playbook at the top of [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md) (next = **Phase 9** threads/promises/secrets/inventory-lite; one phase, analyze+test, update living docs, **commit+push** on the experiment branch). Standing permission to commit/push after each roadmap phase; never merge to `main` until Phase 12 / owner approve. Philosophy: [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md). Classic Anima on `main` stays the daily driver.
+0. **Living World (active on `experiment/living-world`):** Owner says **“go ahead with next phase”** → follow the playbook at the top of [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md) (next = **Phase 10** cards/groups/backup/context estimate; one phase, analyze+test, update living docs, **commit+push** on the experiment branch). Standing permission to commit/push after each roadmap phase; never merge to `main` until Phase 12 / owner approve. Philosophy: [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md). Classic Anima on `main` stays the daily driver.
 1. **New/reinstalled PC?** Linux — pick one:
    - **`bash scripts/setup_linux_dev_noroot.sh`** — no admin password needed. Use this when `sudo` is unavailable or you would rather not type it. It prints the single `apt` line for the desktop libs.
    - **`bash scripts/setup_linux_dev.sh --github`** — the sudo version; also installs `gh` from apt and signs you in.

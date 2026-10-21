@@ -1,7 +1,7 @@
 # Living World roadmap — toward a true “living” under-the-hood world
 
 > **For every agent:** Read this **after** [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md).  
-> Phases **1–8 are shipped** on `experiment/living-world` (build 78+).  
+> Phases **1–9 are shipped** on `experiment/living-world` (build 78+).  
 > This file is the plan from **today → end-goal**. Update checkboxes when a phase lands.  
 > Keep plain English. **Do not merge to `main` until Phase 12 / owner says so.**
 
@@ -82,7 +82,7 @@ Silent, unvalidated AI overwrites of hard canon are **always** out of scope — 
 
 ---
 
-## Where we are now (Phases 1–8 — DONE through near-scene ticks)
+## Where we are now (Phases 1–9 — DONE through continuity objects)
 
 Shipped on `experiment/living-world` (see [`AGENTS.md`](AGENTS.md) / [`PROJECT_REFERENCE.md`](PROJECT_REFERENCE.md) §15b):
 
@@ -96,9 +96,10 @@ Shipped on `experiment/living-world` (see [`AGENTS.md`](AGENTS.md) / [`PROJECT_R
 | **6** | Resolve-before-narrate spine + World log |
 | **7** | Relationship drift, narrator presence sync, routineHints, flag recipes |
 | **8** | Near-scene ticks (active place + connected radius); manual Advance a beat |
+| **9** | Schema v2: threads / promises / secrets / inventory-lite + retrieve + ops |
 
 **Honest gap vs end-goal:**  
-Near-scene ticks keep nearby off-screen life moving a little — still no long-run threads/secrets/inventory-lite (Phase 9) or backup/context polish (Phase 10).
+Open loops stick across sessions — still no backup/context polish (Phase 10) or invisible-engine UX (Phase 11).
 
 Creation Center remains a workshop chat — **not** the living engine. Do not rewrite it as a substitute for this roadmap.
 
@@ -251,7 +252,7 @@ Update checkboxes as phases complete. Each phase must leave `flutter analyze` cl
 
 ---
 
-### Phase 9 — Continuity objects (threads, promises, secrets, inventory-lite)
+### Phase 9 — Continuity objects (threads, promises, secrets, inventory-lite) ✅
 
 **Goal:** Long-run play remembers **open loops**, not only atomic events.
 
@@ -259,17 +260,19 @@ Update checkboxes as phases complete. Each phase must leave `flutter analyze` cl
 
 **Deliverables:**
 
-- [ ] Schema bump (versioned): e.g. `threads` / `promises` / `secrets` with ids, status (open/closed), witness person ids, optional place.
-- [ ] Or fold into flags+events with strict conventions first (thinner) — prefer real types if agents keep tripping on conventions.
-- [ ] Inventory-lite optional: person → list of item ids/names (no crafting tree).
-- [ ] Retrieve scores these when mentioned / witnessed by speaker.
-- [ ] Update ops + factory/editor support.
-- [ ] Migration from schema v1 → vN in `LivingWorld.fromJson`.
+- [x] Schema bump (versioned): `threads` / `promises` / `secrets` with ids, status (open/closed), witness person ids, optional place.
+- [x] Real types (not flag conventions) — schema **v2**.
+- [x] Inventory-lite: `WorldPerson.inventory` list of short item names (no crafting tree).
+- [x] Retrieve scores these when mentioned / witnessed by speaker (prefer open).
+- [x] Update ops (`upsert*` / `close*` / `setInventory`) + factory seedCanon + editor Canon tab.
+- [x] Migration from schema v1 → v2 in `LivingWorld.fromJson` (empty continuity; next save upgrades).
 
 **Acceptance:**
 
 - A promise recorded mid-arc is retrieved sessions later until closed.
 - Schema migration doesn’t wipe existing harbor/factory worlds.
+
+**Shipped:** 2026-10-21 on `experiment/living-world`. Continuity ops are auto-safe (like events/flags); relationships still review-only.
 
 ---
 

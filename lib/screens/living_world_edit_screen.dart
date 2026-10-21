@@ -192,6 +192,51 @@ class _LivingWorldEditScreenState extends State<LivingWorldEditScreen>
     });
   }
 
+  Future<void> _editThread({WorldThread? existing, int? index}) async {
+    final result = await _showThreadDialog(existing);
+    if (result == null) return;
+    final threads = List<WorldThread>.from(_world.threads);
+    if (index != null) {
+      threads[index] = result;
+    } else {
+      threads.add(result);
+    }
+    setState(() {
+      _world = _world.copyWith(threads: threads);
+      _dirty = true;
+    });
+  }
+
+  Future<void> _editPromise({WorldPromise? existing, int? index}) async {
+    final result = await _showPromiseDialog(existing);
+    if (result == null) return;
+    final promises = List<WorldPromise>.from(_world.promises);
+    if (index != null) {
+      promises[index] = result;
+    } else {
+      promises.add(result);
+    }
+    setState(() {
+      _world = _world.copyWith(promises: promises);
+      _dirty = true;
+    });
+  }
+
+  Future<void> _editSecret({WorldSecret? existing, int? index}) async {
+    final result = await _showSecretDialog(existing);
+    if (result == null) return;
+    final secrets = List<WorldSecret>.from(_world.secrets);
+    if (index != null) {
+      secrets[index] = result;
+    } else {
+      secrets.add(result);
+    }
+    setState(() {
+      _world = _world.copyWith(secrets: secrets);
+      _dirty = true;
+    });
+  }
+
   Future<void> _editRelationship({
     WorldRelationship? existing,
     int? index,
@@ -209,6 +254,13 @@ class _LivingWorldEditScreenState extends State<LivingWorldEditScreen>
       _dirty = true;
     });
   }
+
+  int get _canonCount =>
+      _world.events.length +
+      _world.flags.length +
+      _world.threads.length +
+      _world.promises.length +
+      _world.secrets.length;
 
   @override
   Widget build(BuildContext context) {
@@ -256,10 +308,7 @@ class _LivingWorldEditScreenState extends State<LivingWorldEditScreen>
               Tab(text: 'Places (${_world.places.length})'),
               Tab(text: 'People (${_world.people.length})'),
               Tab(text: 'Links (${_world.relationships.length})'),
-              Tab(
-                text:
-                    'Canon (${_world.events.length + _world.flags.length})',
-              ),
+              Tab(text: 'Canon ($_canonCount)'),
             ],
           ),
         ),
@@ -324,7 +373,8 @@ class _LivingWorldEditScreenState extends State<LivingWorldEditScreen>
         Text(
           '${_world.people.length} people · ${_world.places.length} places · '
           '${_world.relationships.length} links · ${_world.events.length} events · '
-          '${_world.flags.length} flags',
+          '${_world.flags.length} flags · ${_world.threads.length} threads · '
+          '${_world.promises.length} promises · ${_world.secrets.length} secrets',
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         if (_world.liveState?.activePlaceId != null) ...[
@@ -509,6 +559,113 @@ class _LivingWorldEditScreenState extends State<LivingWorldEditScreen>
               },
             ),
           ),
+        const Divider(),
+        ListTile(
+          title: Text(
+            'Threads',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          trailing: IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: () => _editThread(),
+          ),
+        ),
+        if (_world.threads.isEmpty)
+          const ListTile(title: Text('No threads yet.')),
+        for (var i = 0; i < _world.threads.length; i++)
+          ListTile(
+            title: Text(
+              '[${_world.threads[i].status.wire}] ${_world.threads[i].title}',
+            ),
+            subtitle: Text(
+              _world.threads[i].summary.trim().isEmpty
+                  ? _world.threads[i].id
+                  : _world.threads[i].summary,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            onTap: () => _editThread(existing: _world.threads[i], index: i),
+            trailing: IconButton(
+              icon: const Icon(Icons.delete_outline),
+              onPressed: () {
+                final threads = List<WorldThread>.from(_world.threads)
+                  ..removeAt(i);
+                setState(() {
+                  _world = _world.copyWith(threads: threads);
+                  _dirty = true;
+                });
+              },
+            ),
+          ),
+        const Divider(),
+        ListTile(
+          title: Text(
+            'Promises',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          trailing: IconButton(
+            icon: const Icon(Icons.add),
+            onPressed:
+                _world.people.length < 2 ? null : () => _editPromise(),
+          ),
+        ),
+        if (_world.promises.isEmpty)
+          const ListTile(title: Text('No promises yet.')),
+        for (var i = 0; i < _world.promises.length; i++)
+          ListTile(
+            title: Text(
+              '[${_world.promises[i].status.wire}] ${_world.promises[i].text}',
+            ),
+            subtitle: Text(
+              '${_world.promises[i].fromId} → ${_world.promises[i].toId}',
+            ),
+            onTap: () =>
+                _editPromise(existing: _world.promises[i], index: i),
+            trailing: IconButton(
+              icon: const Icon(Icons.delete_outline),
+              onPressed: () {
+                final promises = List<WorldPromise>.from(_world.promises)
+                  ..removeAt(i);
+                setState(() {
+                  _world = _world.copyWith(promises: promises);
+                  _dirty = true;
+                });
+              },
+            ),
+          ),
+        const Divider(),
+        ListTile(
+          title: Text(
+            'Secrets',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          trailing: IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: () => _editSecret(),
+          ),
+        ),
+        if (_world.secrets.isEmpty)
+          const ListTile(title: Text('No secrets yet.')),
+        for (var i = 0; i < _world.secrets.length; i++)
+          ListTile(
+            title: Text(
+              '[${_world.secrets[i].status.wire}] ${_world.secrets[i].text}',
+            ),
+            subtitle: Text(_world.secrets[i].id),
+            onTap: () =>
+                _editSecret(existing: _world.secrets[i], index: i),
+            trailing: IconButton(
+              icon: const Icon(Icons.delete_outline),
+              onPressed: () {
+                final secrets = List<WorldSecret>.from(_world.secrets)
+                  ..removeAt(i);
+                setState(() {
+                  _world = _world.copyWith(secrets: secrets);
+                  _dirty = true;
+                });
+              },
+            ),
+          ),
       ],
     );
   }
@@ -556,6 +713,9 @@ class _LivingWorldEditScreenState extends State<LivingWorldEditScreen>
         TextEditingController(text: existing?.personalityNotes ?? '');
     final routine =
         TextEditingController(text: existing?.routineHints ?? '');
+    final inventory = TextEditingController(
+      text: existing?.inventory.join(', ') ?? '',
+    );
     final card =
         TextEditingController(text: existing?.characterCardId ?? '');
     return showDialog<WorldPerson>(
@@ -598,6 +758,13 @@ class _LivingWorldEditScreenState extends State<LivingWorldEditScreen>
                 maxLines: 2,
               ),
               TextField(
+                controller: inventory,
+                decoration: const InputDecoration(
+                  labelText: 'Inventory (comma-separated, optional)',
+                  hintText: 'letter, pier ledger',
+                ),
+              ),
+              TextField(
                 controller: card,
                 decoration: const InputDecoration(
                   labelText: 'Linked character card id (optional)',
@@ -625,6 +792,10 @@ class _LivingWorldEditScreenState extends State<LivingWorldEditScreen>
                   summary: summary.text.trim(),
                   personalityNotes: notes.text.trim(),
                   routineHints: routine.text.trim(),
+                  inventory: [
+                    for (final part in inventory.text.split(','))
+                      if (part.trim().isNotEmpty) part.trim(),
+                  ],
                   characterCardId: cardId.isEmpty ? null : cardId,
                 ),
               );
@@ -841,6 +1012,326 @@ class _LivingWorldEditScreenState extends State<LivingWorldEditScreen>
             child: const Text('Save'),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<WorldThread?> _showThreadDialog(WorldThread? existing) async {
+    final id = TextEditingController(
+      text: existing?.id ?? 'th_${DateTime.now().millisecondsSinceEpoch}',
+    );
+    final title = TextEditingController(text: existing?.title ?? '');
+    final summary = TextEditingController(text: existing?.summary ?? '');
+    final placeId = TextEditingController(text: existing?.placeId ?? '');
+    final personIds = TextEditingController(
+      text: existing?.personIds.join(', ') ?? '',
+    );
+    final witnessIds = TextEditingController(
+      text: existing?.witnessIds.join(', ') ?? '',
+    );
+    var status = existing?.status ?? WorldContinuityStatus.open;
+    return showDialog<WorldThread>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setLocal) => AlertDialog(
+          title: Text(existing == null ? 'Add thread' : 'Edit thread'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: id,
+                  decoration: const InputDecoration(labelText: 'Id'),
+                  enabled: existing == null,
+                ),
+                TextField(
+                  controller: title,
+                  decoration: const InputDecoration(labelText: 'Title'),
+                ),
+                TextField(
+                  controller: summary,
+                  decoration: const InputDecoration(labelText: 'Summary'),
+                  minLines: 2,
+                  maxLines: 3,
+                ),
+                DropdownButtonFormField<WorldContinuityStatus>(
+                  // ignore: deprecated_member_use
+                  value: status,
+                  decoration: const InputDecoration(labelText: 'Status'),
+                  items: [
+                    for (final s in WorldContinuityStatus.values)
+                      DropdownMenuItem(value: s, child: Text(s.wire)),
+                  ],
+                  onChanged: (v) {
+                    if (v == null) return;
+                    setLocal(() => status = v);
+                  },
+                ),
+                TextField(
+                  controller: placeId,
+                  decoration:
+                      const InputDecoration(labelText: 'Place id (optional)'),
+                ),
+                TextField(
+                  controller: personIds,
+                  decoration: const InputDecoration(
+                    labelText: 'Person ids (comma-separated)',
+                  ),
+                ),
+                TextField(
+                  controller: witnessIds,
+                  decoration: const InputDecoration(
+                    labelText: 'Witness ids (comma-separated)',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final t = title.text.trim();
+                final i = id.text.trim();
+                if (t.isEmpty || i.isEmpty) return;
+                final place = placeId.text.trim();
+                Navigator.pop(
+                  context,
+                  WorldThread(
+                    id: i,
+                    title: t,
+                    summary: summary.text.trim(),
+                    status: status,
+                    placeId: place.isEmpty ? null : place,
+                    personIds: [
+                      for (final part in personIds.text.split(','))
+                        if (part.trim().isNotEmpty) part.trim(),
+                    ],
+                    witnessIds: [
+                      for (final part in witnessIds.text.split(','))
+                        if (part.trim().isNotEmpty) part.trim(),
+                    ],
+                  ),
+                );
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<WorldPromise?> _showPromiseDialog(WorldPromise? existing) async {
+    if (_world.people.length < 2) return null;
+    var fromId = existing?.fromId ?? _world.people.first.id;
+    var toId = existing?.toId ?? _world.people[1].id;
+    final id = TextEditingController(
+      text: existing?.id ?? 'pr_${DateTime.now().millisecondsSinceEpoch}',
+    );
+    final text = TextEditingController(text: existing?.text ?? '');
+    final placeId = TextEditingController(text: existing?.placeId ?? '');
+    var status = existing?.status ?? WorldContinuityStatus.open;
+    return showDialog<WorldPromise>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setLocal) => AlertDialog(
+          title: Text(existing == null ? 'Add promise' : 'Edit promise'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: id,
+                  decoration: const InputDecoration(labelText: 'Id'),
+                  enabled: existing == null,
+                ),
+                TextField(
+                  controller: text,
+                  decoration: const InputDecoration(labelText: 'Promise text'),
+                  minLines: 2,
+                  maxLines: 3,
+                ),
+                DropdownButtonFormField<String>(
+                  // ignore: deprecated_member_use
+                  value: fromId,
+                  decoration: const InputDecoration(labelText: 'From'),
+                  items: [
+                    for (final p in _world.people)
+                      DropdownMenuItem(value: p.id, child: Text(p.name)),
+                  ],
+                  onChanged: (v) {
+                    if (v == null) return;
+                    setLocal(() => fromId = v);
+                  },
+                ),
+                DropdownButtonFormField<String>(
+                  // ignore: deprecated_member_use
+                  value: toId,
+                  decoration: const InputDecoration(labelText: 'To'),
+                  items: [
+                    for (final p in _world.people)
+                      DropdownMenuItem(value: p.id, child: Text(p.name)),
+                  ],
+                  onChanged: (v) {
+                    if (v == null) return;
+                    setLocal(() => toId = v);
+                  },
+                ),
+                DropdownButtonFormField<WorldContinuityStatus>(
+                  // ignore: deprecated_member_use
+                  value: status,
+                  decoration: const InputDecoration(labelText: 'Status'),
+                  items: [
+                    for (final s in WorldContinuityStatus.values)
+                      DropdownMenuItem(value: s, child: Text(s.wire)),
+                  ],
+                  onChanged: (v) {
+                    if (v == null) return;
+                    setLocal(() => status = v);
+                  },
+                ),
+                TextField(
+                  controller: placeId,
+                  decoration:
+                      const InputDecoration(labelText: 'Place id (optional)'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final t = text.text.trim();
+                final i = id.text.trim();
+                if (t.isEmpty || i.isEmpty || fromId == toId) return;
+                final place = placeId.text.trim();
+                Navigator.pop(
+                  context,
+                  WorldPromise(
+                    id: i,
+                    text: t,
+                    fromId: fromId,
+                    toId: toId,
+                    status: status,
+                    placeId: place.isEmpty ? null : place,
+                  ),
+                );
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<WorldSecret?> _showSecretDialog(WorldSecret? existing) async {
+    final id = TextEditingController(
+      text: existing?.id ?? 'sec_${DateTime.now().millisecondsSinceEpoch}',
+    );
+    final text = TextEditingController(text: existing?.text ?? '');
+    final placeId = TextEditingController(text: existing?.placeId ?? '');
+    final subjectIds = TextEditingController(
+      text: existing?.subjectIds.join(', ') ?? '',
+    );
+    final witnessIds = TextEditingController(
+      text: existing?.witnessIds.join(', ') ?? '',
+    );
+    var status = existing?.status ?? WorldContinuityStatus.open;
+    return showDialog<WorldSecret>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setLocal) => AlertDialog(
+          title: Text(existing == null ? 'Add secret' : 'Edit secret'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: id,
+                  decoration: const InputDecoration(labelText: 'Id'),
+                  enabled: existing == null,
+                ),
+                TextField(
+                  controller: text,
+                  decoration: const InputDecoration(labelText: 'Secret text'),
+                  minLines: 2,
+                  maxLines: 4,
+                ),
+                DropdownButtonFormField<WorldContinuityStatus>(
+                  // ignore: deprecated_member_use
+                  value: status,
+                  decoration: const InputDecoration(labelText: 'Status'),
+                  items: [
+                    for (final s in WorldContinuityStatus.values)
+                      DropdownMenuItem(value: s, child: Text(s.wire)),
+                  ],
+                  onChanged: (v) {
+                    if (v == null) return;
+                    setLocal(() => status = v);
+                  },
+                ),
+                TextField(
+                  controller: subjectIds,
+                  decoration: const InputDecoration(
+                    labelText: 'Subject person ids (comma-separated)',
+                  ),
+                ),
+                TextField(
+                  controller: witnessIds,
+                  decoration: const InputDecoration(
+                    labelText: 'Witness person ids (comma-separated)',
+                  ),
+                ),
+                TextField(
+                  controller: placeId,
+                  decoration:
+                      const InputDecoration(labelText: 'Place id (optional)'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final t = text.text.trim();
+                final i = id.text.trim();
+                if (t.isEmpty || i.isEmpty) return;
+                final place = placeId.text.trim();
+                Navigator.pop(
+                  context,
+                  WorldSecret(
+                    id: i,
+                    text: t,
+                    status: status,
+                    placeId: place.isEmpty ? null : place,
+                    subjectIds: [
+                      for (final part in subjectIds.text.split(','))
+                        if (part.trim().isNotEmpty) part.trim(),
+                    ],
+                    witnessIds: [
+                      for (final part in witnessIds.text.split(','))
+                        if (part.trim().isNotEmpty) part.trim(),
+                    ],
+                  ),
+                );
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
       ),
     );
   }

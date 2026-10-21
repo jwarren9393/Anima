@@ -7,7 +7,7 @@
 >
 > **Living documents:** `AGENTS.md` + this file + `README.md` are kept current together — see §29 for the upkeep rule every agent must follow.
 
-**Last updated:** 2026-10-21 · **Version:** 1.0.0 build **78** · **Tests:** 470 (`flutter test`) · Living World Phases 1–8 shipped; next Phase 9 in `LIVING_WORLD_ROADMAP.md`
+**Last updated:** 2026-10-21 · **Version:** 1.0.0 build **78** · **Tests:** 480 (`flutter test`) · Living World Phases 1–9 shipped; next Phase 10 in `LIVING_WORLD_ROADMAP.md`
 
 ---
 
@@ -161,7 +161,7 @@ Anima/
 | `chat_session.dart` | Thread: messages, note, persona, lore picks, memory, group cast, optional `worldId` |
 | `character.dart` | ST-compatible card fields + Anima id + embedded lorebook |
 | `persona.dart` | Structured {{user}} identity fields |
-| `living_world.dart` | Living World notebook (people/places/relationships/events/flags/liveState; `routineHints` on people) |
+| `living_world.dart` | Living World notebook schema v2 (people/places/relationships/events/flags/threads/promises/secrets/liveState; `routineHints` + `inventory` on people) |
 | `living_world_update_policy.dart` | Play modes: manual / proposeAfterTurn / autoSafe |
 | `turn_resolution.dart` | Phase 6+ resolve result (applied / deferred / as-of-turn / presenceSync / nearSceneTick) |
 | `living_world_tick_settings.dart` | Phase 8 tick trigger + caps |
@@ -587,7 +587,7 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 
 | Piece | Role |
 |-------|------|
-| `LivingWorld` model | People, places, relationships, events, flags, optional `liveState` |
+| `LivingWorld` model | People, places, relationships, events, flags, optional `liveState` (schema v1 base; v2 adds continuity — see Phase 9) |
 | `LivingWorldService` | `worlds/<id>.json` under the Anima library (`AppDataRoot.librarySubdirs` includes `worlds`) |
 | `LivingWorldRetriever` | Relevance over recent chat + speaker; token budget trim; prompt formatter |
 | `ChatSession.worldId` | Per-chat bind; **null = off** (default — classic Anima unchanged) |
@@ -600,7 +600,7 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 |-------|------|
 | `LivingWorldUpdateService` | Build propose prompt; parse/validate JSON ops; apply selected ops in memory |
 | Chat ⋮ → **Update world from chat…** | Bound world; NanoGPT proposes; **review sheet**; save only applied rows |
-| Ops | `addEvent`, `setFlag`, `setRelationship`, `setActivePlace`, `setPersonLocation` |
+| Ops | `addEvent`, `setFlag`, `setRelationship`, `setActivePlace`, `setPersonLocation` (+ Phase 9 continuity ops) |
 | Safety | Unknown person/place ids dropped; no new people/places invented; nothing written until Apply |
 
 ### Phase 3 (shipped on the experiment branch)
@@ -662,7 +662,18 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 | Manual | Chat ⋮ + Worlds hub row menu → **Advance world a beat…** (review sheet) |
 | World log | `TurnResolutionKind.nearSceneTick` |
 
-**Not yet (see roadmap Phases 9–12):** threads/secrets/inventory-lite, `.anima-backup` inclusion of `worlds/` (folder copy still moves them via `librarySubdirs`), Creation Center rewrite (not required for living engine).
+### Phase 9 (shipped on the experiment branch)
+
+| Piece | Role |
+|-------|------|
+| Schema **v2** | `threads` / `promises` / `secrets` (`open`/`closed`, person/place/witness ids) + `WorldPerson.inventory` (short item names) |
+| Migration | `fromJson` accepts v1 (or missing version); fills empty continuity; sets in-memory `schemaVersion` to 2 so next save upgrades |
+| Update ops | `upsertThread`/`closeThread`, `upsertPromise`/`closePromise`, `upsertSecret`/`closeSecret`, `setInventory` — all auto-safe |
+| Retriever | Scores open loops by selected cast, place, haystack text, speaker-as-witness/subject; closed only on strong text hit; prompt sections + person `items:` |
+| Factory / editor | seedCanon may emit continuity; Canon tab edits threads/promises/secrets; person dialog inventory field |
+| Sample harbor | Missing-crate thread, Edric→Mira dawn promise, letter secret (Lena witness), Mira `pier ledger` |
+
+**Not yet (see roadmap Phases 10–12):** `.anima-backup` inclusion of `worlds/` (folder copy still moves them via `librarySubdirs`), stronger card-link UX, context-estimate pack tokens, Creation Center rewrite (not required for living engine).
 
 **Invariant:** Lorebooks + Memory summary stay; Living World is the authoritative layer for *tracked* facts when bound. AI never silently overwrites hard state (even when auto-apply lands — validation + policy required).
 
@@ -923,7 +934,7 @@ Tests cover: lore scan, prompt builders, card codec, backup, sync stability, cha
 - Backup not encrypted.
 - PNG export needs PNG avatar for embedded image.
 - Windows build requires Windows host.
-- **Living World (experiment):** Phases 1–8 (scored retrieve; update-with-review; after-turn policy; opt-in resolve-before-narrate + World log; relationship drift / flag recipes / Narrator presence sync / routineHints; near-scene ticks + Advance a beat; solo/group; Worlds hub + factory); `.anima-backup` does not yet pack `worlds/` (copying the whole Anima folder still includes them).
+- **Living World (experiment):** Phases 1–9 (scored retrieve; update-with-review; after-turn policy; opt-in resolve-before-narrate + World log; relationship drift / flag recipes / Narrator presence sync / routineHints; near-scene ticks + Advance a beat; schema v2 threads/promises/secrets/inventory-lite; solo/group; Worlds hub + factory); `.anima-backup` does not yet pack `worlds/` (copying the whole Anima folder still includes them).
 - Back-burner: undo send, last-chat resume, pinned mood chips, memory preview panel, etc.
 
 ---

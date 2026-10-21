@@ -17,11 +17,15 @@ void main() {
       final again = LivingWorld.fromJson(world.toJson());
       expect(again.id, world.id);
       expect(again.title, 'Sample Harbor');
+      expect(again.schemaVersion, 2);
       expect(again.people, hasLength(3));
       expect(again.places, hasLength(3));
       expect(again.relationships, hasLength(3));
       expect(again.events, hasLength(3));
       expect(again.flags, hasLength(3));
+      expect(again.threads, hasLength(1));
+      expect(again.promises, hasLength(1));
+      expect(again.secrets, hasLength(1));
       expect(again.liveState?.activePlaceId, 'pl_pier');
     });
 

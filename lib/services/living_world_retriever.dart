@@ -22,6 +22,9 @@ class LivingWorldRetriever {
   static const maxRelationships = 8;
   static const maxEvents = 10;
   static const maxFlags = 8;
+  static const maxThreads = 6;
+  static const maxPromises = 6;
+  static const maxSecrets = 6;
 
   LivingWorldPack retrieve({
     required LivingWorld world,
@@ -226,11 +229,43 @@ class LivingWorldRetriever {
       if (flags.length >= maxFlags) break;
     }
 
+    final speakingIdEarly = _findSpeakingPersonId(
+      world.people,
+      speakerName: speakerName,
+      speakerCharacterId: speakerCharacterId,
+    );
+
+    // Continuity objects (Phase 9): prefer open; closed only on strong text hit.
+    final threads = _scoreThreads(
+      world.threads,
+      personIds: personIds,
+      placeIds: placeIds,
+      haystack: haystack,
+      speakingPersonId: speakingIdEarly,
+    );
+    final promises = _scorePromises(
+      world.promises,
+      personIds: personIds,
+      placeIds: placeIds,
+      haystack: haystack,
+      peopleById: peopleById,
+    );
+    final secrets = _scoreSecrets(
+      world.secrets,
+      personIds: personIds,
+      placeIds: placeIds,
+      haystack: haystack,
+      speakingPersonId: speakingIdEarly,
+    );
+
     // If nothing matched, still give a tiny world header + active place.
     if (rankedPeople.isEmpty &&
         rankedPlaces.isEmpty &&
         events.isEmpty &&
-        flags.isEmpty) {
+        flags.isEmpty &&
+        threads.isEmpty &&
+        promises.isEmpty &&
+        secrets.isEmpty) {
       return LivingWorldPack(
         worldTitle: world.title,
         genreNote: world.genreNote,
@@ -241,12 +276,11 @@ class LivingWorldRetriever {
         relationships: const [],
         events: const [],
         flags: const [],
+        threads: const [],
+        promises: const [],
+        secrets: const [],
         liveState: live,
-        speakingPersonId: _findSpeakingPersonId(
-          world.people,
-          speakerName: speakerName,
-          speakerCharacterId: speakerCharacterId,
-        ),
+        speakingPersonId: speakingIdEarly,
       ).fitBudget(budget);
     }
 
@@ -272,9 +306,105 @@ class LivingWorldRetriever {
       relationships: relationships,
       events: events,
       flags: flags,
+      threads: threads,
+      promises: promises,
+      secrets: secrets,
       liveState: live,
       speakingPersonId: speakingId,
     ).fitBudget(budget);
+  }
+
+  List<WorldThread> _scoreThreads(
+    List<WorldThread> all, {
+    required Set<String> personIds,
+    required Set<String> placeIds,
+    required String haystack,
+    required String? speakingPersonId,
+  }) {
+    final rows = <({WorldThread item, int score})>[];
+    for (final t in all) {
+      final textHit = _nameInHaystack(t.title, haystack) ||
+          (t.summary.trim().isNotEmpty &&
+              _nameInHaystack(t.summary, haystack));
+      final hitPerson = t.personIds.any(personIds.contains) ||
+          t.witnessIds.any(personIds.contains);
+      final hitPlace = t.placeId != null && placeIds.contains(t.placeId);
+      final speakerHit = speakingPersonId != null &&
+          (t.personIds.contains(speakingPersonId) ||
+              t.witnessIds.contains(speakingPersonId));
+      if (!t.isOpen && !textHit) continue;
+      if (!hitPerson && !hitPlace && !textHit && !speakerHit) continue;
+      var score = 0;
+      if (t.isOpen) score += 20;
+      if (hitPerson) score += 40;
+      if (hitPlace) score += 25;
+      if (textHit) score += 35;
+      if (speakerHit) score += 30;
+      rows.add((item: t, score: score));
+    }
+    rows.sort((a, b) => b.score.compareTo(a.score));
+    return [for (final row in rows.take(maxThreads)) row.item];
+  }
+
+  List<WorldPromise> _scorePromises(
+    List<WorldPromise> all, {
+    required Set<String> personIds,
+    required Set<String> placeIds,
+    required String haystack,
+    required Map<String, WorldPerson> peopleById,
+  }) {
+    final rows = <({WorldPromise item, int score})>[];
+    for (final p in all) {
+      final textHit = _nameInHaystack(p.text, haystack);
+      final hitPerson =
+          personIds.contains(p.fromId) || personIds.contains(p.toId);
+      final hitPlace = p.placeId != null && placeIds.contains(p.placeId);
+      if (!p.isOpen && !textHit) continue;
+      if (!hitPerson && !hitPlace && !textHit) continue;
+      var score = 0;
+      if (p.isOpen) score += 20;
+      if (hitPerson) score += 45;
+      if (hitPlace) score += 20;
+      if (textHit) score += 35;
+      // Soft boost when names appear in haystack even if not in selected cast.
+      final from = peopleById[p.fromId];
+      final to = peopleById[p.toId];
+      if (from != null && _nameInHaystack(from.name, haystack)) score += 10;
+      if (to != null && _nameInHaystack(to.name, haystack)) score += 10;
+      rows.add((item: p, score: score));
+    }
+    rows.sort((a, b) => b.score.compareTo(a.score));
+    return [for (final row in rows.take(maxPromises)) row.item];
+  }
+
+  List<WorldSecret> _scoreSecrets(
+    List<WorldSecret> all, {
+    required Set<String> personIds,
+    required Set<String> placeIds,
+    required String haystack,
+    required String? speakingPersonId,
+  }) {
+    final rows = <({WorldSecret item, int score})>[];
+    for (final s in all) {
+      final textHit = _nameInHaystack(s.text, haystack);
+      final hitPerson = s.subjectIds.any(personIds.contains) ||
+          s.witnessIds.any(personIds.contains);
+      final hitPlace = s.placeId != null && placeIds.contains(s.placeId);
+      final speakerHit = speakingPersonId != null &&
+          (s.subjectIds.contains(speakingPersonId) ||
+              s.witnessIds.contains(speakingPersonId));
+      if (!s.isOpen && !textHit) continue;
+      if (!hitPerson && !hitPlace && !textHit && !speakerHit) continue;
+      var score = 0;
+      if (s.isOpen) score += 20;
+      if (hitPerson) score += 40;
+      if (hitPlace) score += 20;
+      if (textHit) score += 40;
+      if (speakerHit) score += 50;
+      rows.add((item: s, score: score));
+    }
+    rows.sort((a, b) => b.score.compareTo(a.score));
+    return [for (final row in rows.take(maxSecrets)) row.item];
   }
 
   /// Prompt block for an early system message. Empty when pack is useless.
@@ -382,6 +512,9 @@ class LivingWorldPack {
     this.relationships = const [],
     this.events = const [],
     this.flags = const [],
+    this.threads = const [],
+    this.promises = const [],
+    this.secrets = const [],
     this.liveState,
     this.speakingPersonId,
   });
@@ -393,6 +526,9 @@ class LivingWorldPack {
   final List<WorldRelationship> relationships;
   final List<WorldEvent> events;
   final List<WorldFlag> flags;
+  final List<WorldThread> threads;
+  final List<WorldPromise> promises;
+  final List<WorldSecret> secrets;
   final WorldLiveState? liveState;
 
   /// World person id for the current speaker when known (prompt marks them).
@@ -404,6 +540,9 @@ class LivingWorldPack {
       relationships.isEmpty &&
       events.isEmpty &&
       flags.isEmpty &&
+      threads.isEmpty &&
+      promises.isEmpty &&
+      secrets.isEmpty &&
       (liveState == null ||
           ((liveState!.activePlaceId == null ||
                   liveState!.activePlaceId!.isEmpty) &&
@@ -472,6 +611,8 @@ class LivingWorldPack {
             person.personalityNotes.trim(),
           if (person.routineHints.trim().isNotEmpty)
             'routine: ${person.routineHints.trim()}',
+          if (person.inventory.isNotEmpty)
+            'items: ${person.inventory.join(', ')}',
         ];
         if (bits.isNotEmpty) buf.write(': ${bits.join(' · ')}');
         buf.writeln();
@@ -486,6 +627,36 @@ class LivingWorldPack {
         final labels =
             rel.labels.isEmpty ? '' : ' (${rel.labels.join(', ')})';
         buf.writeln('- $from → $to: ${rel.score}$labels');
+      }
+    }
+
+    if (threads.isNotEmpty) {
+      buf.writeln('Threads (open loops):');
+      for (final t in threads) {
+        buf.write('- [${t.status.wire}] ${t.title}');
+        if (t.summary.trim().isNotEmpty) {
+          buf.write(': ${t.summary.trim()}');
+        }
+        buf.writeln();
+      }
+    }
+
+    if (promises.isNotEmpty) {
+      buf.writeln('Promises:');
+      for (final p in promises) {
+        final from = _nameOrId(people, p.fromId);
+        final to = _nameOrId(people, p.toId);
+        buf.writeln('- [${p.status.wire}] $from → $to: ${p.text.trim()}');
+      }
+    }
+
+    if (secrets.isNotEmpty) {
+      buf.writeln('Secrets (who knows what):');
+      for (final s in secrets) {
+        final witnesses = s.witnessIds.isEmpty
+            ? ''
+            : ' (known by: ${s.witnessIds.map((id) => _nameOrId(people, id)).join(', ')})';
+        buf.writeln('- [${s.status.wire}] ${s.text.trim()}$witnesses');
       }
     }
 
@@ -527,6 +698,24 @@ class LivingWorldPack {
         pack = pack._copyWith(flags: pack.flags.sublist(0, pack.flags.length - 1));
         continue;
       }
+      if (pack.secrets.length > 1) {
+        pack = pack._copyWith(
+          secrets: pack.secrets.sublist(0, pack.secrets.length - 1),
+        );
+        continue;
+      }
+      if (pack.promises.length > 1) {
+        pack = pack._copyWith(
+          promises: pack.promises.sublist(0, pack.promises.length - 1),
+        );
+        continue;
+      }
+      if (pack.threads.length > 1) {
+        pack = pack._copyWith(
+          threads: pack.threads.sublist(0, pack.threads.length - 1),
+        );
+        continue;
+      }
       if (pack.relationships.length > 2) {
         pack = pack._copyWith(
           relationships:
@@ -558,6 +747,9 @@ class LivingWorldPack {
     List<WorldRelationship>? relationships,
     List<WorldEvent>? events,
     List<WorldFlag>? flags,
+    List<WorldThread>? threads,
+    List<WorldPromise>? promises,
+    List<WorldSecret>? secrets,
   }) {
     return LivingWorldPack(
       worldTitle: worldTitle,
@@ -567,6 +759,9 @@ class LivingWorldPack {
       relationships: relationships ?? this.relationships,
       events: events ?? this.events,
       flags: flags ?? this.flags,
+      threads: threads ?? this.threads,
+      promises: promises ?? this.promises,
+      secrets: secrets ?? this.secrets,
       liveState: liveState,
       speakingPersonId: speakingPersonId,
     );

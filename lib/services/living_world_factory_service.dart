@@ -17,7 +17,7 @@ extension LivingWorldFactoryPassLabel on LivingWorldFactoryPass {
         LivingWorldFactoryPass.places => 'Places',
         LivingWorldFactoryPass.people => 'People',
         LivingWorldFactoryPass.relationships => 'Relationships',
-        LivingWorldFactoryPass.seedCanon => 'Events & flags',
+        LivingWorldFactoryPass.seedCanon => 'Events & continuity',
       };
 
   String get progressVerb => switch (this) {
@@ -25,7 +25,7 @@ extension LivingWorldFactoryPassLabel on LivingWorldFactoryPass {
         LivingWorldFactoryPass.places => 'Drafting places…',
         LivingWorldFactoryPass.people => 'Drafting people…',
         LivingWorldFactoryPass.relationships => 'Linking relationships…',
-        LivingWorldFactoryPass.seedCanon => 'Seeding events & flags…',
+        LivingWorldFactoryPass.seedCanon => 'Seeding events & continuity…',
       };
 }
 
@@ -194,10 +194,12 @@ class LivingWorldFactoryService {
         '$shared'
             'Shape:\n'
             '{"people":[{"id":"p_...","name":"...","summary":"...",'
-            '"personalityNotes":"...","routineHints":"optional soft schedule"}]}\n'
+            '"personalityNotes":"...","routineHints":"optional soft schedule",'
+            '"inventory":["optional short item names"]}]}\n'
             'Fill about ${request.clampedPeople} named people. summary = role/'
             'what they do; personalityNotes = temperament/voice (short); '
-            'routineHints = soft time-of-day habits (optional, 1 short phrase). '
+            'routineHints = soft time-of-day habits (optional, 1 short phrase); '
+            'inventory = 0–3 short item names when relevant (optional). '
             'Do not invent places here.',
       LivingWorldFactoryPass.relationships =>
         '$shared'
@@ -213,9 +215,17 @@ class LivingWorldFactoryService {
             '{"events":[{"id":"e_...","text":"...","at":"optional",'
             '"placeId":"optional","personIds":["..."]}],'
             '"flags":[{"id":"f_...","key":"snake_case","value":true}],'
+            '"threads":[{"id":"th_...","title":"...","summary":"...",'
+            '"status":"open","personIds":["..."],"placeId":"optional",'
+            '"witnessIds":["..."]}],'
+            '"promises":[{"id":"pr_...","text":"...","fromId":"p_...",'
+            '"toId":"p_...","status":"open","placeId":"optional"}],'
+            '"secrets":[{"id":"sec_...","text":"...","status":"open",'
+            '"subjectIds":["..."],"witnessIds":["..."],"placeId":"optional"}],'
             '"liveState":{"activePlaceId":"pl_...","personLocations":'
             '{"p_...":"pl_..."}}}\n'
-            'Seed 3–8 starting events and a few flags that make play interesting. '
+            'Seed 3–8 starting events, a few flags, and 1–4 open continuity '
+            'objects (threads / promises / secrets) that make play interesting. '
             'Only use existing person/place ids. liveState is optional but useful.',
     };
   }
@@ -447,6 +457,106 @@ class LivingWorldFactoryService {
       }
     }
 
+    final threads = <WorldThread>[...world.threads];
+    final rawThreads = map['threads'];
+    if (rawThreads is List) {
+      for (final item in rawThreads) {
+        if (item is! Map) continue;
+        try {
+          var thread = WorldThread.fromJson(Map<String, dynamic>.from(item));
+          if (thread.id.trim().isEmpty) {
+            thread = thread.copyWith(id: _slugId('th', thread.title));
+          }
+          if (thread.placeId != null && !placeIds.contains(thread.placeId)) {
+            thread = thread.copyWith(clearPlaceId: true);
+          }
+          thread = thread.copyWith(
+            personIds: [
+              for (final id in thread.personIds)
+                if (personIds.contains(id)) id,
+            ],
+            witnessIds: [
+              for (final id in thread.witnessIds)
+                if (personIds.contains(id)) id,
+            ],
+          );
+          final idx = threads.indexWhere((t) => t.id == thread.id);
+          if (idx >= 0) {
+            threads[idx] = thread;
+          } else {
+            threads.add(thread);
+          }
+        } on FormatException {
+          // Skip.
+        }
+      }
+    }
+
+    final promises = <WorldPromise>[...world.promises];
+    final rawPromises = map['promises'];
+    if (rawPromises is List) {
+      for (final item in rawPromises) {
+        if (item is! Map) continue;
+        try {
+          var promise =
+              WorldPromise.fromJson(Map<String, dynamic>.from(item));
+          if (!personIds.contains(promise.fromId) ||
+              !personIds.contains(promise.toId)) {
+            continue;
+          }
+          if (promise.id.trim().isEmpty) {
+            promise = promise.copyWith(id: _slugId('pr', promise.text));
+          }
+          if (promise.placeId != null && !placeIds.contains(promise.placeId)) {
+            promise = promise.copyWith(clearPlaceId: true);
+          }
+          final idx = promises.indexWhere((p) => p.id == promise.id);
+          if (idx >= 0) {
+            promises[idx] = promise;
+          } else {
+            promises.add(promise);
+          }
+        } on FormatException {
+          // Skip.
+        }
+      }
+    }
+
+    final secrets = <WorldSecret>[...world.secrets];
+    final rawSecrets = map['secrets'];
+    if (rawSecrets is List) {
+      for (final item in rawSecrets) {
+        if (item is! Map) continue;
+        try {
+          var secret = WorldSecret.fromJson(Map<String, dynamic>.from(item));
+          if (secret.id.trim().isEmpty) {
+            secret = secret.copyWith(id: _slugId('sec', secret.text));
+          }
+          if (secret.placeId != null && !placeIds.contains(secret.placeId)) {
+            secret = secret.copyWith(clearPlaceId: true);
+          }
+          secret = secret.copyWith(
+            subjectIds: [
+              for (final id in secret.subjectIds)
+                if (personIds.contains(id)) id,
+            ],
+            witnessIds: [
+              for (final id in secret.witnessIds)
+                if (personIds.contains(id)) id,
+            ],
+          );
+          final idx = secrets.indexWhere((s) => s.id == secret.id);
+          if (idx >= 0) {
+            secrets[idx] = secret;
+          } else {
+            secrets.add(secret);
+          }
+        } on FormatException {
+          // Skip.
+        }
+      }
+    }
+
     WorldLiveState? live = world.liveState;
     final rawLive = map['liveState'];
     if (rawLive is Map) {
@@ -462,6 +572,9 @@ class LivingWorldFactoryService {
     return world.copyWith(
       events: events,
       flags: flags,
+      threads: threads,
+      promises: promises,
+      secrets: secrets,
       liveState: live,
     );
   }
