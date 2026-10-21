@@ -33,8 +33,10 @@ import '../services/group_beat_codec.dart';
 import '../services/group_reply_service.dart';
 import '../services/group_speaker_inference.dart';
 import '../services/lorebook_service.dart';
+import '../models/living_world_update_policy.dart';
 import '../services/living_world_retriever.dart';
 import '../services/living_world_service.dart';
+import '../services/living_world_undo_service.dart';
 import '../services/living_world_update_service.dart';
 import '../services/presence_service.dart';
 import '../services/director_service.dart';
@@ -137,8 +139,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final _transcriptCodec = ChatTranscriptCodec();
   final _draftService = ComposerDraftService();
   final _livingWorldService = LivingWorldService();
+  final _livingWorldUndo = LivingWorldUndoService();
   static const _livingWorldRetriever = LivingWorldRetriever();
   static const _livingWorldUpdates = LivingWorldUpdateService();
+  bool _livingWorldAfterTurnBusy = false;
   static const _replyRewrite = ReplyRewriteService();
   static const _narrator = NarratorService();
   static const _director = DirectorService();
@@ -2753,6 +2757,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       if (selected == null || selected.isEmpty || !mounted) return;
 
       setState(() => _busy = true);
+      await _livingWorldUndo.pushSnapshot(world);
       final updated = _livingWorldUpdates.applyUpdates(world, selected);
       await _livingWorldService.save(updated);
       if (!mounted) return;
@@ -2772,6 +2777,181 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         _error = 'Living World update: $e';
       });
     }
+  }
+
+  /// Phase 5: after a successful reply, propose / auto-apply per app policy.
+  Future<void> _maybeLivingWorldAfterTurn() async {
+    if (!mounted || _livingWorldAfterTurnBusy) return;
+    final session = _session;
+    final worldId = session?.worldId?.trim();
+    if (session == null || worldId == null || worldId.isEmpty) return;
+    if (!_hasApiKey) return;
+
+    final policy = await widget.settingsService.getLivingWorldUpdatePolicy();
+    if (policy == LivingWorldUpdatePolicy.manual) return;
+
+    _livingWorldAfterTurnBusy = true;
+    try {
+      final world = await _livingWorldService.getById(worldId);
+      if (world == null || !mounted) return;
+
+      final model = await widget.settingsService.getModel();
+      final sampling = (await widget.settingsService.getSampling()).copyWith(
+        temperature: 0.2,
+        maxTokens: 1200,
+      );
+      final messages = _livingWorldUpdates.buildProposeMessages(
+        world: world,
+        recentMessages: _messages,
+        userName: _userName,
+        speakerName: _character?.name ?? '',
+      );
+      final raw = await widget.nanoGptService.complete(
+        model: model,
+        messages: messages,
+        sampling: sampling,
+      );
+      final proposed = _livingWorldUpdates.parseProposal(raw, world: world);
+      if (!mounted) return;
+      if (proposed.isEmpty) return;
+
+      if (policy == LivingWorldUpdatePolicy.proposeAfterTurn) {
+        final selected = await showLivingWorldUpdateSheet(
+          context: context,
+          updates: proposed,
+          title: 'World updates — ${world.title}',
+        );
+        if (selected == null || selected.isEmpty || !mounted) return;
+        await _livingWorldUndo.pushSnapshot(world);
+        final updated = _livingWorldUpdates.applyUpdates(world, selected);
+        await _livingWorldService.save(updated);
+        if (!mounted) return;
+        setState(() => _boundWorldTitle = updated.title);
+        _showLocalToast(
+          'Saved ${selected.length} Living World '
+          '${selected.length == 1 ? 'update' : 'updates'}.',
+        );
+        return;
+      }
+
+      // autoSafe
+      final parts = _livingWorldUpdates.partitionForAutoSafe(proposed);
+      var working = world;
+      if (parts.safe.isNotEmpty) {
+        await _livingWorldUndo.pushSnapshot(working);
+        working = _livingWorldUpdates.applyUpdates(working, parts.safe);
+        await _livingWorldService.save(working);
+        if (!mounted) return;
+        setState(() => _boundWorldTitle = working.title);
+        _showLocalToast(
+          'World auto-saved ${parts.safe.length} safe '
+          '${parts.safe.length == 1 ? 'fact' : 'facts'}.',
+        );
+      }
+      if (parts.risky.isEmpty || !mounted) return;
+      final selected = await showLivingWorldUpdateSheet(
+        context: context,
+        updates: parts.risky,
+        title: 'Review relationship updates — ${working.title}',
+      );
+      if (selected == null || selected.isEmpty || !mounted) return;
+      // Snapshot again only if we didn't already snapshot for safe ops.
+      if (parts.safe.isEmpty) {
+        await _livingWorldUndo.pushSnapshot(working);
+      }
+      working = _livingWorldUpdates.applyUpdates(working, selected);
+      await _livingWorldService.save(working);
+      if (!mounted) return;
+      setState(() => _boundWorldTitle = working.title);
+      _showLocalToast(
+        'Saved ${selected.length} relationship '
+        '${selected.length == 1 ? 'update' : 'updates'}.',
+      );
+    } catch (e) {
+      // Soft-fail: play continues; owner can use manual Update world…
+      if (!mounted) return;
+      debugPrint('Living World after-turn skipped: $e');
+    } finally {
+      _livingWorldAfterTurnBusy = false;
+    }
+  }
+
+  Future<void> _undoLastLivingWorldUpdate() async {
+    final worldId = _session?.worldId?.trim();
+    if (worldId == null || worldId.isEmpty || _busy) return;
+    final can = await _livingWorldUndo.canUndo(worldId);
+    if (!can) {
+      if (!mounted) return;
+      _showLocalToast('Nothing to undo for this Living World yet.');
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      final restored = await _livingWorldUndo.undoLast(
+        worldService: _livingWorldService,
+        worldId: worldId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _boundWorldTitle = restored?.title;
+      });
+      _showLocalToast(
+        restored == null
+            ? 'Undo failed.'
+            : 'Reverted last Living World update pack.',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = 'Living World undo: $e';
+      });
+    }
+  }
+
+  Future<void> _pickLivingWorldUpdatePolicy() async {
+    final current = await widget.settingsService.getLivingWorldUpdatePolicy();
+    if (!mounted) return;
+    final picked = await showModalBottomSheet<LivingWorldUpdatePolicy>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Living World during play',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+              ),
+              for (final policy in LivingWorldUpdatePolicy.values)
+                ListTile(
+                  leading: Icon(
+                    policy == current
+                        ? Icons.check_circle
+                        : Icons.circle_outlined,
+                  ),
+                  title: Text(policy.menuLabel),
+                  subtitle: Text(policy.helpText),
+                  onTap: () => Navigator.pop(context, policy),
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+    if (picked == null) return;
+    await widget.settingsService.setLivingWorldUpdatePolicy(picked);
+    if (!mounted) return;
+    _showLocalToast('Living World play mode: ${picked.shortLabel}');
   }
 
   Future<void> _editMemorySummary() async {
@@ -4086,6 +4266,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       setState(() => _busy = false);
       await _persist();
       unawaited(_maybeAutoSummarize());
+      unawaited(_maybeLivingWorldAfterTurn());
       _refocusComposer();
     } on NanoGptCancelledException {
       if (!mounted) return;
@@ -4596,6 +4777,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               if (value == 'lorebooks') _pickChatLorebooks();
               if (value == 'living_world') _pickLivingWorld();
               if (value == 'living_world_update') _updateLivingWorldFromChat();
+              if (value == 'living_world_policy') _pickLivingWorldUpdatePolicy();
+              if (value == 'living_world_undo') _undoLastLivingWorldUpdate();
               if (value == 'chat_lore') _openChatLorebook();
               if (value == 'chat_copies') _openChatOverrides();
               if (value == 'memory') _editMemorySummary();
@@ -4643,6 +4826,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 const PopupMenuItem(
                   value: 'living_world_update',
                   child: Text('Update world from chat…'),
+                ),
+              if (_session?.hasLivingWorld ?? false)
+                const PopupMenuItem(
+                  value: 'living_world_policy',
+                  child: Text('World play mode…'),
+                ),
+              if (_session?.hasLivingWorld ?? false)
+                const PopupMenuItem(
+                  value: 'living_world_undo',
+                  child: Text('Undo last world update'),
                 ),
               PopupMenuItem(
                 value: 'chat_lore',

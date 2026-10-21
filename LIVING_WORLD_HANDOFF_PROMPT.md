@@ -2,22 +2,29 @@
 
 Copy everything below the line into a **new Agent chat** opened in the **Anima** workspace.
 
+> **Status (2026-10-20):** Phases **0–4 are done** on `experiment/living-world`.  
+> For **what to build next** (organic DF-lite play loop → end-goal), follow  
+> **[`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md)** starting at **Phase 5**.  
+> This handoff stays the **philosophy / locked scope** document — do not ignore its out-of-scope list.
+
 ---
 
 ## Who I am and what this chat is for
 
 I am Jakwan. Anima is my passion project — my first real app. Cursor agents wrote most of the code; I direct product. Treat me as product owner / director, not as someone who can recite every service file. Explore the repo carefully before proposing big changes. Prefer thin, reversible slices over rewrites.
 
-**This conversation is a build handoff for Living World**, not a rewrite of Anima and not a Dwarf Fortress clone.
+**This conversation is a build handoff for Living World**, not a rewrite of Anima and not a full Dwarf Fortress clone.
+
+**True end-goal (owner):** a DF-**lite** engine **under** Anima’s chat shell — the world updates organically as he plays (validated under-the-hood state), not a frozen factory notebook he must hand-edit every time. See the roadmap.
 
 Your job is to:
 
 1. Understand the locked decision and scope below.
-2. Explore Anima’s existing memory / lore / summary / prompt-assembly paths.
-3. Work **only on a new git branch** so main/stable Anima stays my daily driver fallback.
-4. Build the **sweet-spot** living-world layer: structured canon the app owns, retrieved into chat — AI roleplays from that canon.
+2. Explore Anima’s existing memory / lore / summary / prompt-assembly paths **and** the shipped Living World code on `experiment/living-world`.
+3. Work **only on `experiment/living-world`** (or ask before branching) so main/stable Anima stays the daily driver fallback.
+4. Build toward the **roadmap** phases — sweet-spot living world: structured canon the app owns, retrieved into chat, **updated through a validated turn pipeline** — AI roleplays from that canon.
 
-Do **not** scrap Anima’s chat-first experience. Do **not** port Chronicle wholesale. Do **not** chase full Dwarf Fortress simulation.
+Do **not** scrap Anima’s chat-first experience. Do **not** port Chronicle wholesale. Do **not** chase full Dwarf Fortress simulation (fortress UI, fluids, planet ticks).
 
 ---
 
@@ -293,14 +300,17 @@ Only after I agree on an approach:
 
 ## Your first reply in the new chat should
 
-1. Confirm you understood: **keep Anima; add chat-native Living World memory/engine spine; sweet-spot scope only; experiment on a branch.**
-2. Start **Phase 0** exploration (no large code changes yet).
-3. Tell me what you found about existing memory/lore/summary/prompt paths.
-4. Recommend the thinnest next experiment (likely option A or a tight A→B path).
-5. Ask for my go-ahead before creating the branch / writing substantial code.
+**If Phases 1–4 are already in the tree (they are):**
+
+1. Confirm you understood the end-goal: **organic validated world updates under Anima chat (DF-lite method)** — not a frozen notebook and not a fortress clone.
+2. Confirm you’ll work on **`experiment/living-world`** and follow **[`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md)** from the first unchecked phase (likely **Phase 5**).
+3. Briefly state what Phase 5 will deliver in plain English.
+4. Ask for go-ahead before large coding / commits.
+
+**Only if starting from scratch on main with no Living World code:** do Phase 0 exploration first, then follow the original Phase 1–4 plan in this file before the roadmap.
 
 ---
 
 ## Short paste if you need a TL;DR later
 
-> Keep Anima. Add an optional Living World layer on a feature branch: structured JSON canon (people, places, relationships, events, flags) the app owns; retrieve relevant scraps into the existing chat prompt; AI roleplays but does not silently overwrite canon. Target ~20–50 named people and a town/region of places — not a planet, not DF graphics/maps/fortress systems. Creation Center as-is is a workshop chat and is NOT the world factory; do not rewrite it first — engine + play retrieval first; multi-pass world factory later. NanoGPT = play chat; strong models optional later for drafting world data. Feature-flagged, chat-native, thin slices. Main Anima stays my fallback. Ask before commits. Adults; uncensored app prompts. Phase 0 map first, then thinnest vertical slice.
+> Keep Anima. Living World = structured JSON canon the app owns; retrieve into chat; AI roleplays; **no silent unvalidated overwrites**. Phases 1–4 shipped (notebook, retrieve, reviewed writes, cast scale, factory). End-goal = DF-lite **under** chat: world changes as you play via a turn pipeline — see `LIVING_WORLD_ROADMAP.md` Phase 5+. Not a planet, not DF graphics/maps/fortress systems. Creation Center ≠ living engine. Work on `experiment/living-world`. Ask before commits/merge. Adults; uncensored app prompts.

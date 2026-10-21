@@ -7,7 +7,7 @@
 >
 > **Living documents:** `AGENTS.md` + this file + `README.md` are kept current together — see §29 for the upkeep rule every agent must follow.
 
-**Last updated:** 2026-10-20 · **Version:** 1.0.0 build **78** · **Tests:** 436 (`flutter test`) · Living World Phase 1–4 on branch `experiment/living-world`
+**Last updated:** 2026-10-20 · **Version:** 1.0.0 build **78** · **Tests:** 440 (`flutter test`) · Living World Phases 1–5 shipped; next Phase 6 in `LIVING_WORLD_ROADMAP.md`
 
 ---
 
@@ -99,7 +99,7 @@
 | Paths | `path_provider` → app documents directory |
 | Files | `file_picker`, `share_plus`, Android `saf` for sync URIs |
 | Fonts | `google_fonts` |
-| Tests | `flutter_test` — 436 tests |
+| Tests | `flutter_test` — 440 tests |
 
 **Platforms:** Android (primary), Linux desktop, Windows desktop. macOS not targeted.
 
@@ -568,9 +568,11 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 ## 15b. Living World (experiment)
 
 **Branch:** `experiment/living-world` (not on `main` until merge).  
-**Brief:** [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md)
+**Brief (philosophy / locked scope):** [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md)  
+**Roadmap (Phases 5–12 → DF-lite living play):** [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md)
 
-**North star:** App owns structured canon; AI roleplays from retrieved scraps — does not silently overwrite hard state.
+**North star:** App owns structured canon; AI roleplays from retrieved scraps — does not silently overwrite hard state.  
+**Owner end-goal:** organic after-turn world updates (validated engine loop under Anima chat) — Phases 1–4 are the warehouse + factory; Phase 5+ is the living write loop. See roadmap.
 
 ### Phase 1 (shipped on the experiment branch)
 
@@ -611,9 +613,18 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 | Factory UI | Pitch + place/people sliders; progress per pass; saves validated notebook (uses Character build model/sampling) |
 | Separation | **Not** Creation Center — workshop chat untouched; factory never relies on one endless thread |
 
-**Not yet:** auto-propose after every turn, Creation Center rewrite, `.anima-backup` inclusion of `worlds/` (folder copy still moves them via `librarySubdirs`).
+### Phase 5 (shipped on the experiment branch)
 
-**Invariant:** Lorebooks + Memory summary stay; Living World is the authoritative layer for *tracked* facts when bound. AI never silently overwrites hard state.
+| Piece | Role |
+|-------|------|
+| `LivingWorldUpdatePolicy` | `manual` / `proposeAfterTurn` / `autoSafe` (Settings + chat ⋮) |
+| After-turn hook | Successful `_streamAssistantReply` → propose when bound + non-manual |
+| Auto-safe split | Events/flags/active place/who-where auto-apply; relationships still reviewed |
+| `LivingWorldUndoService` | `worlds/<id>.undo.json` snapshots; ⋮ → Undo last world update |
+
+**Not yet (see roadmap Phases 6–12):** turn resolve-before-narrate, light systems, near-scene ticks, threads/secrets, `.anima-backup` inclusion of `worlds/` (folder copy still moves them via `librarySubdirs`), Creation Center rewrite (not required for living engine).
+
+**Invariant:** Lorebooks + Memory summary stay; Living World is the authoritative layer for *tracked* facts when bound. AI never silently overwrites hard state (even when auto-apply lands — validation + policy required).
 
 ---
 
@@ -800,7 +811,7 @@ Applied in `PromptBuilder.applyMacros()`.
 ## 26. Testing and quality
 
 ```bash
-flutter test      # 436 tests
+flutter test      # 440 tests
 flutter analyze
 ```
 
@@ -884,14 +895,17 @@ Tests cover: lore scan, prompt builders, card codec, backup, sync stability, cha
 | **`PROJECT_REFERENCE.md`** (this file) | External AI, deep onboarding | Full technical encyclopedia |
 | **`AGENTS.md`** | Cursor coding agents | Current status, roadmap, code map, machine notes, next actions |
 | **`README.md`** | Human owner | Screen-by-screen feature catalog, install, release history |
+| **`LIVING_WORLD_HANDOFF_PROMPT.md`** | Agents | Living World philosophy + locked in/out scope |
+| **`LIVING_WORLD_ROADMAP.md`** | Agents | Phases 5–12 build order toward organic DF-lite living play |
 
 **How to feed Gemini / external AI:**
 
 1. Attach or paste **`PROJECT_REFERENCE.md`** for full context.
 2. Optionally add **`AGENTS.md`** for latest build status and agent conventions.
-3. For UI-only questions, **`README.md`** sections 1–4 are enough.
+3. For Living World future work, also attach **`LIVING_WORLD_ROADMAP.md`** (+ handoff for scope locks).
+4. For UI-only questions, **`README.md`** sections 1–4 are enough.
 
-**Living-document rule (for every agent):** these three files are the living docs and must be updated together after meaningful work — **`AGENTS.md`** always (status/roadmap/code map), **this file** whenever mechanics or architecture changed (update the section you touched), and **`README.md`** whenever anything user-visible changed.
+**Living-document rule (for every agent):** the core three files must be updated together after meaningful work — **`AGENTS.md`** always (status/roadmap/code map), **this file** whenever mechanics or architecture changed (update the section you touched), and **`README.md`** whenever anything user-visible changed. For Living World phase completions, also update checkboxes in **`LIVING_WORLD_ROADMAP.md`**.
 
 ---
 

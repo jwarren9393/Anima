@@ -863,7 +863,7 @@ A tiny pointer file still sits in hidden app storage so the next launch knows wh
 - No TTS (removed).
 - Paths only on long-press menu (not permanent composer button).
 - Backup/sync plain JSON, not encrypted; API key excluded on purpose.
-- Living World (experiment): scored retrieve (solo/group) + explicit **Update world from chat…** with review; **Settings → Living Worlds** hub + multi-pass world factory + notebook editor; large casts stay mostly off-prompt; no auto-write every turn; `.anima-backup` does not pack `worlds/` yet (copying the whole Anima folder still includes them).
+- Living World (experiment): scored retrieve (solo/group); **play modes** Manual / Propose-after-turn / Auto-safe (Settings → Living Worlds or chat ⋮); undo last world update pack; hub + factory + editor; large casts stay mostly off-prompt; further DF-lite depth in `LIVING_WORLD_ROADMAP.md` Phase 6+; `.anima-backup` does not pack `worlds/` yet (folder copy still includes them).
 - PNG card export: JPEG/WebP avatars may use placeholder; PNG avatars embed correctly.
 - **Presence / scene law** is always on (no toggle) — uses narrator name mentions; very old memory without witness tags may leak until re-summarized; honorifics don’t match names — use the **Narrator** control to establish who’s present.
 - NanoGPT website **Intelligence** scores not available via API (Anima shows catalog + routing stats instead).
@@ -899,7 +899,7 @@ bash scripts/setup_linux_dev_noroot.sh   # once per Linux PC — no admin passwo
 cd ~/Documents/Git\ Projects/Anima       # this PC's checkout — quote the space in the name
 flutter doctor
 flutter pub get
-flutter test      # 436 tests
+flutter test      # 440 tests
 flutter analyze
 flutter run -d linux     # or -d windows / a connected Android device
 ```

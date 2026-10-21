@@ -5,9 +5,11 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'settings_store.dart';
 
+import '../models/living_world_update_policy.dart';
 import '../models/ui_style_settings.dart';
 import '../utils/platform_utils.dart';
 
+export '../models/living_world_update_policy.dart' show LivingWorldUpdatePolicy;
 export '../models/ui_style_settings.dart'
     show AvatarShape, AvatarSizeTier, AvatarStyleSettings;
 
@@ -488,6 +490,7 @@ class SettingsService {
   static const _contextKeepRecentKey = 'context_summarize_keep_recent';
   static const _favoriteModelsKey = 'nanogpt_favorite_models';
   static const _legacyContextMaxHistoryKey = 'context_max_history_messages';
+  static const _livingWorldUpdatePolicyKey = 'living_world_update_policy';
 
   /// Preference keys included in a full-app backup (never the API key).
   static const backupPreferenceKeys = <String>[
@@ -531,6 +534,7 @@ class SettingsService {
     _contextSummarizeEveryKey,
     _contextKeepRecentKey,
     _favoriteModelsKey,
+    _livingWorldUpdatePolicyKey,
   ];
 
   static const storedKeys = <String>[
@@ -1161,6 +1165,19 @@ class SettingsService {
     final parsed = double.tryParse(raw ?? '');
     if (parsed == null) return SamplingSettings.defaultPenalty;
     return parsed.clamp(-2.0, 2.0);
+  }
+
+  /// Living World after-turn write policy (Phase 5). Default = manual.
+  Future<LivingWorldUpdatePolicy> getLivingWorldUpdatePolicy() async {
+    final raw = await _storage.read(key: _livingWorldUpdatePolicyKey);
+    return LivingWorldUpdatePolicyX.fromStorage(raw);
+  }
+
+  Future<void> setLivingWorldUpdatePolicy(LivingWorldUpdatePolicy policy) async {
+    await _storage.write(
+      key: _livingWorldUpdatePolicyKey,
+      value: policy.storageValue,
+    );
   }
 
   double? _parseOptionalDouble(String? raw, double min, double max) {

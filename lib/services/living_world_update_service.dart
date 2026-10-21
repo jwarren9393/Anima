@@ -46,6 +46,16 @@ class LivingWorldCanonUpdate {
       };
 
   String get reviewDetail => summary;
+
+  /// Safe for Phase 5 auto-apply (still schema-validated). Relationships need OK.
+  bool get isSafeForAutoApply => switch (op) {
+        LivingWorldUpdateOp.addEvent ||
+        LivingWorldUpdateOp.setFlag ||
+        LivingWorldUpdateOp.setActivePlace ||
+        LivingWorldUpdateOp.setPersonLocation =>
+          true,
+        LivingWorldUpdateOp.setRelationship => false,
+      };
 }
 
 /// Propose structured canon updates from recent chat; apply only after review.
@@ -146,6 +156,21 @@ class LivingWorldUpdateService {
       if (update != null) out.add(update);
     }
     return out;
+  }
+
+  /// Split proposals into auto-safe vs needs-review (Phase 5 autoSafe policy).
+  ({List<LivingWorldCanonUpdate> safe, List<LivingWorldCanonUpdate> risky})
+      partitionForAutoSafe(List<LivingWorldCanonUpdate> updates) {
+    final safe = <LivingWorldCanonUpdate>[];
+    final risky = <LivingWorldCanonUpdate>[];
+    for (final u in updates) {
+      if (u.isSafeForAutoApply) {
+        safe.add(u);
+      } else {
+        risky.add(u);
+      }
+    }
+    return (safe: safe, risky: risky);
   }
 
   /// Apply selected updates onto [world]. Does not save to disk.

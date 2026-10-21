@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../models/living_world.dart';
+import '../models/living_world_update_policy.dart';
 import '../services/living_world_service.dart';
 import '../services/nanogpt_service.dart';
 import '../services/settings_service.dart';
@@ -35,6 +36,7 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
   List<LivingWorldSummary> _worlds = [];
   bool _loading = true;
   String? _error;
+  LivingWorldUpdatePolicy _policy = LivingWorldUpdatePolicy.manual;
 
   @override
   void initState() {
@@ -49,9 +51,11 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
     });
     try {
       final worlds = await widget.worldService.listSummaries();
+      final policy = await widget.settingsService.getLivingWorldUpdatePolicy();
       if (!mounted) return;
       setState(() {
         _worlds = worlds;
+        _policy = policy;
         _loading = false;
       });
     } catch (e) {
@@ -61,6 +65,12 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
         _error = '$e';
       });
     }
+  }
+
+  Future<void> _setPolicy(LivingWorldUpdatePolicy policy) async {
+    await widget.settingsService.setLivingWorldUpdatePolicy(policy);
+    if (!mounted) return;
+    setState(() => _policy = policy);
   }
 
   Future<void> _open(LivingWorldSummary summary) async {
@@ -224,6 +234,25 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
                           ),
                     ),
                   ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                    child: Text(
+                      'During play',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                  ),
+                  for (final policy in LivingWorldUpdatePolicy.values)
+                    ListTile(
+                      leading: Icon(
+                        policy == _policy
+                            ? Icons.check_circle
+                            : Icons.circle_outlined,
+                      ),
+                      title: Text(policy.menuLabel),
+                      subtitle: Text(policy.helpText),
+                      onTap: () => _setPolicy(policy),
+                    ),
+                  const Divider(),
                   if (_error != null)
                     ListTile(
                       leading: Icon(
