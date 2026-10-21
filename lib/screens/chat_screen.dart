@@ -38,6 +38,7 @@ import '../models/turn_resolution.dart';
 import '../services/living_world_log_service.dart';
 import '../services/living_world_retriever.dart';
 import '../services/living_world_service.dart';
+import '../services/living_world_simulator.dart';
 import '../services/living_world_systems_service.dart';
 import '../services/living_world_turn_resolver.dart';
 import '../services/living_world_undo_service.dart';
@@ -150,7 +151,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   static const _livingWorldUpdates = LivingWorldUpdateService();
   static const _livingWorldResolver = LivingWorldTurnResolver();
   static const _livingWorldSystems = LivingWorldSystemsService();
+  static const _livingWorldSimulator = LivingWorldSimulator();
   bool _livingWorldAfterTurnBusy = false;
+  bool _livingWorldTickBusy = false;
   /// Phase 6: set when resolve-before-narrate ran this stream (skip re-propose).
   bool _livingWorldResolvedThisTurn = false;
   /// Relationships deferred from resolve-before for after-turn review.
@@ -2973,6 +2976,106 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
   }
 
+  /// Phase 5 then Phase 8: after-turn extract, then optional near-scene tick.
+  Future<void> _afterLivingWorldTurnPipeline() async {
+    await _maybeLivingWorldAfterTurn();
+    await _maybeLivingWorldNearSceneTick(automatic: true);
+  }
+
+  /// Phase 8: tiny near-scene tick around the active place (rules-only).
+  ///
+  /// Automatic ticks respect Settings trigger (off / after turn / every N).
+  /// Manual Advance always plans a tick when the chat is bound.
+  Future<void> _maybeLivingWorldNearSceneTick({
+    required bool automatic,
+  }) async {
+    if (!mounted || _livingWorldTickBusy) return;
+    final session = _session;
+    final worldId = session?.worldId?.trim();
+    if (session == null || worldId == null || worldId.isEmpty) return;
+
+    final tickSettings =
+        await widget.settingsService.getLivingWorldTickSettings();
+    if (automatic) {
+      final assistantCount = _messages
+          .where((m) => m.isAssistant || m.isGroupBeat)
+          .length;
+      if (!tickSettings.shouldAutoTick(assistantReplyCount: assistantCount)) {
+        return;
+      }
+    }
+
+    _livingWorldTickBusy = true;
+    try {
+      final world = await _livingWorldService.getById(worldId);
+      if (world == null || !mounted) return;
+
+      final plan = _livingWorldSimulator.planTick(
+        world,
+        settings: tickSettings,
+      );
+      if (plan.isEmpty || !mounted) return;
+
+      List<LivingWorldCanonUpdate> selected;
+      if (automatic) {
+        // Auto ticks only apply safe ops (rules never emit relationships).
+        selected = plan.ops.where((u) => u.isSafeForAutoApply).toList();
+      } else {
+        final reviewed = await showLivingWorldUpdateSheet(
+          context: context,
+          updates: plan.ops,
+          title: 'Advance a beat — ${world.title}',
+        );
+        if (reviewed == null || reviewed.isEmpty || !mounted) return;
+        selected = reviewed;
+      }
+      if (selected.isEmpty) return;
+
+      await _livingWorldUndo.pushSnapshot(world);
+      final updated = _livingWorldUpdates.applyUpdates(world, selected);
+      await _livingWorldService.save(updated);
+      await _livingWorldLog.append(
+        TurnResolution(
+          worldId: world.id,
+          at: DateTime.now(),
+          kind: TurnResolutionKind.nearSceneTick,
+          proposed: plan.ops,
+          applied: selected,
+          chatId: session.id,
+        ),
+      );
+      if (!mounted) return;
+      setState(() => _boundWorldTitle = updated.title);
+      _showLocalToast(
+        automatic
+            ? 'World beat: ${selected.length} near-scene '
+                '${selected.length == 1 ? 'change' : 'changes'}.'
+            : 'Advanced world beat '
+                '(${selected.length} '
+                '${selected.length == 1 ? 'change' : 'changes'}).',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      if (automatic) {
+        debugPrint('Living World near-scene tick skipped: $e');
+      } else {
+        setState(() => _error = 'Living World beat: $e');
+      }
+    } finally {
+      _livingWorldTickBusy = false;
+    }
+  }
+
+  Future<void> _advanceLivingWorldBeat() async {
+    if (_busy) return;
+    final worldId = _session?.worldId?.trim();
+    if (worldId == null || worldId.isEmpty) {
+      setState(() => _error = 'Bind a Living World first (⋮ → Living World).');
+      return;
+    }
+    await _maybeLivingWorldNearSceneTick(automatic: false);
+  }
+
   /// Phase 5: after a successful reply, propose / auto-apply per app policy.
   ///
   /// When Phase 6 resolve-before already ran, skip a second propose call and
@@ -4585,7 +4688,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       setState(() => _busy = false);
       await _persist();
       unawaited(_maybeAutoSummarize());
-      unawaited(_maybeLivingWorldAfterTurn());
+      unawaited(_afterLivingWorldTurnPipeline());
       _refocusComposer();
     } on NanoGptCancelledException {
       if (!mounted) return;
@@ -5096,6 +5199,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               if (value == 'lorebooks') _pickChatLorebooks();
               if (value == 'living_world') _pickLivingWorld();
               if (value == 'living_world_update') _updateLivingWorldFromChat();
+              if (value == 'living_world_tick') _advanceLivingWorldBeat();
               if (value == 'living_world_policy') _pickLivingWorldUpdatePolicy();
               if (value == 'living_world_log') _showLivingWorldLog();
               if (value == 'living_world_undo') _undoLastLivingWorldUpdate();
@@ -5146,6 +5250,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 const PopupMenuItem(
                   value: 'living_world_update',
                   child: Text('Update world from chat…'),
+                ),
+              if (_session?.hasLivingWorld ?? false)
+                const PopupMenuItem(
+                  value: 'living_world_tick',
+                  child: Text('Advance world a beat…'),
                 ),
               if (_session?.hasLivingWorld ?? false)
                 const PopupMenuItem(

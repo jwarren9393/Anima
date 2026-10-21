@@ -264,6 +264,7 @@ Minimal chrome: **Close** · title · **⋮** menu. **Voice row** above composer
 | **World Info: …** | Use Settings default, pick specific global lorebooks, or turn global lore **off** for this thread (character card lore still applies) |
 | **Living World: Off / …** | *(Experiment branch)* Optional structured world notebook for this chat (solo or group) — retrieves a small scored pack of relevant canon into replies (large casts stay mostly off-prompt); Off by default. Create empty / sample harbor / import JSON |
 | **Update world from chat…** | *(Experiment — when a world is bound)* AI proposes events/flags/relationships/locations from recent chat; you review and apply — nothing saves silently |
+| **Advance world a beat…** | *(Experiment — bound)* Run one near-scene tick (active place + neighbors only); review then save. Also on Worlds hub row ⋮. Auto ticks optional in **Settings → Living Worlds** (default Off) |
 | **World play mode…** | *(Experiment — bound)* Manual / Propose after turn / Auto-safe; toggle **Resolve before reply** (Living mode — facts first, then prose) |
 | **World log…** | *(Experiment — bound)* What the engine applied on recent turns |
 | **Undo last world update** | *(Experiment — bound)* Revert the last applied update pack |
@@ -866,7 +867,7 @@ A tiny pointer file still sits in hidden app storage so the next launch knows wh
 - No TTS (removed).
 - Paths only on long-press menu (not permanent composer button).
 - Backup/sync plain JSON, not encrypted; API key excluded on purpose.
-- Living World (experiment): scored retrieve (solo/group); **play modes** Manual / Propose-after-turn / Auto-safe; opt-in **Resolve before reply (Living mode)** (facts first, then prose); **World log…**; undo last world update pack; light systems (relationship drift from aid/betrayal/promise events, Narrator presence → who/where, routine hints, flag recipes); hub + factory + editor; large casts stay mostly off-prompt; further DF-lite depth in `LIVING_WORLD_ROADMAP.md` Phase 8+; `.anima-backup` does not pack `worlds/` yet (folder copy still includes them).
+- Living World (experiment): scored retrieve (solo/group); **play modes** Manual / Propose-after-turn / Auto-safe; opt-in **Resolve before reply (Living mode)** (facts first, then prose); **near-scene ticks** (Off / after turn / every N) + **Advance world a beat…**; **World log…**; undo last world update pack; light systems (relationship drift from aid/betrayal/promise events, Narrator presence → who/where, routine hints, flag recipes); hub + factory + editor; large casts stay mostly off-prompt; further DF-lite depth in `LIVING_WORLD_ROADMAP.md` Phase 9+; `.anima-backup` does not pack `worlds/` yet (folder copy still includes them).
 - PNG card export: JPEG/WebP avatars may use placeholder; PNG avatars embed correctly.
 - **Presence / scene law** is always on (no toggle) — uses narrator name mentions; very old memory without witness tags may leak until re-summarized; honorifics don’t match names — use the **Narrator** control to establish who’s present.
 - NanoGPT website **Intelligence** scores not available via API (Anima shows catalog + routing stats instead).

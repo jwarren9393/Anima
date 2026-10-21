@@ -4,12 +4,19 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../models/living_world.dart';
+import '../models/living_world_tick_settings.dart';
 import '../models/living_world_update_policy.dart';
+import '../models/turn_resolution.dart';
+import '../services/living_world_log_service.dart';
 import '../services/living_world_service.dart';
+import '../services/living_world_simulator.dart';
+import '../services/living_world_undo_service.dart';
+import '../services/living_world_update_service.dart';
 import '../services/nanogpt_service.dart';
 import '../services/settings_service.dart';
 import '../widgets/living_world_factory_sheet.dart';
 import '../widgets/living_world_picker.dart';
+import '../widgets/living_world_update_sheet.dart';
 import 'living_world_edit_screen.dart';
 
 /// Living Worlds hub — list / create / factory / import notebooks.
@@ -38,6 +45,13 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
   String? _error;
   LivingWorldUpdatePolicy _policy = LivingWorldUpdatePolicy.manual;
   bool _resolveBeforeNarrate = false;
+  LivingWorldTickSettings _tickSettings = LivingWorldTickSettings.defaults;
+  bool _tickBusy = false;
+
+  final _simulator = const LivingWorldSimulator();
+  final _updates = const LivingWorldUpdateService();
+  final _undo = LivingWorldUndoService();
+  final _log = LivingWorldLogService();
 
   @override
   void initState() {
@@ -55,11 +69,13 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
       final policy = await widget.settingsService.getLivingWorldUpdatePolicy();
       final livingMode =
           await widget.settingsService.getLivingWorldResolveBeforeNarrate();
+      final tick = await widget.settingsService.getLivingWorldTickSettings();
       if (!mounted) return;
       setState(() {
         _worlds = worlds;
         _policy = policy;
         _resolveBeforeNarrate = livingMode;
+        _tickSettings = tick;
         _loading = false;
       });
     } catch (e) {
@@ -81,6 +97,81 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
     await widget.settingsService.setLivingWorldResolveBeforeNarrate(enabled);
     if (!mounted) return;
     setState(() => _resolveBeforeNarrate = enabled);
+  }
+
+  Future<void> _setTickSettings(LivingWorldTickSettings settings) async {
+    final next = settings.clamped();
+    await widget.settingsService.setLivingWorldTickSettings(next);
+    if (!mounted) return;
+    setState(() => _tickSettings = next);
+  }
+
+  Future<void> _advanceBeat(LivingWorldSummary summary) async {
+    if (_tickBusy) return;
+    setState(() {
+      _tickBusy = true;
+      _error = null;
+    });
+    try {
+      final world = await widget.worldService.getById(summary.id);
+      if (world == null || !mounted) {
+        setState(() {
+          _tickBusy = false;
+          _error = 'Could not open that world file.';
+        });
+        return;
+      }
+      final plan = _simulator.planTick(world, settings: _tickSettings);
+      if (!mounted) return;
+      if (plan.isEmpty) {
+        setState(() => _tickBusy = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Nothing nearby to advance — set an active place or add people.',
+            ),
+          ),
+        );
+        return;
+      }
+      setState(() => _tickBusy = false);
+      final selected = await showLivingWorldUpdateSheet(
+        context: context,
+        updates: plan.ops,
+        title: 'Advance a beat — ${world.title}',
+      );
+      if (selected == null || selected.isEmpty || !mounted) return;
+
+      setState(() => _tickBusy = true);
+      await _undo.pushSnapshot(world);
+      final updated = _updates.applyUpdates(world, selected);
+      await widget.worldService.save(updated);
+      await _log.append(
+        TurnResolution(
+          worldId: world.id,
+          at: DateTime.now(),
+          kind: TurnResolutionKind.nearSceneTick,
+          proposed: plan.ops,
+          applied: selected,
+        ),
+      );
+      if (!mounted) return;
+      setState(() => _tickBusy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Advanced ${selected.length} near-scene '
+            '${selected.length == 1 ? 'change' : 'changes'}.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _tickBusy = false;
+        _error = 'Advance beat failed: $e';
+      });
+    }
   }
 
   Future<void> _open(LivingWorldSummary summary) async {
@@ -274,6 +365,137 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
                     value: _resolveBeforeNarrate,
                     onChanged: _setResolveBeforeNarrate,
                   ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                    child: Text(
+                      'Near-scene ticks',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Text(
+                      'Tiny shifts around the active place and its neighbors '
+                      '(not the whole cast). Unbound chats never tick. '
+                      'Default is off — use Advance world a beat… when you want one.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  for (final trigger in LivingWorldTickTrigger.values)
+                    ListTile(
+                      leading: Icon(
+                        trigger == _tickSettings.trigger
+                            ? Icons.check_circle
+                            : Icons.circle_outlined,
+                      ),
+                      title: Text(trigger.menuLabel),
+                      subtitle: Text(trigger.helpText),
+                      onTap: () => _setTickSettings(
+                        _tickSettings.copyWith(trigger: trigger),
+                      ),
+                    ),
+                  if (_tickSettings.trigger == LivingWorldTickTrigger.everyN)
+                    ListTile(
+                      leading: const Icon(Icons.repeat),
+                      title: Text('Every ${_tickSettings.everyN} turns'),
+                      subtitle: const Text('Tap to pick 2–10'),
+                      onTap: () async {
+                        final picked = await showDialog<int>(
+                          context: context,
+                          builder: (context) => SimpleDialog(
+                            title: const Text('Tick every N turns'),
+                            children: [
+                              for (final n in [2, 3, 4, 5, 6, 8, 10])
+                                SimpleDialogOption(
+                                  onPressed: () => Navigator.pop(context, n),
+                                  child: Text('Every $n turns'),
+                                ),
+                            ],
+                          ),
+                        );
+                        if (picked == null || !mounted) return;
+                        await _setTickSettings(
+                          _tickSettings.copyWith(everyN: picked),
+                        );
+                      },
+                    ),
+                  ListTile(
+                    leading: const Icon(Icons.groups_outlined),
+                    title: Text(
+                      'Max ${_tickSettings.maxPeople} people · '
+                      '${_tickSettings.maxOps} ops · '
+                      '${_tickSettings.radiusHops}-hop radius',
+                    ),
+                    subtitle: const Text('Tap to adjust tick caps'),
+                    onTap: () async {
+                      var people = _tickSettings.maxPeople;
+                      var ops = _tickSettings.maxOps;
+                      var hops = _tickSettings.radiusHops;
+                      final ok = await showDialog<bool>(
+                        context: context,
+                        builder: (context) => StatefulBuilder(
+                          builder: (context, setLocal) => AlertDialog(
+                            title: const Text('Tick caps'),
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text('People touched: $people'),
+                                Slider(
+                                  value: people.toDouble(),
+                                  min: 1,
+                                  max: 12,
+                                  divisions: 11,
+                                  label: '$people',
+                                  onChanged: (v) =>
+                                      setLocal(() => people = v.round()),
+                                ),
+                                Text('Max ops: $ops'),
+                                Slider(
+                                  value: ops.toDouble(),
+                                  min: 1,
+                                  max: 12,
+                                  divisions: 11,
+                                  label: '$ops',
+                                  onChanged: (v) =>
+                                      setLocal(() => ops = v.round()),
+                                ),
+                                Text('Place radius hops: $hops'),
+                                Slider(
+                                  value: hops.toDouble(),
+                                  min: 0,
+                                  max: 2,
+                                  divisions: 2,
+                                  label: '$hops',
+                                  onChanged: (v) =>
+                                      setLocal(() => hops = v.round()),
+                                ),
+                              ],
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: const Text('Cancel'),
+                              ),
+                              FilledButton(
+                                onPressed: () => Navigator.pop(context, true),
+                                child: const Text('Save'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                      if (ok != true || !mounted) return;
+                      await _setTickSettings(
+                        _tickSettings.copyWith(
+                          maxPeople: people,
+                          maxOps: ops,
+                          radiusHops: hops,
+                        ),
+                      );
+                    },
+                  ),
                   const Divider(),
                   if (_error != null)
                     ListTile(
@@ -323,10 +545,22 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
                           '${world.placeCount} places',
                         ),
                         onTap: () => _open(world),
-                        trailing: IconButton(
-                          tooltip: 'Delete',
-                          icon: const Icon(Icons.delete_outline),
-                          onPressed: () => _delete(world),
+                        trailing: PopupMenuButton<String>(
+                          enabled: !_tickBusy,
+                          onSelected: (value) {
+                            if (value == 'advance') _advanceBeat(world);
+                            if (value == 'delete') _delete(world);
+                          },
+                          itemBuilder: (context) => const [
+                            PopupMenuItem(
+                              value: 'advance',
+                              child: Text('Advance world a beat…'),
+                            ),
+                            PopupMenuItem(
+                              value: 'delete',
+                              child: Text('Delete'),
+                            ),
+                          ],
                         ),
                       ),
                 ],

@@ -13,6 +13,9 @@ enum TurnResolutionKind {
 
   /// Narrator scene → who/where sync (Phase 7 presence).
   presenceSync,
+
+  /// Near-scene tick (Phase 8) — active place + connected radius only.
+  nearSceneTick,
 }
 
 /// Structured result of one Living World resolve / apply pass.
@@ -91,6 +94,7 @@ class TurnResolution {
         TurnResolutionKind.afterTurn => 'After turn',
         TurnResolutionKind.manual => 'Manual update',
         TurnResolutionKind.presenceSync => 'Presence sync',
+        TurnResolutionKind.nearSceneTick => 'Near-scene tick',
       };
 
   Map<String, dynamic> toJson() => {

@@ -1,7 +1,7 @@
 # Living World roadmap — toward a true “living” under-the-hood world
 
 > **For every agent:** Read this **after** [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md).  
-> Phases **1–7 are shipped** on `experiment/living-world` (build 78+).  
+> Phases **1–8 are shipped** on `experiment/living-world` (build 78+).  
 > This file is the plan from **today → end-goal**. Update checkboxes when a phase lands.  
 > Keep plain English. **Do not merge to `main` until Phase 12 / owner says so.**
 
@@ -82,7 +82,7 @@ Silent, unvalidated AI overwrites of hard canon are **always** out of scope — 
 
 ---
 
-## Where we are now (Phases 1–7 — DONE through light systems)
+## Where we are now (Phases 1–8 — DONE through near-scene ticks)
 
 Shipped on `experiment/living-world` (see [`AGENTS.md`](AGENTS.md) / [`PROJECT_REFERENCE.md`](PROJECT_REFERENCE.md) §15b):
 
@@ -95,9 +95,10 @@ Shipped on `experiment/living-world` (see [`AGENTS.md`](AGENTS.md) / [`PROJECT_R
 | **5** | After-turn propose / auto-safe + undo |
 | **6** | Resolve-before-narrate spine + World log |
 | **7** | Relationship drift, narrator presence sync, routineHints, flag recipes |
+| **8** | Near-scene ticks (active place + connected radius); manual Advance a beat |
 
 **Honest gap vs end-goal:**  
-Play can now update canon (after turn / Living mode) and light **systems** nudge trust/presence from events — still no near-scene ticks (Phase 8) or long-run threads/secrets (Phase 9).
+Near-scene ticks keep nearby off-screen life moving a little — still no long-run threads/secrets/inventory-lite (Phase 9) or backup/context polish (Phase 10).
 
 Creation Center remains a workshop chat — **not** the living engine. Do not rewrite it as a substitute for this roadmap.
 
@@ -224,7 +225,7 @@ Update checkboxes as phases complete. Each phase must leave `flutter analyze` cl
 
 ---
 
-### Phase 8 — Story-local simulation (near-scene “ticks”)
+### Phase 8 — Story-local simulation (near-scene “ticks”) ✅
 
 **Goal:** Between or after turns, **only near the active place / cast**, run a small tick so the world isn’t frozen off-screen — still tiny vs DF.
 
@@ -232,11 +233,12 @@ Update checkboxes as phases complete. Each phase must leave `flutter analyze` cl
 
 **Deliverables:**
 
-- [ ] `LivingWorldSimulator` (name flexible): input = notebook + active place + radius (connected places) + last N events.
-- [ ] Tick outputs = validated ops only (events/flags/rel deltas/who-where), capped count.
-- [ ] Trigger options: after turn; every N turns; manual “Advance world a beat…” in Worlds hub / chat ⋮.
-- [ ] Hard caps: max people touched per tick, max ops, token/API budget if AI-assisted.
-- [ ] Off-screen people: may get **short** event lines or flag flips — never full card prose dumps into prompt.
+- [x] `LivingWorldSimulator`: input = notebook + active place + radius (connected places, bidirectional) + last N events.
+- [x] Tick outputs = validated ops only (short events / soft who-where from routineHints), capped count — no relationship invent; systems may still drift from new events.
+- [x] Trigger options: Settings **Near-scene ticks** Off / After each turn / Every N turns; manual **Advance world a beat…** in Worlds hub ⋮ and chat ⋮.
+- [x] Hard caps: max people, max ops, radius hops (settings); rules-first so no API required for ticks.
+- [x] Off-screen people: **short** ambient event lines from routineHints — never full card prose; near-scene roster formatter for any future AI assist.
+- [x] Tests: radius / 40-person caps / empty world / apply→retrieve / TurnResolution `nearSceneTick`.
 
 **Acceptance:**
 
@@ -244,6 +246,8 @@ Update checkboxes as phases complete. Each phase must leave `flutter analyze` cl
 - Unbound chats never tick.
 
 **Out:** global every-second real-time sim; weather/fluids.
+
+**Shipped:** 2026-10-21 on `experiment/living-world`. Default trigger = **off** (manual Advance only). Auto ticks run after the Phase 5 after-turn pipeline when enabled.
 
 ---
 
