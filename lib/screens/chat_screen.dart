@@ -36,6 +36,7 @@ import '../services/lorebook_service.dart';
 import '../models/living_world_update_policy.dart';
 import '../models/turn_resolution.dart';
 import '../services/living_world_log_service.dart';
+import '../services/living_world_pending_service.dart';
 import '../services/living_world_retriever.dart';
 import '../services/living_world_service.dart';
 import '../services/living_world_simulator.dart';
@@ -147,6 +148,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final _livingWorldService = LivingWorldService();
   final _livingWorldUndo = LivingWorldUndoService();
   final _livingWorldLog = LivingWorldLogService();
+  final _livingWorldPending = LivingWorldPendingService();
   static const _livingWorldRetriever = LivingWorldRetriever();
   static const _livingWorldUpdates = LivingWorldUpdateService();
   static const _livingWorldResolver = LivingWorldTurnResolver();
@@ -154,12 +156,21 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   static const _livingWorldSimulator = LivingWorldSimulator();
   bool _livingWorldAfterTurnBusy = false;
   bool _livingWorldTickBusy = false;
+  /// Phase 11: one after-turn+tick pipeline at a time; extra turns queue once.
+  bool _livingWorldPipelineBusy = false;
+  bool _livingWorldPipelineQueued = false;
+  /// Bumped on leave so in-flight after-turn work stops applying UI/saves.
+  int _livingWorldEpoch = 0;
   /// Phase 6: set when resolve-before-narrate ran this stream (skip re-propose).
   bool _livingWorldResolvedThisTurn = false;
   /// Relationships deferred from resolve-before for after-turn review.
   List<LivingWorldCanonUpdate> _pendingLivingWorldRisky = const [];
   /// Injected into the same reply's prompt after engine apply.
   String? _livingWorldAsOfTurnBlock;
+  /// Phase 11 ambient chip — safe facts just auto-saved (tap → World log).
+  int _ambientWorldUpdatedCount = 0;
+  /// Phase 11 — disk-backed risky ops waiting for Review pending….
+  int _pendingWorldReviewCount = 0;
   static const _replyRewrite = ReplyRewriteService();
   static const _narrator = NarratorService();
   static const _director = DirectorService();
@@ -457,12 +468,41 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Future<void> _refreshBoundWorldTitle() async {
     final id = _session?.worldId?.trim();
     if (id == null || id.isEmpty) {
-      if (mounted) setState(() => _boundWorldTitle = null);
+      if (mounted) {
+        setState(() {
+          _boundWorldTitle = null;
+          _pendingWorldReviewCount = 0;
+          _ambientWorldUpdatedCount = 0;
+        });
+      }
       return;
     }
     final world = await _livingWorldService.getById(id);
+    final pending = await _livingWorldPending.count(id);
     if (!mounted) return;
-    setState(() => _boundWorldTitle = world?.title);
+    setState(() {
+      _boundWorldTitle = world?.title;
+      _pendingWorldReviewCount = pending;
+    });
+  }
+
+  bool _livingWorldJobAlive(int epoch) =>
+      mounted && epoch == _livingWorldEpoch;
+
+  void _noteWorldUpdated(int count) {
+    if (!mounted || count <= 0) return;
+    setState(() => _ambientWorldUpdatedCount = count);
+  }
+
+  Future<void> _refreshPendingWorldReviewCount() async {
+    final id = _session?.worldId?.trim();
+    if (id == null || id.isEmpty) {
+      if (mounted) setState(() => _pendingWorldReviewCount = 0);
+      return;
+    }
+    final n = await _livingWorldPending.count(id);
+    if (!mounted) return;
+    setState(() => _pendingWorldReviewCount = n);
   }
 
   @override
@@ -2869,6 +2909,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         _livingWorldAsOfTurnBlock = result.resolution.asOfTurnBlock;
         if (mounted) {
           setState(() => _boundWorldTitle = result.world.title);
+          _noteWorldUpdated(result.resolution.applied.length);
         }
       }
       await _livingWorldLog.append(result.resolution);
@@ -2991,9 +3032,27 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   /// Phase 5 then Phase 8: after-turn extract, then optional near-scene tick.
+  ///
+  /// Phase 11: never blocks typing; overlapping turns queue one extra run;
+  /// leave-chat bumps [_livingWorldEpoch] so stale work stops applying.
   Future<void> _afterLivingWorldTurnPipeline() async {
-    await _maybeLivingWorldAfterTurn();
-    await _maybeLivingWorldNearSceneTick(automatic: true);
+    if (_livingWorldPipelineBusy) {
+      _livingWorldPipelineQueued = true;
+      return;
+    }
+    _livingWorldPipelineBusy = true;
+    final epoch = _livingWorldEpoch;
+    try {
+      do {
+        _livingWorldPipelineQueued = false;
+        if (!_livingWorldJobAlive(epoch)) return;
+        await _maybeLivingWorldAfterTurn();
+        if (!_livingWorldJobAlive(epoch)) return;
+        await _maybeLivingWorldNearSceneTick(automatic: true);
+      } while (_livingWorldPipelineQueued && _livingWorldJobAlive(epoch));
+    } finally {
+      _livingWorldPipelineBusy = false;
+    }
   }
 
   /// Phase 8: tiny near-scene tick around the active place (rules-only).
@@ -3003,13 +3062,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Future<void> _maybeLivingWorldNearSceneTick({
     required bool automatic,
   }) async {
-    if (!mounted || _livingWorldTickBusy) return;
+    if (!_livingWorldJobAlive(_livingWorldEpoch) || _livingWorldTickBusy) {
+      return;
+    }
+    final epoch = _livingWorldEpoch;
     final session = _session;
     final worldId = session?.worldId?.trim();
     if (session == null || worldId == null || worldId.isEmpty) return;
 
     final tickSettings =
         await widget.settingsService.getLivingWorldTickSettings();
+    if (!_livingWorldJobAlive(epoch)) return;
     if (automatic) {
       final assistantCount = _messages
           .where((m) => m.isAssistant || m.isGroupBeat)
@@ -3022,30 +3085,36 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     _livingWorldTickBusy = true;
     try {
       final world = await _livingWorldService.getById(worldId);
-      if (world == null || !mounted) return;
+      if (world == null || !_livingWorldJobAlive(epoch)) return;
 
       final plan = _livingWorldSimulator.planTick(
         world,
         settings: tickSettings,
       );
-      if (plan.isEmpty || !mounted) return;
+      if (plan.isEmpty || !_livingWorldJobAlive(epoch)) return;
 
       List<LivingWorldCanonUpdate> selected;
       if (automatic) {
         // Auto ticks only apply safe ops (rules never emit relationships).
         selected = plan.ops.where((u) => u.isSafeForAutoApply).toList();
       } else {
+        if (!mounted || !_livingWorldJobAlive(epoch)) return;
         final reviewed = await showLivingWorldUpdateSheet(
           context: context,
           updates: plan.ops,
           title: 'Advance a beat — ${world.title}',
         );
-        if (reviewed == null || reviewed.isEmpty || !mounted) return;
+        if (reviewed == null ||
+            reviewed.isEmpty ||
+            !_livingWorldJobAlive(epoch)) {
+          return;
+        }
         selected = reviewed;
       }
       if (selected.isEmpty) return;
 
       await _livingWorldUndo.pushSnapshot(world);
+      if (!_livingWorldJobAlive(epoch)) return;
       final updated = _livingWorldUpdates.applyUpdates(world, selected);
       await _livingWorldService.save(updated);
       await _livingWorldLog.append(
@@ -3058,16 +3127,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           chatId: session.id,
         ),
       );
-      if (!mounted) return;
+      if (!_livingWorldJobAlive(epoch)) return;
       setState(() => _boundWorldTitle = updated.title);
-      _showLocalToast(
-        automatic
-            ? 'World beat: ${selected.length} near-scene '
-                '${selected.length == 1 ? 'change' : 'changes'}.'
-            : 'Advanced world beat '
-                '(${selected.length} '
-                '${selected.length == 1 ? 'change' : 'changes'}).',
-      );
+      _noteWorldUpdated(selected.length);
+      if (!automatic) {
+        _showLocalToast(
+          'Advanced world beat '
+          '(${selected.length} '
+          '${selected.length == 1 ? 'change' : 'changes'}).',
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       if (automatic) {
@@ -3093,15 +3162,19 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   /// Phase 5: after a successful reply, propose / auto-apply per app policy.
   ///
   /// When Phase 6 resolve-before already ran, skip a second propose call and
-  /// only review deferred relationship ops (if any).
+  /// enqueue deferred relationship ops for one-tap Review pending… (Phase 11).
   Future<void> _maybeLivingWorldAfterTurn() async {
-    if (!mounted || _livingWorldAfterTurnBusy) return;
+    if (!_livingWorldJobAlive(_livingWorldEpoch) || _livingWorldAfterTurnBusy) {
+      return;
+    }
+    final epoch = _livingWorldEpoch;
     final session = _session;
     final worldId = session?.worldId?.trim();
     if (session == null || worldId == null || worldId.isEmpty) return;
     if (!_hasApiKey) return;
 
     final policy = await widget.settingsService.getLivingWorldUpdatePolicy();
+    if (!_livingWorldJobAlive(epoch)) return;
     if (policy == LivingWorldUpdatePolicy.manual) {
       _livingWorldResolvedThisTurn = false;
       _pendingLivingWorldRisky = const [];
@@ -3111,7 +3184,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     _livingWorldAfterTurnBusy = true;
     try {
-      // Phase 6 already resolved this turn — only review deferred risky ops.
+      // Phase 6 already resolved this turn — queue deferred risky ops (no modal).
       if (_livingWorldResolvedThisTurn) {
         final deferred = List<LivingWorldCanonUpdate>.from(
           _pendingLivingWorldRisky,
@@ -3119,40 +3192,21 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         _livingWorldResolvedThisTurn = false;
         _pendingLivingWorldRisky = const [];
         _livingWorldAsOfTurnBlock = null;
-        if (deferred.isEmpty || !mounted) return;
+        if (deferred.isEmpty || !_livingWorldJobAlive(epoch)) return;
 
-        final world = await _livingWorldService.getById(worldId);
-        if (world == null || !mounted) return;
-        final selected = await showLivingWorldUpdateSheet(
-          context: context,
-          updates: deferred,
-          title: 'Review relationship updates — ${world.title}',
-        );
-        if (selected == null || selected.isEmpty || !mounted) return;
-        await _livingWorldUndo.pushSnapshot(world);
-        final updated = _livingWorldUpdates.applyUpdates(world, selected);
-        await _livingWorldService.save(updated);
-        await _livingWorldLog.append(
-          TurnResolution(
-            worldId: world.id,
-            at: DateTime.now(),
-            kind: TurnResolutionKind.afterTurn,
-            proposed: deferred,
-            applied: selected,
-            chatId: session.id,
-          ),
-        );
-        if (!mounted) return;
-        setState(() => _boundWorldTitle = updated.title);
+        await _livingWorldPending.enqueue(worldId, deferred);
+        if (!_livingWorldJobAlive(epoch)) return;
+        await _refreshPendingWorldReviewCount();
         _showLocalToast(
-          'Saved ${selected.length} relationship '
-          '${selected.length == 1 ? 'update' : 'updates'}.',
+          '${deferred.length} relationship '
+          '${deferred.length == 1 ? 'change' : 'changes'} '
+          'waiting — tap Review pending.',
         );
         return;
       }
 
       final world = await _livingWorldService.getById(worldId);
-      if (world == null || !mounted) return;
+      if (world == null || !_livingWorldJobAlive(epoch)) return;
 
       final model = await widget.settingsService.getModel();
       final sampling = (await widget.settingsService.getSampling()).copyWith(
@@ -3170,17 +3224,22 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         messages: messages,
         sampling: sampling,
       );
+      if (!_livingWorldJobAlive(epoch)) return;
       final proposed = _livingWorldUpdates.parseProposal(raw, world: world);
-      if (!mounted) return;
       if (proposed.isEmpty) return;
 
       if (policy == LivingWorldUpdatePolicy.proposeAfterTurn) {
+        if (!mounted || !_livingWorldJobAlive(epoch)) return;
         final selected = await showLivingWorldUpdateSheet(
           context: context,
           updates: proposed,
           title: 'World updates — ${world.title}',
         );
-        if (selected == null || selected.isEmpty || !mounted) return;
+        if (selected == null ||
+            selected.isEmpty ||
+            !_livingWorldJobAlive(epoch)) {
+          return;
+        }
         await _livingWorldUndo.pushSnapshot(world);
         final updated = _livingWorldUpdates.applyUpdates(world, selected);
         await _livingWorldService.save(updated);
@@ -3194,8 +3253,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             chatId: session.id,
           ),
         );
-        if (!mounted) return;
+        if (!_livingWorldJobAlive(epoch)) return;
         setState(() => _boundWorldTitle = updated.title);
+        _noteWorldUpdated(selected.length);
         _showLocalToast(
           'Saved ${selected.length} Living World '
           '${selected.length == 1 ? 'update' : 'updates'}.',
@@ -3203,13 +3263,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         return;
       }
 
-      // autoSafe
+      // autoSafe — apply safe quietly; enqueue risky for Review pending (no modal).
       final parts = _livingWorldUpdates.partitionForAutoSafe(proposed);
       var working = world;
-      var snapped = false;
       if (parts.safe.isNotEmpty) {
         await _livingWorldUndo.pushSnapshot(working);
-        snapped = true;
+        if (!_livingWorldJobAlive(epoch)) return;
         working = _livingWorldUpdates.applyUpdates(working, parts.safe);
         await _livingWorldService.save(working);
         await _livingWorldLog.append(
@@ -3223,41 +3282,21 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             chatId: session.id,
           ),
         );
-        if (!mounted) return;
+        if (!_livingWorldJobAlive(epoch)) return;
         setState(() => _boundWorldTitle = working.title);
+        _noteWorldUpdated(parts.safe.length);
+      }
+      if (parts.risky.isEmpty || !_livingWorldJobAlive(epoch)) return;
+      await _livingWorldPending.enqueue(worldId, parts.risky);
+      if (!_livingWorldJobAlive(epoch)) return;
+      await _refreshPendingWorldReviewCount();
+      if (parts.safe.isEmpty) {
         _showLocalToast(
-          'World auto-saved ${parts.safe.length} safe '
-          '${parts.safe.length == 1 ? 'fact' : 'facts'}.',
+          '${parts.risky.length} relationship '
+          '${parts.risky.length == 1 ? 'change' : 'changes'} '
+          'waiting — tap Review pending.',
         );
       }
-      if (parts.risky.isEmpty || !mounted) return;
-      final selected = await showLivingWorldUpdateSheet(
-        context: context,
-        updates: parts.risky,
-        title: 'Review relationship updates — ${working.title}',
-      );
-      if (selected == null || selected.isEmpty || !mounted) return;
-      if (!snapped) {
-        await _livingWorldUndo.pushSnapshot(working);
-      }
-      working = _livingWorldUpdates.applyUpdates(working, selected);
-      await _livingWorldService.save(working);
-      await _livingWorldLog.append(
-        TurnResolution(
-          worldId: working.id,
-          at: DateTime.now(),
-          kind: TurnResolutionKind.afterTurn,
-          proposed: parts.risky,
-          applied: selected,
-          chatId: session.id,
-        ),
-      );
-      if (!mounted) return;
-      setState(() => _boundWorldTitle = working.title);
-      _showLocalToast(
-        'Saved ${selected.length} relationship '
-        '${selected.length == 1 ? 'update' : 'updates'}.',
-      );
     } catch (e) {
       // Soft-fail: play continues; owner can use manual Update world…
       if (!mounted) return;
@@ -3267,6 +3306,69 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _livingWorldResolvedThisTurn = false;
       _pendingLivingWorldRisky = const [];
       _livingWorldAsOfTurnBlock = null;
+    }
+  }
+
+  /// Phase 11: one-tap review of disk-backed pending (usually relationships).
+  Future<void> _reviewPendingWorldChanges() async {
+    final session = _session;
+    final worldId = session?.worldId?.trim();
+    if (session == null || worldId == null || worldId.isEmpty || _busy) return;
+
+    final pending = await _livingWorldPending.list(worldId);
+    if (pending.isEmpty) {
+      await _refreshPendingWorldReviewCount();
+      if (!mounted) return;
+      _showLocalToast('No pending world changes.');
+      return;
+    }
+    final world = await _livingWorldService.getById(worldId);
+    if (world == null || !mounted) return;
+
+    final selected = await showLivingWorldUpdateSheet(
+      context: context,
+      updates: pending,
+      title: 'Review pending — ${world.title}',
+    );
+    if (selected == null || !mounted) return;
+    if (selected.isEmpty) {
+      _showLocalToast('Nothing selected — pending changes kept.');
+      return;
+    }
+
+    setState(() => _busy = true);
+    try {
+      await _livingWorldUndo.pushSnapshot(world);
+      final updated = _livingWorldUpdates.applyUpdates(world, selected);
+      await _livingWorldService.save(updated);
+      await _livingWorldLog.append(
+        TurnResolution(
+          worldId: world.id,
+          at: DateTime.now(),
+          kind: TurnResolutionKind.afterTurn,
+          proposed: pending,
+          applied: selected,
+          chatId: session.id,
+        ),
+      );
+      await _livingWorldPending.removeApplied(worldId, selected);
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _boundWorldTitle = updated.title;
+      });
+      await _refreshPendingWorldReviewCount();
+      _noteWorldUpdated(selected.length);
+      _showLocalToast(
+        'Saved ${selected.length} pending '
+        '${selected.length == 1 ? 'update' : 'updates'}.',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = 'Pending world review: $e';
+      });
     }
   }
 
@@ -3344,8 +3446,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     secondary: const Icon(Icons.sync_alt),
                     title: const Text('Resolve before reply'),
                     subtitle: const Text(
-                      'Living mode — decide safe facts before the AI speaks '
-                      '(extra API call). Needs Propose or Auto-safe.',
+                      'Living mode — Anima decides and saves safe facts first, '
+                      'then the character speaks from that truth (one extra '
+                      'API call; reply starts a bit later). Needs Propose or '
+                      'Auto-safe. Off = update after the reply only.',
                     ),
                     value: livingMode,
                     onChanged: (v) async {
@@ -5150,6 +5254,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    // Invalidate in-flight Living World after-turn / tick work (Phase 11).
+    _livingWorldEpoch++;
     WidgetsBinding.instance.removeObserver(this);
     widget.nanoGptService.cancelActiveStream();
     _draftSaveTimer?.cancel();
@@ -5232,6 +5338,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               if (value == 'living_world_update') _updateLivingWorldFromChat();
               if (value == 'living_world_tick') _advanceLivingWorldBeat();
               if (value == 'living_world_policy') _pickLivingWorldUpdatePolicy();
+              if (value == 'living_world_pending') {
+                _reviewPendingWorldChanges();
+              }
               if (value == 'living_world_log') _showLivingWorldLog();
               if (value == 'living_world_undo') _undoLastLivingWorldUpdate();
               if (value == 'chat_lore') _openChatLorebook();
@@ -5291,6 +5400,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 const PopupMenuItem(
                   value: 'living_world_policy',
                   child: Text('World play mode…'),
+                ),
+              if ((_session?.hasLivingWorld ?? false) &&
+                  _pendingWorldReviewCount > 0)
+                PopupMenuItem(
+                  value: 'living_world_pending',
+                  child: Text(
+                    'Review pending world changes '
+                    '($_pendingWorldReviewCount)',
+                  ),
                 ),
               if (_session?.hasLivingWorld ?? false)
                 const PopupMenuItem(
@@ -5700,6 +5818,40 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if ((_session?.hasLivingWorld ?? false) &&
+                        (_pendingWorldReviewCount > 0 ||
+                            _ambientWorldUpdatedCount > 0))
+                      Padding(
+                        padding: EdgeInsets.only(
+                          bottom: keyboardOpen ? 4 : 6,
+                        ),
+                        child: MinimalChipRow(
+                          children: [
+                            if (_pendingWorldReviewCount > 0)
+                              MinimalChipButton(
+                                label:
+                                    'Review pending ($_pendingWorldReviewCount)',
+                                icon: Icons.rate_review_outlined,
+                                selected: true,
+                                onPressed:
+                                    _busy ? null : _reviewPendingWorldChanges,
+                              ),
+                            if (_ambientWorldUpdatedCount > 0) ...[
+                              if (_pendingWorldReviewCount > 0)
+                                const SizedBox(width: 8),
+                              MinimalChipButton(
+                                label:
+                                    'World updated · $_ambientWorldUpdatedCount',
+                                icon: Icons.public_outlined,
+                                onPressed: () {
+                                  setState(() => _ambientWorldUpdatedCount = 0);
+                                  _showLivingWorldLog();
+                                },
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                     if (!keyboardOpen && (hasMemory || hasAuthorsNote || activeMoodCount > 0))
                       MinimalChipRow(
                         children: [

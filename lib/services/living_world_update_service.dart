@@ -90,6 +90,97 @@ class LivingWorldCanonUpdate {
           true,
         LivingWorldUpdateOp.setRelationship => false,
       };
+
+  /// Fingerprint for pending-queue dedupe (op + summary).
+  String get pendingKey => '${op.name}|${summary.trim().toLowerCase()}';
+
+  /// Full payload for disk-backed pending review (Phase 11).
+  Map<String, dynamic> toJson() => {
+        'op': op.name,
+        'summary': summary,
+        if (event != null) 'event': event!.toJson(),
+        if (flag != null) 'flag': flag!.toJson(),
+        if (relationship != null) 'relationship': relationship!.toJson(),
+        if (activePlaceId != null && activePlaceId!.trim().isNotEmpty)
+          'activePlaceId': activePlaceId!.trim(),
+        if (personId != null && personId!.trim().isNotEmpty)
+          'personId': personId!.trim(),
+        if (placeId != null && placeId!.trim().isNotEmpty)
+          'placeId': placeId!.trim(),
+        if (thread != null) 'thread': thread!.toJson(),
+        if (promise != null) 'promise': promise!.toJson(),
+        if (secret != null) 'secret': secret!.toJson(),
+        if (inventoryItems != null) 'inventoryItems': inventoryItems,
+        if (targetId != null && targetId!.trim().isNotEmpty)
+          'targetId': targetId!.trim(),
+      };
+
+  factory LivingWorldCanonUpdate.fromJson(Map<String, dynamic> json) {
+    final opName = '${json['op'] ?? ''}'.trim();
+    final op = LivingWorldUpdateOp.values.firstWhere(
+      (o) => o.name == opName,
+      orElse: () => LivingWorldUpdateOp.addEvent,
+    );
+    final summary = '${json['summary'] ?? ''}'.trim();
+    WorldEvent? event;
+    final rawEvent = json['event'];
+    if (rawEvent is Map) {
+      event = WorldEvent.fromJson(Map<String, dynamic>.from(rawEvent));
+    }
+    WorldFlag? flag;
+    final rawFlag = json['flag'];
+    if (rawFlag is Map) {
+      flag = WorldFlag.fromJson(Map<String, dynamic>.from(rawFlag));
+    }
+    WorldRelationship? relationship;
+    final rawRel = json['relationship'];
+    if (rawRel is Map) {
+      relationship =
+          WorldRelationship.fromJson(Map<String, dynamic>.from(rawRel));
+    }
+    WorldThread? thread;
+    final rawThread = json['thread'];
+    if (rawThread is Map) {
+      thread = WorldThread.fromJson(Map<String, dynamic>.from(rawThread));
+    }
+    WorldPromise? promise;
+    final rawPromise = json['promise'];
+    if (rawPromise is Map) {
+      promise = WorldPromise.fromJson(Map<String, dynamic>.from(rawPromise));
+    }
+    WorldSecret? secret;
+    final rawSecret = json['secret'];
+    if (rawSecret is Map) {
+      secret = WorldSecret.fromJson(Map<String, dynamic>.from(rawSecret));
+    }
+    List<String>? inventoryItems;
+    final rawInv = json['inventoryItems'];
+    if (rawInv is List) {
+      inventoryItems = [
+        for (final item in rawInv)
+          if ('$item'.trim().isNotEmpty) '$item'.trim(),
+      ];
+    }
+    final activePlaceId = '${json['activePlaceId'] ?? ''}'.trim();
+    final personId = '${json['personId'] ?? ''}'.trim();
+    final placeId = '${json['placeId'] ?? ''}'.trim();
+    final targetId = '${json['targetId'] ?? ''}'.trim();
+    return LivingWorldCanonUpdate(
+      op: op,
+      summary: summary.isEmpty ? op.name : summary,
+      event: event,
+      flag: flag,
+      relationship: relationship,
+      activePlaceId: activePlaceId.isEmpty ? null : activePlaceId,
+      personId: personId.isEmpty ? null : personId,
+      placeId: placeId.isEmpty ? null : placeId,
+      thread: thread,
+      promise: promise,
+      secret: secret,
+      inventoryItems: inventoryItems,
+      targetId: targetId.isEmpty ? null : targetId,
+    );
+  }
 }
 
 /// Propose structured canon updates from recent chat; apply only after review.

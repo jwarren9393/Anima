@@ -31,15 +31,18 @@ extension LivingWorldUpdatePolicyX on LivingWorldUpdatePolicy {
 
   String get helpText => switch (this) {
         LivingWorldUpdatePolicy.manual =>
-          'World notebook stays put during chat unless you open '
-              'Update world from chat… or edit it in Settings → Living Worlds.',
+          'Quietest mode. The notebook only changes when you tap '
+              'Update world from chat… or edit it in Settings → Living Worlds. '
+              'Best while you are still learning the feature.',
         LivingWorldUpdatePolicy.proposeAfterTurn =>
-          'After each AI reply, Anima suggests canon updates and you approve '
-              'them on a review sheet.',
+          'After each AI reply, Anima opens a review sheet of suggested facts. '
+              'Nothing is saved until you approve. Good when you want to check '
+              'every change.',
         LivingWorldUpdatePolicy.autoSafe =>
-          'After each AI reply, safe facts (events, flags, who/where, active '
-              'place) save automatically. Relationship changes still need your OK. '
-              'You can undo the last pack from the chat menu.',
+          'Play quietly: events, flags, who/where, active place, and continuity '
+              'loops save on their own. Relationship changes wait on a '
+              '“Review pending…” chip (no popup every turn). Undo the last pack '
+              'anytime from the chat menu or Worlds hub.',
       };
 
   static LivingWorldUpdatePolicy fromStorage(String? raw) {

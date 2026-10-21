@@ -1,7 +1,7 @@
 # Living World roadmap — toward a true “living” under-the-hood world
 
 > **For every agent:** Read this **after** [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md).  
-> Phases **1–10 are shipped** on `experiment/living-world` (build 78+).  
+> Phases **1–11 are shipped** on `experiment/living-world` (build 78+).  
 > This file is the plan from **today → end-goal**. Update checkboxes when a phase lands.  
 > Keep plain English. **Do not merge to `main` until Phase 12 / owner says so.**
 
@@ -82,7 +82,7 @@ Silent, unvalidated AI overwrites of hard canon are **always** out of scope — 
 
 ---
 
-## Where we are now (Phases 1–10 — DONE through deeper play integration)
+## Where we are now (Phases 1–11 — DONE through invisible-engine UX)
 
 Shipped on `experiment/living-world` (see [`AGENTS.md`](AGENTS.md) / [`PROJECT_REFERENCE.md`](PROJECT_REFERENCE.md) §15b):
 
@@ -98,9 +98,10 @@ Shipped on `experiment/living-world` (see [`AGENTS.md`](AGENTS.md) / [`PROJECT_R
 | **8** | Near-scene ticks (active place + connected radius); manual Advance a beat |
 | **9** | Schema v2: threads / promises / secrets / inventory-lite + retrieve + ops |
 | **10** | Card-link picker UX; hard-pin linked speaker + threads; group-react pack + after-turn; `.anima-backup` includes `worlds/`; context estimate pack tokens; factory seed from Creation Center (one-way) |
+| **11** | Ambient World-updated chip; disk-backed Review pending; hub timeline/undo/export; plain-English policies; cancel-on-leave + queued after-turn; playtest checklist |
 
 **Honest gap vs end-goal:**  
-Backup and card/group polish are in — still need invisible-engine UX (Phase 11) before merge readiness (Phase 12).
+Invisible UX is in — next is **Phase 12** merge readiness (soak + owner approve → `main`).
 
 Creation Center remains a workshop chat — **not** the living engine. Do not rewrite it as a substitute for this roadmap.
 
@@ -299,23 +300,25 @@ Update checkboxes as phases complete. Each phase must leave `flutter analyze` cl
 
 ---
 
-### Phase 11 — “Invisible engine” UX polish
+### Phase 11 — “Invisible engine” UX polish ✅
 
 **Goal:** The under-the-hood world is felt more than managed.
 
 **Deliverables:**
 
-- [ ] Ambient “World updated” chip / subtle log (not modal every turn when auto-safe).
-- [ ] One-tap “Review pending world changes.”
-- [ ] Worlds hub: timeline of applied packs; revert; export.
-- [ ] Policies explained in plain English in Settings.
-- [ ] Performance: don’t block typing; queue resolves; cancel on leave chat.
-- [ ] Playtest checklist for owner (below) signed off.
+- [x] Ambient “World updated” chip / subtle log (not modal every turn when auto-safe).
+- [x] One-tap “Review pending world changes.” (`LivingWorldPendingService` → `worlds/<id>.pending.json`)
+- [x] Worlds hub: timeline of applied packs; revert; export.
+- [x] Policies explained in plain English in Settings.
+- [x] Performance: don’t block typing; queue resolves; cancel on leave chat.
+- [x] Playtest checklist for owner: [`docs/LIVING_WORLD_PLAYTEST.md`](docs/LIVING_WORLD_PLAYTEST.md) (owner sign-off table — run before Phase 12 merge).
 
 **Acceptance:**
 
 - Owner can play an evening with auto-safe on and only glance at the world log.
 - Manual editor still available for surgery.
+
+**Shipped:** 2026-10-21 on `experiment/living-world`.
 
 ---
 
@@ -373,8 +376,8 @@ If a design forks from this roadmap, **pause and ask Jakwan**.
 | Then | **8** | Near-scene ticks |
 | Then | **9** | Threads / secrets / inventory-lite |
 | Done | **10** | Backup, cards, group hardening |
-| Next | **11** | Invisible UX |
-| Finally | **12** | Merge |
+| Done | **11** | Invisible UX |
+| Next | **12** | Merge readiness |
 
 Phases 7–9 can overlap slightly **after** 5–6 are solid, but do not start ticks (8) before a reliable write loop (5).
 
@@ -394,4 +397,4 @@ When finishing a Living World phase:
 
 ## Short paste for a new agent
 
-> Living World Phases 1–10 are done on `experiment/living-world`. Owner’s true end-goal is DF-lite **under Anima chat**: organic validated state changes as he plays — not a frozen factory world and not a fortress clone. Follow [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md); next build work is **Phase 11** (invisible-engine UX). Never silent unvalidated canon writes. Never full DF scope. Do not merge to `main` until Phase 12 / owner approve.
+> Living World Phases 1–11 are done on `experiment/living-world`. Owner’s true end-goal is DF-lite **under Anima chat**: organic validated state changes as he plays — not a frozen factory world and not a fortress clone. Follow [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md); next build work is **Phase 12** (merge readiness / soak / owner approve). Never silent unvalidated canon writes. Never full DF scope. Do not merge to `main` until Phase 12 / owner approve.

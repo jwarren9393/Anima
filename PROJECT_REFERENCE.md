@@ -7,7 +7,7 @@
 >
 > **Living documents:** `AGENTS.md` + this file + `README.md` are kept current together — see §29 for the upkeep rule every agent must follow.
 
-**Last updated:** 2026-10-21 · **Version:** 1.0.0 build **78** · **Tests:** 485 (`flutter test`) · Living World Phases 1–10 shipped; next Phase 11 in `LIVING_WORLD_ROADMAP.md`
+**Last updated:** 2026-10-21 · **Version:** 1.0.0 build **78** · **Tests:** 493 (`flutter test`) · Living World Phases 1–11 shipped; next Phase 12 in `LIVING_WORLD_ROADMAP.md`
 
 ---
 
@@ -223,8 +223,9 @@ Anima/
 | `living_world_systems_service.dart` | Phase 7: relationship drift, flag recipes, narrator presence sync |
 | `living_world_simulator.dart` | Phase 8: near-scene tick planner (radius + capped ops) |
 | `living_world_tick_settings.dart` | Phase 8: tick trigger + caps |
-| `living_world_log_service.dart` | World log under `worlds/<id>.log.json` |
+| `living_world_log_service.dart` | World log / timeline under `worlds/<id>.log.json` |
 | `living_world_undo_service.dart` | Undo snapshots (`worlds/<id>.undo.json`) |
+| `living_world_pending_service.dart` | Phase 11 pending review queue (`worlds/<id>.pending.json`) |
 | `living_world_factory_service.dart` | Multi-pass world factory (outline→places→people→links→seed) |
 | `world_info_service.dart` | `anima_lorebooks.json` |
 | `narrator_service.dart` | Chat Narrator generate + prompt injection + output cleanup |
@@ -681,11 +682,22 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 | Hard-pin retrieve | Linked/named speaker forced into pack; open threads/promises/secrets involving them pinned front; `fitBudget` keeps speaker |
 | Group-react | `_buildGroupBeatApiMessages` injects Living World pack; generate/regenerate call `_afterLivingWorldTurnPipeline` |
 | Shared World log | Already per-`worldId`; sheet copy clarifies shared across bound chats |
-| Backup | `AppBackupService` packs/restores `worlds/` map (notebooks + `.log.json` / `.undo.json`) |
+| Backup | `AppBackupService` packs/restores `worlds/` map (notebooks + `.log.json` / `.undo.json` / `.pending.json`) |
 | Context estimate | `ChatPromptBreakdown.livingWorldTokens` + dialog row |
 | Factory seed | **Seed from Creation Center…** → one-way pitch via `brainstormFromWorkshop` (workshop chat stays non-engine) |
 
-**Not yet (see roadmap Phases 11–12):** invisible-engine UX polish (ambient chip, pending review, hub timeline); merge to `main`.
+### Phase 11 (shipped on the experiment branch)
+
+| Piece | Role |
+|-------|------|
+| Ambient chip | **World updated · N** above composer after safe auto-apply / ticks / resolve-before (tap → timeline; no modal) |
+| `LivingWorldPendingService` | `worlds/<id>.pending.json` — full serializable risky ops; enqueue on auto-safe / resolve-before deferral |
+| Review pending | Chat chip + ⋮ + hub row ⋮ → reuse `showLivingWorldUpdateSheet`; remove only applied keys |
+| Hub timeline | World ⋮ → **Timeline…** (log sheet + Undo last); **Export JSON…**; plain-English policy/Living-mode copy via `SettingsUi` |
+| Pipeline hygiene | After-turn+tick pipeline queues one extra run; `_livingWorldEpoch` invalidates work on leave chat; never sets `_busy` for after-turn |
+| Playtest | [`docs/LIVING_WORLD_PLAYTEST.md`](docs/LIVING_WORLD_PLAYTEST.md) checklist + owner sign-off table |
+
+**Not yet (see roadmap Phase 12):** prerelease soak + owner approve → merge to `main`.
 
 **Invariant:** Lorebooks + Memory summary stay; Living World is the authoritative layer for *tracked* facts when bound. AI never silently overwrites hard state (even when auto-apply lands — validation + policy required).
 
@@ -946,7 +958,7 @@ Tests cover: lore scan, prompt builders, card codec, backup, sync stability, cha
 - Backup not encrypted.
 - PNG export needs PNG avatar for embedded image.
 - Windows build requires Windows host.
-- **Living World (experiment):** Phases 1–10 (scored retrieve; update-with-review; after-turn policy; opt-in resolve-before-narrate + World log; relationship drift / flag recipes / Narrator presence sync / routineHints; near-scene ticks + Advance a beat; schema v2 threads/promises/secrets/inventory-lite; card-link UX + hard-pin; group-react pack/after-turn; context-estimate pack tokens; factory seed from Creation Center; solo/group; Worlds hub + factory); `.anima-backup` includes `worlds/`.
+- **Living World (experiment):** Phases 1–11 (scored retrieve; update-with-review; after-turn policy; opt-in resolve-before-narrate + World log; relationship drift / flag recipes / Narrator presence sync / routineHints; near-scene ticks + Advance a beat; schema v2 threads/promises/secrets/inventory-lite; card-link UX + hard-pin; group-react pack/after-turn; context-estimate pack tokens; factory seed from Creation Center; invisible UX — ambient chip, Review pending, hub timeline/undo/export; solo/group; Worlds hub + factory); `.anima-backup` includes `worlds/`.
 - Back-burner: undo send, last-chat resume, pinned mood chips, memory preview panel, etc.
 
 ---

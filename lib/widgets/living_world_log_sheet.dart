@@ -2,13 +2,19 @@ import 'package:flutter/material.dart';
 
 import '../models/turn_resolution.dart';
 import '../services/living_world_log_service.dart';
+import '../services/living_world_service.dart';
+import '../services/living_world_undo_service.dart';
 
-/// Simple owner-visible list of what the Living World engine applied.
+/// Owner-visible timeline of what the Living World engine applied.
 Future<void> showLivingWorldLogSheet({
   required BuildContext context,
   required String worldId,
   required String worldTitle,
   LivingWorldLogService? logService,
+  LivingWorldUndoService? undoService,
+  LivingWorldService? worldService,
+  bool showRevert = false,
+  VoidCallback? onReverted,
 }) {
   final logs = logService ?? LivingWorldLogService();
   return showModalBottomSheet<void>(
@@ -19,6 +25,10 @@ Future<void> showLivingWorldLogSheet({
       worldId: worldId,
       worldTitle: worldTitle,
       logService: logs,
+      undoService: undoService,
+      worldService: worldService,
+      showRevert: showRevert,
+      onReverted: onReverted,
     ),
   );
 }
@@ -28,11 +38,19 @@ class _LivingWorldLogSheet extends StatefulWidget {
     required this.worldId,
     required this.worldTitle,
     required this.logService,
+    this.undoService,
+    this.worldService,
+    this.showRevert = false,
+    this.onReverted,
   });
 
   final String worldId;
   final String worldTitle;
   final LivingWorldLogService logService;
+  final LivingWorldUndoService? undoService;
+  final LivingWorldService? worldService;
+  final bool showRevert;
+  final VoidCallback? onReverted;
 
   @override
   State<_LivingWorldLogSheet> createState() => _LivingWorldLogSheetState();
@@ -42,6 +60,13 @@ class _LivingWorldLogSheetState extends State<_LivingWorldLogSheet> {
   List<TurnResolution>? _entries;
   String? _error;
   bool _loading = true;
+  bool _canUndo = false;
+  bool _undoBusy = false;
+
+  bool get _revertEnabled =>
+      widget.showRevert &&
+      widget.undoService != null &&
+      widget.worldService != null;
 
   @override
   void initState() {
@@ -56,9 +81,14 @@ class _LivingWorldLogSheetState extends State<_LivingWorldLogSheet> {
     });
     try {
       final entries = await widget.logService.listEntries(widget.worldId);
+      var canUndo = false;
+      if (_revertEnabled) {
+        canUndo = await widget.undoService!.canUndo(widget.worldId);
+      }
       if (!mounted) return;
       setState(() {
         _entries = entries;
+        _canUndo = canUndo;
         _loading = false;
       });
     } catch (e) {
@@ -73,6 +103,36 @@ class _LivingWorldLogSheetState extends State<_LivingWorldLogSheet> {
   Future<void> _clear() async {
     await widget.logService.clear(widget.worldId);
     await _load();
+  }
+
+  Future<void> _undoLast() async {
+    if (!_revertEnabled || _undoBusy) return;
+    setState(() => _undoBusy = true);
+    try {
+      final restored = await widget.undoService!.undoLast(
+        worldService: widget.worldService!,
+        worldId: widget.worldId,
+      );
+      if (!mounted) return;
+      setState(() => _undoBusy = false);
+      widget.onReverted?.call();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            restored == null
+                ? 'Nothing to undo for this notebook.'
+                : 'Reverted last applied pack.',
+          ),
+        ),
+      );
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _undoBusy = false;
+        _error = 'Undo failed: $e';
+      });
+    }
   }
 
   String _formatWhen(DateTime at) {
@@ -98,10 +158,15 @@ class _LivingWorldLogSheetState extends State<_LivingWorldLogSheet> {
                 children: [
                   Expanded(
                     child: Text(
-                      'World log — ${widget.worldTitle}',
+                      'World timeline — ${widget.worldTitle}',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
+                  if (_revertEnabled && _canUndo)
+                    TextButton(
+                      onPressed: _undoBusy ? null : _undoLast,
+                      child: const Text('Undo last'),
+                    ),
                   if (entries.isNotEmpty)
                     TextButton(
                       onPressed: _clear,
@@ -115,7 +180,9 @@ class _LivingWorldLogSheetState extends State<_LivingWorldLogSheet> {
               child: Text(
                 'Shared across every chat bound to this notebook. What the '
                 'engine applied on recent turns (resolve-before, after-turn, '
-                'near-scene ticks). Newest first.',
+                'near-scene ticks). Newest first.'
+                '${_revertEnabled ? ' Undo last restores the notebook before '
+                    'the most recent applied pack (same as chat ⋮).' : ''}',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
