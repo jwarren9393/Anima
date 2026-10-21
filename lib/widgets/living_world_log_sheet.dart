@@ -113,8 +113,9 @@ class _LivingWorldLogSheetState extends State<_LivingWorldLogSheet> {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
               child: Text(
-                'What the engine applied on recent turns (resolve-before and '
-                'after-turn packs). Newest first.',
+                'Shared across every chat bound to this notebook. What the '
+                'engine applied on recent turns (resolve-before, after-turn, '
+                'near-scene ticks). Newest first.',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),

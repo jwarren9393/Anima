@@ -229,6 +229,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 builder: (_) => WorldsHubScreen(
                   settingsService: widget.settingsService,
                   nanoGptService: widget.nanoGptService,
+                  characterService: widget.characterService,
                 ),
               ),
             ),

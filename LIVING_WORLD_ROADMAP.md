@@ -1,7 +1,7 @@
 # Living World roadmap — toward a true “living” under-the-hood world
 
 > **For every agent:** Read this **after** [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md).  
-> Phases **1–9 are shipped** on `experiment/living-world` (build 78+).  
+> Phases **1–10 are shipped** on `experiment/living-world` (build 78+).  
 > This file is the plan from **today → end-goal**. Update checkboxes when a phase lands.  
 > Keep plain English. **Do not merge to `main` until Phase 12 / owner says so.**
 
@@ -82,7 +82,7 @@ Silent, unvalidated AI overwrites of hard canon are **always** out of scope — 
 
 ---
 
-## Where we are now (Phases 1–9 — DONE through continuity objects)
+## Where we are now (Phases 1–10 — DONE through deeper play integration)
 
 Shipped on `experiment/living-world` (see [`AGENTS.md`](AGENTS.md) / [`PROJECT_REFERENCE.md`](PROJECT_REFERENCE.md) §15b):
 
@@ -97,9 +97,10 @@ Shipped on `experiment/living-world` (see [`AGENTS.md`](AGENTS.md) / [`PROJECT_R
 | **7** | Relationship drift, narrator presence sync, routineHints, flag recipes |
 | **8** | Near-scene ticks (active place + connected radius); manual Advance a beat |
 | **9** | Schema v2: threads / promises / secrets / inventory-lite + retrieve + ops |
+| **10** | Card-link picker UX; hard-pin linked speaker + threads; group-react pack + after-turn; `.anima-backup` includes `worlds/`; context estimate pack tokens; factory seed from Creation Center (one-way) |
 
 **Honest gap vs end-goal:**  
-Open loops stick across sessions — still no backup/context polish (Phase 10) or invisible-engine UX (Phase 11).
+Backup and card/group polish are in — still need invisible-engine UX (Phase 11) before merge readiness (Phase 12).
 
 Creation Center remains a workshop chat — **not** the living engine. Do not rewrite it as a substitute for this roadmap.
 
@@ -276,23 +277,25 @@ Update checkboxes as phases complete. Each phase must leave `flutter analyze` cl
 
 ---
 
-### Phase 10 — Deeper play integration (cards, groups, backup)
+### Phase 10 — Deeper play integration (cards, groups, backup) ✅
 
 **Goal:** Living World feels native to Anima’s best tools, not a side folder.
 
 **Deliverables:**
 
-- [ ] Stronger person ↔ character card linking UX (pick card from editor; auto-suggest by name).
-- [ ] When a linked card speaks, pack always prioritizes that person + their threads.
-- [ ] Group: optional shared world log; per-speaker retrieve already exists — harden so group-react doesn’t skip world updates.
-- [ ] Include `worlds/` in `.anima-backup` / restore whitelist.
-- [ ] Context estimate includes Living World pack tokens.
-- [ ] Optional: seed factory from Creation Center export (one-way) — **do not** make workshop chat the engine.
+- [x] Stronger person ↔ character card linking UX (pick card from editor; auto-suggest by name).
+- [x] When a linked card speaks, pack always prioritizes that person + their threads.
+- [x] Group: optional shared world log; per-speaker retrieve already exists — harden so group-react doesn’t skip world updates.
+- [x] Include `worlds/` in `.anima-backup` / restore whitelist.
+- [x] Context estimate includes Living World pack tokens.
+- [x] Optional: seed factory from Creation Center export (one-way) — **do not** make workshop chat the engine.
 
 **Acceptance:**
 
 - Backup/restore brings notebooks to another device.
 - Context estimate shows pack size.
+
+**Shipped:** 2026-10-21 on `experiment/living-world`. World log already shared by `worldId`; sheet copy notes that. Group-react injects pack + runs after-turn pipeline. Factory **Seed from Creation Center…** prefills pitch only.
 
 ---
 
@@ -369,8 +372,8 @@ If a design forks from this roadmap, **pause and ask Jakwan**.
 | Then | **7** | Relationship/presence systems |
 | Then | **8** | Near-scene ticks |
 | Then | **9** | Threads / secrets / inventory-lite |
-| Then | **10** | Backup, cards, group hardening |
-| Then | **11** | Invisible UX |
+| Done | **10** | Backup, cards, group hardening |
+| Next | **11** | Invisible UX |
 | Finally | **12** | Merge |
 
 Phases 7–9 can overlap slightly **after** 5–6 are solid, but do not start ticks (8) before a reliable write loop (5).
@@ -391,4 +394,4 @@ When finishing a Living World phase:
 
 ## Short paste for a new agent
 
-> Living World Phases 1–4 are done (notebook, retrieve, reviewed writes, cast scale, factory). Owner’s true end-goal is DF-lite **under Anima chat**: organic validated state changes as he plays — not a frozen factory world and not a fortress clone. Follow [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md) starting at **Phase 5** (auto after-turn propose / auto-safe + undo). Work on `experiment/living-world`. Ask before commits/merge. Never silent unvalidated canon writes. Never full DF scope.
+> Living World Phases 1–10 are done on `experiment/living-world`. Owner’s true end-goal is DF-lite **under Anima chat**: organic validated state changes as he plays — not a frozen factory world and not a fortress clone. Follow [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md); next build work is **Phase 11** (invisible-engine UX). Never silent unvalidated canon writes. Never full DF scope. Do not merge to `main` until Phase 12 / owner approve.

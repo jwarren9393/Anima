@@ -4,7 +4,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../models/character.dart';
 import '../models/living_world.dart';
+import '../services/character_service.dart';
 import '../services/living_world_service.dart';
 
 /// Simple notebook editor — lists beat a giant workshop chat for canon.
@@ -13,10 +15,14 @@ class LivingWorldEditScreen extends StatefulWidget {
     super.key,
     required this.worldService,
     required this.world,
+    this.characterService,
   });
 
   final LivingWorldService worldService;
   final LivingWorld world;
+
+  /// Optional — enables Pick card… / name suggest for person ↔ character links.
+  final CharacterService? characterService;
 
   @override
   State<LivingWorldEditScreen> createState() => _LivingWorldEditScreenState();
@@ -433,9 +439,7 @@ class _LivingWorldEditScreenState extends State<LivingWorldEditScreen>
           ListTile(
             title: Text(_world.people[i].name),
             subtitle: Text(
-              _world.people[i].summary.trim().isEmpty
-                  ? _world.people[i].id
-                  : _world.people[i].summary,
+              _personSubtitle(_world.people[i]),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
@@ -454,6 +458,19 @@ class _LivingWorldEditScreenState extends State<LivingWorldEditScreen>
           ),
       ],
     );
+  }
+
+  String _personSubtitle(WorldPerson person) {
+    final bits = <String>[];
+    final cardId = person.characterCardId?.trim() ?? '';
+    if (cardId.isNotEmpty) bits.add('Linked card: $cardId');
+    final summary = person.summary.trim();
+    if (summary.isNotEmpty) {
+      bits.add(summary);
+    } else if (bits.isEmpty) {
+      bits.add(person.id);
+    }
+    return bits.join(' · ');
   }
 
   Widget _linksTab() {
@@ -704,105 +721,22 @@ class _LivingWorldEditScreenState extends State<LivingWorldEditScreen>
   }
 
   Future<WorldPerson?> _showPersonDialog(WorldPerson? existing) async {
-    final id = TextEditingController(
-      text: existing?.id ?? 'p_${DateTime.now().millisecondsSinceEpoch}',
-    );
-    final name = TextEditingController(text: existing?.name ?? '');
-    final summary = TextEditingController(text: existing?.summary ?? '');
-    final notes =
-        TextEditingController(text: existing?.personalityNotes ?? '');
-    final routine =
-        TextEditingController(text: existing?.routineHints ?? '');
-    final inventory = TextEditingController(
-      text: existing?.inventory.join(', ') ?? '',
-    );
-    final card =
-        TextEditingController(text: existing?.characterCardId ?? '');
+    List<Character> library = const [];
+    final characterService = widget.characterService;
+    if (characterService != null) {
+      try {
+        library = await characterService.loadCharacters();
+      } catch (_) {
+        library = const [];
+      }
+    }
+    if (!mounted) return null;
+
     return showDialog<WorldPerson>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(existing == null ? 'Add person' : 'Edit person'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: id,
-                decoration: const InputDecoration(labelText: 'Id'),
-                enabled: existing == null,
-              ),
-              TextField(
-                controller: name,
-                decoration: const InputDecoration(labelText: 'Name'),
-              ),
-              TextField(
-                controller: summary,
-                decoration: const InputDecoration(labelText: 'Summary'),
-                minLines: 2,
-                maxLines: 3,
-              ),
-              TextField(
-                controller: notes,
-                decoration:
-                    const InputDecoration(labelText: 'Personality notes'),
-                minLines: 2,
-                maxLines: 3,
-              ),
-              TextField(
-                controller: routine,
-                decoration: const InputDecoration(
-                  labelText: 'Routine hints (optional)',
-                  hintText: 'Mornings at the pier; evenings at the inn',
-                ),
-                minLines: 1,
-                maxLines: 2,
-              ),
-              TextField(
-                controller: inventory,
-                decoration: const InputDecoration(
-                  labelText: 'Inventory (comma-separated, optional)',
-                  hintText: 'letter, pier ledger',
-                ),
-              ),
-              TextField(
-                controller: card,
-                decoration: const InputDecoration(
-                  labelText: 'Linked character card id (optional)',
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final n = name.text.trim();
-              final i = id.text.trim();
-              if (n.isEmpty || i.isEmpty) return;
-              final cardId = card.text.trim();
-              Navigator.pop(
-                context,
-                WorldPerson(
-                  id: i,
-                  name: n,
-                  summary: summary.text.trim(),
-                  personalityNotes: notes.text.trim(),
-                  routineHints: routine.text.trim(),
-                  inventory: [
-                    for (final part in inventory.text.split(','))
-                      if (part.trim().isNotEmpty) part.trim(),
-                  ],
-                  characterCardId: cardId.isEmpty ? null : cardId,
-                ),
-              );
-            },
-            child: const Text('Save'),
-          ),
-        ],
+      builder: (context) => _PersonEditDialog(
+        existing: existing,
+        characters: library,
       ),
     );
   }
@@ -1428,6 +1362,301 @@ class _LivingWorldEditScreenState extends State<LivingWorldEditScreen>
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Person editor with optional character-card picker + name suggest.
+class _PersonEditDialog extends StatefulWidget {
+  const _PersonEditDialog({
+    required this.existing,
+    required this.characters,
+  });
+
+  final WorldPerson? existing;
+  final List<Character> characters;
+
+  @override
+  State<_PersonEditDialog> createState() => _PersonEditDialogState();
+}
+
+class _PersonEditDialogState extends State<_PersonEditDialog> {
+  late final TextEditingController _id;
+  late final TextEditingController _name;
+  late final TextEditingController _summary;
+  late final TextEditingController _notes;
+  late final TextEditingController _routine;
+  late final TextEditingController _inventory;
+  String? _cardId;
+  bool _dismissedSuggest = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.existing;
+    _id = TextEditingController(
+      text: existing?.id ?? 'p_${DateTime.now().millisecondsSinceEpoch}',
+    );
+    _name = TextEditingController(text: existing?.name ?? '');
+    _summary = TextEditingController(text: existing?.summary ?? '');
+    _notes = TextEditingController(text: existing?.personalityNotes ?? '');
+    _routine = TextEditingController(text: existing?.routineHints ?? '');
+    _inventory = TextEditingController(
+      text: existing?.inventory.join(', ') ?? '',
+    );
+    _cardId = existing?.characterCardId?.trim();
+    if (_cardId != null && _cardId!.isEmpty) _cardId = null;
+    _name.addListener(() {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _id.dispose();
+    _name.dispose();
+    _summary.dispose();
+    _notes.dispose();
+    _routine.dispose();
+    _inventory.dispose();
+    super.dispose();
+  }
+
+  Character? _characterById(String? id) {
+    final trimmed = id?.trim() ?? '';
+    if (trimmed.isEmpty) return null;
+    for (final c in widget.characters) {
+      if (c.id == trimmed) return c;
+    }
+    return null;
+  }
+
+  List<Character> _nameSuggestions() {
+    if (_cardId != null && _cardId!.isNotEmpty) return const [];
+    if (_dismissedSuggest) return const [];
+    final needle = _name.text.trim().toLowerCase();
+    if (needle.length < 2) return const [];
+    final hits = <Character>[];
+    for (final c in widget.characters) {
+      final n = c.name.trim().toLowerCase();
+      if (n.isEmpty) continue;
+      if (n == needle || n.contains(needle) || needle.contains(n)) {
+        hits.add(c);
+      }
+      if (hits.length >= 5) break;
+    }
+    return hits;
+  }
+
+  Future<void> _pickCard() async {
+    if (widget.characters.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No character cards yet — create one in Characters.'),
+        ),
+      );
+      return;
+    }
+    final picked = await showModalBottomSheet<Character>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: ListView(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                child: Text(
+                  'Link character card',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              for (final c in widget.characters)
+                ListTile(
+                  title: Text(c.name.trim().isEmpty ? c.id : c.name.trim()),
+                  subtitle: Text(c.id, maxLines: 1),
+                  onTap: () => Navigator.pop(context, c),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _cardId = picked.id;
+      _dismissedSuggest = true;
+      if (_name.text.trim().isEmpty && picked.name.trim().isNotEmpty) {
+        _name.text = picked.name.trim();
+      }
+    });
+  }
+
+  void _save() {
+    final n = _name.text.trim();
+    final i = _id.text.trim();
+    if (n.isEmpty || i.isEmpty) return;
+    final card = _cardId?.trim();
+    Navigator.pop(
+      context,
+      WorldPerson(
+        id: i,
+        name: n,
+        summary: _summary.text.trim(),
+        personalityNotes: _notes.text.trim(),
+        routineHints: _routine.text.trim(),
+        inventory: [
+          for (final part in _inventory.text.split(','))
+            if (part.trim().isNotEmpty) part.trim(),
+        ],
+        characterCardId: (card == null || card.isEmpty) ? null : card,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final linked = _characterById(_cardId);
+    final suggestions = _nameSuggestions();
+    final scheme = Theme.of(context).colorScheme;
+
+    return AlertDialog(
+      title: Text(widget.existing == null ? 'Add person' : 'Edit person'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _id,
+              decoration: const InputDecoration(labelText: 'Id'),
+              enabled: widget.existing == null,
+            ),
+            TextField(
+              controller: _name,
+              decoration: const InputDecoration(labelText: 'Name'),
+            ),
+            TextField(
+              controller: _summary,
+              decoration: const InputDecoration(labelText: 'Summary'),
+              minLines: 2,
+              maxLines: 3,
+            ),
+            TextField(
+              controller: _notes,
+              decoration:
+                  const InputDecoration(labelText: 'Personality notes'),
+              minLines: 2,
+              maxLines: 3,
+            ),
+            TextField(
+              controller: _routine,
+              decoration: const InputDecoration(
+                labelText: 'Routine hints (optional)',
+                hintText: 'Mornings at the pier; evenings at the inn',
+              ),
+              minLines: 1,
+              maxLines: 2,
+            ),
+            TextField(
+              controller: _inventory,
+              decoration: const InputDecoration(
+                labelText: 'Inventory (comma-separated, optional)',
+                hintText: 'letter, pier ledger',
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Linked character card',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+            const SizedBox(height: 4),
+            if (linked != null)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  linked.name.trim().isEmpty ? linked.id : linked.name.trim(),
+                ),
+                subtitle: Text(linked.id),
+                trailing: IconButton(
+                  tooltip: 'Clear link',
+                  icon: const Icon(Icons.link_off),
+                  onPressed: () => setState(() {
+                    _cardId = null;
+                    _dismissedSuggest = false;
+                  }),
+                ),
+              )
+            else if (_cardId != null && _cardId!.isNotEmpty)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('Card id: $_cardId'),
+                subtitle: const Text('Card not found in library'),
+                trailing: IconButton(
+                  tooltip: 'Clear link',
+                  icon: const Icon(Icons.link_off),
+                  onPressed: () => setState(() {
+                    _cardId = null;
+                    _dismissedSuggest = false;
+                  }),
+                ),
+              )
+            else
+              Text(
+                widget.characters.isEmpty
+                    ? 'No library cards to link yet.'
+                    : 'Optional — when this card speaks in chat, the pack '
+                        'prioritizes this person.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+              ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: widget.characters.isEmpty ? null : _pickCard,
+              icon: const Icon(Icons.badge_outlined),
+              label: Text(
+                linked == null && (_cardId == null || _cardId!.isEmpty)
+                    ? 'Pick card…'
+                    : 'Change card…',
+              ),
+            ),
+            if (suggestions.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Suggested by name',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+              ),
+              for (final c in suggestions)
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(c.name.trim().isEmpty ? c.id : c.name.trim()),
+                  trailing: TextButton(
+                    onPressed: () => setState(() {
+                      _cardId = c.id;
+                      _dismissedSuggest = true;
+                    }),
+                    child: const Text('Link'),
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _save,
+          child: const Text('Save'),
+        ),
+      ],
     );
   }
 }

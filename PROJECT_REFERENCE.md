@@ -7,7 +7,7 @@
 >
 > **Living documents:** `AGENTS.md` + this file + `README.md` are kept current together — see §29 for the upkeep rule every agent must follow.
 
-**Last updated:** 2026-10-21 · **Version:** 1.0.0 build **78** · **Tests:** 480 (`flutter test`) · Living World Phases 1–9 shipped; next Phase 10 in `LIVING_WORLD_ROADMAP.md`
+**Last updated:** 2026-10-21 · **Version:** 1.0.0 build **78** · **Tests:** 485 (`flutter test`) · Living World Phases 1–10 shipped; next Phase 11 in `LIVING_WORLD_ROADMAP.md`
 
 ---
 
@@ -346,7 +346,7 @@ All library files live in **one user-owned folder** (`AppDataRoot`, default `Doc
 
 **Character saves** (`character_service.dart`): every write is flushed to disk (`flush: true`) with one automatic retry; concurrent saves are serialized through a write queue so a read-modify-write can never clobber another card (e.g. a quick temporary-NPC save racing an editor save); `upsert()` re-reads the file after writing and throws if the card did not land, so the editor can show the error and stay open instead of closing and silently losing edits.
 
-**Backup** (`AppBackupService`): single `.anima-backup` JSON with whitelist above + settings keys + base64 avatars. **No API key.** Copy the whole Anima folder to move the key too.
+**Backup** (`AppBackupService`): single `.anima-backup` JSON with whitelist above + settings keys + base64 avatars + Living World `worlds/` notebooks (and `.log.json` / `.undo.json` side cars). **No API key.** Copy the whole Anima folder to move the key too.
 
 **Sync — removed in build 72.** There is no cloud feature in the app any more: no `SyncService`, no sync file, no rclone mount, no Google. See §22 for how data moves between devices now (`scripts/sync_phone_anima.sh` optionally copies a `.anima-backup` over adb).
 
@@ -673,7 +673,19 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 | Factory / editor | seedCanon may emit continuity; Canon tab edits threads/promises/secrets; person dialog inventory field |
 | Sample harbor | Missing-crate thread, Edric→Mira dawn promise, letter secret (Lena witness), Mira `pier ledger` |
 
-**Not yet (see roadmap Phases 10–12):** `.anima-backup` inclusion of `worlds/` (folder copy still moves them via `librarySubdirs`), stronger card-link UX, context-estimate pack tokens, Creation Center rewrite (not required for living engine).
+### Phase 10 (shipped on the experiment branch)
+
+| Piece | Role |
+|-------|------|
+| Card-link UX | Person editor **Pick card…** / Clear link + name-based suggestions (`CharacterService`); list shows linked card id |
+| Hard-pin retrieve | Linked/named speaker forced into pack; open threads/promises/secrets involving them pinned front; `fitBudget` keeps speaker |
+| Group-react | `_buildGroupBeatApiMessages` injects Living World pack; generate/regenerate call `_afterLivingWorldTurnPipeline` |
+| Shared World log | Already per-`worldId`; sheet copy clarifies shared across bound chats |
+| Backup | `AppBackupService` packs/restores `worlds/` map (notebooks + `.log.json` / `.undo.json`) |
+| Context estimate | `ChatPromptBreakdown.livingWorldTokens` + dialog row |
+| Factory seed | **Seed from Creation Center…** → one-way pitch via `brainstormFromWorkshop` (workshop chat stays non-engine) |
+
+**Not yet (see roadmap Phases 11–12):** invisible-engine UX polish (ambient chip, pending review, hub timeline); merge to `main`.
 
 **Invariant:** Lorebooks + Memory summary stay; Living World is the authoritative layer for *tracked* facts when bound. AI never silently overwrites hard state (even when auto-apply lands — validation + policy required).
 
@@ -819,7 +831,7 @@ Plus **Enter to send** toggle (desktop).
 
 ## 22. Backup and restore (local only)
 
-See §8. User must **re-enter API key** after restore.
+See §8. User must **re-enter API key** after restore. Living World notebooks under `worlds/` are included in `.anima-backup` (Phase 10).
 
 **No cloud sync.** The cross-device sync feature was **removed** in build 72 (with `SyncService`, `SyncTarget`, the four `sync_*` settings keys and the `saf` dependency), because the owner's phone and laptop are always together and the cloud path only added rate-limit stalls and Google tokens that expired every 7 days. `Create backup` writes one `.anima-backup` file and `Restore backup` applies it; moving the file between devices is up to the user. `scripts/sync_phone_anima.sh` automates that copy over USB/Wi-Fi adb (`--auto` newest-wins, `--library` for the whole library, `--dry-run` to preview, and it refuses to overwrite without confirmation). API key: never in the backup; each device keeps its own.
 
@@ -934,7 +946,7 @@ Tests cover: lore scan, prompt builders, card codec, backup, sync stability, cha
 - Backup not encrypted.
 - PNG export needs PNG avatar for embedded image.
 - Windows build requires Windows host.
-- **Living World (experiment):** Phases 1–9 (scored retrieve; update-with-review; after-turn policy; opt-in resolve-before-narrate + World log; relationship drift / flag recipes / Narrator presence sync / routineHints; near-scene ticks + Advance a beat; schema v2 threads/promises/secrets/inventory-lite; solo/group; Worlds hub + factory); `.anima-backup` does not yet pack `worlds/` (copying the whole Anima folder still includes them).
+- **Living World (experiment):** Phases 1–10 (scored retrieve; update-with-review; after-turn policy; opt-in resolve-before-narrate + World log; relationship drift / flag recipes / Narrator presence sync / routineHints; near-scene ticks + Advance a beat; schema v2 threads/promises/secrets/inventory-lite; card-link UX + hard-pin; group-react pack/after-turn; context-estimate pack tokens; factory seed from Creation Center; solo/group; Worlds hub + factory); `.anima-backup` includes `worlds/`.
 - Back-burner: undo send, last-chat resume, pinned mood chips, memory preview panel, etc.
 
 ---

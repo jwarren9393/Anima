@@ -45,6 +45,36 @@ class LivingWorldFactoryRequest {
 
   int get clampedPlaces => targetPlaceCount.clamp(3, 20);
   int get clampedPeople => targetPersonCount.clamp(6, 50);
+
+  /// One-way seed from Creation Center workshop prose (does not sync back).
+  ///
+  /// [characterLines] are short "Name — summary" snippets from linked cards.
+  static String brainstormFromWorkshop({
+    required String title,
+    String worldSummary = '',
+    List<String> characterLines = const [],
+  }) {
+    final buf = StringBuffer();
+    final t = title.trim();
+    if (t.isNotEmpty) buf.writeln('Workshop title: $t');
+    final summary = worldSummary.trim();
+    if (summary.isNotEmpty) {
+      if (buf.isNotEmpty) buf.writeln();
+      buf.writeln(summary);
+    }
+    final cast = [
+      for (final line in characterLines)
+        if (line.trim().isNotEmpty) line.trim(),
+    ];
+    if (cast.isNotEmpty) {
+      if (buf.isNotEmpty) buf.writeln();
+      buf.writeln('Linked character cards (seed cast hints only):');
+      for (final line in cast.take(24)) {
+        buf.writeln('- $line');
+      }
+    }
+    return buf.toString().trim();
+  }
 }
 
 /// Progress snapshot while the factory runs.

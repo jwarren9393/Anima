@@ -153,7 +153,7 @@ publish only a zip you built locally, use
 
 Use **Settings → Backup, restore & sync**:
 
-- **Create backup** — one `.anima-backup` JSON file (no API key).
+- **Create backup** — one `.anima-backup` JSON file (no API key; includes Living World notebooks under `worlds/` on the experiment branch).
 - **Backup & restore (local only)** — one `.anima-backup` file; **there is no cloud/sync feature in the app** — move the file to the other device yourself (USB, KDE Connect, a shared folder) and use **Restore backup** there. `scripts/sync_phone_anima.sh` automates that copy over adb.
 
 ---
@@ -272,7 +272,7 @@ Minimal chrome: **Close** · title · **⋮** menu. **Voice row** above composer
 | **Chat copies…** | Reset per-chat character/persona/lore overrides (only shows when you have some) |
 | **Memory summary** / **Memory summary (set)** | Scene (now) + Ledger (durable plot); pin facts so summarize never drops them |
 | **Summarize now** | Merge older messages into Scene/Ledger (does not wipe pinned lines or open threads) |
-| **Context estimate** | Rough token/message gauge vs history budget and model window |
+| **Context estimate** | Rough token/message gauge vs history budget and model window (includes Living World pack when bound — experiment branch) |
 | **Characters** | Open Characters list |
 | **Manage cast** | Rename group, add/remove cast, lore, note — **Close** (X) returns Home for new/saved chats |
 | **Add / update character…** | One menu for all three character-in-chat flows: **New character from this chat** (AI builds a card from recent messages — optionally based on another card/persona you pick), **Add temporary character** (quick NPC), **Update saved character from chat** (revise one saved card from thread context) |
@@ -764,7 +764,7 @@ Live preview; **Save** applies app-wide immediately via `AppearanceController`. 
 **Create backup**
 
 - One `.anima-backup` plain JSON file.
-- **Includes:** chats, characters, personas, categories, lorebooks, workshops, composer drafts, Paths cache, avatars, settings.
+- **Includes:** chats, characters, personas, categories, lorebooks, workshops, composer drafts, Paths cache, avatars, Living World notebooks (`worlds/` — experiment branch), settings.
 - **Excludes:** API key (re-enter after restore).
 - **Desktop:** Save dialog (Downloads suggested).
 - **Android:** system share sheet.
@@ -776,7 +776,7 @@ Live preview; **Save** applies app-wide immediately via `AppearanceController`. 
 **Moving data between devices**
 
 - **Create backup** writes one `.anima-backup` file (chats, characters, personas, categories,
-  lorebooks, workshops, drafts, Paths cache, avatars, settings — never the API key).
+  lorebooks, workshops, drafts, Paths cache, avatars, Living World `worlds/`, settings — never the API key).
 - Move that file to the other device however you like — USB, **KDE Connect**, a shared folder, a USB
   stick — then open Anima there and use **Restore backup**.
 - **Optional helper (PC):** `bash scripts/sync_phone_anima.sh --auto` copies the file — or the whole
@@ -867,7 +867,7 @@ A tiny pointer file still sits in hidden app storage so the next launch knows wh
 - No TTS (removed).
 - Paths only on long-press menu (not permanent composer button).
 - Backup/sync plain JSON, not encrypted; API key excluded on purpose.
-- Living World (experiment): scored retrieve (solo/group); **play modes** Manual / Propose-after-turn / Auto-safe; opt-in **Resolve before reply (Living mode)** (facts first, then prose); **near-scene ticks** (Off / after turn / every N) + **Advance world a beat…**; **World log…**; undo last world update pack; light systems (relationship drift from aid/betrayal/promise events, Narrator presence → who/where, routine hints, flag recipes); **continuity** (open threads / promises / secrets + light inventory on people — notebook editor Canon tab); hub + factory + editor; large casts stay mostly off-prompt; further DF-lite depth in `LIVING_WORLD_ROADMAP.md` Phase 10+; `.anima-backup` does not pack `worlds/` yet (folder copy still includes them).
+- Living World (experiment): scored retrieve (solo/group; linked card hard-pin); **play modes** Manual / Propose-after-turn / Auto-safe; opt-in **Resolve before reply (Living mode)** (facts first, then prose); **near-scene ticks** (Off / after turn / every N) + **Advance world a beat…**; **World log…** (shared per notebook); undo last world update pack; light systems (relationship drift from aid/betrayal/promise events, Narrator presence → who/where, routine hints, flag recipes); **continuity** (open threads / promises / secrets + light inventory — Canon tab); person **Pick card…** / name suggest; group-react uses pack + after-turn; context estimate shows pack size; hub + factory (**Seed from Creation Center…** one-way) + editor; `.anima-backup` includes `worlds/`; further polish in `LIVING_WORLD_ROADMAP.md` Phase 11+.
 - PNG card export: JPEG/WebP avatars may use placeholder; PNG avatars embed correctly.
 - **Presence / scene law** is always on (no toggle) — uses narrator name mentions; very old memory without witness tags may leak until re-summarized; honorifics don’t match names — use the **Narrator** control to establish who’s present.
 - NanoGPT website **Intelligence** scores not available via API (Anima shows catalog + routing stats instead).

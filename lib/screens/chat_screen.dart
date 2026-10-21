@@ -2135,6 +2135,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _scrollToBottom(jump: true);
 
       unawaited(_maybeAutoSummarize());
+      // Phase 10: group-react must not skip Living World after-turn / ticks.
+      unawaited(_afterLivingWorldTurnPipeline());
     } on NanoGptCancelledException {
       // Ignore.
     } on NanoGptException catch (error) {
@@ -2226,6 +2228,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       await _persist();
       _scrollToBottom(jump: true);
       unawaited(_maybeAutoSummarize());
+      unawaited(_afterLivingWorldTurnPipeline());
     } on NanoGptCancelledException {
       // Ignore.
     } on NanoGptException catch (error) {
@@ -2387,6 +2390,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       globalPostHistory: globalPrompts.postHistoryInstructions,
     );
 
+    final historyEnd = historyEndExclusive ?? _messages.length;
+    final recentForWorld = historyEnd <= 0
+        ? const <ChatMessage>[]
+        : _messages.sublist(0, historyEnd);
+    final livingWorldBlock = await _livingWorldPromptBlock(
+          speaker: primary,
+          recentForScan: recentForWorld,
+        ) ??
+        '';
+
     return _groupReply.buildBeatMessages(
       speakers: speakers,
       allInChat: _participants,
@@ -2412,6 +2425,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           ) ??
           '',
       priorBeatToAvoid: priorBeatToAvoid,
+      livingWorldBlock: livingWorldBlock,
     );
   }
 
@@ -3485,6 +3499,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       memoryTokens = _contextService.estimateTokens(block);
     }
 
+    var livingWorldTokens = 0;
+    final worldBlock = await _livingWorldPromptBlock(
+      speaker: speaker,
+      recentForScan: historyForScan,
+    );
+    if (worldBlock != null && worldBlock.trim().isNotEmpty) {
+      livingWorldTokens = _contextService.estimateTokens(worldBlock);
+    }
+
     final contextSettings = await widget.settingsService.getContextSettings();
     final history = _contextService.selectHistory(
       messages: _messages,
@@ -3516,6 +3539,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         personaOnlyTokens +
         globalPromptTokens +
         loreTokens +
+        livingWorldTokens +
         memoryTokens +
         historyTokens +
         postHistoryTokens;
@@ -3531,6 +3555,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       historyTokens: historyTokens,
       postHistoryTokens: postHistoryTokens,
       estimatedSentTokens: estimatedSent,
+      livingWorldTokens: livingWorldTokens,
     );
   }
 
@@ -3628,6 +3653,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   )
                 else
                   const Text('World Info (this turn): none matched'),
+                if (breakdown.livingWorldTokens > 0)
+                  Text(
+                    'Living World pack: ~${ContextEstimate.formatTokenCount(breakdown.livingWorldTokens)} tokens',
+                  )
+                else if ((session.worldId ?? '').trim().isNotEmpty)
+                  const Text('Living World pack: bound, nothing retrieved'),
                 if (breakdown.personaTokens > 0)
                   Text(
                     'Persona + global prompts: ~${ContextEstimate.formatTokenCount(breakdown.personaTokens)} tokens',

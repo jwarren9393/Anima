@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../models/living_world.dart';
+import '../models/world_workshop.dart';
+import '../services/character_service.dart';
 import '../services/living_world_factory_service.dart';
 import '../services/living_world_service.dart';
 import '../services/nanogpt_service.dart';
 import '../services/settings_service.dart';
+import '../services/world_workshop_service.dart';
 
 /// Collect a brainstorm pitch, run the multi-pass factory, save the notebook.
 Future<LivingWorld?> showLivingWorldFactorySheet({
@@ -12,6 +15,8 @@ Future<LivingWorld?> showLivingWorldFactorySheet({
   required LivingWorldService worldService,
   required NanoGptService nanoGptService,
   required SettingsService settingsService,
+  CharacterService? characterService,
+  WorldWorkshopService? workshopService,
 }) {
   return showModalBottomSheet<LivingWorld>(
     context: context,
@@ -21,6 +26,8 @@ Future<LivingWorld?> showLivingWorldFactorySheet({
       worldService: worldService,
       nanoGptService: nanoGptService,
       settingsService: settingsService,
+      characterService: characterService,
+      workshopService: workshopService ?? WorldWorkshopService(),
     ),
   );
 }
@@ -30,11 +37,15 @@ class _LivingWorldFactorySheet extends StatefulWidget {
     required this.worldService,
     required this.nanoGptService,
     required this.settingsService,
+    required this.workshopService,
+    this.characterService,
   });
 
   final LivingWorldService worldService;
   final NanoGptService nanoGptService;
   final SettingsService settingsService;
+  final WorldWorkshopService workshopService;
+  final CharacterService? characterService;
 
   @override
   State<_LivingWorldFactorySheet> createState() =>
@@ -50,11 +61,113 @@ class _LivingWorldFactorySheetState extends State<_LivingWorldFactorySheet> {
   bool _busy = false;
   String _status = '';
   String? _error;
+  String? _seedNote;
 
   @override
   void dispose() {
     _pitch.dispose();
     super.dispose();
+  }
+
+  Future<void> _seedFromWorkshop() async {
+    if (_busy) return;
+    List<WorldWorkshop> workshops;
+    try {
+      workshops = await widget.workshopService.loadWorkshops();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = 'Could not load Creation Center workshops: $e');
+      return;
+    }
+    if (!mounted) return;
+    if (workshops.isEmpty) {
+      setState(
+        () => _error =
+            'No Creation Center workshops yet — create one first, or type a pitch.',
+      );
+      return;
+    }
+
+    final picked = await showModalBottomSheet<WorldWorkshop>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: ListView(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                child: Text(
+                  'Seed from Creation Center',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(
+                  'One-way only — fills the factory pitch from the workshop '
+                  'summary (and linked cards). Does not turn Creation Center '
+                  'into the living engine.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+              for (final w in workshops)
+                ListTile(
+                  title: Text(w.title.trim().isEmpty ? 'Untitled' : w.title),
+                  subtitle: Text(
+                    w.worldSummary.trim().isEmpty
+                        ? 'No world summary yet'
+                        : w.worldSummary.trim(),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onTap: () => Navigator.pop(context, w),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+    if (picked == null || !mounted) return;
+
+    final characterLines = <String>[];
+    final characterService = widget.characterService;
+    if (characterService != null && picked.linkedCharacterIds.isNotEmpty) {
+      try {
+        final all = await characterService.loadCharacters();
+        final byId = {for (final c in all) c.id: c};
+        for (final id in picked.linkedCharacterIds) {
+          final c = byId[id];
+          if (c == null) continue;
+          final name = c.name.trim().isEmpty ? c.id : c.name.trim();
+          final summary = c.description.trim();
+          characterLines.add(
+            summary.isEmpty
+                ? name
+                : '$name — ${summary.length > 160 ? '${summary.substring(0, 160)}…' : summary}',
+          );
+        }
+      } catch (_) {}
+    }
+
+    final pitch = LivingWorldFactoryRequest.brainstormFromWorkshop(
+      title: picked.title,
+      worldSummary: picked.worldSummary,
+      characterLines: characterLines,
+    );
+    if (!mounted) return;
+    if (pitch.isEmpty) {
+      setState(
+        () => _error =
+            'That workshop has no summary or linked cards to seed from.',
+      );
+      return;
+    }
+    setState(() {
+      _pitch.text = pitch;
+      _seedNote = 'Seeded from “${picked.title.trim().isEmpty ? 'Untitled' : picked.title.trim()}”';
+      _error = null;
+    });
   }
 
   Future<void> _run() async {
@@ -146,6 +259,21 @@ class _LivingWorldFactorySheetState extends State<_LivingWorldFactorySheet> {
                       color: scheme.onSurfaceVariant,
                     ),
               ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _busy ? null : _seedFromWorkshop,
+                icon: const Icon(Icons.auto_awesome_outlined),
+                label: const Text('Seed from Creation Center…'),
+              ),
+              if (_seedNote != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  _seedNote!,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.primary,
+                      ),
+                ),
+              ],
               const SizedBox(height: 16),
               TextField(
                 controller: _pitch,

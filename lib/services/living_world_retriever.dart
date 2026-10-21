@@ -106,6 +106,18 @@ class LivingWorldRetriever {
       if (score > 0) personScores[person.id] = score;
     }
 
+    // Phase 10: hard-pin the linked/named speaker into the pack even when they
+    // would otherwise score 0 (e.g. never mentioned, not at active place).
+    final speakingIdPinned = _findSpeakingPersonId(
+      world.people,
+      speakerName: speakerName,
+      speakerCharacterId: speakerCharacterId,
+    );
+    if (speakingIdPinned != null) {
+      final prior = personScores[speakingIdPinned] ?? 0;
+      if (prior < 190) personScores[speakingIdPinned] = 190;
+    }
+
     // Soft-pull relationship neighbors of *strongly* relevant people only
     // (mentioned / speaker / card). Place-only presence does not expand the
     // whole acquaintance graph — that would defeat cast scale.
@@ -229,33 +241,44 @@ class LivingWorldRetriever {
       if (flags.length >= maxFlags) break;
     }
 
-    final speakingIdEarly = _findSpeakingPersonId(
-      world.people,
-      speakerName: speakerName,
-      speakerCharacterId: speakerCharacterId,
-    );
+    final speakingIdEarly = speakingIdPinned;
 
     // Continuity objects (Phase 9): prefer open; closed only on strong text hit.
-    final threads = _scoreThreads(
-      world.threads,
-      personIds: personIds,
-      placeIds: placeIds,
-      haystack: haystack,
+    // Phase 10: pin the speaker's open loops to the front so fitBudget keeps them.
+    final threads = _pinSpeakerContinuity(
+      _scoreThreads(
+        world.threads,
+        personIds: personIds,
+        placeIds: placeIds,
+        haystack: haystack,
+        speakingPersonId: speakingIdEarly,
+      ),
       speakingPersonId: speakingIdEarly,
+      involves: (t, id) => t.personIds.contains(id) || t.witnessIds.contains(id),
     );
-    final promises = _scorePromises(
-      world.promises,
-      personIds: personIds,
-      placeIds: placeIds,
-      haystack: haystack,
-      peopleById: peopleById,
-    );
-    final secrets = _scoreSecrets(
-      world.secrets,
-      personIds: personIds,
-      placeIds: placeIds,
-      haystack: haystack,
+    final promises = _pinSpeakerContinuity(
+      _scorePromises(
+        world.promises,
+        personIds: personIds,
+        placeIds: placeIds,
+        haystack: haystack,
+        peopleById: peopleById,
+        speakingPersonId: speakingIdEarly,
+      ),
       speakingPersonId: speakingIdEarly,
+      involves: (p, id) => p.fromId == id || p.toId == id,
+    );
+    final secrets = _pinSpeakerContinuity(
+      _scoreSecrets(
+        world.secrets,
+        personIds: personIds,
+        placeIds: placeIds,
+        haystack: haystack,
+        speakingPersonId: speakingIdEarly,
+      ),
+      speakingPersonId: speakingIdEarly,
+      involves: (s, id) =>
+          s.subjectIds.contains(id) || s.witnessIds.contains(id),
     );
 
     // If nothing matched, still give a tiny world header + active place.
@@ -352,6 +375,7 @@ class LivingWorldRetriever {
     required Set<String> placeIds,
     required String haystack,
     required Map<String, WorldPerson> peopleById,
+    String? speakingPersonId,
   }) {
     final rows = <({WorldPromise item, int score})>[];
     for (final p in all) {
@@ -359,13 +383,16 @@ class LivingWorldRetriever {
       final hitPerson =
           personIds.contains(p.fromId) || personIds.contains(p.toId);
       final hitPlace = p.placeId != null && placeIds.contains(p.placeId);
+      final speakerHit = speakingPersonId != null &&
+          (p.fromId == speakingPersonId || p.toId == speakingPersonId);
       if (!p.isOpen && !textHit) continue;
-      if (!hitPerson && !hitPlace && !textHit) continue;
+      if (!hitPerson && !hitPlace && !textHit && !speakerHit) continue;
       var score = 0;
       if (p.isOpen) score += 20;
       if (hitPerson) score += 45;
       if (hitPlace) score += 20;
       if (textHit) score += 35;
+      if (speakerHit) score += 30;
       // Soft boost when names appear in haystack even if not in selected cast.
       final from = peopleById[p.fromId];
       final to = peopleById[p.toId];
@@ -375,6 +402,25 @@ class LivingWorldRetriever {
     }
     rows.sort((a, b) => b.score.compareTo(a.score));
     return [for (final row in rows.take(maxPromises)) row.item];
+  }
+
+  /// Move open loops that involve [speakingPersonId] to the front (stable).
+  List<T> _pinSpeakerContinuity<T>(
+    List<T> items, {
+    required String? speakingPersonId,
+    required bool Function(T item, String id) involves,
+  }) {
+    if (speakingPersonId == null || items.length < 2) return items;
+    final pinned = <T>[];
+    final rest = <T>[];
+    for (final item in items) {
+      if (involves(item, speakingPersonId)) {
+        pinned.add(item);
+      } else {
+        rest.add(item);
+      }
+    }
+    return [...pinned, ...rest];
   }
 
   List<WorldSecret> _scoreSecrets(
@@ -687,6 +733,7 @@ class LivingWorldPack {
 
   /// Drop lower-priority rows until roughly under [tokenBudget].
   /// Lists are expected highest-priority first; we trim from the end.
+  /// Speaker person + their open continuity (pinned front) are kept longest.
   LivingWorldPack fitBudget(int tokenBudget) {
     var pack = this;
     while (_estimateTokens(pack.renderBody()) > tokenBudget) {
@@ -723,8 +770,9 @@ class LivingWorldPack {
         );
         continue;
       }
-      if (pack.people.length > 2) {
-        // People are highest-priority first (speaker at front); trim the tail.
+      if (pack.people.length > 1) {
+        // People are highest-priority first (speaker at front); never drop the
+        // linked/named speaker — only trim the tail.
         pack = pack._copyWith(
           people: pack.people.sublist(0, pack.people.length - 1),
         );

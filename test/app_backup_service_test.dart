@@ -187,4 +187,33 @@ void main() {
       throwsA(isA<AppBackupException>()),
     );
   });
+
+  test('Living World worlds/ folder round-trips in backup', () async {
+    await seedDocs();
+    final worlds = Directory(p.join(tempDir.path, 'worlds'));
+    await worlds.create(recursive: true);
+    await File(p.join(worlds.path, 'harbor.json')).writeAsString(
+      '{"id":"harbor","title":"Sample Harbor","schemaVersion":2}',
+    );
+    await File(p.join(worlds.path, 'harbor.log.json')).writeAsString('[]');
+    await File(p.join(worlds.path, 'harbor.undo.json')).writeAsString('[]');
+
+    final bundle = await service.createBackup();
+    expect(bundle.summary.worldFileCount, 3);
+    final map = jsonDecode(utf8.decode(bundle.bytes)) as Map<String, dynamic>;
+    expect(map['worlds'], isA<Map>());
+    expect((map['worlds'] as Map).keys, contains('harbor.json'));
+
+    // Wipe worlds and restore.
+    await File(p.join(worlds.path, 'harbor.json')).delete();
+    await File(p.join(worlds.path, 'extra.json')).writeAsString('{"id":"x"}');
+
+    await service.restoreBackup(bundle.bytes);
+    expect(
+      await File(p.join(worlds.path, 'harbor.json')).readAsString(),
+      contains('Sample Harbor'),
+    );
+    expect(await File(p.join(worlds.path, 'harbor.log.json')).exists(), isTrue);
+    expect(await File(p.join(worlds.path, 'extra.json')).exists(), isFalse);
+  });
 }

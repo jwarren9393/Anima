@@ -7,6 +7,7 @@ import '../models/living_world.dart';
 import '../models/living_world_tick_settings.dart';
 import '../models/living_world_update_policy.dart';
 import '../models/turn_resolution.dart';
+import '../services/character_service.dart';
 import '../services/living_world_log_service.dart';
 import '../services/living_world_service.dart';
 import '../services/living_world_simulator.dart';
@@ -28,11 +29,13 @@ class WorldsHubScreen extends StatefulWidget {
     super.key,
     required this.settingsService,
     required this.nanoGptService,
+    this.characterService,
     LivingWorldService? worldService,
   }) : worldService = worldService ?? LivingWorldService();
 
   final SettingsService settingsService;
   final NanoGptService nanoGptService;
+  final CharacterService? characterService;
   final LivingWorldService worldService;
 
   @override
@@ -185,6 +188,7 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
         builder: (_) => LivingWorldEditScreen(
           worldService: widget.worldService,
           world: world,
+          characterService: widget.characterService,
         ),
       ),
     );
@@ -199,6 +203,7 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
         builder: (_) => LivingWorldEditScreen(
           worldService: widget.worldService,
           world: world,
+          characterService: widget.characterService,
         ),
       ),
     );
@@ -213,6 +218,7 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
         builder: (_) => LivingWorldEditScreen(
           worldService: widget.worldService,
           world: world,
+          characterService: widget.characterService,
         ),
       ),
     );
@@ -245,6 +251,7 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
           builder: (_) => LivingWorldEditScreen(
             worldService: widget.worldService,
             world: world,
+            characterService: widget.characterService,
           ),
         ),
       );
@@ -261,6 +268,7 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
       worldService: widget.worldService,
       nanoGptService: widget.nanoGptService,
       settingsService: widget.settingsService,
+      characterService: widget.characterService,
     );
     if (world == null || !mounted) return;
     await Navigator.of(context).push(
@@ -268,6 +276,7 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
         builder: (_) => LivingWorldEditScreen(
           worldService: widget.worldService,
           world: world,
+          characterService: widget.characterService,
         ),
       ),
     );
