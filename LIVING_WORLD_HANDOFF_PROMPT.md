@@ -3,7 +3,7 @@
 Copy everything below the line into a **new Agent chat** opened in the **Anima** workspace.
 
 > **Status (2026-10-21):** Phases **1–11 are done** on `experiment/living-world`.  
-> For **what to build next**, follow **[`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md)** starting at **Phase 12** (merge readiness).  
+> For **what to build next**, follow **[`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md)** — **Phase 13** next (world person → character/persona + bound chat). Phase 12 agent package is done; soak/merge wait until after Phase 13.  
 > This handoff stays the **philosophy / locked scope** document — do not ignore its out-of-scope list.
 
 ---

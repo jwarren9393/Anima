@@ -7,7 +7,7 @@
 >
 > **Living documents:** `AGENTS.md` + this file + `README.md` are kept current together — see §29 for the upkeep rule every agent must follow.
 
-**Last updated:** 2026-10-21 · **Version:** 1.0.0 build **78** · **Tests:** 499 (`flutter test`) · Living World Phases 1–11 + Phase 12 agent package on `experiment/living-world`; await owner soak + merge approve (`docs/LIVING_WORLD_MERGE_READINESS.md`)
+**Last updated:** 2026-10-21 · **Version:** 1.0.0 build **78** · **Tests:** 499 (`flutter test`) · Living World Phases 1–11 + Phase 12 agent package on `experiment/living-world`; **Phase 13 next** (world→character/persona); then owner soak + merge (`docs/LIVING_WORLD_MERGE_READINESS.md`)
 
 ---
 
@@ -688,7 +688,7 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 | Shared World log | Already per-`worldId`; sheet copy clarifies shared across bound chats |
 | Backup | `AppBackupService` packs/restores `worlds/` map (notebooks + `.log.json` / `.undo.json` / `.pending.json`) |
 | Context estimate | `ChatPromptBreakdown.livingWorldTokens` + dialog row |
-| Factory seed | **Seed from Creation Center…** → one-way pitch via `brainstormFromWorkshop` (workshop chat stays non-engine) |
+| Factory seed | **Seed from Creation Center…** → one-way pitch via `brainstormFromWorkshop` (workshop chat stays non-engine). Picks a workshop, fills the factory brainstorm box with title + world summary + short linked-card name/summary lines; then the normal multi-pass factory runs. Does **not** sync back into Creation Center. |
 
 ### Phase 11 (shipped on the experiment branch)
 
@@ -701,7 +701,7 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 | Pipeline hygiene | After-turn+tick pipeline queues one extra run; `_livingWorldEpoch` invalidates work on leave chat; never sets `_busy` for after-turn |
 | Playtest | [`docs/LIVING_WORLD_PLAYTEST.md`](docs/LIVING_WORLD_PLAYTEST.md) checklist + owner sign-off table |
 
-### Phase 12 (agent package shipped — await owner)
+### Phase 12 (agent package shipped — await Phase 13 + owner)
 
 | Piece | Role |
 |-------|------|
@@ -709,7 +709,16 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 | Merge readiness doc | [`docs/LIVING_WORLD_MERGE_READINESS.md`](docs/LIVING_WORLD_MERGE_READINESS.md) — phone + Windows soak + merge steps |
 | Hub / Settings copy | Stresses optional + off until bind |
 
-**Still owner-only:** multi-session soak on phone + Windows, then explicit approve → merge to `main` → normal `v1.0.0` deploy.
+### Phase 13 (NEXT — owner blocker before merge)
+
+| Piece | Role |
+|-------|------|
+| Create character from person | From Living World person editor/list → AI draft Anima character card (build model) → review → save + set `linkedCharacterId` |
+| Create persona from person | Same for player stand-in people → persona card + review |
+| Start chat bound | One-tap solo chat with new/linked character, persona picker, `worldId` already set |
+| Keep | **Pick card…** (existing cards) + **Seed from Creation Center…** (workshop → factory pitch only) |
+
+**Still blocked for merge:** Phase 13 code, then owner soak on phone + Windows, then explicit approve → merge to `main` → normal `v1.0.0` deploy.
 
 **Invariant:** Lorebooks + Memory summary stay; Living World is the authoritative layer for *tracked* facts when bound. AI never silently overwrites hard state (even when auto-apply lands — validation + policy required).
 
@@ -970,7 +979,7 @@ Tests cover: lore scan, prompt builders, card codec, backup, sync stability, cha
 - Backup not encrypted.
 - PNG export needs PNG avatar for embedded image.
 - Windows build requires Windows host.
-- **Living World (experiment, merge-ready package):** Phases 1–11 + Phase 12 agent package (opt-in defaults + soak/merge docs). Feature **off until bind**. See §15b + `docs/LIVING_WORLD_MERGE_READINESS.md`.
+- **Living World (experiment):** Phases 1–11 + Phase 12 agent package; **Phase 13 next** (world→cards). Feature **off until bind**. See §15b + `docs/LIVING_WORLD_MERGE_READINESS.md`.
 - Back-burner: undo send, last-chat resume, pinned mood chips, memory preview panel, etc.
 
 ---

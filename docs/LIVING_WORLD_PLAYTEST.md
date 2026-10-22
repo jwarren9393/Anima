@@ -12,7 +12,7 @@ Run this after each major Living World phase, and again before merge to `main` (
 
 1. Open Anima on the `experiment/living-world` build (or after merge, daily driver).
 2. Settings → **Living Worlds** → create **sample harbor** or run **World factory**.
-3. Start a solo or group chat → ⋮ → **Living World** → bind that notebook.
+3. **After Phase 13:** on a person → **Create character from this person…** (review → save) → **Start chat** so the world is already attached. Until Phase 13 ships, make/link a character by hand, then: Start a solo or group chat → ⋮ → **Living World** → bind that notebook.
 4. Set play mode to **Auto-apply safe updates** (hub or chat ⋮ → World play mode…).
 5. Leave **Near-scene ticks** Off unless you want ambient beats.
 

@@ -1,7 +1,7 @@
 # Living World — Phase 12 merge readiness
 
 > **Agent rule:** Prepare this package on `experiment/living-world`.  
-> **Do not merge to `main`** until Jakwan explicitly approves after soak.
+> **Do not merge to `main`** until **Phase 13 is shipped** and Jakwan explicitly approves after soak.
 
 This is the gate between the Living World experiment and daily-driver Anima.
 
@@ -11,21 +11,23 @@ This is the gate between the Living World experiment and daily-driver Anima.
 
 | Bar | Passes when |
 | --- | --- |
+| **Phase 13** | World person → create character / persona + start chat already bound (see [`LIVING_WORLD_ROADMAP.md`](../LIVING_WORLD_ROADMAP.md) Phase 13). Owner blocker 2026-10-21. |
 | **Opt-in** | New chats have no `worldId`. Policy default = Manual. Ticks Off. Resolve-before Off. Unbound chat = classic Anima. |
 | **Tests** | `flutter analyze` clean + `flutter test` green on the experiment branch. |
-| **Docs** | `AGENTS.md`, `PROJECT_REFERENCE.md` §15b, `README.md`, `LIVING_WORLD_ROADMAP.md` Phase 12, and this file agree. |
-| **Soak** | Owner playtest on **phone and Windows** (multi-session) using [`LIVING_WORLD_PLAYTEST.md`](LIVING_WORLD_PLAYTEST.md). |
+| **Docs** | `AGENTS.md`, `PROJECT_REFERENCE.md` §15b, `README.md`, `LIVING_WORLD_ROADMAP.md` Phases 12–13, and this file agree. |
+| **Soak** | Owner playtest on **phone and Windows** (multi-session) using [`LIVING_WORLD_PLAYTEST.md`](LIVING_WORLD_PLAYTEST.md) — include create-character-from-person once Phase 13 lands. |
 | **Approve** | Owner says merge (exact words like “merge Living World” / “merge to main”). |
 
 ---
 
-## Agent checklist (done as Phase 12 code/docs work)
+## Agent checklist
 
-- [x] Defaults verified + regression tests (`test/living_world_phase12_test.dart`)
+- [x] Phase 12 defaults verified + regression tests (`test/living_world_phase12_test.dart`)
 - [x] Playtest checklist linked from living docs
 - [x] Merge readiness doc (this file)
 - [x] Living docs updated for Phase 12 package
-- [ ] Owner soak (phone + Windows) — **owner**
+- [ ] **Phase 13** world → character / persona bridge — **next agent build**
+- [ ] Owner soak (phone + Windows) — **owner** (after Phase 13)
 - [ ] Owner explicit merge approve — **owner**
 
 ---
