@@ -6,8 +6,19 @@ import 'package:path_provider/path_provider.dart';
 
 import '../models/character.dart';
 import '../models/living_world.dart';
+import '../services/api_key_service.dart';
+import '../services/appearance_controller.dart';
+import '../services/character_category_service.dart';
 import '../services/character_service.dart';
+import '../services/chat_service.dart';
 import '../services/living_world_service.dart';
+import '../services/nanogpt_service.dart';
+import '../services/persona_service.dart';
+import '../services/settings_service.dart';
+import '../services/world_info_service.dart';
+import '../services/world_workshop_service.dart';
+import '../widgets/living_world_person_card_sheet.dart';
+import 'chat_screen.dart';
 
 /// Simple notebook editor — lists beat a giant workshop chat for canon.
 class LivingWorldEditScreen extends StatefulWidget {
@@ -16,6 +27,15 @@ class LivingWorldEditScreen extends StatefulWidget {
     required this.worldService,
     required this.world,
     this.characterService,
+    this.personaService,
+    this.chatService,
+    this.settingsService,
+    this.nanoGptService,
+    this.apiKeyService,
+    this.characterCategoryService,
+    this.worldInfoService,
+    this.worldWorkshopService,
+    this.appearanceController,
   });
 
   final LivingWorldService worldService;
@@ -23,6 +43,17 @@ class LivingWorldEditScreen extends StatefulWidget {
 
   /// Optional — enables Pick card… / name suggest for person ↔ character links.
   final CharacterService? characterService;
+
+  /// Phase 13 — create persona / start chat from a notebook person.
+  final PersonaService? personaService;
+  final ChatService? chatService;
+  final SettingsService? settingsService;
+  final NanoGptService? nanoGptService;
+  final ApiKeyService? apiKeyService;
+  final CharacterCategoryService? characterCategoryService;
+  final WorldInfoService? worldInfoService;
+  final WorldWorkshopService? worldWorkshopService;
+  final AppearanceController? appearanceController;
 
   @override
   State<LivingWorldEditScreen> createState() => _LivingWorldEditScreenState();
@@ -139,18 +170,185 @@ class _LivingWorldEditScreenState extends State<LivingWorldEditScreen>
   }
 
   Future<void> _editPerson({WorldPerson? existing, int? index}) async {
-    final result = await _showPersonDialog(existing);
+    final result = await _showPersonDialog(existing, index: index);
     if (result == null) return;
     final people = List<WorldPerson>.from(_world.people);
+    final int personIndex;
     if (index != null) {
-      people[index] = result;
+      people[index] = result.person;
+      personIndex = index;
     } else {
-      people.add(result);
+      people.add(result.person);
+      personIndex = people.length - 1;
     }
     setState(() {
       _world = _world.copyWith(people: people);
       _dirty = true;
     });
+
+    final followUp = result.followUp;
+    if (followUp == null) return;
+    final person = people[personIndex];
+    if (followUp == 'character') {
+      await _createCharacterFromPerson(person, personIndex);
+    } else if (followUp == 'persona') {
+      await _createPersonaFromPerson(person);
+    } else if (followUp == 'chat') {
+      await _startBoundChat(person);
+    }
+  }
+
+  bool get _canDraftCards =>
+      widget.characterService != null &&
+      widget.settingsService != null &&
+      widget.nanoGptService != null;
+
+  bool get _canCreatePersona =>
+      widget.personaService != null &&
+      widget.settingsService != null &&
+      widget.nanoGptService != null;
+
+  bool get _canStartBoundChat =>
+      widget.characterService != null &&
+      widget.personaService != null &&
+      widget.chatService != null &&
+      widget.settingsService != null &&
+      widget.nanoGptService != null &&
+      widget.apiKeyService != null &&
+      widget.characterCategoryService != null &&
+      widget.worldInfoService != null &&
+      widget.worldWorkshopService != null &&
+      widget.appearanceController != null;
+
+  Future<void> _createCharacterFromPerson(WorldPerson person, int _) async {
+    final characterService = widget.characterService;
+    final settingsService = widget.settingsService;
+    final nanoGptService = widget.nanoGptService;
+    if (characterService == null ||
+        settingsService == null ||
+        nanoGptService == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Character drafting needs Characters + API settings wired in.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final result =
+        await LivingWorldPersonCardActions.createCharacterFromPerson(
+      context: context,
+      world: _world,
+      person: person,
+      worldService: widget.worldService,
+      characterService: characterService,
+      settingsService: settingsService,
+      nanoGptService: nanoGptService,
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _world = result.world;
+      _dirty = false;
+    });
+
+    final start = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Start chat?'),
+        content: Text(
+          'Chat with ${result.character.name} with this world already attached?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Start chat'),
+          ),
+        ],
+      ),
+    );
+    if (start == true && mounted) {
+      final linked = result.world.people.firstWhere(
+        (p) => p.id == person.id,
+        orElse: () => person.copyWith(characterCardId: result.character.id),
+      );
+      await _startBoundChat(linked);
+    }
+  }
+
+  Future<void> _createPersonaFromPerson(WorldPerson person) async {
+    final personaService = widget.personaService;
+    final settingsService = widget.settingsService;
+    final nanoGptService = widget.nanoGptService;
+    if (personaService == null ||
+        settingsService == null ||
+        nanoGptService == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Persona drafting needs Personas + API settings wired in.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    await LivingWorldPersonCardActions.createPersonaFromPerson(
+      context: context,
+      world: _world,
+      person: person,
+      personaService: personaService,
+      settingsService: settingsService,
+      nanoGptService: nanoGptService,
+    );
+  }
+
+  Future<void> _startBoundChat(WorldPerson person) async {
+    if (!_canStartBoundChat) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Start chat needs Characters, Personas, and chat services.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final session = await LivingWorldPersonCardActions.startBoundChat(
+      context: context,
+      world: _world,
+      person: person,
+      characterService: widget.characterService!,
+      personaService: widget.personaService!,
+      chatService: widget.chatService!,
+      settingsService: widget.settingsService!,
+      nanoGptService: widget.nanoGptService!,
+    );
+    if (session == null || !mounted) return;
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChatScreen(
+          apiKeyService: widget.apiKeyService!,
+          settingsService: widget.settingsService!,
+          characterService: widget.characterService!,
+          characterCategoryService: widget.characterCategoryService!,
+          personaService: widget.personaService!,
+          chatService: widget.chatService!,
+          nanoGptService: widget.nanoGptService!,
+          worldInfoService: widget.worldInfoService!,
+          worldWorkshopService: widget.worldWorkshopService!,
+          appearanceController: widget.appearanceController!,
+          initialSession: session,
+        ),
+      ),
+    );
   }
 
   Future<void> _editPlace({WorldPlace? existing, int? index}) async {
@@ -444,15 +642,56 @@ class _LivingWorldEditScreenState extends State<LivingWorldEditScreen>
               overflow: TextOverflow.ellipsis,
             ),
             onTap: () => _editPerson(existing: _world.people[i], index: i),
-            trailing: IconButton(
-              icon: const Icon(Icons.delete_outline),
-              onPressed: () {
-                final people = List<WorldPerson>.from(_world.people)
-                  ..removeAt(i);
-                setState(() {
-                  _world = _world.copyWith(people: people);
-                  _dirty = true;
-                });
+            trailing: PopupMenuButton<String>(
+              onSelected: (value) async {
+                final person = _world.people[i];
+                if (value == 'edit') {
+                  await _editPerson(existing: person, index: i);
+                } else if (value == 'character') {
+                  await _createCharacterFromPerson(person, i);
+                } else if (value == 'persona') {
+                  await _createPersonaFromPerson(person);
+                } else if (value == 'chat') {
+                  await _startBoundChat(person);
+                } else if (value == 'delete') {
+                  final people = List<WorldPerson>.from(_world.people)
+                    ..removeAt(i);
+                  setState(() {
+                    _world = _world.copyWith(people: people);
+                    _dirty = true;
+                  });
+                }
+              },
+              itemBuilder: (context) {
+                final linked =
+                    (_world.people[i].characterCardId?.trim() ?? '').isNotEmpty;
+                return [
+                  const PopupMenuItem(value: 'edit', child: Text('Edit…')),
+                  if (_canDraftCards)
+                    const PopupMenuItem(
+                      value: 'character',
+                      child: Text('Create character from this person…'),
+                    ),
+                  if (_canCreatePersona)
+                    const PopupMenuItem(
+                      value: 'persona',
+                      child: Text('Create persona from this person…'),
+                    ),
+                  if (_canStartBoundChat)
+                    PopupMenuItem(
+                      value: 'chat',
+                      enabled: linked,
+                      child: Text(
+                        linked
+                            ? 'Start chat with this character…'
+                            : 'Start chat (link a character first)',
+                      ),
+                    ),
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Text('Delete'),
+                  ),
+                ];
               },
             ),
           ),
@@ -720,7 +959,10 @@ class _LivingWorldEditScreenState extends State<LivingWorldEditScreen>
     );
   }
 
-  Future<WorldPerson?> _showPersonDialog(WorldPerson? existing) async {
+  Future<_PersonDialogResult?> _showPersonDialog(
+    WorldPerson? existing, {
+    int? index,
+  }) async {
     List<Character> library = const [];
     final characterService = widget.characterService;
     if (characterService != null) {
@@ -732,11 +974,17 @@ class _LivingWorldEditScreenState extends State<LivingWorldEditScreen>
     }
     if (!mounted) return null;
 
-    return showDialog<WorldPerson>(
+    // New people must be saved once before Phase 13 card/chat actions.
+    final isExisting = existing != null && index != null;
+
+    return showDialog<_PersonDialogResult>(
       context: context,
       builder: (context) => _PersonEditDialog(
         existing: existing,
         characters: library,
+        canCreateCharacter: _canDraftCards && isExisting,
+        canCreatePersona: _canCreatePersona && isExisting,
+        canStartChat: _canStartBoundChat && isExisting,
       ),
     );
   }
@@ -1367,14 +1615,29 @@ class _LivingWorldEditScreenState extends State<LivingWorldEditScreen>
 }
 
 /// Person editor with optional character-card picker + name suggest.
+class _PersonDialogResult {
+  const _PersonDialogResult(this.person, {this.followUp});
+
+  final WorldPerson person;
+
+  /// Optional Phase 13 action after applying the person: character / persona / chat.
+  final String? followUp;
+}
+
 class _PersonEditDialog extends StatefulWidget {
   const _PersonEditDialog({
     required this.existing,
     required this.characters,
+    this.canCreateCharacter = false,
+    this.canCreatePersona = false,
+    this.canStartChat = false,
   });
 
   final WorldPerson? existing;
   final List<Character> characters;
+  final bool canCreateCharacter;
+  final bool canCreatePersona;
+  final bool canStartChat;
 
   @override
   State<_PersonEditDialog> createState() => _PersonEditDialogState();
@@ -1493,25 +1756,40 @@ class _PersonEditDialogState extends State<_PersonEditDialog> {
     });
   }
 
-  void _save() {
+  WorldPerson? _buildPerson() {
     final n = _name.text.trim();
     final i = _id.text.trim();
-    if (n.isEmpty || i.isEmpty) return;
+    if (n.isEmpty || i.isEmpty) return null;
     final card = _cardId?.trim();
+    return WorldPerson(
+      id: i,
+      name: n,
+      summary: _summary.text.trim(),
+      personalityNotes: _notes.text.trim(),
+      routineHints: _routine.text.trim(),
+      inventory: [
+        for (final part in _inventory.text.split(','))
+          if (part.trim().isNotEmpty) part.trim(),
+      ],
+      characterCardId: (card == null || card.isEmpty) ? null : card,
+    );
+  }
+
+  void _save({String? followUp}) {
+    final person = _buildPerson();
+    if (person == null) return;
+    if (followUp == 'chat' &&
+        (person.characterCardId?.trim() ?? '').isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Link or create a character before starting a chat.'),
+        ),
+      );
+      return;
+    }
     Navigator.pop(
       context,
-      WorldPerson(
-        id: i,
-        name: n,
-        summary: _summary.text.trim(),
-        personalityNotes: _notes.text.trim(),
-        routineHints: _routine.text.trim(),
-        inventory: [
-          for (final part in _inventory.text.split(','))
-            if (part.trim().isNotEmpty) part.trim(),
-        ],
-        characterCardId: (card == null || card.isEmpty) ? null : card,
-      ),
+      _PersonDialogResult(person, followUp: followUp),
     );
   }
 
@@ -1644,6 +1922,46 @@ class _PersonEditDialogState extends State<_PersonEditDialog> {
                   ),
                 ),
             ],
+            if (widget.canCreateCharacter ||
+                widget.canCreatePersona ||
+                widget.canStartChat) ...[
+              const SizedBox(height: 16),
+              Text(
+                'Make playable',
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Turn this notebook person into an Anima card, or start a '
+                'solo chat already bound to this world.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              if (widget.canCreateCharacter)
+                OutlinedButton.icon(
+                  onPressed: () => _save(followUp: 'character'),
+                  icon: const Icon(Icons.person_add_alt_1_outlined),
+                  label: const Text('Create character from this person…'),
+                ),
+              if (widget.canCreatePersona) ...[
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () => _save(followUp: 'persona'),
+                  icon: const Icon(Icons.face_outlined),
+                  label: const Text('Create persona from this person…'),
+                ),
+              ],
+              if (widget.canStartChat) ...[
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () => _save(followUp: 'chat'),
+                  icon: const Icon(Icons.chat_outlined),
+                  label: const Text('Start chat with this character…'),
+                ),
+              ],
+            ],
           ],
         ),
       ),
@@ -1653,7 +1971,7 @@ class _PersonEditDialogState extends State<_PersonEditDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed: _save,
+          onPressed: () => _save(),
           child: const Text('Save'),
         ),
       ],

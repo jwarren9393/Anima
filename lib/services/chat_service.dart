@@ -140,6 +140,7 @@ class ChatService {
     String? personaId,
     int greetingIndex = 0,
     String? sourceWorkshopId,
+    String? worldId,
   }) async {
     final builder = const PromptBuilder();
     final greetings = character.allGreetings
@@ -167,6 +168,7 @@ class ChatService {
       );
     }
 
+    final boundWorld = worldId?.trim();
     final session = ChatSession(
       id: ChatSession.newId(),
       characterId: character.id,
@@ -177,6 +179,7 @@ class ChatService {
       sourceWorkshopId: sourceWorkshopId?.trim().isEmpty == true
           ? null
           : sourceWorkshopId?.trim(),
+      worldId: (boundWorld == null || boundWorld.isEmpty) ? null : boundWorld,
     );
 
     await saveChat(session);

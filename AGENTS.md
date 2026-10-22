@@ -60,10 +60,11 @@ High-value SillyTavern concepts to aim for over time:
 
 ## Current status
 
-**Phase:** Living World experiment — **Phases 1–11 shipped; Phase 12 agent package done; Phase 13 is next** on `experiment/living-world` — **merge blocked until Phase 13 + owner soak + explicit merge approve** (see [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md) + [`docs/LIVING_WORLD_MERGE_READINESS.md`](docs/LIVING_WORLD_MERGE_READINESS.md))
+**Phase:** Living World experiment — **Phases 1–11 + Phase 13 shipped; Phase 12 agent package done** on `experiment/living-world` (build **79**) — **merge blocked until owner soak + explicit merge approve** (see [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md) + [`docs/LIVING_WORLD_MERGE_READINESS.md`](docs/LIVING_WORLD_MERGE_READINESS.md))
 
 **Last updated:** 2026-10-21
-**Last agent action:** **Docs: Phase 13 added (world → character / persona bridge).** Owner blocker before merge — create character/persona from a notebook person + start chat already bound to that world. Playbook updated so “go ahead with next phase” skips Phase 12 owner-only soak boxes and builds Phase 13. Explained Seed from Creation Center for the owner (workshop summary → factory pitch only). **Did not implement Phase 13 code in this pass.** **Did not merge to `main`.**
+**Last agent action:** **Phase 13 Living World world → character / persona bridge.** From Living World People tab / person editor: **Create character from this person…** / **Create persona from this person…** (build model + review sheet; sets `characterCardId` on character accept) and **Start chat with this character…** (persona + greeting pick → solo chat with `worldId` already set). Helpers: `living_world_card_bridge.dart`, `living_world_person_card_sheet.dart`; tests in `living_world_phase13_test.dart`. **505 tests** pass. **Did not merge to `main`.**
+**Previous agent action:** **Docs: Phase 13 added (world → character / persona bridge).** Owner blocker before merge — create character/persona from a notebook person + start chat already bound to that world. Playbook updated so “go ahead with next phase” skips Phase 12 owner-only soak boxes and builds Phase 13. Explained Seed from Creation Center for the owner (workshop summary → factory pitch only). **Did not implement Phase 13 code in this pass.** **Did not merge to `main`.**
 **Previous agent action:** **Phase 12 Living World merge-readiness package.** Verified opt-in defaults (unbound `worldId`, Manual policy, ticks Off, Resolve-before Off) + `test/living_world_phase12_test.dart`. Added [`docs/LIVING_WORLD_MERGE_READINESS.md`](docs/LIVING_WORLD_MERGE_READINESS.md) (phone + Windows soak + merge gate). Settings / Worlds hub copy stresses **off until you bind**. Living docs updated. **Did not merge to `main`.**
 **Previous agent action:** **Phase 11 Living World invisible-engine UX.** Auto-safe no longer pops a relationship modal every turn — risky ops queue in `worlds/<id>.pending.json` with a **Review pending (N)** chip + ⋮ menu. Safe applies show a quiet **World updated · N** chip (tap → timeline). Worlds hub: plain-English policy copy, row ⋮ **Timeline… / Undo last pack / Export JSON… / Review pending**. After-turn pipeline queues one extra run and cancels on leave chat (`_livingWorldEpoch`). Playtest checklist: [`docs/LIVING_WORLD_PLAYTEST.md`](docs/LIVING_WORLD_PLAYTEST.md).
 **Previous agent action:** **Phase 8 Living World near-scene ticks.** `LivingWorldSimulator` — BFS radius from active place + connected places; capped people/ops; short ambient events + soft who/where from `routineHints` (rules-first, no API). Settings **Near-scene ticks** Off / After each turn / Every N + caps; chat ⋮ + Worlds hub **Advance world a beat…**; World log kind `nearSceneTick`. Auto ticks run after the after-turn pipeline when enabled; unbound chats never tick. Ask before merge to main.
@@ -150,8 +151,8 @@ full `./deploy.sh` afterwards was verified end to end — it printed
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar; **Scene moods** (mood icon + **+** menu) — includes **Sensual / intimate**, **Real voice (anti-script)**, **Intimate build-up**, **Explicit / graphic**, **Afterglow** with hard-coded **vocabulary law** (plain adult words; bans LLM euphemisms, porn-script dialogue, em-dash spam, recycled *actions* when those moods are on); **Chat copies** — per-chat character/persona overrides + **Chat lore** (thread-only World Info merged with global picks); long-press avatar edits chat copy (library unchanged)
 - **Linux install/update** — `./scripts/update_linux.sh` builds and installs the desktop app; add `--pull` to download GitHub changes first
 - **Windows app** — built for you by **GitHub Actions** on every `./deploy.sh` (Flutter can't build Windows from Linux); download `Anima-1.0.0-windows-x64.zip` from the release and run it as a portable folder — no installer
-- **Living World (experiment branch — merge-ready package)** — **off by default** (unbound chat = classic Anima). Optional per-chat bind to a structured notebook in `worlds/`; scored retrieve-and-inject for **solo and group** (linked card hard-pin + open loops); **play policy** Manual (default) / Propose-after-turn / Auto-safe; opt-in **Resolve before reply (Living mode)**; **near-scene ticks** (default Off) + **Advance world a beat…**; ambient **World updated** chip + disk-backed **Review pending…**; **World log / timeline…**; **Undo last world update**; **Update world from chat…**; light systems; **continuity** (schema v2); person ↔ character **Pick card…**; group-react pack + after-turn; context estimate pack tokens; backup includes `worlds/`; factory **Seed from Creation Center…**; **Settings → Living Worlds** hub + factory + editor; playtest [`docs/LIVING_WORLD_PLAYTEST.md`](docs/LIVING_WORLD_PLAYTEST.md); merge gate [`docs/LIVING_WORLD_MERGE_READINESS.md`](docs/LIVING_WORLD_MERGE_READINESS.md)
-- **Smoke:** `flutter test` (499) + `flutter analyze` pass; Android + Windows + Linux desktop debug work
+- **Living World (experiment branch — merge-ready package)** — **off by default** (unbound chat = classic Anima). Optional per-chat bind to a structured notebook in `worlds/`; scored retrieve-and-inject for **solo and group** (linked card hard-pin + open loops); **play policy** Manual (default) / Propose-after-turn / Auto-safe; opt-in **Resolve before reply (Living mode)**; **near-scene ticks** (default Off) + **Advance world a beat…**; ambient **World updated** chip + disk-backed **Review pending…**; **World log / timeline…**; **Undo last world update**; **Update world from chat…**; light systems; **continuity** (schema v2); person ↔ character **Pick card…** + **Create character / persona from this person…** + **Start chat** already bound; group-react pack + after-turn; context estimate pack tokens; backup includes `worlds/`; factory **Seed from Creation Center…**; **Settings → Living Worlds** hub + factory + editor; playtest [`docs/LIVING_WORLD_PLAYTEST.md`](docs/LIVING_WORLD_PLAYTEST.md); merge gate [`docs/LIVING_WORLD_MERGE_READINESS.md`](docs/LIVING_WORLD_MERGE_READINESS.md)
+- **Smoke:** `flutter test` (505) + `flutter analyze` pass; Android + Windows + Linux desktop debug work
 
 ### What does NOT work yet / limits
 
@@ -362,6 +363,7 @@ lib/
     living_world_picker.dart      Per-chat Living World bind / create sample / import JSON
     living_world_update_sheet.dart Review sheet for proposed Living World updates
     living_world_log_sheet.dart   Owner-visible World log (what the engine applied)
+    living_world_person_card_sheet.dart Phase 13: create character/persona from person + start bound chat
     reply_rewrite_sheet.dart      Rewrite reply mode picker (custom first + moods / style options)
   utils/
     platform_utils.dart           Desktop platform detection (Windows / Linux / macOS)
@@ -411,6 +413,7 @@ lib/
     world_info_service.dart       Persist global lorebooks (anima_lorebooks.json)
     living_world_service.dart     Load/save Living World notebooks under library worlds/
     living_world_retriever.dart   Select relevant canon pack + format for prompt injection
+    living_world_card_bridge.dart Phase 13: person brief / seed card / link / bind helpers
     living_world_update_service.dart  Propose/parse/apply typed canon updates (+ safe/risky split)
     living_world_undo_service.dart Undo snapshots after applied update packs
     living_world_pending_service.dart Phase 11: disk-backed risky-op review queue (worlds/<id>.pending.json)
@@ -656,7 +659,7 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-0. **Living World (active on `experiment/living-world`):** Say **“go ahead with next phase”** → agent builds **Phase 13** (create character / persona from world people + start chat bound to that world) per [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md). After Phase 13: owner soak on **phone + Windows** ([`docs/LIVING_WORLD_MERGE_READINESS.md`](docs/LIVING_WORLD_MERGE_READINESS.md) + [`docs/LIVING_WORLD_PLAYTEST.md`](docs/LIVING_WORLD_PLAYTEST.md)), then say **“merge Living World”** / **“merge to main”** explicitly. Agents must **not** merge on “go ahead with next phase” alone. Philosophy: [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md). Classic Anima on `main` stays the daily driver until merge.
+0. **Living World (active on `experiment/living-world`):** Phase 13 is shipped. **Owner soak** on **phone + Windows** ([`docs/LIVING_WORLD_MERGE_READINESS.md`](docs/LIVING_WORLD_MERGE_READINESS.md) + [`docs/LIVING_WORLD_PLAYTEST.md`](docs/LIVING_WORLD_PLAYTEST.md)), then say **“merge Living World”** / **“merge to main”** explicitly. “Go ahead with next phase” has no further agent build phase before merge. Agents must **not** merge without that explicit phrase. Philosophy: [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md). Classic Anima on `main` stays the daily driver until merge.
 1. **New/reinstalled PC?** Linux — pick one:
    - **`bash scripts/setup_linux_dev_noroot.sh`** — no admin password needed. Use this when `sudo` is unavailable or you would rather not type it. It prints the single `apt` line for the desktop libs.
    - **`bash scripts/setup_linux_dev.sh --github`** — the sudo version; also installs `gh` from apt and signs you in.
@@ -665,7 +668,7 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 3. First launch: use **Documents/Anima** (or pick a folder). On Android, allow **All files access** so My Files can open it.
 4. Enter your NanoGPT API key in **Settings → API** (saved in that folder as `api_key.txt`). Your old library can be restored from a `.anima-backup` file in **Settings → Backup, restore & sync** — on the Windows laptop one is waiting in `Documents\Anima Backup\`, `W:\Anima Backup\` and `G:\My Drive\Anima Backup\`.
 5. On Windows, Cursor already points the Dart extension at `C:/src/flutter` (`dart.flutterSdkPath`); set that user-level setting on any new machine if the Dart extension cannot find Flutter.
-6. **Release rule:** keep `pubspec.yaml` at **`1.0.0+<build>`** — only increment the number after `+`. Stable daily driver uploads to **`v1.0.0`**. Living World experiment builds go to the **`v1.0.0-living-world`** prerelease (do not overwrite `v1.0.0` until merge). Current experiment tree is **build 78**. On **Windows**, `./deploy.sh` skips the Linux desktop steps and uploads the APK (plus kicks off the Windows zip via Actions).
+6. **Release rule:** keep `pubspec.yaml` at **`1.0.0+<build>`** — only increment the number after `+`. Stable daily driver uploads to **`v1.0.0`**. Living World experiment builds go to the **`v1.0.0-living-world`** prerelease (do not overwrite `v1.0.0` until merge). Current experiment tree is **build 79**. On **Windows**, `./deploy.sh` skips the Linux desktop steps and uploads the APK (plus kicks off the Windows zip via Actions).
 7. **Moving data between devices (no cloud any more):** create a backup on one device, move the file, then **Restore backup** on the other. `bash scripts/sync_phone_anima.sh --auto` does the copy over USB/Wi-Fi adb in about two seconds, or use whatever you like (KDE Connect, a USB stick). Each device keeps its own API key, so re-entering it is never part of a restore.
 
 ---
@@ -678,7 +681,7 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 | [`README.md`](README.md) | User-facing feature catalog and install guide |
 | [`AGENTS.md`](AGENTS.md) | This file — agent status, roadmap, code map |
 | [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md) | Philosophy + locked scope for Living World (chat-native, DF **method** not clone) — read first |
-| [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md) | **Build order** — Phases 1–11 + Phase 12 agent package shipped; **Phase 13 next** (world→cards); then owner soak/merge |
+| [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md) | **Build order** — Phases 1–11 + 13 + Phase 12 agent package shipped; **owner soak/merge** next |
 | [`docs/LIVING_WORLD_MERGE_READINESS.md`](docs/LIVING_WORLD_MERGE_READINESS.md) | Phase 12 soak (phone + Windows) + merge gate |
 | [`docs/LIVING_WORLD_PLAYTEST.md`](docs/LIVING_WORLD_PLAYTEST.md) | Evening auto-safe playtest + sign-off table |
 

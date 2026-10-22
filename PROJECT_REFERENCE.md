@@ -682,7 +682,7 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 
 | Piece | Role |
 |-------|------|
-| Card-link UX | Person editor **Pick card…** / Clear link + name-based suggestions (`CharacterService`); list shows linked card id |
+| Card-link UX | Person editor **Pick card…** / Clear link + name-based suggestions (`CharacterService`); list shows linked card id; Phase 13 **Create character / persona from this person…** + **Start chat** |
 | Hard-pin retrieve | Linked/named speaker forced into pack; open threads/promises/secrets involving them pinned front; `fitBudget` keeps speaker |
 | Group-react | `_buildGroupBeatApiMessages` injects Living World pack; generate/regenerate call `_afterLivingWorldTurnPipeline` |
 | Shared World log | Already per-`worldId`; sheet copy clarifies shared across bound chats |
@@ -701,7 +701,7 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 | Pipeline hygiene | After-turn+tick pipeline queues one extra run; `_livingWorldEpoch` invalidates work on leave chat; never sets `_busy` for after-turn |
 | Playtest | [`docs/LIVING_WORLD_PLAYTEST.md`](docs/LIVING_WORLD_PLAYTEST.md) checklist + owner sign-off table |
 
-### Phase 12 (agent package shipped — await Phase 13 + owner)
+### Phase 12 (agent package shipped — await owner soak + merge)
 
 | Piece | Role |
 |-------|------|
@@ -709,16 +709,18 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 | Merge readiness doc | [`docs/LIVING_WORLD_MERGE_READINESS.md`](docs/LIVING_WORLD_MERGE_READINESS.md) — phone + Windows soak + merge steps |
 | Hub / Settings copy | Stresses optional + off until bind |
 
-### Phase 13 (NEXT — owner blocker before merge)
+### Phase 13 (shipped — world → character / persona bridge)
 
 | Piece | Role |
 |-------|------|
-| Create character from person | From Living World person editor/list → AI draft Anima character card (build model) → review → save + set `linkedCharacterId` |
-| Create persona from person | Same for player stand-in people → persona card + review |
-| Start chat bound | One-tap solo chat with new/linked character, persona picker, `worldId` already set |
+| `LivingWorldCardBridge` | Person brief for AI; seed character/persona from notebook fields; `linkPersonToCharacter`; `bindSessionToWorld` |
+| `LivingWorldPersonCardActions` | UI flows: AI draft (build model) → review sheet → save; character sets `WorldPerson.characterCardId` |
+| People tab / person editor | **Create character…** / **Create persona…** / **Start chat with this character…** |
+| `ChatService.startNewChat` | Optional `worldId` so new solo chats open already bound |
 | Keep | **Pick card…** (existing cards) + **Seed from Creation Center…** (workshop → factory pitch only) |
+| Tests | `test/living_world_phase13_test.dart` |
 
-**Still blocked for merge:** Phase 13 code, then owner soak on phone + Windows, then explicit approve → merge to `main` → normal `v1.0.0` deploy.
+**Still blocked for merge:** owner soak on phone + Windows, then explicit approve → merge to `main` → normal `v1.0.0` deploy.
 
 **Invariant:** Lorebooks + Memory summary stay; Living World is the authoritative layer for *tracked* facts when bound. AI never silently overwrites hard state (even when auto-apply lands — validation + policy required).
 

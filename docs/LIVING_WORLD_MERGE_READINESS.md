@@ -26,8 +26,8 @@ This is the gate between the Living World experiment and daily-driver Anima.
 - [x] Playtest checklist linked from living docs
 - [x] Merge readiness doc (this file)
 - [x] Living docs updated for Phase 12 package
-- [ ] **Phase 13** world → character / persona bridge — **next agent build**
-- [ ] Owner soak (phone + Windows) — **owner** (after Phase 13)
+- [x] **Phase 13** world → character / persona bridge — shipped 2026-10-21 (build 79)
+- [ ] Owner soak (phone + Windows) — **owner**
 - [ ] Owner explicit merge approve — **owner**
 
 ---

@@ -8,7 +8,11 @@ import '../models/living_world.dart';
 import '../models/living_world_tick_settings.dart';
 import '../models/living_world_update_policy.dart';
 import '../models/turn_resolution.dart';
+import '../services/api_key_service.dart';
+import '../services/appearance_controller.dart';
+import '../services/character_category_service.dart';
 import '../services/character_service.dart';
+import '../services/chat_service.dart';
 import '../services/living_world_log_service.dart';
 import '../services/living_world_pending_service.dart';
 import '../services/living_world_service.dart';
@@ -16,7 +20,10 @@ import '../services/living_world_simulator.dart';
 import '../services/living_world_undo_service.dart';
 import '../services/living_world_update_service.dart';
 import '../services/nanogpt_service.dart';
+import '../services/persona_service.dart';
 import '../services/settings_service.dart';
+import '../services/world_info_service.dart';
+import '../services/world_workshop_service.dart';
 import '../widgets/living_world_factory_sheet.dart';
 import '../widgets/living_world_log_sheet.dart';
 import '../widgets/living_world_picker.dart';
@@ -34,12 +41,26 @@ class WorldsHubScreen extends StatefulWidget {
     required this.settingsService,
     required this.nanoGptService,
     this.characterService,
+    this.personaService,
+    this.chatService,
+    this.apiKeyService,
+    this.characterCategoryService,
+    this.worldInfoService,
+    this.worldWorkshopService,
+    this.appearanceController,
     LivingWorldService? worldService,
   }) : worldService = worldService ?? LivingWorldService();
 
   final SettingsService settingsService;
   final NanoGptService nanoGptService;
   final CharacterService? characterService;
+  final PersonaService? personaService;
+  final ChatService? chatService;
+  final ApiKeyService? apiKeyService;
+  final CharacterCategoryService? characterCategoryService;
+  final WorldInfoService? worldInfoService;
+  final WorldWorkshopService? worldWorkshopService;
+  final AppearanceController? appearanceController;
   final LivingWorldService worldService;
 
   @override
@@ -200,6 +221,15 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
           worldService: widget.worldService,
           world: world,
           characterService: widget.characterService,
+          personaService: widget.personaService,
+          chatService: widget.chatService,
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
+          apiKeyService: widget.apiKeyService,
+          characterCategoryService: widget.characterCategoryService,
+          worldInfoService: widget.worldInfoService,
+          worldWorkshopService: widget.worldWorkshopService,
+          appearanceController: widget.appearanceController,
         ),
       ),
     );
@@ -215,6 +245,15 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
           worldService: widget.worldService,
           world: world,
           characterService: widget.characterService,
+          personaService: widget.personaService,
+          chatService: widget.chatService,
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
+          apiKeyService: widget.apiKeyService,
+          characterCategoryService: widget.characterCategoryService,
+          worldInfoService: widget.worldInfoService,
+          worldWorkshopService: widget.worldWorkshopService,
+          appearanceController: widget.appearanceController,
         ),
       ),
     );
@@ -230,6 +269,15 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
           worldService: widget.worldService,
           world: world,
           characterService: widget.characterService,
+          personaService: widget.personaService,
+          chatService: widget.chatService,
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
+          apiKeyService: widget.apiKeyService,
+          characterCategoryService: widget.characterCategoryService,
+          worldInfoService: widget.worldInfoService,
+          worldWorkshopService: widget.worldWorkshopService,
+          appearanceController: widget.appearanceController,
         ),
       ),
     );
@@ -263,6 +311,15 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
             worldService: widget.worldService,
             world: world,
             characterService: widget.characterService,
+            personaService: widget.personaService,
+            chatService: widget.chatService,
+            settingsService: widget.settingsService,
+            nanoGptService: widget.nanoGptService,
+            apiKeyService: widget.apiKeyService,
+            characterCategoryService: widget.characterCategoryService,
+            worldInfoService: widget.worldInfoService,
+            worldWorkshopService: widget.worldWorkshopService,
+            appearanceController: widget.appearanceController,
           ),
         ),
       );
@@ -288,6 +345,15 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
           worldService: widget.worldService,
           world: world,
           characterService: widget.characterService,
+          personaService: widget.personaService,
+          chatService: widget.chatService,
+          settingsService: widget.settingsService,
+          nanoGptService: widget.nanoGptService,
+          apiKeyService: widget.apiKeyService,
+          characterCategoryService: widget.characterCategoryService,
+          worldInfoService: widget.worldInfoService,
+          worldWorkshopService: widget.worldWorkshopService,
+          appearanceController: widget.appearanceController,
         ),
       ),
     );

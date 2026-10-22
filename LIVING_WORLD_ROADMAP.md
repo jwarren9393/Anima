@@ -1,9 +1,9 @@
 # Living World roadmap — toward a true “living” under-the-hood world
 
 > **For every agent:** Read this **after** [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md).  
-> Phases **1–11 are shipped**; **Phase 12 agent package** (defaults + docs + soak guide) is on `experiment/living-world` (build 78+).  
-> **Next agent build work = Phase 13** (create character / persona from world people — owner blocker before merge).  
-> Phase 12 **soak + merge** still need owner sign-off **after** Phase 13. Update checkboxes when a phase lands.  
+> Phases **1–11 + Phase 13** are shipped; **Phase 12 agent package** (defaults + docs + soak guide) is on `experiment/living-world` (build 79+).  
+> **Next:** owner soak on phone + Windows, then explicit **merge Living World** / **merge to main**.  
+> Phase 12 **soak + merge** still need owner sign-off. Update checkboxes when a phase lands.  
 > Keep plain English. **Do not merge to `main` until the owner explicitly approves after soak.**
 
 ---
@@ -22,7 +22,7 @@ This is the **default standing order** for local Cursor agents in this repo. No 
 ### What you do (in order — every time)
 
 1. **Branch:** `git checkout experiment/living-world` and `git pull` (or fetch + fast-forward). All Living World coding stays on this branch.
-2. **Read:** this file → find the **first agent-build phase whose deliverable checkboxes are not all done**. Skip 1–4 (shipped). **Skip Phase 12 owner-only boxes** (soak / merge approve) — those are not agent coding. As of 2026-10-21 the next build phase is **Phase 13**. Also skim `AGENTS.md` current status.
+2. **Read:** this file → find the **first agent-build phase whose deliverable checkboxes are not all done**. Skip 1–4 (shipped). **Skip Phase 12 owner-only boxes** (soak / merge approve) — those are not agent coding. As of 2026-10-21 Phase **13 is shipped**; remaining work is **owner soak + merge approve** (not agent coding). Also skim `AGENTS.md` current status.
 3. **Implement that one phase only** (do not start the next phase in the same session unless the owner explicitly says to continue after you finished and pushed).
 4. **Verify:** `flutter analyze` clean + `flutter test` green (fix what you break).
 5. **Living docs (required before commit):**
@@ -323,7 +323,7 @@ Update checkboxes as phases complete. Each phase must leave `flutter analyze` cl
 
 ---
 
-### Phase 12 — Merge readiness ⏳ agent package done; await Phase 13 + owner soak + approve
+### Phase 12 — Merge readiness ⏳ agent package + Phase 13 done; await owner soak + approve
 
 **Goal:** Living World is good enough to become part of daily-driver Anima on `main`.
 
@@ -331,40 +331,40 @@ Update checkboxes as phases complete. Each phase must leave `flutter analyze` cl
 
 - [x] Feature still **off by default** (unbound chat = classic Anima) — verified; regression tests in `test/living_world_phase12_test.dart`.
 - [x] Docs: README, PROJECT_REFERENCE §15b, AGENTS status, this roadmap, [`docs/LIVING_WORLD_MERGE_READINESS.md`](docs/LIVING_WORLD_MERGE_READINESS.md).
-- [ ] **Phase 13 shipped** (world → character / persona bridge — owner blocker, 2026-10-21).
+- [x] **Phase 13 shipped** (world → character / persona bridge — 2026-10-21).
 - [ ] Prerelease soak: multi-session play on **phone + Windows** (owner — see merge readiness doc + [`docs/LIVING_WORLD_PLAYTEST.md`](docs/LIVING_WORLD_PLAYTEST.md)).
 - [ ] Owner explicit approve → merge `experiment/living-world` → `main` → normal `v1.0.0` deploy.
 
-**Do not merge** if: Phase 13 incomplete, silent corruption bugs, analyze/tests red, unbound chat regresses, or soak table unsigned.
+**Do not merge** if: silent corruption bugs, analyze/tests red, unbound chat regresses, or soak table unsigned.
 
-**Agent package shipped:** 2026-10-21 on `experiment/living-world`. Merge stays **blocked** until Phase 13 + Jakwan soak + explicit merge phrase.
+**Agent package shipped:** 2026-10-21 on `experiment/living-world`. Merge stays **blocked** until Jakwan soak + explicit merge phrase.
 
 ---
 
-### Phase 13 — World → character / persona bridge ⏳ NEXT (owner blocker before merge)
+### Phase 13 — World → character / persona bridge ✅
 
 **Goal:** Fix the missing link: after making a Living World notebook, Jakwan can turn notebook **people** into real Anima **character cards** (and optionally a **persona**), then start a chat already bound to that world — without hand-retyping everything.
 
 **Why:** Owner feedback 2026-10-21 — “I attach a world to a chat, but what chat if I don’t have characters/persona yet?” **Pick card…** only links an *existing* card. Creation Center → world seed already exists (keep it). This phase is the **other direction**: world → cards → chat.
 
-**Plain-English player flow (must work when done):**
+**Plain-English player flow:**
 
 1. Settings → Living Worlds → open a notebook (sample / factory / import).
-2. On a **person** row (editor People tab or person detail): actions like **Create character from this person…** and/or **Create persona from this person…**.
-3. AI drafts a normal Anima character (or persona) from that person’s name + summary + personalityNotes + optional relationships/place hints — **review sheet before save** (same spirit as other AI card flows).
-4. After save: person gets `linkedCharacterId` (or clear persona link if you add one) automatically when they confirm.
-5. Optional hub/person action: **Start chat with this character…** (solo) → new chat uses that card + a persona pick → **already bound** to this `worldId`.
-6. Bulk helper (nice-to-have in same phase if small): multi-select people → create characters with review; skip ones already linked.
+2. On a **person** row (People tab ⋮ or person editor): **Create character from this person…** and/or **Create persona from this person…**.
+3. AI drafts a normal Anima character (or persona) from that person’s name + summary + personalityNotes + optional relationships/place hints — **review sheet before save** (same spirit as other AI card flows). Fallback: notebook fields only if AI fails.
+4. After save: person gets `characterCardId` automatically when they confirm a character.
+5. **Start chat with this character…** (solo) → persona pick → greeting pick → chat already bound to this `worldId`.
+6. Bulk helper deferred (nice-to-have; not required for acceptance).
 
 **Deliverables:**
 
-- [ ] **Create character from person** — service + UI on person editor / people list (Living World edit screen + Worlds hub entry if natural). Uses Character & persona **build** model/settings (same as other full-card drafts). Review before apply. Sets `WorldPerson.linkedCharacterId` on accept.
-- [ ] **Create persona from person** — same idea for when a notebook person is “me” / the player stand-in. Review before apply. Does not require replacing Pick card for characters.
-- [ ] **Start chat bound to this world** — after a linked character exists (or right after create), one-tap path to New Solo chat with `worldId` pre-set + persona picker.
-- [ ] Keep **Seed from Creation Center…** unchanged (workshop → factory pitch only; one-way).
-- [ ] Keep **Pick card…** for linking cards that already exist.
-- [ ] Tests for draft mapping / link-on-accept / chat bind helper (no live API required in unit tests).
-- [ ] Living docs: this file checkboxes, `AGENTS.md`, `PROJECT_REFERENCE.md` §15b, `README.md` (Living Worlds / Characters touchpoints), merge readiness notes Phase 13 done.
+- [x] **Create character from person** — `LivingWorldCardBridge` + `LivingWorldPersonCardActions` on person editor / people list. Uses Character & persona **build** model/settings. Review before apply. Sets `WorldPerson.characterCardId` on accept.
+- [x] **Create persona from person** — same idea for player stand-in. Review before apply. Pick card… unchanged.
+- [x] **Start chat bound to this world** — `ChatService.startNewChat(..., worldId:)` + persona/greeting pickers.
+- [x] Keep **Seed from Creation Center…** unchanged (workshop → factory pitch only; one-way).
+- [x] Keep **Pick card…** for linking cards that already exist.
+- [x] Tests: `test/living_world_phase13_test.dart` (brief / seed / link / bind helper).
+- [x] Living docs: this file, `AGENTS.md`, `PROJECT_REFERENCE.md` §15b, `README.md`, merge readiness.
 
 **Acceptance:**
 
@@ -377,7 +377,7 @@ Update checkboxes as phases complete. Each phase must leave `flutter analyze` cl
 - Auto-creating the entire cast of 40 people in one unattended shot without review.
 - Map / fortress UI.
 
-**Agent note:** Prefer reusing `CharacterCollaborator` / persona builder / `AiFieldChanges` review sheets over inventing a new AI stack. Validate like other card flows.
+**Shipped:** 2026-10-21 on `experiment/living-world` (build 79).
 
 ---
 
@@ -416,8 +416,8 @@ If a design forks from this roadmap, **pause and ask Jakwan**.
 | --- | --- | --- |
 | Done | **5–11** | Write loop → systems → ticks → continuity → backup/cards → invisible UX |
 | Agent ✅ | **12** | Merge-readiness package (defaults + soak docs) — owner soak/merge still open |
-| **Now** | **13** | World person → create character / persona + start chat already bound |
-| After 13 | **12 soak** | Owner phone + Windows playtest → explicit “merge Living World” |
+| Done | **13** | World person → create character / persona + start chat already bound |
+| **Now** | **12 soak** | Owner phone + Windows playtest → explicit “merge Living World” |
 
 Phases 7–9 can overlap slightly **after** 5–6 are solid, but do not start ticks (8) before a reliable write loop (5).
 
@@ -437,4 +437,4 @@ When finishing a Living World phase:
 
 ## Short paste for a new agent
 
-> Living World Phases 1–11 + Phase 12 **agent package** are on `experiment/living-world`. **Next build = Phase 13** (create character / persona from world people + start chat already bound) — owner blocker before merge. Skip Phase 12 soak/merge boxes (owner-only). Follow [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md) playbook: one phase, tests, living docs, commit+push on `experiment/living-world`. End-goal: DF-lite under Anima chat. Keep Creation Center → **Seed from Creation Center…** as-is (one-way). Never silent unvalidated canon writes. Do not merge to `main` without owner approve.
+> Living World Phases 1–11 + Phase 13 + Phase 12 **agent package** are on `experiment/living-world` (build 79+). **No further agent build phases** before merge — next is **owner soak** (phone + Windows) then explicit “merge Living World”. Skip Phase 12 soak/merge boxes (owner-only). End-goal: DF-lite under Anima chat. Keep Creation Center → **Seed from Creation Center…** as-is (one-way). Never silent unvalidated canon writes. Do not merge to `main` without owner approve.
