@@ -13,21 +13,24 @@ enum LivingWorldFactoryPass {
 
 extension LivingWorldFactoryPassLabel on LivingWorldFactoryPass {
   String get label => switch (this) {
-        LivingWorldFactoryPass.outline => 'Outline',
-        LivingWorldFactoryPass.places => 'Places',
-        LivingWorldFactoryPass.people => 'People',
-        LivingWorldFactoryPass.relationships => 'Relationships',
-        LivingWorldFactoryPass.seedCanon => 'Events & continuity',
-      };
+    LivingWorldFactoryPass.outline => 'Outline',
+    LivingWorldFactoryPass.places => 'Places',
+    LivingWorldFactoryPass.people => 'People',
+    LivingWorldFactoryPass.relationships => 'Relationships',
+    LivingWorldFactoryPass.seedCanon => 'Events & continuity',
+  };
 
   String get progressVerb => switch (this) {
-        LivingWorldFactoryPass.outline => 'Sketching the world…',
-        LivingWorldFactoryPass.places => 'Drafting places…',
-        LivingWorldFactoryPass.people => 'Drafting people…',
-        LivingWorldFactoryPass.relationships => 'Linking relationships…',
-        LivingWorldFactoryPass.seedCanon => 'Seeding events & continuity…',
-      };
+    LivingWorldFactoryPass.outline => 'Sketching the world…',
+    LivingWorldFactoryPass.places => 'Drafting places…',
+    LivingWorldFactoryPass.people => 'Drafting people…',
+    LivingWorldFactoryPass.relationships => 'Linking relationships…',
+    LivingWorldFactoryPass.seedCanon => 'Seeding events & continuity…',
+  };
 }
+
+/// People are drafted in small batches so NanoGPT does not truncate mid-JSON.
+const int kLivingWorldFactoryPeopleBatchSize = 8;
 
 /// Inputs for a multi-pass world compile.
 class LivingWorldFactoryRequest {
@@ -49,10 +52,12 @@ class LivingWorldFactoryRequest {
   /// One-way seed from Creation Center workshop prose (does not sync back).
   ///
   /// [characterLines] are short "Name — summary" snippets from linked cards.
+  /// [personaLine] is an optional "Name — summary" for the linked player persona.
   static String brainstormFromWorkshop({
     required String title,
     String worldSummary = '',
     List<String> characterLines = const [],
+    String personaLine = '',
   }) {
     final buf = StringBuffer();
     final t = title.trim();
@@ -61,6 +66,12 @@ class LivingWorldFactoryRequest {
     if (summary.isNotEmpty) {
       if (buf.isNotEmpty) buf.writeln();
       buf.writeln(summary);
+    }
+    final persona = personaLine.trim();
+    if (persona.isNotEmpty) {
+      if (buf.isNotEmpty) buf.writeln();
+      buf.writeln('Linked player persona (seed hint only):');
+      buf.writeln('- $persona');
     }
     final cast = [
       for (final line in characterLines)
@@ -110,13 +121,26 @@ class LivingWorldFactoryService {
   ];
 
   /// Build the NanoGPT messages for one factory pass.
+  ///
+  /// [peopleBatchNames] — when set on the people pass, only flesh out these
+  /// names (used for multi-call batches so replies stay short enough).
   List<Map<String, String>> buildPassMessages({
     required LivingWorldFactoryPass pass,
     required LivingWorldFactoryRequest request,
     required LivingWorld world,
+    List<String>? peopleBatchNames,
   }) {
-    final system = _systemFor(pass, request);
-    final user = _userFor(pass, request, world);
+    final system = _systemFor(
+      pass,
+      request,
+      peopleBatchNames: peopleBatchNames,
+    );
+    final user = _userFor(
+      pass,
+      request,
+      world,
+      peopleBatchNames: peopleBatchNames,
+    );
     return [
       {'role': 'system', 'content': system},
       {'role': 'user', 'content': user},
@@ -132,8 +156,11 @@ class LivingWorldFactoryService {
   }) {
     final map = _decodeJsonObject(rawResponse);
     return switch (pass) {
-      LivingWorldFactoryPass.outline =>
-        _applyOutline(world, map, request: request),
+      LivingWorldFactoryPass.outline => _applyOutline(
+        world,
+        map,
+        request: request,
+      ),
       LivingWorldFactoryPass.places => _applyPlaces(world, map),
       LivingWorldFactoryPass.people => _applyPeople(world, map),
       LivingWorldFactoryPass.relationships => _applyRelationships(world, map),
@@ -144,25 +171,39 @@ class LivingWorldFactoryService {
   /// Run all passes via [completePass]. Saves nothing — caller persists.
   Future<LivingWorld> compile({
     required LivingWorldFactoryRequest request,
-    required Future<String> Function(LivingWorldFactoryPass pass, List<Map<String, String>> messages)
-        completePass,
+    required Future<String> Function(
+      LivingWorldFactoryPass pass,
+      List<Map<String, String>> messages,
+    )
+    completePass,
     void Function(LivingWorldFactoryProgress progress)? onProgress,
     LivingWorld? seed,
   }) async {
-    var world = seed ??
-        LivingWorld.empty(
-          title: _guessTitle(request.brainstorm),
-        );
+    var world =
+        seed ?? LivingWorld.empty(title: _guessTitle(request.brainstorm));
     final total = passOrder.length;
     for (var i = 0; i < passOrder.length; i++) {
       final pass = passOrder[i];
+      if (pass == LivingWorldFactoryPass.people) {
+        world = await _compilePeopleInBatches(
+          request: request,
+          world: world,
+          passIndex: i + 1,
+          passCount: total,
+          completePass: completePass,
+          onProgress: onProgress,
+        );
+        continue;
+      }
       onProgress?.call(
         LivingWorldFactoryProgress(
           pass: pass,
           passIndex: i + 1,
           passCount: total,
           world: world,
-          status: pass.progressVerb,
+          status:
+              'Step ${i + 1} of $total — ${pass.progressVerb} '
+              '(each step can take a few minutes)',
         ),
       );
       final messages = buildPassMessages(
@@ -171,19 +212,27 @@ class LivingWorldFactoryService {
         world: world,
       );
       final raw = await completePass(pass, messages);
-      world = applyPass(
-        pass: pass,
-        world: world,
-        rawResponse: raw,
-        request: request,
-      );
+      try {
+        world = applyPass(
+          pass: pass,
+          world: world,
+          rawResponse: raw,
+          request: request,
+        );
+      } on FormatException catch (e) {
+        throw FormatException(
+          'World factory step "${pass.label}" got a cut-off or invalid reply '
+          'from NanoGPT. Try Build world again (or fewer people/places).\n\n$e',
+        );
+      }
       onProgress?.call(
         LivingWorldFactoryProgress(
           pass: pass,
           passIndex: i + 1,
           passCount: total,
           world: world,
-          status: '${pass.label} done · '
+          status:
+              '${pass.label} done · '
               '${world.people.length} people · '
               '${world.places.length} places',
         ),
@@ -192,10 +241,122 @@ class LivingWorldFactoryService {
     return world.validated();
   }
 
+  /// Flesh out people in chunks of [kLivingWorldFactoryPeopleBatchSize].
+  Future<LivingWorld> _compilePeopleInBatches({
+    required LivingWorldFactoryRequest request,
+    required LivingWorld world,
+    required int passIndex,
+    required int passCount,
+    required Future<String> Function(
+      LivingWorldFactoryPass pass,
+      List<Map<String, String>> messages,
+    )
+    completePass,
+    void Function(LivingWorldFactoryProgress progress)? onProgress,
+  }) async {
+    final target = request.clampedPeople;
+    var names = [
+      for (final p in world.people)
+        if (p.name.trim().isNotEmpty) p.name.trim(),
+    ];
+    if (names.length > target) {
+      names = names.take(target).toList();
+    }
+
+    // Prefer named batches from the outline. If outline gave none, invent in
+    // anonymous batches of up to kLivingWorldFactoryPeopleBatchSize.
+    final batchPlans = <List<String>?>[];
+    if (names.isNotEmpty) {
+      for (
+        var i = 0;
+        i < names.length;
+        i += kLivingWorldFactoryPeopleBatchSize
+      ) {
+        final end = (i + kLivingWorldFactoryPeopleBatchSize < names.length)
+            ? i + kLivingWorldFactoryPeopleBatchSize
+            : names.length;
+        batchPlans.add(names.sublist(i, end));
+      }
+    } else {
+      var left = target;
+      while (left > 0) {
+        final n = left > kLivingWorldFactoryPeopleBatchSize
+            ? kLivingWorldFactoryPeopleBatchSize
+            : left;
+        batchPlans.add(null); // null = invent N new people
+        left -= n;
+      }
+    }
+
+    var next = world;
+    for (var b = 0; b < batchPlans.length; b++) {
+      final batch = batchPlans[b];
+      final batchCount =
+          batch?.length ??
+          (b == batchPlans.length - 1
+              ? (target - next.people.length).clamp(
+                  1,
+                  kLivingWorldFactoryPeopleBatchSize,
+                )
+              : kLivingWorldFactoryPeopleBatchSize);
+      onProgress?.call(
+        LivingWorldFactoryProgress(
+          pass: LivingWorldFactoryPass.people,
+          passIndex: passIndex,
+          passCount: passCount,
+          world: next,
+          status:
+              'Step $passIndex of $passCount — drafting people '
+              'batch ${b + 1} of ${batchPlans.length} '
+              '(~$batchCount)…',
+        ),
+      );
+      // Temporary request override so the "fill about N" prompt matches batch.
+      final batchRequest = LivingWorldFactoryRequest(
+        brainstorm: request.brainstorm,
+        targetPlaceCount: request.targetPlaceCount,
+        targetPersonCount: batchCount,
+      );
+      final messages = buildPassMessages(
+        pass: LivingWorldFactoryPass.people,
+        request: batchRequest,
+        world: next,
+        peopleBatchNames: batch,
+      );
+      final raw = await completePass(LivingWorldFactoryPass.people, messages);
+      try {
+        next = applyPass(
+          pass: LivingWorldFactoryPass.people,
+          world: next,
+          rawResponse: raw,
+          request: request,
+        );
+      } on FormatException catch (e) {
+        throw FormatException(
+          'World factory people batch ${b + 1}/${batchPlans.length} got a '
+          'cut-off or invalid reply. Try Build world again.\n\n$e',
+        );
+      }
+    }
+    onProgress?.call(
+      LivingWorldFactoryProgress(
+        pass: LivingWorldFactoryPass.people,
+        passIndex: passIndex,
+        passCount: passCount,
+        world: next,
+        status:
+            'People done · ${next.people.length} people · '
+            '${next.places.length} places',
+      ),
+    );
+    return next;
+  }
+
   String _systemFor(
     LivingWorldFactoryPass pass,
-    LivingWorldFactoryRequest request,
-  ) {
+    LivingWorldFactoryRequest request, {
+    List<String>? peopleBatchNames,
+  }) {
     const shared =
         'You author structured Living World notebook data for Anima.\n'
         'Return ONLY one JSON object (no markdown fences, no prose).\n'
@@ -226,11 +387,10 @@ class LivingWorldFactoryService {
             '{"people":[{"id":"p_...","name":"...","summary":"...",'
             '"personalityNotes":"...","routineHints":"optional soft schedule",'
             '"inventory":["optional short item names"]}]}\n'
-            'Fill about ${request.clampedPeople} named people. summary = role/'
-            'what they do; personalityNotes = temperament/voice (short); '
-            'routineHints = soft time-of-day habits (optional, 1 short phrase); '
-            'inventory = 0–3 short item names when relevant (optional). '
-            'Do not invent places here.',
+            '${peopleBatchNames != null && peopleBatchNames.isNotEmpty ? 'Flesh out ONLY these ${peopleBatchNames.length} people (same names): ${peopleBatchNames.join(", ")}.\n' : 'Fill about ${request.clampedPeople} named people.\n'}'
+            'Keep each field SHORT (summary ≤ 25 words; personalityNotes ≤ 15 words; '
+            'routineHints one short phrase or omit; inventory 0–2 short items). '
+            'Do not invent places here. Return complete valid JSON only.',
       LivingWorldFactoryPass.relationships =>
         '$shared'
             'Shape:\n'
@@ -263,15 +423,29 @@ class LivingWorldFactoryService {
   String _userFor(
     LivingWorldFactoryPass pass,
     LivingWorldFactoryRequest request,
-    LivingWorld world,
-  ) {
+    LivingWorld world, {
+    List<String>? peopleBatchNames,
+  }) {
     final pitch = request.brainstorm.trim();
     final buf = StringBuffer();
     buf.writeln('## Owner brainstorm');
-    buf.writeln(pitch.isEmpty ? '(no pitch — invent a vivid town-scale setting)' : pitch);
+    buf.writeln(
+      pitch.isEmpty ? '(no pitch — invent a vivid town-scale setting)' : pitch,
+    );
     buf.writeln();
     buf.writeln('## Current notebook');
     buf.writeln(_formatNotebook(world));
+    if (peopleBatchNames != null && peopleBatchNames.isNotEmpty) {
+      buf.writeln();
+      buf.writeln('## This people batch (required)');
+      for (final name in peopleBatchNames) {
+        buf.writeln('- $name');
+      }
+      buf.writeln(
+        'Return a "people" array with exactly these names fleshed out. '
+        'Do not add extra people in this reply.',
+      );
+    }
     buf.writeln();
     buf.writeln('Complete the ${pass.label} pass as JSON only.');
     return buf.toString();
@@ -294,18 +468,12 @@ class LivingWorldFactoryService {
     final stubPlaces = <WorldPlace>[
       for (final name in placeNames.take(maxPlaces))
         if (name.trim().isNotEmpty)
-          WorldPlace(
-            id: _slugId('pl', name),
-            name: name.trim(),
-          ),
+          WorldPlace(id: _slugId('pl', name), name: name.trim()),
     ];
     final stubPeople = <WorldPerson>[
       for (final name in personNames.take(maxPeople))
         if (name.trim().isNotEmpty)
-          WorldPerson(
-            id: _slugId('p', name),
-            name: name.trim(),
-          ),
+          WorldPerson(id: _slugId('p', name), name: name.trim()),
     ];
 
     return world.copyWith(
@@ -406,8 +574,9 @@ class LivingWorldFactoryService {
       for (final item in raw) {
         if (item is! Map) continue;
         try {
-          final rel =
-              WorldRelationship.fromJson(Map<String, dynamic>.from(item));
+          final rel = WorldRelationship.fromJson(
+            Map<String, dynamic>.from(item),
+          );
           if (!personIds.contains(rel.fromId) ||
               !personIds.contains(rel.toId)) {
             continue;
@@ -475,7 +644,9 @@ class LivingWorldFactoryService {
               value: flag.value,
             );
           }
-          final idx = flags.indexWhere((f) => f.key == flag.key || f.id == flag.id);
+          final idx = flags.indexWhere(
+            (f) => f.key == flag.key || f.id == flag.id,
+          );
           if (idx >= 0) {
             flags[idx] = flag;
           } else {
@@ -528,8 +699,7 @@ class LivingWorldFactoryService {
       for (final item in rawPromises) {
         if (item is! Map) continue;
         try {
-          var promise =
-              WorldPromise.fromJson(Map<String, dynamic>.from(item));
+          var promise = WorldPromise.fromJson(Map<String, dynamic>.from(item));
           if (!personIds.contains(promise.fromId) ||
               !personIds.contains(promise.toId)) {
             continue;
@@ -591,8 +761,9 @@ class LivingWorldFactoryService {
     final rawLive = map['liveState'];
     if (rawLive is Map) {
       try {
-        final parsed =
-            WorldLiveState.fromJson(Map<String, dynamic>.from(rawLive));
+        final parsed = WorldLiveState.fromJson(
+          Map<String, dynamic>.from(rawLive),
+        );
         live = parsed;
       } on FormatException {
         // Keep previous.
@@ -622,13 +793,94 @@ class LivingWorldFactoryService {
     final start = text.indexOf('{');
     final end = text.lastIndexOf('}');
     if (start >= 0 && end > start) {
-      text = text.substring(start, end + 1);
+      final slice = text.substring(start, end + 1);
+      try {
+        final decoded = jsonDecode(slice);
+        if (decoded is Map) {
+          return Map<String, dynamic>.from(decoded);
+        }
+      } on FormatException {
+        // Fall through to salvage incomplete arrays (truncated replies).
+      }
     }
-    final decoded = jsonDecode(text);
-    if (decoded is! Map) {
-      throw const FormatException('Factory pass must return a JSON object.');
+
+    for (final key in const [
+      'people',
+      'places',
+      'relationships',
+      'events',
+      'flags',
+      'threads',
+      'promises',
+      'secrets',
+    ]) {
+      final salvaged = _salvageNamedArray(text, key);
+      if (salvaged != null) return salvaged;
     }
-    return Map<String, dynamic>.from(decoded);
+
+    throw const FormatException(
+      'Factory pass reply was cut off or not valid JSON.',
+    );
+  }
+
+  /// Pull complete `{...}` objects from a truncated `"key": [ ...` array.
+  Map<String, dynamic>? _salvageNamedArray(String text, String key) {
+    final marker = '"$key"';
+    final keyIdx = text.indexOf(marker);
+    if (keyIdx < 0) return null;
+    final bracket = text.indexOf('[', keyIdx + marker.length);
+    if (bracket < 0) return null;
+
+    final items = <dynamic>[];
+    var i = bracket + 1;
+    while (i < text.length) {
+      while (i < text.length && ' \n\r\t,'.contains(text[i])) {
+        i++;
+      }
+      if (i >= text.length || text[i] == ']') break;
+      if (text[i] != '{') break;
+      final objEnd = _findMatchingBrace(text, i);
+      if (objEnd < 0) break; // truncated mid-object — keep what we have
+      try {
+        items.add(jsonDecode(text.substring(i, objEnd + 1)));
+      } on FormatException {
+        break;
+      }
+      i = objEnd + 1;
+    }
+    if (items.isEmpty) return null;
+    return {key: items};
+  }
+
+  /// Index of the `}` that closes the `{` at [openIndex], or -1 if truncated.
+  int _findMatchingBrace(String text, int openIndex) {
+    var depth = 0;
+    var inString = false;
+    var escape = false;
+    for (var i = openIndex; i < text.length; i++) {
+      final ch = text[i];
+      if (inString) {
+        if (escape) {
+          escape = false;
+        } else if (ch == '\\') {
+          escape = true;
+        } else if (ch == '"') {
+          inString = false;
+        }
+        continue;
+      }
+      if (ch == '"') {
+        inString = true;
+        continue;
+      }
+      if (ch == '{') {
+        depth++;
+      } else if (ch == '}') {
+        depth--;
+        if (depth == 0) return i;
+      }
+    }
+    return -1;
   }
 
   List<String> _stringList(Object? raw) {
@@ -648,13 +900,17 @@ class LivingWorldFactoryService {
     }
     buf.writeln('places (${world.places.length}):');
     for (final p in world.places.take(40)) {
-      buf.writeln('- ${p.id}: ${p.name}'
-          '${p.description.trim().isEmpty ? '' : ' — ${p.description.trim()}'}');
+      buf.writeln(
+        '- ${p.id}: ${p.name}'
+        '${p.description.trim().isEmpty ? '' : ' — ${p.description.trim()}'}',
+      );
     }
     buf.writeln('people (${world.people.length}):');
     for (final p in world.people.take(60)) {
-      buf.writeln('- ${p.id}: ${p.name}'
-          '${p.summary.trim().isEmpty ? '' : ' — ${p.summary.trim()}'}');
+      buf.writeln(
+        '- ${p.id}: ${p.name}'
+        '${p.summary.trim().isEmpty ? '' : ' — ${p.summary.trim()}'}',
+      );
     }
     if (world.relationships.isNotEmpty) {
       buf.writeln('relationships (${world.relationships.length}):');

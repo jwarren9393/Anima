@@ -97,8 +97,8 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
     try {
       final worlds = await widget.worldService.listSummaries();
       final policy = await widget.settingsService.getLivingWorldUpdatePolicy();
-      final livingMode =
-          await widget.settingsService.getLivingWorldResolveBeforeNarrate();
+      final livingMode = await widget.settingsService
+          .getLivingWorldResolveBeforeNarrate();
       final tick = await widget.settingsService.getLivingWorldTickSettings();
       final pending = <String, int>{};
       for (final w in worlds) {
@@ -337,6 +337,7 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
       nanoGptService: widget.nanoGptService,
       settingsService: widget.settingsService,
       characterService: widget.characterService,
+      personaService: widget.personaService,
     );
     if (world == null || !mounted) return;
     await Navigator.of(context).push(
@@ -404,9 +405,7 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
     if (!can) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Nothing to undo for this notebook yet.'),
-        ),
+        const SnackBar(content: Text('Nothing to undo for this notebook yet.')),
       );
       return;
     }
@@ -450,9 +449,9 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
       if (path == null || !mounted) return;
       await File(path).writeAsBytes(bytes, flush: true);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Exported · $path')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Exported · $path')));
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = 'Export failed: $e');

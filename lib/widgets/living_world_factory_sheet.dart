@@ -6,8 +6,12 @@ import '../services/character_service.dart';
 import '../services/living_world_factory_service.dart';
 import '../services/living_world_service.dart';
 import '../services/nanogpt_service.dart';
+import '../services/persona_service.dart';
 import '../services/settings_service.dart';
 import '../services/world_workshop_service.dart';
+
+/// How long one factory pass may wait on NanoGPT (5 sequential passes).
+const _kFactoryPassTimeout = Duration(minutes: 5);
 
 /// Collect a brainstorm pitch, run the multi-pass factory, save the notebook.
 Future<LivingWorld?> showLivingWorldFactorySheet({
@@ -16,6 +20,7 @@ Future<LivingWorld?> showLivingWorldFactorySheet({
   required NanoGptService nanoGptService,
   required SettingsService settingsService,
   CharacterService? characterService,
+  PersonaService? personaService,
   WorldWorkshopService? workshopService,
 }) {
   return showModalBottomSheet<LivingWorld>(
@@ -27,6 +32,7 @@ Future<LivingWorld?> showLivingWorldFactorySheet({
       nanoGptService: nanoGptService,
       settingsService: settingsService,
       characterService: characterService,
+      personaService: personaService,
       workshopService: workshopService ?? WorldWorkshopService(),
     ),
   );
@@ -39,6 +45,7 @@ class _LivingWorldFactorySheet extends StatefulWidget {
     required this.settingsService,
     required this.workshopService,
     this.characterService,
+    this.personaService,
   });
 
   final LivingWorldService worldService;
@@ -46,6 +53,7 @@ class _LivingWorldFactorySheet extends StatefulWidget {
   final SettingsService settingsService;
   final WorldWorkshopService workshopService;
   final CharacterService? characterService;
+  final PersonaService? personaService;
 
   @override
   State<_LivingWorldFactorySheet> createState() =>
@@ -67,6 +75,13 @@ class _LivingWorldFactorySheetState extends State<_LivingWorldFactorySheet> {
   void dispose() {
     _pitch.dispose();
     super.dispose();
+  }
+
+  String _shortHint(String name, String summary) {
+    final n = name.trim().isEmpty ? 'Unnamed' : name.trim();
+    final s = summary.trim();
+    if (s.isEmpty) return n;
+    return '$n — ${s.length > 160 ? '${s.substring(0, 160)}…' : s}';
   }
 
   Future<void> _seedFromWorkshop() async {
@@ -106,8 +121,8 @@ class _LivingWorldFactorySheetState extends State<_LivingWorldFactorySheet> {
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
                 child: Text(
                   'One-way only — fills the factory pitch from the workshop '
-                  'summary (and linked cards). Does not turn Creation Center '
-                  'into the living engine.',
+                  'summary (and linked persona/cards). Does not turn Creation '
+                  'Center into the living engine.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
@@ -139,13 +154,21 @@ class _LivingWorldFactorySheetState extends State<_LivingWorldFactorySheet> {
         for (final id in picked.linkedCharacterIds) {
           final c = byId[id];
           if (c == null) continue;
-          final name = c.name.trim().isEmpty ? c.id : c.name.trim();
-          final summary = c.description.trim();
-          characterLines.add(
-            summary.isEmpty
-                ? name
-                : '$name — ${summary.length > 160 ? '${summary.substring(0, 160)}…' : summary}',
-          );
+          characterLines.add(_shortHint(c.name, c.description));
+        }
+      } catch (_) {}
+    }
+
+    var personaLine = '';
+    final personaId = picked.linkedPersonaId?.trim() ?? '';
+    final personaService = widget.personaService;
+    if (personaService != null && personaId.isNotEmpty) {
+      try {
+        final personas = await personaService.loadPersonas();
+        for (final p in personas) {
+          if (p.id != personaId) continue;
+          personaLine = _shortHint(p.name, p.description);
+          break;
         }
       } catch (_) {}
     }
@@ -154,6 +177,7 @@ class _LivingWorldFactorySheetState extends State<_LivingWorldFactorySheet> {
       title: picked.title,
       worldSummary: picked.worldSummary,
       characterLines: characterLines,
+      personaLine: personaLine,
     );
     if (!mounted) return;
     if (pitch.isEmpty) {
@@ -165,7 +189,8 @@ class _LivingWorldFactorySheetState extends State<_LivingWorldFactorySheet> {
     }
     setState(() {
       _pitch.text = pitch;
-      _seedNote = 'Seeded from “${picked.title.trim().isEmpty ? 'Untitled' : picked.title.trim()}”';
+      _seedNote =
+          'Seeded from “${picked.title.trim().isEmpty ? 'Untitled' : picked.title.trim()}”';
       _error = null;
     });
   }
@@ -181,17 +206,16 @@ class _LivingWorldFactorySheetState extends State<_LivingWorldFactorySheet> {
     setState(() {
       _busy = true;
       _error = null;
-      _status = 'Starting factory…';
+      _status = 'Starting factory (5 AI steps — stay on this screen)…';
     });
 
     try {
       final build = await widget.settingsService.getCharacterBuildSettings();
       final mainModel = await widget.settingsService.getModel();
       final model = build.resolvedModel(mainModel);
-      final sampling = build.toSampling().copyWith(
-            // Factory passes need room for JSON lists.
-            maxTokens: build.maxTokens.clamp(1024, 8192),
-          );
+      // Always allow a large reply — character-build maxTokens (often 2K)
+      // truncates mid-JSON when drafting many people in one shot.
+      final sampling = build.toSampling().copyWith(maxTokens: 8192);
 
       final request = LivingWorldFactoryRequest(
         brainstorm: brainstorm,
@@ -210,6 +234,7 @@ class _LivingWorldFactorySheetState extends State<_LivingWorldFactorySheet> {
             model: model,
             messages: messages,
             sampling: sampling,
+            timeout: _kFactoryPassTimeout,
           );
         },
       );
@@ -252,12 +277,12 @@ class _LivingWorldFactorySheetState extends State<_LivingWorldFactorySheet> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Multi-pass compile into a Living World notebook on disk '
-                '(outline → places → people → relationships → events). '
-                'Not Creation Center chat — each step writes structured JSON.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
+                'Runs 5 AI steps in a row (outline → places → people → '
+                'relationships → events). Each step can take a few minutes — '
+                'keep this sheet open until it finishes.',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
               ),
               const SizedBox(height: 12),
               OutlinedButton.icon(
@@ -269,9 +294,9 @@ class _LivingWorldFactorySheetState extends State<_LivingWorldFactorySheet> {
                 const SizedBox(height: 6),
                 Text(
                   _seedNote!,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: scheme.primary,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: scheme.primary),
                 ),
               ],
               const SizedBox(height: 16),
@@ -301,9 +326,7 @@ class _LivingWorldFactorySheetState extends State<_LivingWorldFactorySheet> {
                 max: 20,
                 divisions: 17,
                 label: '${_places.round()}',
-                onChanged: _busy
-                    ? null
-                    : (v) => setState(() => _places = v),
+                onChanged: _busy ? null : (v) => setState(() => _places = v),
               ),
               Text(
                 'People: ${_people.round()}',
@@ -315,9 +338,7 @@ class _LivingWorldFactorySheetState extends State<_LivingWorldFactorySheet> {
                 max: 50,
                 divisions: 44,
                 label: '${_people.round()}',
-                onChanged: _busy
-                    ? null
-                    : (v) => setState(() => _people = v),
+                onChanged: _busy ? null : (v) => setState(() => _people = v),
               ),
               if (_status.isNotEmpty) ...[
                 const SizedBox(height: 8),
@@ -336,10 +357,7 @@ class _LivingWorldFactorySheetState extends State<_LivingWorldFactorySheet> {
               ],
               if (_error != null) ...[
                 const SizedBox(height: 8),
-                Text(
-                  _error!,
-                  style: TextStyle(color: scheme.error),
-                ),
+                Text(_error!, style: TextStyle(color: scheme.error)),
               ],
               const SizedBox(height: 16),
               FilledButton(

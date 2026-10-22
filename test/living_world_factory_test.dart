@@ -49,7 +49,10 @@ void main() {
       expect(next.title, 'Gray Harbor');
       expect(next.genreNote, contains('Rainy'));
       expect(next.places.length, 3);
-      expect(next.people.map((p) => p.name), containsAll(['Mira', 'Edric', 'Lena']));
+      expect(
+        next.people.map((p) => p.name),
+        containsAll(['Mira', 'Edric', 'Lena']),
+      );
       expect(next.places.first.id, startsWith('pl_'));
     });
 
@@ -57,9 +60,7 @@ void main() {
       var world = LivingWorld(
         id: 'w1',
         title: 'Harbor',
-        places: const [
-          WorldPlace(id: 'pl_pier', name: 'South Pier'),
-        ],
+        places: const [WorldPlace(id: 'pl_pier', name: 'South Pier')],
       );
       world = factory.applyPass(
         pass: LivingWorldFactoryPass.places,
@@ -94,9 +95,7 @@ void main() {
       var world = LivingWorld(
         id: 'w1',
         title: 'Harbor',
-        places: const [
-          WorldPlace(id: 'pl_pier', name: 'South Pier'),
-        ],
+        places: const [WorldPlace(id: 'pl_pier', name: 'South Pier')],
         people: const [
           WorldPerson(id: 'p_mira', name: 'Mira'),
           WorldPerson(id: 'p_edric', name: 'Edric'),
@@ -177,6 +176,24 @@ void main() {
       expect(world.places, hasLength(1));
       expect(world.people, hasLength(1));
     });
+
+    test('salvages complete people from truncated JSON', () {
+      // Mimics NanoGPT cutting off mid-object when max tokens run out.
+      const truncated = '''
+{"people":[
+ {"id":"p_ada","name":"Ada","summary":"Mayor","personalityNotes":"Calm","inventory":[]},
+ {"id":"p_ben","name":"Ben","summary":"Dockhand","personalityNotes":"Loud","inventory":["rope"]},
+ {"id":"p_cara","name":"Cara","summary":"Merchant","personalityNotes":"Sharp","inventory":["Gulf trade writ","Sealed letters of cre
+''';
+      final world = factory.applyPass(
+        pass: LivingWorldFactoryPass.people,
+        world: LivingWorld.empty(title: 'Harbor'),
+        request: request,
+        rawResponse: truncated,
+      );
+      expect(world.people.length, 2);
+      expect(world.people.map((p) => p.name), containsAll(['Ada', 'Ben']));
+    });
   });
 
   group('LivingWorldFactoryService.compile', () {
@@ -219,13 +236,72 @@ void main() {
         },
       );
 
-      expect(seen, LivingWorldFactoryService.passOrder);
+      // People may run as multiple batch calls; other passes once each.
+      expect(seen.first, LivingWorldFactoryPass.outline);
+      expect(seen.contains(LivingWorldFactoryPass.places), isTrue);
+      expect(seen.contains(LivingWorldFactoryPass.people), isTrue);
+      expect(seen.contains(LivingWorldFactoryPass.relationships), isTrue);
+      expect(seen.last, LivingWorldFactoryPass.seedCanon);
       expect(world.title, 'Compiled Town');
       expect(world.places.length, greaterThanOrEqualTo(2));
       expect(world.people.length, greaterThanOrEqualTo(3));
       expect(world.relationships, isNotEmpty);
       expect(world.events, isNotEmpty);
       expect(world.flags, isNotEmpty);
+    });
+
+    test('people pass batches large rosters', () async {
+      final bigRequest = LivingWorldFactoryRequest(
+        brainstorm: 'Big cast test',
+        targetPlaceCount: 3,
+        targetPersonCount: 20,
+      );
+      var peopleCalls = 0;
+      final world = await factory.compile(
+        request: bigRequest,
+        completePass: (pass, messages) async {
+          if (pass == LivingWorldFactoryPass.outline) {
+            return '''
+{"title":"Crowd","genreNote":"Test","placeNames":["A","B","C"],
+"personNames":[${List.generate(20, (i) => '"P$i"').join(',')}]}
+''';
+          }
+          if (pass == LivingWorldFactoryPass.places) {
+            return '''
+{"places":[
+ {"id":"pl_a","name":"A","description":"a","connectedPlaceIds":["pl_b"]},
+ {"id":"pl_b","name":"B","description":"b","connectedPlaceIds":["pl_a"]},
+ {"id":"pl_c","name":"C","description":"c","connectedPlaceIds":["pl_a"]}
+]}
+''';
+          }
+          if (pass == LivingWorldFactoryPass.people) {
+            peopleCalls++;
+            expect(messages[1]['content'], contains('This people batch'));
+            // Return whatever names the batch asked for is hard; return a
+            // fixed batch-sized set — merge keeps growing via apply.
+            final start =
+                (peopleCalls - 1) * kLivingWorldFactoryPeopleBatchSize;
+            final people = <String>[];
+            for (
+              var i = start;
+              i < start + kLivingWorldFactoryPeopleBatchSize && i < 20;
+              i++
+            ) {
+              people.add(
+                '{"id":"p_$i","name":"P$i","summary":"Role $i","personalityNotes":"x"}',
+              );
+            }
+            return '{"people":[${people.join(",")}]}';
+          }
+          if (pass == LivingWorldFactoryPass.relationships) {
+            return '{"relationships":[]}';
+          }
+          return '{"events":[],"flags":[]}';
+        },
+      );
+      expect(peopleCalls, (20 / kLivingWorldFactoryPeopleBatchSize).ceil());
+      expect(world.people.length, greaterThanOrEqualTo(16));
     });
   });
 }

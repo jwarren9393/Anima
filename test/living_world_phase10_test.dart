@@ -26,9 +26,7 @@ void main() {
             characterCardId: 'card_quiet',
           ),
         ],
-        places: const [
-          WorldPlace(id: 'pl_market', name: 'Market'),
-        ],
+        places: const [WorldPlace(id: 'pl_market', name: 'Market')],
         liveState: const WorldLiveState(
           activePlaceId: 'pl_market',
           personLocations: {'p_other': 'pl_market'},
@@ -88,11 +86,7 @@ void main() {
           ),
         ],
         places: const [
-          WorldPlace(
-            id: 'pl1',
-            name: 'Pier',
-            description: 'Working docks',
-          ),
+          WorldPlace(id: 'pl1', name: 'Pier', description: 'Working docks'),
         ],
         threads: const [
           WorldThread(
@@ -135,11 +129,14 @@ void main() {
           'Mira — Pier clerk who keeps a ledger.',
           'Edric — Dockworker.',
         ],
+        personaLine: 'Jay — Curious traveler.',
       );
       expect(pitch, contains('Harbor Workshop'));
       expect(pitch, contains('missing crate'));
       expect(pitch, contains('Mira'));
       expect(pitch, contains('Linked character cards'));
+      expect(pitch, contains('Linked player persona'));
+      expect(pitch, contains('Jay'));
     });
 
     test('empty workshop yields empty brainstorm', () {
