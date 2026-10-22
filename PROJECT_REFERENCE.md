@@ -7,7 +7,7 @@
 >
 > **Living documents:** `AGENTS.md` + this file + `README.md` are kept current together — see §29 for the upkeep rule every agent must follow.
 
-**Last updated:** 2026-10-21 · **Version:** 1.0.0 build **78** · **Tests:** 493 (`flutter test`) · Living World Phases 1–11 shipped; next Phase 12 in `LIVING_WORLD_ROADMAP.md`
+**Last updated:** 2026-10-21 · **Version:** 1.0.0 build **78** · **Tests:** 499 (`flutter test`) · Living World Phases 1–11 + Phase 12 agent package on `experiment/living-world`; await owner soak + merge approve (`docs/LIVING_WORLD_MERGE_READINESS.md`)
 
 ---
 
@@ -577,12 +577,16 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 
 ## 15b. Living World (experiment)
 
-**Branch:** `experiment/living-world` (not on `main` until merge).  
+**Branch:** `experiment/living-world` (not on `main` until owner merge approve).  
 **Brief (philosophy / locked scope):** [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md)  
-**Roadmap (Phases 5–12 → DF-lite living play):** [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md)
+**Roadmap (Phases 5–12 → DF-lite living play):** [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md)  
+**Merge gate / soak:** [`docs/LIVING_WORLD_MERGE_READINESS.md`](docs/LIVING_WORLD_MERGE_READINESS.md)  
+**Playtest:** [`docs/LIVING_WORLD_PLAYTEST.md`](docs/LIVING_WORLD_PLAYTEST.md)
 
 **North star:** App owns structured canon; AI roleplays from retrieved scraps — does not silently overwrite hard state.  
 **Owner end-goal:** organic after-turn world updates (validated engine loop under Anima chat) — Phases 1–4 are the warehouse + factory; Phase 5+ is the living write loop. See roadmap.
+
+**Defaults (merge invariant):** `ChatSession.worldId` null; play policy **Manual**; near-scene ticks **Off**; Resolve-before-narrate **Off**. Unbound chat never injects a pack or runs after-turn / ticks.
 
 ### Phase 1 (shipped on the experiment branch)
 
@@ -697,7 +701,15 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 | Pipeline hygiene | After-turn+tick pipeline queues one extra run; `_livingWorldEpoch` invalidates work on leave chat; never sets `_busy` for after-turn |
 | Playtest | [`docs/LIVING_WORLD_PLAYTEST.md`](docs/LIVING_WORLD_PLAYTEST.md) checklist + owner sign-off table |
 
-**Not yet (see roadmap Phase 12):** prerelease soak + owner approve → merge to `main`.
+### Phase 12 (agent package shipped — await owner)
+
+| Piece | Role |
+|-------|------|
+| Opt-in defaults | Verified + `test/living_world_phase12_test.dart` (unbound / Manual / ticks Off / resolve-before Off) |
+| Merge readiness doc | [`docs/LIVING_WORLD_MERGE_READINESS.md`](docs/LIVING_WORLD_MERGE_READINESS.md) — phone + Windows soak + merge steps |
+| Hub / Settings copy | Stresses optional + off until bind |
+
+**Still owner-only:** multi-session soak on phone + Windows, then explicit approve → merge to `main` → normal `v1.0.0` deploy.
 
 **Invariant:** Lorebooks + Memory summary stay; Living World is the authoritative layer for *tracked* facts when bound. AI never silently overwrites hard state (even when auto-apply lands — validation + policy required).
 
@@ -958,7 +970,7 @@ Tests cover: lore scan, prompt builders, card codec, backup, sync stability, cha
 - Backup not encrypted.
 - PNG export needs PNG avatar for embedded image.
 - Windows build requires Windows host.
-- **Living World (experiment):** Phases 1–11 (scored retrieve; update-with-review; after-turn policy; opt-in resolve-before-narrate + World log; relationship drift / flag recipes / Narrator presence sync / routineHints; near-scene ticks + Advance a beat; schema v2 threads/promises/secrets/inventory-lite; card-link UX + hard-pin; group-react pack/after-turn; context-estimate pack tokens; factory seed from Creation Center; invisible UX — ambient chip, Review pending, hub timeline/undo/export; solo/group; Worlds hub + factory); `.anima-backup` includes `worlds/`.
+- **Living World (experiment, merge-ready package):** Phases 1–11 + Phase 12 agent package (opt-in defaults + soak/merge docs). Feature **off until bind**. See §15b + `docs/LIVING_WORLD_MERGE_READINESS.md`.
 - Back-burner: undo send, last-chat resume, pinned mood chips, memory preview panel, etc.
 
 ---

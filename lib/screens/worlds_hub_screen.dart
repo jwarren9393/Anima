@@ -465,10 +465,11 @@ class _WorldsHubScreenState extends State<WorldsHubScreen> {
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                     child: SettingsUi.sectionHint(
                       context,
-                      'Structured world notebooks for chat-native Living World '
-                      'play. The factory builds one on disk in passes — this is '
-                      'not Creation Center workshop chat. Unbound chats stay '
-                      'classic Anima.',
+                      'Optional structured notebooks for chat-native Living '
+                      'World play. Off by default: chats stay classic Anima '
+                      'until you bind one (chat ⋮ → Living World). The factory '
+                      'builds a notebook on disk in passes — this is not '
+                      'Creation Center workshop chat.',
                     ),
                   ),
                   Padding(

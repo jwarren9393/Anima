@@ -223,7 +223,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _SettingsTile(
             icon: Icons.public_outlined,
             title: 'Living Worlds',
-            subtitle: 'Notebooks + world factory (not Creation Center)',
+            subtitle:
+                'Optional notebooks + factory — off until you bind a chat',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => WorldsHubScreen(

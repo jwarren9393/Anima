@@ -2,6 +2,8 @@
 
 Run this after each major Living World phase, and again before merge to `main` (Phase 12).
 
+**Phase 12 soak (phone + Windows + sign-off):** see [`LIVING_WORLD_MERGE_READINESS.md`](LIVING_WORLD_MERGE_READINESS.md). Use this checklist for the evening play; use the merge doc for multi-device soak and the merge gate.
+
 **Goal:** Play an evening with **Auto-apply safe updates** on and only glance at the world timeline — the engine should feel present, not naggy.
 
 ---
@@ -69,3 +71,5 @@ Run this after each major Living World phase, and again before merge to `main` (
 | Backup includes worlds | | |
 
 Owner sign-off before Phase 12 merge: __________________ date: ________
+
+Also complete the device table in [`LIVING_WORLD_MERGE_READINESS.md`](LIVING_WORLD_MERGE_READINESS.md) (phone + Windows) before saying “merge to main.”

@@ -1,9 +1,9 @@
 # Living World roadmap — toward a true “living” under-the-hood world
 
 > **For every agent:** Read this **after** [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md).  
-> Phases **1–11 are shipped** on `experiment/living-world` (build 78+).  
-> This file is the plan from **today → end-goal**. Update checkboxes when a phase lands.  
-> Keep plain English. **Do not merge to `main` until Phase 12 / owner says so.**
+> Phases **1–11 are shipped**; **Phase 12 agent package** (defaults + docs + soak guide) is on `experiment/living-world` (build 78+).  
+> **Soak + merge still need owner sign-off.** Update checkboxes when a phase lands.  
+> Keep plain English. **Do not merge to `main` until the owner explicitly approves after soak.**
 
 ---
 
@@ -101,7 +101,7 @@ Shipped on `experiment/living-world` (see [`AGENTS.md`](AGENTS.md) / [`PROJECT_R
 | **11** | Ambient World-updated chip; disk-backed Review pending; hub timeline/undo/export; plain-English policies; cancel-on-leave + queued after-turn; playtest checklist |
 
 **Honest gap vs end-goal:**  
-Invisible UX is in — next is **Phase 12** merge readiness (soak + owner approve → `main`).
+Invisible UX is in. Phase 12 **agent package** (opt-in defaults verified, docs, soak/merge guide) is ready. Remaining: **owner soak on phone + Windows**, then **explicit merge approve**.
 
 Creation Center remains a workshop chat — **not** the living engine. Do not rewrite it as a substitute for this roadmap.
 
@@ -322,18 +322,20 @@ Update checkboxes as phases complete. Each phase must leave `flutter analyze` cl
 
 ---
 
-### Phase 12 — Merge readiness
+### Phase 12 — Merge readiness ⏳ agent package done; await owner soak + approve
 
 **Goal:** Living World is good enough to become part of daily-driver Anima on `main`.
 
 **Deliverables:**
 
-- [ ] Feature still **off by default** (unbound chat = classic Anima).
-- [ ] Docs: README, PROJECT_REFERENCE §15b, AGENTS status, this roadmap checkboxes.
-- [ ] Prerelease soak: multi-session play on phone + Windows.
+- [x] Feature still **off by default** (unbound chat = classic Anima) — verified; regression tests in `test/living_world_phase12_test.dart`.
+- [x] Docs: README, PROJECT_REFERENCE §15b, AGENTS status, this roadmap, [`docs/LIVING_WORLD_MERGE_READINESS.md`](docs/LIVING_WORLD_MERGE_READINESS.md).
+- [ ] Prerelease soak: multi-session play on **phone + Windows** (owner — see merge readiness doc + [`docs/LIVING_WORLD_PLAYTEST.md`](docs/LIVING_WORLD_PLAYTEST.md)).
 - [ ] Owner explicit approve → merge `experiment/living-world` → `main` → normal `v1.0.0` deploy.
 
-**Do not merge** if: silent corruption bugs, analyze/tests red, or unbound chat regresses.
+**Do not merge** if: silent corruption bugs, analyze/tests red, unbound chat regresses, or soak table unsigned.
+
+**Agent package shipped:** 2026-10-21 on `experiment/living-world`. Merge is **blocked** until Jakwan signs soak + says to merge.
 
 ---
 
@@ -377,7 +379,7 @@ If a design forks from this roadmap, **pause and ask Jakwan**.
 | Then | **9** | Threads / secrets / inventory-lite |
 | Done | **10** | Backup, cards, group hardening |
 | Done | **11** | Invisible UX |
-| Next | **12** | Merge readiness |
+| Now | **12** | Merge readiness (agent package ✅; owner soak + approve) |
 
 Phases 7–9 can overlap slightly **after** 5–6 are solid, but do not start ticks (8) before a reliable write loop (5).
 
@@ -397,4 +399,4 @@ When finishing a Living World phase:
 
 ## Short paste for a new agent
 
-> Living World Phases 1–11 are done on `experiment/living-world`. Owner’s true end-goal is DF-lite **under Anima chat**: organic validated state changes as he plays — not a frozen factory world and not a fortress clone. Follow [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md); next build work is **Phase 12** (merge readiness / soak / owner approve). Never silent unvalidated canon writes. Never full DF scope. Do not merge to `main` until Phase 12 / owner approve.
+> Living World Phases 1–11 + Phase 12 **agent package** are on `experiment/living-world`. Owner’s true end-goal is DF-lite **under Anima chat**: organic validated state changes as he plays — not a frozen factory world and not a fortress clone. Follow [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md). Remaining: owner soak (phone + Windows) then **explicit merge approve** — see [`docs/LIVING_WORLD_MERGE_READINESS.md`](docs/LIVING_WORLD_MERGE_READINESS.md). Never silent unvalidated canon writes. Never full DF scope. Do not merge to `main` without owner approve.
