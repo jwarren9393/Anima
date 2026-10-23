@@ -65,10 +65,9 @@ class ChatSession {
   /// New chats default to off; older saves without this field stay on.
   final bool autoReply;
 
-  /// Global lorebook ids active for this chat.
+  /// Library lorebook ids for **this chat only**.
   ///
-  /// `null` = use every lorebook that is enabled in World Info settings.
-  /// A list (even empty) = only those books (chat override).
+  /// `null` or empty = none (no Settings-wide auto-on). Non-empty = those ids.
   final List<String>? lorebookIds;
 
   /// Running Scene + Ledger memory of older turns (editable, pin-safe).

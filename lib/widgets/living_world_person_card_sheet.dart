@@ -28,7 +28,7 @@ class LivingWorldPersonCardActions {
   ///
   /// Returns the updated world (with `characterCardId` set) or null if cancelled.
   static Future<({LivingWorld world, Character character})?>
-      createCharacterFromPerson({
+  createCharacterFromPerson({
     required BuildContext context,
     required LivingWorld world,
     required WorldPerson person,
@@ -275,8 +275,7 @@ class LivingWorldPersonCardActions {
     final selected = await showAiFieldChangesSheet(
       context: context,
       title: 'Review persona from $name',
-      subtitle:
-          'Check fields to save as a {{user}} persona (player stand-in).',
+      subtitle: 'Check fields to save as a {{user}} persona (player stand-in).',
       changes: changes,
       applyLabel: 'Save persona',
     );
@@ -295,6 +294,121 @@ class LivingWorldPersonCardActions {
     return merged;
   }
 
+  /// Update an existing character card from Living World person state (arcs,
+  /// relationships, soft personality) — review before save.
+  static Future<Character?> refreshCharacterFromWorld({
+    required BuildContext context,
+    required LivingWorld world,
+    required WorldPerson person,
+    required Character existing,
+    required CharacterService characterService,
+    required SettingsService settingsService,
+    required NanoGptService nanoGptService,
+  }) async {
+    final name = person.name.trim().isNotEmpty
+        ? person.name.trim()
+        : existing.name.trim();
+    final brief = _bridge.buildPersonBrief(world: world, person: person);
+    final cardSnapshot = StringBuffer()
+      ..writeln('Name: ${existing.name}')
+      ..writeln('Description: ${existing.description}')
+      ..writeln('Personality: ${existing.personality}')
+      ..writeln('Scenario: ${existing.scenario}')
+      ..writeln('System prompt: ${existing.systemPrompt}')
+      ..writeln('Post-history: ${existing.postHistoryInstructions}');
+
+    final userBrief =
+        'Update this existing Anima character card so it matches the Living '
+        'World notebook (relationships, soft personality drift, current role). '
+        'Keep the same person and name. Prefer short, concrete edits — do not '
+        'rewrite the whole card for no reason. Adult fiction OK.\n\n'
+        '## Current character card\n'
+        '${cardSnapshot.toString().trim()}\n\n'
+        '## Living World person state (authoritative for arcs / links)\n'
+        '$brief';
+
+    _showBusy(context, 'Updating ${existing.name} from world…');
+    Character? draft;
+    try {
+      final build = await settingsService.resolveCharacterBuild();
+      final baseUrl = await settingsService.getApiBaseUrl();
+      final messages = _builder.buildPlainEnglishCharacterExportMessages(
+        userBrief: userBrief,
+        characterName: name,
+        buildPromptNote: build.promptNote,
+      );
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final raw = await nanoGptService.complete(
+          model: build.model,
+          messages: messages,
+          baseUrl: baseUrl,
+          sampling: WorldWorkshopBuilder.workshopExportSampling(build.sampling),
+        );
+        try {
+          draft = _builder.parseCharacterJson(
+            raw,
+            preferredId: existing.id,
+            fallbackName: name,
+          );
+          break;
+        } on FormatException {
+          if (attempt == 1) rethrow;
+        }
+      }
+    } catch (e) {
+      if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
+      if (context.mounted) {
+        _toast(context, 'Could not update from world: $e');
+      }
+      return null;
+    }
+
+    if (context.mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+    if (!context.mounted || draft == null) return null;
+
+    // Preserve greetings / examples unless the model filled them.
+    draft = draft.copyWith(
+      id: existing.id,
+      name: draft.name.trim().isEmpty ? existing.name : draft.name,
+      firstMes: draft.firstMes.trim().isEmpty
+          ? existing.firstMes
+          : draft.firstMes,
+      alternateGreetings: draft.alternateGreetings.isEmpty
+          ? existing.alternateGreetings
+          : draft.alternateGreetings,
+      mesExample: draft.mesExample.trim().isEmpty
+          ? existing.mesExample
+          : draft.mesExample,
+      avatarFileName: existing.avatarFileName,
+      characterBook: existing.characterBook,
+    );
+
+    final changes = compareCharacterFields(existing, draft);
+    if (changes.isEmpty) {
+      _toast(context, 'World state matches the card — nothing to change.');
+      return null;
+    }
+
+    final selected = await showAiFieldChangesSheet(
+      context: context,
+      title: 'Update ${existing.name} from world',
+      subtitle:
+          'Apply Living World arcs/relationships into this character card.',
+      changes: changes,
+      applyLabel: 'Update card',
+    );
+    if (selected == null || !context.mounted) return null;
+
+    final merged = mergeCharacterChanges(existing, draft, selected);
+    await characterService.upsert(merged);
+    if (context.mounted) {
+      _toast(context, 'Updated ${merged.name} from the Living World.');
+    }
+    return merged;
+  }
+
   /// Solo chat with a linked character, already bound to [world.id].
   static Future<ChatSession?> startBoundChat({
     required BuildContext context,
@@ -308,10 +422,7 @@ class LivingWorldPersonCardActions {
   }) async {
     final cardId = person.characterCardId?.trim() ?? '';
     if (cardId.isEmpty) {
-      _toast(
-        context,
-        'Link or create a character for this person first.',
-      );
+      _toast(context, 'Link or create a character for this person first.');
       return null;
     }
 
@@ -325,10 +436,7 @@ class LivingWorldPersonCardActions {
     }
     if (!context.mounted) return null;
     if (character == null) {
-      _toast(
-        context,
-        'Linked card $cardId is missing from Characters.',
-      );
+      _toast(context, 'Linked card $cardId is missing from Characters.');
       return null;
     }
 
@@ -381,8 +489,8 @@ class LivingWorldPersonCardActions {
   }
 
   static void _toast(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }

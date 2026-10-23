@@ -20,11 +20,7 @@ void main() {
       title: 'Test',
       updatedAt: DateTime(2026, 1, 1),
       characterOverrides: {
-        'c1': Character(
-          id: 'c1',
-          name: 'Mira',
-          description: 'Dating {{user}}',
-        ),
+        'c1': Character(id: 'c1', name: 'Mira', description: 'Dating {{user}}'),
       },
     );
 
@@ -32,7 +28,7 @@ void main() {
     expect(resolved.description, contains('Dating'));
   });
 
-  test('resolver merges chat lorebook', () {
+  test('resolver ignores legacy chat lorebook (feature removed)', () {
     final session = ChatSession(
       id: 'chat1',
       characterId: 'c1',
@@ -45,36 +41,32 @@ void main() {
         ],
       ),
     );
-    expect(resolver.chatLorebooks(session), hasLength(1));
+    expect(resolver.chatLorebooks(session), isEmpty);
+    expect(resolver.hasChatOverrides(session), isFalse);
   });
 
-  test('session round-trips overrides and chat lore', () {
+  test('session round-trips character and persona overrides', () {
     final session = ChatSession(
       id: 'chat1',
       characterId: 'c1',
       title: 'Test',
       updatedAt: DateTime(2026, 1, 1),
-      characterOverrides: {
-        'c1': const Character(id: 'c1', name: 'Mira'),
-      },
+      characterOverrides: {'c1': const Character(id: 'c1', name: 'Mira')},
       personaOverride: const Persona(id: 'p1', name: 'Jay'),
-      chatLorebook: const Lorebook(
-        name: 'Thread lore',
-        entries: [
-          LorebookEntry(id: 1, keys: ['dating'], content: 'They are together.'),
-        ],
-      ),
     );
 
     final restored = ChatSession.fromJson(session.toJson());
     expect(restored.characterOverrides['c1']?.name, 'Mira');
     expect(restored.personaOverride?.name, 'Jay');
-    expect(restored.chatLorebook?.name, 'Thread lore');
   });
 
   test('ensureLastUserMessageIncluded keeps latest user line for replies', () {
     final messages = [
-      ChatMessage(id: 'n1', role: ChatRole.narrator, text: 'Only Aria is here.'),
+      ChatMessage(
+        id: 'n1',
+        role: ChatRole.narrator,
+        text: 'Only Aria is here.',
+      ),
       ChatMessage(id: 'u1', role: ChatRole.user, text: 'Hello Aria.'),
       ChatMessage(
         id: 'a1',

@@ -495,14 +495,78 @@ class LivingWorldUpdateService {
       final fenced = match.group(1)?.trim() ?? '';
       final parsed = _tryParseObject(fenced);
       if (parsed != null) return parsed;
+      final salvaged = _salvageUpdatesObject(fenced);
+      if (salvaged != null) return salvaged;
     }
 
     final parsed = _tryParseObject(text);
     if (parsed != null) return parsed;
+    final salvaged = _salvageUpdatesObject(text);
+    if (salvaged != null) return salvaged;
 
     throw const FormatException(
-      'Could not find Living World update JSON in the model reply.',
+      'Could not find Living World update JSON in the model reply. '
+      'The model returned prose or cut-off JSON — try Update world from chat again.',
     );
+  }
+
+  /// When the model truncates mid-array, keep complete update objects.
+  static Map<String, dynamic>? _salvageUpdatesObject(String text) {
+    final marker = '"updates"';
+    final keyIdx = text.indexOf(marker);
+    if (keyIdx < 0) return null;
+    final bracket = text.indexOf('[', keyIdx + marker.length);
+    if (bracket < 0) return null;
+
+    final items = <dynamic>[];
+    var i = bracket + 1;
+    while (i < text.length) {
+      while (i < text.length && ' \n\r\t,'.contains(text[i])) {
+        i++;
+      }
+      if (i >= text.length || text[i] == ']') break;
+      if (text[i] != '{') break;
+      final objEnd = _findMatchingBrace(text, i);
+      if (objEnd < 0) break;
+      try {
+        items.add(jsonDecode(text.substring(i, objEnd + 1)));
+      } catch (_) {
+        break;
+      }
+      i = objEnd + 1;
+    }
+    if (items.isEmpty) return null;
+    return {'updates': items};
+  }
+
+  static int _findMatchingBrace(String text, int openIndex) {
+    var depth = 0;
+    var inString = false;
+    var escape = false;
+    for (var i = openIndex; i < text.length; i++) {
+      final ch = text[i];
+      if (inString) {
+        if (escape) {
+          escape = false;
+        } else if (ch == '\\') {
+          escape = true;
+        } else if (ch == '"') {
+          inString = false;
+        }
+        continue;
+      }
+      if (ch == '"') {
+        inString = true;
+        continue;
+      }
+      if (ch == '{') {
+        depth++;
+      } else if (ch == '}') {
+        depth--;
+        if (depth == 0) return i;
+      }
+    }
+    return -1;
   }
 
   static Map<String, dynamic>? _tryParseObject(String text) {

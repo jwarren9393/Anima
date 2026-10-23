@@ -25,15 +25,12 @@ class ChatSessionResolver {
     return session.personaOverride ?? library;
   }
 
-  List<Lorebook> chatLorebooks(ChatSession session) {
-    final book = session.chatLorebook;
-    if (book == null || book.isEmpty) return const [];
-    return [book];
-  }
+  /// Thread-only Chat lore was removed from the product; keep returning empty
+  /// so old `chatLorebook` JSON in backups does not inject.
+  List<Lorebook> chatLorebooks(ChatSession session) => const [];
 
   bool hasChatOverrides(ChatSession session) {
     return session.characterOverrides.isNotEmpty ||
-        session.personaOverride != null ||
-        (session.chatLorebook != null && !session.chatLorebook!.isEmpty);
+        session.personaOverride != null;
   }
 }

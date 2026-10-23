@@ -17,6 +17,7 @@ import '../services/world_info_service.dart';
 import '../widgets/anima_avatar.dart';
 import '../widgets/character_token_badge.dart';
 import '../widgets/character_category_controls.dart';
+import '../widgets/chat_lorebook_picker.dart';
 import '../widgets/create_character_from_chat_sheet.dart';
 import '../widgets/greeting_picker.dart';
 import '../widgets/minimal_chip_button.dart';
@@ -136,12 +137,10 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
       }
     }
 
-    final selectedLore = <String>{};
-    if (session?.lorebookIds != null) {
-      selectedLore.addAll(session!.lorebookIds!);
-    } else {
-      selectedLore.addAll(lore.where((b) => b.enabled).map((b) => b.id));
-    }
+    // Per-chat only — never auto-pull Settings "enabled" books.
+    final selectedLore = <String>{
+      if (session?.lorebookIds != null) ...session!.lorebookIds!,
+    };
 
     setState(() {
       _all = characters;
@@ -288,9 +287,7 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
           List<Character>.from(_ordered),
           authorsNote: _authorsNoteController.text,
           autoReply: _autoReply,
-          lorebookIds: _lorebooks.isEmpty
-              ? const []
-              : _selectedLoreIds.toList(growable: false),
+          lorebookIds: _selectedLoreIds.toList(growable: false),
           title: _titleController.text,
         );
         if (!mounted) return;
@@ -319,9 +316,7 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
         personaId: persona.sessionId,
         authorsNote: _authorsNoteController.text,
         autoReply: _autoReply,
-        lorebookIds: _lorebooks.isEmpty
-            ? null
-            : _selectedLoreIds.toList(growable: false),
+        lorebookIds: _selectedLoreIds.toList(growable: false),
         greetingIndex: greetingIndex,
         title: _titleController.text,
       );
@@ -357,68 +352,24 @@ class _GroupChatSetupScreenState extends State<GroupChatSetupScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'No global lorebooks yet. Add them under Settings → World Info.',
+            'No lorebooks in your library yet. Add them under Settings → World Info.',
           ),
         ),
       );
       return;
     }
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (sheetContext) {
-        final height = MediaQuery.sizeOf(sheetContext).height * 0.55;
-        return SafeArea(
-          child: SizedBox(
-            height: height,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                  child: Text(
-                    'Global lorebooks',
-                    style: Theme.of(sheetContext).textTheme.titleMedium,
-                  ),
-                ),
-                Expanded(
-                  child: ListView(
-                    children: [
-                      for (final book in _lorebooks)
-                        CheckboxListTile(
-                          value: _selectedLoreIds.contains(book.id),
-                          title: Text(book.displayName),
-                          subtitle: Text(
-                            '${book.enabledEntryCount} entries'
-                            '${book.enabled ? '' : ' · off in Settings'}',
-                          ),
-                          onChanged: (v) {
-                            setState(() {
-                              if (v == true) {
-                                _selectedLoreIds.add(book.id);
-                              } else {
-                                _selectedLoreIds.remove(book.id);
-                              }
-                            });
-                          },
-                        ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: FilledButton(
-                    onPressed: () => Navigator.pop(sheetContext),
-                    child: const Text('Done'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+    final picked = await pickChatLorebookIds(
+      context,
+      allBooks: _lorebooks,
+      initialIds: _selectedLoreIds.toList(growable: false),
+      title: _isEditMode ? 'Lorebooks for this chat' : 'Lorebooks for new chat',
     );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _selectedLoreIds
+        ..clear()
+        ..addAll(picked);
+    });
   }
 
   Future<void> _showAuthorsNoteEditor() async {

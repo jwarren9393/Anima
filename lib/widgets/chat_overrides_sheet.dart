@@ -5,7 +5,7 @@ import '../models/chat_session.dart';
 import '../models/persona.dart';
 import '../services/chat_session_resolver.dart';
 
-/// Manage per-chat character/persona/lore copies.
+/// Manage per-chat character/persona copies.
 Future<void> showChatOverridesSheet({
   required BuildContext context,
   required ChatSession session,
@@ -46,7 +46,7 @@ class _ChatOverridesSheet extends StatelessWidget {
     final theme = Theme.of(context);
     final overrideIds = session.characterOverrides.keys.toSet();
     final hasPersonaOverride = session.personaOverride != null;
-    final hasChatLore =
+    final hasLegacyChatLore =
         session.chatLorebook != null && !session.chatLorebook!.isEmpty;
 
     return SafeArea(
@@ -64,10 +64,11 @@ class _ChatOverridesSheet extends StatelessWidget {
               style: theme.textTheme.bodySmall,
             ),
             const SizedBox(height: 12),
-            if (overrideIds.isEmpty && !hasPersonaOverride && !hasChatLore)
+            if (overrideIds.isEmpty &&
+                !hasPersonaOverride &&
+                !hasLegacyChatLore)
               Text(
-                'No chat-only copies yet. Update a character or persona for '
-                'this chat, or add chat lore.',
+                'No chat-only copies yet.',
                 style: theme.textTheme.bodySmall,
               ),
             for (final character in participants)
@@ -109,29 +110,24 @@ class _ChatOverridesSheet extends StatelessWidget {
                   icon: const Icon(Icons.restore),
                 ),
               ),
-            if (hasChatLore)
+            if (hasLegacyChatLore)
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.menu_book_outlined),
-                title: Text(
-                  session.chatLorebook!.name.trim().isEmpty
-                      ? 'Chat lorebook'
-                      : session.chatLorebook!.name.trim(),
-                ),
-                subtitle: Text(
-                  '${session.chatLorebook!.entries.length} '
-                  'entr${session.chatLorebook!.entries.length == 1 ? 'y' : 'ies'}',
+                title: const Text('Old chat lore (unused)'),
+                subtitle: const Text(
+                  'Chat lore was removed — clear leftover data',
                 ),
                 trailing: IconButton(
-                  tooltip: 'Clear chat lore',
+                  tooltip: 'Clear',
                   onPressed: () {
                     onChanged(session.copyWith(clearChatLorebook: true));
                     Navigator.pop(context);
                   },
-                  icon: const Icon(Icons.restore),
+                  icon: const Icon(Icons.delete_outline),
                 ),
               ),
-            if (_resolver.hasChatOverrides(session)) ...[
+            if (_resolver.hasChatOverrides(session) || hasLegacyChatLore) ...[
               const SizedBox(height: 8),
               OutlinedButton(
                 onPressed: () {

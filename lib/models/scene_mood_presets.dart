@@ -76,6 +76,23 @@ class SceneMoodPresets {
           'beats that fit THIS person in THIS moment.',
     ),
     SceneMoodPreset(
+      id: 'period_voice_adult',
+      name: 'Period voice (adult)',
+      description:
+          'Adult/intimate OK — diction fits the setting, not modern porn-script.',
+      text:
+          'SCENE MOOD — PERIOD VOICE / ADULT REGISTER (ongoing until turned off):\n'
+          'Adult intimacy and desire are allowed and may be graphic when the scene '
+          'calls for it — but speech and dirty talk must fit THIS world\'s time, '
+          'class, and culture (e.g. medieval / court / fantasy), not modern bedroom '
+          'slang, TikTok cadence, or corporate soft-speak. No vague AI mush '
+          '("waves of pleasure", "electric sparks", interchangeable "don\'t stop / '
+          'right there"). No porn-script lines recycled for every character. '
+          '{{char}} stays themselves: specific words, body, and manners that belong '
+          'in this setting. Prefer plain period-appropriate adult words over '
+          'euphemistic purple prose.',
+    ),
+    SceneMoodPreset(
       id: 'intimate_buildup',
       name: 'Intimate build-up',
       description: 'Tension, teasing, anticipation before sex.',

@@ -80,22 +80,20 @@ class WorldInfoService {
     return null;
   }
 
-  /// Books that should inject into prompts right now.
+  /// Books that should inject into prompts for one chat.
   ///
-  /// When [chatLorebookIds] is null, every enabled global book is used.
-  /// When set (including empty), only those ids are used (if they still exist).
+  /// Only ids listed in [chatLorebookIds] are used. `null` or empty means
+  /// **no** library lorebooks for this chat (character-card lore still applies).
+  /// There is no “enabled in Settings = on for every chat” behavior.
   Future<List<Lorebook>> booksForChat({List<String>? chatLorebookIds}) async {
     final all = await loadBooks();
-    final Iterable<GlobalLorebook> selected;
-    if (chatLorebookIds == null) {
-      selected = all.where((b) => b.enabled);
-    } else {
-      final wanted = chatLorebookIds.toSet();
-      selected = all.where((b) => wanted.contains(b.id));
+    if (chatLorebookIds == null || chatLorebookIds.isEmpty) {
+      return const [];
     }
+    final wanted = chatLorebookIds.toSet();
     return [
-      for (final g in selected)
-        if (g.book.entries.isNotEmpty) g.book,
+      for (final g in all)
+        if (wanted.contains(g.id) && g.book.entries.isNotEmpty) g.book,
     ];
   }
 

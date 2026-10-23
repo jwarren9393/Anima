@@ -484,29 +484,36 @@ Special tuned sampling for: memory summarize, narrator generate, composer format
 
 - **Tap** bubble → edit text
 - **Tap narrator card** → reopen narrator sheet
-- **Long-press** → menu: Delete, Rewind, Branch, **Narrator**, Continue, Impersonate, **My line…**, Paths, Auto-reply, Rewrite/Regen/Swipe (AI only)
-- **Quick swipe** ◀ 1/N ▶ on latest AI message
+- **Long-press** → slim menu: Delete, Rewind, Regenerate / Rewrite (AI), Branch, swipe browse, **Paths** (last). Impersonate / My line… are on the **You** chip. Narrator / Continue / Group react / Auto-reply / New swipe stay on composer chrome or under-bubble ▶
+- **Quick swipe** ◀ 1/N ▶ on latest AI message (▶ past last swipe generates a new alternate)
+
+### Composer voice row
+
+- **You** chip — tap returns to persona typing; **long-press** → Impersonate / My line…
+- **Cast chip** — tap forces that character’s AI reply (groups); **long-press** opens **Guide AI** mode for that character (`_setComposerVoice(id, guideMode: true)`). Write line remains via the Write line / Guide AI toggle
+- After **Guide AI** send completes, `_setComposerVoice(null, requestFocus: false)` returns to You without opening the keyboard
 
 ### My line sheet (player side)
 
-- **My line…** (long-press menu) opens `_MyLineSheet` in `chat_screen.dart` — writes the **player's own** next message, the persona-side counterpart of Guide AI. It exists because `PromptMode.impersonate` had no way to steer the line.
+- **My line…** (long-press **You** chip) opens `_MyLineSheet` in `chat_screen.dart` — writes the **player's own** next message, the persona-side counterpart of Guide AI. It exists because `PromptMode.impersonate` had no way to steer the line.
 - **Steer my line** → `_impersonate(guideNote: …)`; the note is stored on the bubble as `generationKind: impersonate` + `generationGuide`, and also reaches the API through `_streamIntoLastAssistant` → `_streamAssistantReply` → `_buildApiMessages(playerGuideNote:)`, which appends `PersonaGuideService.formatPlayerDirection()` as a **final** late mandatory system block (after narrator/post-history) plus a last Impersonate lock so nothing can yank the model back to {{char}}. An empty box → `PersonaGuideService.defaultInstruction`.
 - **Just write it (no steers)** → plain `_impersonate()` with `generationKind: impersonate` and an empty guide (still regenerable as plain Impersonate).
-- **Regenerate / New swipe** on that bubble reuses the saved `generationGuide` (menu subtitle shows “Keeps your steer: …”). Same for **Guide AI** character replies (`generationKind: characterGuide`).
+- **Regenerate** on that bubble reuses the saved `generationGuide` (menu subtitle shows “Keeps your steer: …”). Same for **Guide AI** character replies (`generationKind: characterGuide`). New swipes still come from under-bubble ▶
 - Impersonate system prompt uses `PresenceService.formatPlayerPerspectiveBoundary()` instead of the normal “You are {{char}}” knowledge boundary, skips card post-history, and labels character card fields as “other person / reference only”.
-- Guide AI (cast chip → composer) is unchanged for sending — also first person (`*I…*` actions) — and now persists the note for regen/swipe.
+- Guide AI (cast chip long-press → composer) — first person (`*I…*` actions); persists the note for regen/swipe; returns to You after send
 - **First-person law:** `ChatStyleRules.formatFirstPersonPerspectiveRule()` is injected in every post-history block for the speaker of that turn.
-- Long-press menu order (top cluster): Paths · Impersonate · My line… · Regenerate · Rewrite reply…
+- Message long-press order: Delete · Rewind · Regenerate · Rewrite · Branch · swipe browse · **Paths** (bottom)
 - **Paths direction** is stored in `RoadwayCacheEntry.direction` with the options; reopening the sheet restores the steer box so Refresh keeps the same prompt.
 
 ### Auto-reply
 
 - Default **off**. Off = send only; use Continue or (group) tap name chip.
 - On = send (and narrator post) also queue AI reply.
+- Toggle at group chat setup / **Manage cast** (not on the message long-press menu).
 
 ### Paths (Roadway)
 
-- Long-press → **Paths** sheet (`_PathsSheet` in `chat_screen.dart`).
+- Message long-press (last item) → **Paths** sheet (`_PathsSheet` in `chat_screen.dart`).
 - `RoadwayService.buildMessages()` — first-person options only; recent chat labels player as **You (player):** not persona name.
 - `RoadwayService.generateSampling()` — capped tokens + repeat penalties; `parseOptions()` dedupes; `normalizeUserPerspective()` fixes `*Name*` leaks.
 - **Direction field** — the sheet's optional "Steer these paths" box is passed to `buildMessages(direction: …)`, which adds "The player asked for paths like this" plus *every option must follow that request — write N variations*; empty keeps the plain brainstorm.

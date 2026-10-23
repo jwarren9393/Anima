@@ -142,6 +142,25 @@ class LivingWorldCardBridge {
     );
   }
 
+  /// Find the notebook person linked to [characterId], or a name match.
+  WorldPerson? findPersonForCharacter(
+    LivingWorld world,
+    Character character,
+  ) {
+    final cardId = character.id.trim();
+    if (cardId.isNotEmpty) {
+      for (final p in world.people) {
+        if ((p.characterCardId ?? '').trim() == cardId) return p;
+      }
+    }
+    final name = character.name.trim().toLowerCase();
+    if (name.isEmpty) return null;
+    for (final p in world.people) {
+      if (p.name.trim().toLowerCase() == name) return p;
+    }
+    return null;
+  }
+
   /// Sets [WorldPerson.characterCardId] for [personId]; no-op if missing.
   LivingWorld linkPersonToCharacter(
     LivingWorld world, {
