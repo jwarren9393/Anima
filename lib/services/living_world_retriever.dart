@@ -31,8 +31,10 @@ class LivingWorldRetriever {
     required List<ChatMessage> recentMessages,
     String speakerName = '',
     String userName = '',
+
     /// Anima character card id for the speaker (boosts linked world people).
     String speakerCharacterId = '',
+
     /// Extra names to treat as scene cast (group chats).
     List<String> castNames = const [],
     int tokenBudget = defaultTokenBudget,
@@ -176,10 +178,16 @@ class LivingWorldRetriever {
       if (coreIds.contains(rel.fromId) || coreIds.contains(rel.toId)) {
         score += 20;
       }
-      if (_personIsSpeaker(peopleById[rel.fromId], speakerName,
-              speakerCharacterId) ||
+      if (_personIsSpeaker(
+            peopleById[rel.fromId],
+            speakerName,
+            speakerCharacterId,
+          ) ||
           _personIsSpeaker(
-              peopleById[rel.toId], speakerName, speakerCharacterId)) {
+            peopleById[rel.toId],
+            speakerName,
+            speakerCharacterId,
+          )) {
         score += 30;
       }
       scoredRels.add((rel: rel, score: score));
@@ -194,18 +202,16 @@ class LivingWorldRetriever {
     final eventCount = world.events.length;
     for (var i = 0; i < eventCount; i++) {
       final event = world.events[i];
-      final recency = i; // higher index = more recent if appended chronologically
+      final recency =
+          i; // higher index = more recent if appended chronologically
       var score = recency; // slight recency bias among equals
       final hitPerson = event.personIds.any(personIds.contains);
       final hitPlace =
           event.placeId != null && placeIds.contains(event.placeId);
-      final hitText = _anyNameInText(
-        event.text,
-        [
-          ...rankedPeople.map((p) => p.name),
-          ...rankedPlaces.map((p) => p.name),
-        ],
-      );
+      final hitText = _anyNameInText(event.text, [
+        ...rankedPeople.map((p) => p.name),
+        ...rankedPlaces.map((p) => p.name),
+      ]);
       if (hitPerson) score += 40;
       if (hitPlace) score += 30;
       if (hitText) score += 20;
@@ -213,9 +219,7 @@ class LivingWorldRetriever {
       eventRows.add((event: event, score: score));
     }
     eventRows.sort((a, b) => b.score.compareTo(a.score));
-    final events = [
-      for (final row in eventRows.take(maxEvents)) row.event,
-    ];
+    final events = [for (final row in eventRows.take(maxEvents)) row.event];
 
     final flags = <WorldFlag>[];
     for (final flag in world.flags) {
@@ -254,7 +258,8 @@ class LivingWorldRetriever {
         speakingPersonId: speakingIdEarly,
       ),
       speakingPersonId: speakingIdEarly,
-      involves: (t, id) => t.personIds.contains(id) || t.witnessIds.contains(id),
+      involves: (t, id) =>
+          t.personIds.contains(id) || t.witnessIds.contains(id),
     );
     final promises = _pinSpeakerContinuity(
       _scorePromises(
@@ -346,13 +351,15 @@ class LivingWorldRetriever {
   }) {
     final rows = <({WorldThread item, int score})>[];
     for (final t in all) {
-      final textHit = _nameInHaystack(t.title, haystack) ||
-          (t.summary.trim().isNotEmpty &&
-              _nameInHaystack(t.summary, haystack));
-      final hitPerson = t.personIds.any(personIds.contains) ||
+      final textHit =
+          _nameInHaystack(t.title, haystack) ||
+          (t.summary.trim().isNotEmpty && _nameInHaystack(t.summary, haystack));
+      final hitPerson =
+          t.personIds.any(personIds.contains) ||
           t.witnessIds.any(personIds.contains);
       final hitPlace = t.placeId != null && placeIds.contains(t.placeId);
-      final speakerHit = speakingPersonId != null &&
+      final speakerHit =
+          speakingPersonId != null &&
           (t.personIds.contains(speakingPersonId) ||
               t.witnessIds.contains(speakingPersonId));
       if (!t.isOpen && !textHit) continue;
@@ -383,7 +390,8 @@ class LivingWorldRetriever {
       final hitPerson =
           personIds.contains(p.fromId) || personIds.contains(p.toId);
       final hitPlace = p.placeId != null && placeIds.contains(p.placeId);
-      final speakerHit = speakingPersonId != null &&
+      final speakerHit =
+          speakingPersonId != null &&
           (p.fromId == speakingPersonId || p.toId == speakingPersonId);
       if (!p.isOpen && !textHit) continue;
       if (!hitPerson && !hitPlace && !textHit && !speakerHit) continue;
@@ -433,10 +441,12 @@ class LivingWorldRetriever {
     final rows = <({WorldSecret item, int score})>[];
     for (final s in all) {
       final textHit = _nameInHaystack(s.text, haystack);
-      final hitPerson = s.subjectIds.any(personIds.contains) ||
+      final hitPerson =
+          s.subjectIds.any(personIds.contains) ||
           s.witnessIds.any(personIds.contains);
       final hitPlace = s.placeId != null && placeIds.contains(s.placeId);
-      final speakerHit = speakingPersonId != null &&
+      final speakerHit =
+          speakingPersonId != null &&
           (s.subjectIds.contains(speakingPersonId) ||
               s.witnessIds.contains(speakingPersonId));
       if (!s.isOpen && !textHit) continue;
@@ -458,7 +468,10 @@ class LivingWorldRetriever {
     final body = pack.renderBody();
     if (body.trim().isEmpty) return '';
     return 'Living World memory (authoritative canon — do not invent or '
-        'overwrite these tracked facts; roleplay from them):\n$body';
+        'overwrite these tracked facts; roleplay from them):\n'
+        'Prefer introducing people already named in this pack when it fits. '
+        'If someone new must enter the scene, give them a clear proper name '
+        'and role so the world notebook can record them.\n$body';
   }
 
   String _buildHaystack({
@@ -604,8 +617,8 @@ class LivingWorldPack {
     if (liveState != null) {
       final active = liveState!.activePlaceId;
       if (active != null && active.isNotEmpty) {
-        final placeName = _lookupName(places, active) ??
-            _lookupNameFromLiveOnly(active);
+        final placeName =
+            _lookupName(places, active) ?? _lookupNameFromLiveOnly(active);
         buf.writeln(
           'Active place id: $active'
           '${placeName != null ? ' ($placeName)' : ''}',
@@ -670,8 +683,7 @@ class LivingWorldPack {
       for (final rel in relationships) {
         final from = _nameOrId(people, rel.fromId);
         final to = _nameOrId(people, rel.toId);
-        final labels =
-            rel.labels.isEmpty ? '' : ' (${rel.labels.join(', ')})';
+        final labels = rel.labels.isEmpty ? '' : ' (${rel.labels.join(', ')})';
         buf.writeln('- $from → $to: ${rel.score}$labels');
       }
     }
@@ -738,11 +750,15 @@ class LivingWorldPack {
     var pack = this;
     while (_estimateTokens(pack.renderBody()) > tokenBudget) {
       if (pack.events.length > 3) {
-        pack = pack._copyWith(events: pack.events.sublist(0, pack.events.length - 1));
+        pack = pack._copyWith(
+          events: pack.events.sublist(0, pack.events.length - 1),
+        );
         continue;
       }
       if (pack.flags.length > 2) {
-        pack = pack._copyWith(flags: pack.flags.sublist(0, pack.flags.length - 1));
+        pack = pack._copyWith(
+          flags: pack.flags.sublist(0, pack.flags.length - 1),
+        );
         continue;
       }
       if (pack.secrets.length > 1) {
@@ -765,8 +781,10 @@ class LivingWorldPack {
       }
       if (pack.relationships.length > 2) {
         pack = pack._copyWith(
-          relationships:
-              pack.relationships.sublist(0, pack.relationships.length - 1),
+          relationships: pack.relationships.sublist(
+            0,
+            pack.relationships.length - 1,
+          ),
         );
         continue;
       }

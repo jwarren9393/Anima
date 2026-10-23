@@ -79,7 +79,11 @@ class LivingWorldFactoryRequest {
     ];
     if (cast.isNotEmpty) {
       if (buf.isNotEmpty) buf.writeln();
-      buf.writeln('Linked character cards (seed cast hints only):');
+      buf.writeln(
+        'Must-include cast (from linked character cards — keep these names; '
+        'still invent additional supporting people so the notebook reaches '
+        'the chosen people count):',
+      );
       for (final line in cast.take(24)) {
         buf.writeln('- $line');
       }
@@ -241,6 +245,42 @@ class LivingWorldFactoryService {
     return world.validated();
   }
 
+  /// Named outline batches first, then invent batches until [target] is covered.
+  ///
+  /// Each entry is either a list of names to flesh out, or `null` (= invent N
+  /// new people). Exposed for tests — Creation Center seeds often leave only a
+  /// handful of outline names; invent padding is what hits the People slider.
+  static List<List<String>?> planPeopleBatches({
+    required List<String> outlineNames,
+    required int target,
+    int batchSize = kLivingWorldFactoryPeopleBatchSize,
+  }) {
+    final size = batchSize.clamp(1, 50);
+    final goal = target.clamp(1, 50);
+    final names = <String>[
+      for (final n in outlineNames)
+        if (n.trim().isNotEmpty) n.trim(),
+    ];
+    final capped = names.length > goal ? names.take(goal).toList() : names;
+
+    final plans = <List<String>?>[];
+    for (var i = 0; i < capped.length; i += size) {
+      final end = (i + size < capped.length) ? i + size : capped.length;
+      plans.add(capped.sublist(i, end));
+    }
+
+    var remaining = goal - capped.length;
+    while (remaining > 0) {
+      final n = remaining > size ? size : remaining;
+      plans.add(null); // invent N new people
+      remaining -= n;
+    }
+
+    // Outline empty and target > 0 already covered by the invent loop; if
+    // both are empty, leave plans empty (caller no-ops).
+    return plans;
+  }
+
   /// Flesh out people in chunks of [kLivingWorldFactoryPeopleBatchSize].
   Future<LivingWorld> _compilePeopleInBatches({
     required LivingWorldFactoryRequest request,
@@ -255,50 +295,24 @@ class LivingWorldFactoryService {
     void Function(LivingWorldFactoryProgress progress)? onProgress,
   }) async {
     final target = request.clampedPeople;
-    var names = [
+    final names = [
       for (final p in world.people)
         if (p.name.trim().isNotEmpty) p.name.trim(),
     ];
-    if (names.length > target) {
-      names = names.take(target).toList();
-    }
 
-    // Prefer named batches from the outline. If outline gave none, invent in
-    // anonymous batches of up to kLivingWorldFactoryPeopleBatchSize.
-    final batchPlans = <List<String>?>[];
-    if (names.isNotEmpty) {
-      for (
-        var i = 0;
-        i < names.length;
-        i += kLivingWorldFactoryPeopleBatchSize
-      ) {
-        final end = (i + kLivingWorldFactoryPeopleBatchSize < names.length)
-            ? i + kLivingWorldFactoryPeopleBatchSize
-            : names.length;
-        batchPlans.add(names.sublist(i, end));
-      }
-    } else {
-      var left = target;
-      while (left > 0) {
-        final n = left > kLivingWorldFactoryPeopleBatchSize
-            ? kLivingWorldFactoryPeopleBatchSize
-            : left;
-        batchPlans.add(null); // null = invent N new people
-        left -= n;
-      }
-    }
+    final batchPlans = planPeopleBatches(
+      outlineNames: names,
+      target: target,
+    );
+    if (batchPlans.isEmpty) return world;
 
     var next = world;
     for (var b = 0; b < batchPlans.length; b++) {
       final batch = batchPlans[b];
-      final batchCount =
-          batch?.length ??
-          (b == batchPlans.length - 1
-              ? (target - next.people.length).clamp(
-                  1,
-                  kLivingWorldFactoryPeopleBatchSize,
-                )
-              : kLivingWorldFactoryPeopleBatchSize);
+      final remaining = (target - next.people.length).clamp(0, target);
+      if (batch == null && remaining <= 0) break;
+      final batchCount = batch?.length ??
+          remaining.clamp(1, kLivingWorldFactoryPeopleBatchSize);
       onProgress?.call(
         LivingWorldFactoryProgress(
           pass: LivingWorldFactoryPass.people,
@@ -371,7 +385,12 @@ class LivingWorldFactoryService {
             '{"title":"...","genreNote":"...","placeNames":["..."],'
             '"personNames":["..."],"themes":["..."]}\n'
             'Aim for about ${request.clampedPlaces} place names and '
-            '${request.clampedPeople} person names (unique, playable).\n'
+            'exactly about ${request.clampedPeople} person names '
+            '(unique, playable).\n'
+            'If the brainstorm lists a must-include cast, keep those names '
+            'and invent additional supporting people until the personNames '
+            'array is about ${request.clampedPeople} long — do not stop at '
+            'the must-include cast alone.\n'
             'title + genreNote describe the whole setting in plain language.',
       LivingWorldFactoryPass.places =>
         '$shared'
@@ -387,7 +406,7 @@ class LivingWorldFactoryService {
             '{"people":[{"id":"p_...","name":"...","summary":"...",'
             '"personalityNotes":"...","routineHints":"optional soft schedule",'
             '"inventory":["optional short item names"]}]}\n'
-            '${peopleBatchNames != null && peopleBatchNames.isNotEmpty ? 'Flesh out ONLY these ${peopleBatchNames.length} people (same names): ${peopleBatchNames.join(", ")}.\n' : 'Fill about ${request.clampedPeople} named people.\n'}'
+            '${peopleBatchNames != null && peopleBatchNames.isNotEmpty ? 'Flesh out ONLY these ${peopleBatchNames.length} people (same names): ${peopleBatchNames.join(", ")}.\n' : 'Invent about ${request.clampedPeople} NEW named people who are not already in the notebook.\n'}'
             'Keep each field SHORT (summary ≤ 25 words; personalityNotes ≤ 15 words; '
             'routineHints one short phrase or omit; inventory 0–2 short items). '
             'Do not invent places here. Return complete valid JSON only.',
@@ -435,16 +454,25 @@ class LivingWorldFactoryService {
     buf.writeln();
     buf.writeln('## Current notebook');
     buf.writeln(_formatNotebook(world));
-    if (peopleBatchNames != null && peopleBatchNames.isNotEmpty) {
-      buf.writeln();
-      buf.writeln('## This people batch (required)');
-      for (final name in peopleBatchNames) {
-        buf.writeln('- $name');
+    if (pass == LivingWorldFactoryPass.people) {
+      if (peopleBatchNames != null && peopleBatchNames.isNotEmpty) {
+        buf.writeln();
+        buf.writeln('## This people batch (required)');
+        for (final name in peopleBatchNames) {
+          buf.writeln('- $name');
+        }
+        buf.writeln(
+          'Return a "people" array with exactly these names fleshed out. '
+          'Do not add extra people in this reply.',
+        );
+      } else if (world.people.isNotEmpty) {
+        buf.writeln();
+        buf.writeln('## Invent new people (required)');
+        buf.writeln(
+          'Return about ${request.clampedPeople} NEW people who are not '
+          'already listed above. Do not re-list or rename existing people.',
+        );
       }
-      buf.writeln(
-        'Return a "people" array with exactly these names fleshed out. '
-        'Do not add extra people in this reply.',
-      );
     }
     buf.writeln();
     buf.writeln('Complete the ${pass.label} pass as JSON only.');

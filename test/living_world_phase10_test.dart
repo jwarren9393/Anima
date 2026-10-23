@@ -134,9 +134,10 @@ void main() {
       expect(pitch, contains('Harbor Workshop'));
       expect(pitch, contains('missing crate'));
       expect(pitch, contains('Mira'));
-      expect(pitch, contains('Linked character cards'));
+      expect(pitch, contains('Must-include cast'));
       expect(pitch, contains('Linked player persona'));
       expect(pitch, contains('Jay'));
+      expect(pitch, contains('additional supporting'));
     });
 
     test('empty workshop yields empty brainstorm', () {

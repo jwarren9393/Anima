@@ -81,10 +81,7 @@ Here you go:
     });
 
     test('empty updates list is ok', () {
-      final updates = service.parseProposal(
-        '{"updates":[]}',
-        world: sample(),
-      );
+      final updates = service.parseProposal('{"updates":[]}', world: sample());
       expect(updates, isEmpty);
     });
 
@@ -99,8 +96,7 @@ Here you go:
   group('applyUpdates', () {
     test('applies selected events flags relationships and live state', () {
       final world = sample();
-      final proposed = service.parseProposal(
-        '''
+      final proposed = service.parseProposal('''
 {
   "updates": [
     {"op":"addEvent","text":"Jay promised Mira silence about the letter.","personIds":["p_mira"]},
@@ -110,25 +106,17 @@ Here you go:
     {"op":"setPersonLocation","personId":"p_edric","placeId":"pl_inn"}
   ]
 }
-''',
-        world: world,
-      );
+''', world: world);
 
       final updated = service.applyUpdates(world, proposed);
       expect(
         updated.events.any((e) => e.text.contains('promised Mira')),
         isTrue,
       );
-      expect(
-        updated.flags.any((f) => f.key == 'jay_promised_silence'),
-        isTrue,
-      );
+      expect(updated.flags.any((f) => f.key == 'jay_promised_silence'), isTrue);
       expect(
         updated.relationships.any(
-          (r) =>
-              r.fromId == 'p_mira' &&
-              r.toId == 'p_lena' &&
-              r.score == 25,
+          (r) => r.fromId == 'p_mira' && r.toId == 'p_lena' && r.score == 25,
         ),
         isTrue,
       );
@@ -145,11 +133,14 @@ Here you go:
         world: world,
       );
       final updated = service.applyUpdates(world, proposed);
-      final matches = updated.flags
-          .where((f) => f.key.toLowerCase() == 'mira_knows_crate_missing');
+      final matches = updated.flags.where(
+        (f) => f.key.toLowerCase() == 'mira_knows_crate_missing',
+      );
       // Original key kept or new key — one logical flag after merge by key
       expect(
-        updated.flags.where((f) => f.key.toLowerCase() == 'mira_knows_crate_missing'),
+        updated.flags.where(
+          (f) => f.key.toLowerCase() == 'mira_knows_crate_missing',
+        ),
         hasLength(1),
       );
       expect(matches.single.value, isFalse);
@@ -190,6 +181,68 @@ Here you go:
       expect(user, contains('pl_pier'));
       expect(user, contains('keep the letter secret'));
       expect(messages[0]['content'], contains('JSON'));
+      expect(messages[0]['content'], contains('upsertPerson'));
+    });
+  });
+
+  group('upsertPerson', () {
+    test('parses and applies a newly introduced person', () {
+      final world = sample();
+      final updates = service.parseProposal('''
+{"updates":[{"op":"upsertPerson","name":"Lady Cassalin",
+ "summary":"Daughter of the Ravensmere tolls lord"}]}
+''', world: world);
+      expect(updates, hasLength(1));
+      expect(updates.single.op, LivingWorldUpdateOp.upsertPerson);
+      expect(updates.single.isSafeForAutoApply, isFalse);
+      expect(updates.single.reviewLabel, 'New person');
+      expect(updates.single.person?.name, 'Lady Cassalin');
+
+      final updated = service.applyUpdates(world, updates);
+      expect(updated.people.any((p) => p.name == 'Lady Cassalin'), isTrue);
+      expect(updated.people.length, world.people.length + 1);
+    });
+
+    test('drops upsertPerson when the name is already on the roster', () {
+      final world = sample();
+      final updates = service.parseProposal(
+        '{"updates":[{"op":"upsertPerson","name":"Mira","summary":"Already here"}]}',
+        world: world,
+      );
+      expect(updates, isEmpty);
+    });
+
+    test('round-trips through pending JSON', () {
+      final world = sample();
+      final updates = service.parseProposal(
+        '{"updates":[{"op":"upsertPerson","name":"Cassalin","summary":"Toll heir"}]}',
+        world: world,
+      );
+      final raw = updates.single.toJson();
+      final again = LivingWorldCanonUpdate.fromJson(raw);
+      expect(again.op, LivingWorldUpdateOp.upsertPerson);
+      expect(again.person?.name, 'Cassalin');
+      final applied = service.applyUpdates(world, [again]);
+      expect(applied.people.any((p) => p.name == 'Cassalin'), isTrue);
+    });
+
+    test('partition marks upsertPerson as risky', () {
+      final world = sample();
+      final updates = service.parseProposal('''
+{"updates":[
+ {"op":"setFlag","key":"feast_started","value":true},
+ {"op":"upsertPerson","name":"Cassalin","summary":"Guest"}
+]}
+''', world: world);
+      final parts = service.partitionForAutoSafe(updates);
+      expect(
+        parts.safe.any((u) => u.op == LivingWorldUpdateOp.setFlag),
+        isTrue,
+      );
+      expect(
+        parts.risky.any((u) => u.op == LivingWorldUpdateOp.upsertPerson),
+        isTrue,
+      );
     });
   });
 }

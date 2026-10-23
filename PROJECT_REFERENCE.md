@@ -632,6 +632,7 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 | `LivingWorldEditScreen` | Tabbed notebook editor (overview, places, people, links, events/flags) + export JSON |
 | `LivingWorldFactoryService` | Multi-pass AI compile: outline → places → people → relationships → seed events/flags/liveState |
 | Factory UI | Pitch + place/people sliders; progress per pass; saves validated notebook (uses Character build model/sampling) |
+| People fill | Outline must-include cast + invent to People slider; `planPeopleBatches` pads invent batches when outline is short (Creation Center seeds no longer stop at linked cast size) |
 | Separation | **Not** Creation Center — workshop chat untouched; factory never relies on one endless thread |
 
 ### Phase 5 (shipped on the experiment branch)
@@ -640,7 +641,8 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 |-------|------|
 | `LivingWorldUpdatePolicy` | `manual` / `proposeAfterTurn` / `autoSafe` (Settings + chat ⋮) |
 | After-turn hook | Successful `_streamAssistantReply` → propose when bound + non-manual |
-| Auto-safe split | Events/flags/active place/who-where auto-apply; relationships still reviewed |
+| Auto-safe split | Events/flags/active place/who-where/continuity/inventory auto-apply; **relationships** and **upsertPerson** (newly introduced NPCs) still reviewed / Review pending |
+| `upsertPerson` | When chat clearly names/introduces someone not on the roster; apply adds a People row → Create character from person |
 | `LivingWorldUndoService` | `worlds/<id>.undo.json` snapshots; ⋮ → Undo last world update |
 
 ### Phase 6 (shipped on the experiment branch)
@@ -695,14 +697,14 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 | Shared World log | Already per-`worldId`; sheet copy clarifies shared across bound chats |
 | Backup | `AppBackupService` packs/restores `worlds/` map (notebooks + `.log.json` / `.undo.json` / `.pending.json`) |
 | Context estimate | `ChatPromptBreakdown.livingWorldTokens` + dialog row |
-| Factory seed | **Seed from Creation Center…** → one-way pitch via `brainstormFromWorkshop` (workshop chat stays non-engine). Picks a workshop, fills the factory brainstorm box with title + world summary + short linked-card name/summary lines; then the normal multi-pass factory runs. Does **not** sync back into Creation Center. |
+| Factory seed | **Seed from Creation Center…** → one-way pitch via `brainstormFromWorkshop` (workshop chat stays non-engine). Must-include linked cast + invent supporting people up to the People slider; then the normal multi-pass factory runs. Does **not** sync back into Creation Center. |
 
 ### Phase 11 (shipped on the experiment branch)
 
 | Piece | Role |
 |-------|------|
 | Ambient chip | **World updated · N** above composer after safe auto-apply / ticks / resolve-before (tap → timeline; no modal) |
-| `LivingWorldPendingService` | `worlds/<id>.pending.json` — full serializable risky ops; enqueue on auto-safe / resolve-before deferral |
+| `LivingWorldPendingService` | `worlds/<id>.pending.json` — full serializable risky ops (relationships + new people); enqueue on auto-safe / resolve-before deferral |
 | Review pending | Chat chip + ⋮ + hub row ⋮ → reuse `showLivingWorldUpdateSheet`; remove only applied keys |
 | Hub timeline | World ⋮ → **Timeline…** (log sheet + Undo last); **Export JSON…**; plain-English policy/Living-mode copy via `SettingsUi` |
 | Pipeline hygiene | After-turn+tick pipeline queues one extra run; `_livingWorldEpoch` invalidates work on leave chat; never sets `_busy` for after-turn |

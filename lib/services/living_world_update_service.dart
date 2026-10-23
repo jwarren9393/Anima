@@ -18,6 +18,9 @@ enum LivingWorldUpdateOp {
   upsertSecret,
   closeSecret,
   setInventory,
+
+  /// New or refreshed notebook person introduced in chat (review-only).
+  upsertPerson,
 }
 
 /// A single proposed canon edit, validated against the current world.
@@ -36,6 +39,7 @@ class LivingWorldCanonUpdate {
     this.secret,
     this.inventoryItems,
     this.targetId,
+    this.person,
   });
 
   final LivingWorldUpdateOp op;
@@ -57,63 +61,69 @@ class LivingWorldCanonUpdate {
   /// Id for close* ops (thread / promise / secret).
   final String? targetId;
 
+  /// Payload for [LivingWorldUpdateOp.upsertPerson].
+  final WorldPerson? person;
+
   String get reviewLabel => switch (op) {
-        LivingWorldUpdateOp.addEvent => 'Event',
-        LivingWorldUpdateOp.setFlag => 'Flag',
-        LivingWorldUpdateOp.setRelationship => 'Relationship',
-        LivingWorldUpdateOp.setActivePlace => 'Active place',
-        LivingWorldUpdateOp.setPersonLocation => 'Who / where',
-        LivingWorldUpdateOp.upsertThread => 'Thread',
-        LivingWorldUpdateOp.closeThread => 'Close thread',
-        LivingWorldUpdateOp.upsertPromise => 'Promise',
-        LivingWorldUpdateOp.closePromise => 'Close promise',
-        LivingWorldUpdateOp.upsertSecret => 'Secret',
-        LivingWorldUpdateOp.closeSecret => 'Close secret',
-        LivingWorldUpdateOp.setInventory => 'Inventory',
-      };
+    LivingWorldUpdateOp.addEvent => 'Event',
+    LivingWorldUpdateOp.setFlag => 'Flag',
+    LivingWorldUpdateOp.setRelationship => 'Relationship',
+    LivingWorldUpdateOp.setActivePlace => 'Active place',
+    LivingWorldUpdateOp.setPersonLocation => 'Who / where',
+    LivingWorldUpdateOp.upsertThread => 'Thread',
+    LivingWorldUpdateOp.closeThread => 'Close thread',
+    LivingWorldUpdateOp.upsertPromise => 'Promise',
+    LivingWorldUpdateOp.closePromise => 'Close promise',
+    LivingWorldUpdateOp.upsertSecret => 'Secret',
+    LivingWorldUpdateOp.closeSecret => 'Close secret',
+    LivingWorldUpdateOp.setInventory => 'Inventory',
+    LivingWorldUpdateOp.upsertPerson => 'New person',
+  };
 
   String get reviewDetail => summary;
 
-  /// Safe for Phase 5 auto-apply (still schema-validated). Relationships need OK.
+  /// Safe for Phase 5 auto-apply (still schema-validated).
+  /// Relationships and new people need Review pending.
   bool get isSafeForAutoApply => switch (op) {
-        LivingWorldUpdateOp.addEvent ||
-        LivingWorldUpdateOp.setFlag ||
-        LivingWorldUpdateOp.setActivePlace ||
-        LivingWorldUpdateOp.setPersonLocation ||
-        LivingWorldUpdateOp.upsertThread ||
-        LivingWorldUpdateOp.closeThread ||
-        LivingWorldUpdateOp.upsertPromise ||
-        LivingWorldUpdateOp.closePromise ||
-        LivingWorldUpdateOp.upsertSecret ||
-        LivingWorldUpdateOp.closeSecret ||
-        LivingWorldUpdateOp.setInventory =>
-          true,
-        LivingWorldUpdateOp.setRelationship => false,
-      };
+    LivingWorldUpdateOp.addEvent ||
+    LivingWorldUpdateOp.setFlag ||
+    LivingWorldUpdateOp.setActivePlace ||
+    LivingWorldUpdateOp.setPersonLocation ||
+    LivingWorldUpdateOp.upsertThread ||
+    LivingWorldUpdateOp.closeThread ||
+    LivingWorldUpdateOp.upsertPromise ||
+    LivingWorldUpdateOp.closePromise ||
+    LivingWorldUpdateOp.upsertSecret ||
+    LivingWorldUpdateOp.closeSecret ||
+    LivingWorldUpdateOp.setInventory => true,
+    LivingWorldUpdateOp.setRelationship ||
+    LivingWorldUpdateOp.upsertPerson => false,
+  };
 
   /// Fingerprint for pending-queue dedupe (op + summary).
   String get pendingKey => '${op.name}|${summary.trim().toLowerCase()}';
 
   /// Full payload for disk-backed pending review (Phase 11).
   Map<String, dynamic> toJson() => {
-        'op': op.name,
-        'summary': summary,
-        if (event != null) 'event': event!.toJson(),
-        if (flag != null) 'flag': flag!.toJson(),
-        if (relationship != null) 'relationship': relationship!.toJson(),
-        if (activePlaceId != null && activePlaceId!.trim().isNotEmpty)
-          'activePlaceId': activePlaceId!.trim(),
-        if (personId != null && personId!.trim().isNotEmpty)
-          'personId': personId!.trim(),
-        if (placeId != null && placeId!.trim().isNotEmpty)
-          'placeId': placeId!.trim(),
-        if (thread != null) 'thread': thread!.toJson(),
-        if (promise != null) 'promise': promise!.toJson(),
-        if (secret != null) 'secret': secret!.toJson(),
-        if (inventoryItems != null) 'inventoryItems': inventoryItems,
-        if (targetId != null && targetId!.trim().isNotEmpty)
-          'targetId': targetId!.trim(),
-      };
+    'op': op.name,
+    'summary': summary,
+    if (event != null) 'event': event!.toJson(),
+    if (flag != null) 'flag': flag!.toJson(),
+    if (relationship != null) 'relationship': relationship!.toJson(),
+    if (activePlaceId != null && activePlaceId!.trim().isNotEmpty)
+      'activePlaceId': activePlaceId!.trim(),
+    if (personId != null && personId!.trim().isNotEmpty)
+      'personId': personId!.trim(),
+    if (placeId != null && placeId!.trim().isNotEmpty)
+      'placeId': placeId!.trim(),
+    if (thread != null) 'thread': thread!.toJson(),
+    if (promise != null) 'promise': promise!.toJson(),
+    if (secret != null) 'secret': secret!.toJson(),
+    if (inventoryItems != null) 'inventoryItems': inventoryItems,
+    if (targetId != null && targetId!.trim().isNotEmpty)
+      'targetId': targetId!.trim(),
+    if (person != null) 'person': person!.toJson(),
+  };
 
   factory LivingWorldCanonUpdate.fromJson(Map<String, dynamic> json) {
     final opName = '${json['op'] ?? ''}'.trim();
@@ -135,8 +145,9 @@ class LivingWorldCanonUpdate {
     WorldRelationship? relationship;
     final rawRel = json['relationship'];
     if (rawRel is Map) {
-      relationship =
-          WorldRelationship.fromJson(Map<String, dynamic>.from(rawRel));
+      relationship = WorldRelationship.fromJson(
+        Map<String, dynamic>.from(rawRel),
+      );
     }
     WorldThread? thread;
     final rawThread = json['thread'];
@@ -152,6 +163,15 @@ class LivingWorldCanonUpdate {
     final rawSecret = json['secret'];
     if (rawSecret is Map) {
       secret = WorldSecret.fromJson(Map<String, dynamic>.from(rawSecret));
+    }
+    WorldPerson? person;
+    final rawPerson = json['person'];
+    if (rawPerson is Map) {
+      try {
+        person = WorldPerson.fromJson(Map<String, dynamic>.from(rawPerson));
+      } on FormatException {
+        person = null;
+      }
     }
     List<String>? inventoryItems;
     final rawInv = json['inventoryItems'];
@@ -179,6 +199,7 @@ class LivingWorldCanonUpdate {
       secret: secret,
       inventoryItems: inventoryItems,
       targetId: targetId.isEmpty ? null : targetId,
+      person: person,
     );
   }
 }
@@ -213,11 +234,16 @@ class LivingWorldUpdateService {
             'Return ONLY one JSON object (no markdown, no prose) shaped like:\n'
             '{"updates":[{"op":"addEvent|setFlag|setRelationship|setActivePlace|'
             'setPersonLocation|upsertThread|closeThread|upsertPromise|closePromise|'
-            'upsertSecret|closeSecret|setInventory",...}]}\n'
+            'upsertSecret|closeSecret|setInventory|upsertPerson",...}]}\n'
             '\n'
             'Rules:\n'
             '- Only propose facts clearly established or decided in the recent chat.\n'
-            '- Do NOT invent new people or places. Use only ids from the roster.\n'
+            '- For events/flags/relationships/places/locations/continuity/inventory: '
+            'use only person/place ids from the roster (do not invent place ids).\n'
+            '- upsertPerson: when chat clearly INTRODUCES or NAMES someone new '
+            'with a role (e.g. a lady presented at dinner who is not on the roster), '
+            'propose one upsertPerson with their name + a short summary. '
+            'Do not invent random extras who were never named.\n'
             '- Prefer short factual event text (who decided/did what, where).\n'
             '- Flags: stable keys like snake_case; value bool or short string.\n'
             '  Prefer recipe-style keys when they fit: knows_<person>, '
@@ -249,7 +275,9 @@ class LivingWorldUpdateService {
             'upsertSecret: {"op":"upsertSecret","id":"optional","text":"...","status":"open|closed",'
             '"subjectIds":["..."],"witnessIds":["..."],"placeId":"optional"}\n'
             'closeSecret: {"op":"closeSecret","id":"sec_..."}\n'
-            'setInventory: {"op":"setInventory","personId":"...","items":["..."]}\n',
+            'setInventory: {"op":"setInventory","personId":"...","items":["..."]}\n'
+            'upsertPerson: {"op":"upsertPerson","id":"optional p_...","name":"...",'
+            '"summary":"short role","personalityNotes":"optional"}\n',
       },
       {
         'role': 'user',
@@ -314,7 +342,7 @@ class LivingWorldUpdateService {
 
   /// Split proposals into auto-safe vs needs-review (Phase 5 autoSafe policy).
   ({List<LivingWorldCanonUpdate> safe, List<LivingWorldCanonUpdate> risky})
-      partitionForAutoSafe(List<LivingWorldCanonUpdate> updates) {
+  partitionForAutoSafe(List<LivingWorldCanonUpdate> updates) {
     final safe = <LivingWorldCanonUpdate>[];
     final risky = <LivingWorldCanonUpdate>[];
     for (final u in updates) {
@@ -389,10 +417,7 @@ class LivingWorldUpdateService {
           if (personId == null || placeId == null) continue;
           final base = live ?? const WorldLiveState();
           live = base.copyWith(
-            personLocations: {
-              ...base.personLocations,
-              personId: placeId,
-            },
+            personLocations: {...base.personLocations, personId: placeId},
           );
         case LivingWorldUpdateOp.upsertThread:
           final thread = update.thread;
@@ -456,6 +481,42 @@ class LivingWorldUpdateService {
           if (idx < 0) continue;
           people = List<WorldPerson>.from(people)
             ..[idx] = people[idx].copyWith(inventory: items);
+        case LivingWorldUpdateOp.upsertPerson:
+          final person = update.person;
+          if (person == null) continue;
+          final byId = people.indexWhere((p) => p.id == person.id);
+          if (byId >= 0) {
+            final existing = people[byId];
+            people = List<WorldPerson>.from(people)
+              ..[byId] = existing.copyWith(
+                name: person.name,
+                summary: person.summary.trim().isNotEmpty
+                    ? person.summary
+                    : existing.summary,
+                personalityNotes: person.personalityNotes.trim().isNotEmpty
+                    ? person.personalityNotes
+                    : existing.personalityNotes,
+              );
+            continue;
+          }
+          final nameKey = person.name.trim().toLowerCase();
+          final byName = people.indexWhere(
+            (p) => p.name.trim().toLowerCase() == nameKey,
+          );
+          if (byName >= 0) {
+            final existing = people[byName];
+            people = List<WorldPerson>.from(people)
+              ..[byName] = existing.copyWith(
+                summary: person.summary.trim().isNotEmpty
+                    ? person.summary
+                    : existing.summary,
+                personalityNotes: person.personalityNotes.trim().isNotEmpty
+                    ? person.personalityNotes
+                    : existing.personalityNotes,
+              );
+          } else {
+            people = [...people, person];
+          }
       }
     }
 
@@ -634,11 +695,43 @@ class LivingWorldUpdateService {
       'upsertSecret' => LivingWorldUpdateOp.upsertSecret,
       'closeSecret' => LivingWorldUpdateOp.closeSecret,
       'setInventory' => LivingWorldUpdateOp.setInventory,
+      'upsertPerson' => LivingWorldUpdateOp.upsertPerson,
       _ => null,
     };
     if (op == null) return null;
 
     switch (op) {
+      case LivingWorldUpdateOp.upsertPerson:
+        final name = '${json['name'] ?? ''}'.trim();
+        if (name.isEmpty) return null;
+        final nameKey = name.toLowerCase();
+        // Already on the roster under this name — skip (no duplicate noise).
+        for (final p in people) {
+          if (p.name.trim().toLowerCase() == nameKey) return null;
+        }
+        var id = '${json['id'] ?? ''}'.trim();
+        if (id.isEmpty) {
+          id = _slugPersonId(name);
+        }
+        // Reject colliding with a different person's id.
+        if (personIds.contains(id)) return null;
+        final summary = '${json['summary'] ?? ''}'.trim();
+        final personalityNotes = '${json['personalityNotes'] ?? ''}'.trim();
+        final person = WorldPerson(
+          id: id,
+          name: name,
+          summary: summary.length > 200 ? summary.substring(0, 200) : summary,
+          personalityNotes: personalityNotes.length > 120
+              ? personalityNotes.substring(0, 120)
+              : personalityNotes,
+        );
+        final label = summary.isEmpty ? name : '$name — $summary';
+        return LivingWorldCanonUpdate(
+          op: op,
+          summary: label.length > 120 ? '${label.substring(0, 117)}…' : label,
+          person: person,
+        );
+
       case LivingWorldUpdateOp.addEvent:
         final text = '${json['text'] ?? ''}'.trim();
         if (text.isEmpty) return null;
@@ -665,11 +758,7 @@ class LivingWorldUpdateService {
           placeId: placeId.isEmpty ? null : placeId,
           personIds: personIdsOut,
         );
-        return LivingWorldCanonUpdate(
-          op: op,
-          summary: text,
-          event: event,
-        );
+        return LivingWorldCanonUpdate(op: op, summary: text, event: event);
 
       case LivingWorldUpdateOp.setFlag:
         final key = '${json['key'] ?? ''}'.trim();
@@ -701,10 +790,11 @@ class LivingWorldUpdateService {
           return null;
         }
         final scoreRaw = json['score'];
-        final score = (scoreRaw is int
-                ? scoreRaw
-                : int.tryParse('$scoreRaw') ?? 0)
-            .clamp(-100, 100);
+        final score =
+            (scoreRaw is int ? scoreRaw : int.tryParse('$scoreRaw') ?? 0).clamp(
+              -100,
+              100,
+            );
         final labels = <String>[];
         final rawLabels = json['labels'];
         if (rawLabels is List) {
@@ -984,6 +1074,18 @@ class LivingWorldUpdateService {
 
   static int outHash(String text) => text.hashCode & 0xffff;
 
+  static String _slugPersonId(String name) {
+    final slug = name
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+        .replaceAll(RegExp(r'^_+|_+$'), '');
+    final stem = slug.isEmpty
+        ? DateTime.now().microsecondsSinceEpoch.toString()
+        : (slug.length > 32 ? slug.substring(0, 32) : slug);
+    return 'p_$stem';
+  }
+
   String _formatTranscript(List<ChatMessage> messages) {
     if (messages.isEmpty) return '(no recent messages)';
     final start = messages.length > maxTranscriptMessages
@@ -994,9 +1096,10 @@ class LivingWorldUpdateService {
       final m = messages[i];
       final who = switch (m.role) {
         ChatRole.user => 'User',
-        ChatRole.assistant => m.speakerName?.trim().isNotEmpty == true
-            ? m.speakerName!.trim()
-            : 'Assistant',
+        ChatRole.assistant =>
+          m.speakerName?.trim().isNotEmpty == true
+              ? m.speakerName!.trim()
+              : 'Assistant',
         ChatRole.narrator => 'Narrator',
         ChatRole.director => 'Director',
         ChatRole.groupBeat => 'Group',
@@ -1035,9 +1138,7 @@ class LivingWorldUpdateService {
 
   String _formatFlags(LivingWorld world) {
     if (world.flags.isEmpty) return '(none)';
-    return [
-      for (final f in world.flags) '- ${f.key}: ${f.value}',
-    ].join('\n');
+    return [for (final f in world.flags) '- ${f.key}: ${f.value}'].join('\n');
   }
 
   String _formatOpenContinuity(LivingWorld world) {
@@ -1074,8 +1175,6 @@ class LivingWorldUpdateService {
     final tail = world.events.length > 8
         ? world.events.sublist(world.events.length - 8)
         : world.events;
-    return [
-      for (final e in tail) '- ${e.text}',
-    ].join('\n');
+    return [for (final e in tail) '- ${e.text}'].join('\n');
   }
 }

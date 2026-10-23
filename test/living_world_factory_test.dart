@@ -303,5 +303,96 @@ void main() {
       expect(peopleCalls, (20 / kLivingWorldFactoryPeopleBatchSize).ceil());
       expect(world.people.length, greaterThanOrEqualTo(16));
     });
+
+    test('planPeopleBatches pads invent slots when outline is short', () {
+      final plans = LivingWorldFactoryService.planPeopleBatches(
+        outlineNames: const [
+          'Elara',
+          'Valen',
+          'Malcor',
+          'Soren',
+          'Aldric',
+          'Valerius',
+        ],
+        target: 24,
+      );
+      final named = plans.whereType<List<String>>().expand((e) => e).toList();
+      expect(named, hasLength(6));
+      final inventBatches = plans.where((p) => p == null).length;
+      // 24 - 6 = 18 invent slots → ceil(18/8) = 3; 6 names fit in one batch.
+      expect(inventBatches, 3);
+      expect(plans.length, 1 + inventBatches);
+    });
+
+    test('planPeopleBatches invent-only when outline empty', () {
+      final plans = LivingWorldFactoryService.planPeopleBatches(
+        outlineNames: const [],
+        target: 10,
+      );
+      expect(plans.every((p) => p == null), isTrue);
+      expect(plans, hasLength(2)); // 8 + 2
+    });
+
+    test('people pass invents padding after a short outline cast', () async {
+      final request = LivingWorldFactoryRequest(
+        brainstorm: 'Seed cast only',
+        targetPlaceCount: 3,
+        targetPersonCount: 12,
+      );
+      var peopleCalls = 0;
+      final world = await factory.compile(
+        request: request,
+        completePass: (pass, messages) async {
+          if (pass == LivingWorldFactoryPass.outline) {
+            return '''
+{"title":"Thin","genreNote":"Test","placeNames":["A","B","C"],
+"personNames":["Ada","Ben"]}
+''';
+          }
+          if (pass == LivingWorldFactoryPass.places) {
+            return '''
+{"places":[
+ {"id":"pl_a","name":"A","description":"a","connectedPlaceIds":["pl_b"]},
+ {"id":"pl_b","name":"B","description":"b","connectedPlaceIds":["pl_a"]},
+ {"id":"pl_c","name":"C","description":"c","connectedPlaceIds":["pl_a"]}
+]}
+''';
+          }
+          if (pass == LivingWorldFactoryPass.people) {
+            peopleCalls++;
+            final content = messages[1]['content']!;
+            if (content.contains('This people batch')) {
+              return '''
+{"people":[
+ {"id":"p_ada","name":"Ada","summary":"One","personalityNotes":"x"},
+ {"id":"p_ben","name":"Ben","summary":"Two","personalityNotes":"y"}
+]}
+''';
+            }
+            // Invent padding batch
+            expect(content, contains('Invent new people'));
+            return '''
+{"people":[
+ {"id":"p_c1","name":"Cara","summary":"New","personalityNotes":"z"},
+ {"id":"p_c2","name":"Dan","summary":"New","personalityNotes":"z"},
+ {"id":"p_c3","name":"Eve","summary":"New","personalityNotes":"z"},
+ {"id":"p_c4","name":"Fay","summary":"New","personalityNotes":"z"},
+ {"id":"p_c5","name":"Gus","summary":"New","personalityNotes":"z"},
+ {"id":"p_c6","name":"Hana","summary":"New","personalityNotes":"z"},
+ {"id":"p_c7","name":"Ivy","summary":"New","personalityNotes":"z"},
+ {"id":"p_c8","name":"Jon","summary":"New","personalityNotes":"z"}
+]}
+''';
+          }
+          if (pass == LivingWorldFactoryPass.relationships) {
+            return '{"relationships":[]}';
+          }
+          return '{"events":[],"flags":[]}';
+        },
+      );
+      expect(peopleCalls, greaterThanOrEqualTo(2));
+      expect(world.people.length, greaterThanOrEqualTo(10));
+      expect(world.people.any((p) => p.name == 'Cara'), isTrue);
+    });
   });
 }
