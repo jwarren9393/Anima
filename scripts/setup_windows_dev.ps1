@@ -76,7 +76,12 @@ if (-not $SkipVsBuildTools) {
         Write-Host '  VS Build Tools with the C++ workload already present.'
     } else {
         Write-Host '  Downloading the VS 2022 Build Tools bootstrapper ...'
-        curl.exe -L -o $vsBootstrapper 'https://aka.ms/vs/17/release/vs_buildtools.exe'
+        # curl progress goes to stderr; with $ErrorActionPreference=Stop that becomes a
+        # terminating error in Windows PowerShell 5.1 — silence the meter, keep real failures.
+        & curl.exe -fsSL -o $vsBootstrapper 'https://aka.ms/vs/17/release/vs_buildtools.exe'
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path $vsBootstrapper)) {
+            Write-Error "Failed to download VS Build Tools bootstrapper (curl exit $LASTEXITCODE)"
+        }
         Write-Host '  Installing C++ workload + ATL — this can take 15–40 min ...'
         & $vsBootstrapper --quiet --wait --norestart --nocache `
             --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended `
@@ -113,9 +118,9 @@ if (-not (Test-Path (Join-Path $cmdlineLatest 'bin\sdkmanager.bat'))) {
     $zipUrl  = 'https://dl.google.com/android/repository/commandlinetools-win-13114758_latest.zip'
     $zipPath = Join-Path $env:TEMP 'commandlinetools-win.zip'
     Write-Host '  Downloading Android cmdline-tools ...'
-    curl.exe -L -o $zipPath $zipUrl
-    if (-not (Test-Path $zipPath) -or (Get-Item $zipPath).Length -lt 1MB) {
-        Write-Error "Failed to download cmdline-tools from $zipUrl"
+    & curl.exe -fsSL -o $zipPath $zipUrl
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $zipPath) -or (Get-Item $zipPath).Length -lt 1MB) {
+        Write-Error "Failed to download cmdline-tools from $zipUrl (curl exit $LASTEXITCODE)"
     }
     $extractRoot = Join-Path $env:TEMP 'android-cmdline-tools'
     if (Test-Path $extractRoot) { Remove-Item $extractRoot -Recurse -Force }

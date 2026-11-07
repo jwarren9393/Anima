@@ -578,75 +578,48 @@ so the definition reaches every plugin target. Don't remove it unless the depend
 `deploy.sh` step 7/7 also now notices a **failed** run (compares the newest run's `createdAt` with the
 dispatch time) and reports it immediately instead of waiting out the 15-minute poll.
 
-### Windows laptop — **JAYS-DELL** (current Windows host)
+### Windows host — **Jay** (current; rebuilt 2026-11-07)
 
-A **fresh Windows 11 install** was rebuilt by the Cline agent on **2026-09-26**. Project checkout:
-**`C:\Users\jakwa\Documents\GitHub\Anima`** (normal `git clone`, remote `jwarren9393/Anima`, branch
-`main`, clean tree). Journey lives beside it at `C:\Users\jakwa\Documents\GitHub\Journey` (`master`).
-**One working copy each.** Never build from `W:` (**Jay-Ex-SSD**, exFAT) or `G:` (Google Drive) —
-Flutter writes plugin symlinks and fails on those filesystems.
+Fresh Windows 11 reinstall. Projects live at **`C:\Users\Jay\Git and Cursor\Git Repos\`**
+(Anima, Journey, Boundless, SpineSync, Harmony Select). Prefer this NTFS tree only — never build from
+exFAT/FAT or a cloud-mirrored folder (Flutter plugin symlinks fail there).
 
 | Tool | Status |
 |------|--------|
-| Flutter | ✅ stable in `C:\src\flutter` (`git clone -b stable --depth 1`) |
-| JDK | ✅ Temurin 17 at `C:\Program Files\Eclipse Adoptium\jdk-17.0.20.101-hotspot` |
-| Android SDK | ✅ `%LOCALAPPDATA%\Android\Sdk` — cmdline-tools, platform-tools 37.0.1, platform 36, build-tools 36.0.0, licences accepted |
-| Visual Studio | ✅ Build Tools 2022 **17.14.41** + **C++ workload + ATL** — `vcvarsall.bat` present, `VC\Tools\MSVC\14.44.35207\` (cl.exe + `atlmfc\include\atlstr.h`) |
-| Git | ✅ `C:\Program Files\Git\cmd\git.exe` (git-lfs 3.7.1 also installed) |
-| GitHub CLI (`gh`) | ✅ `C:\Program Files\GitHub CLI\gh.exe` 2.101.0 — **sign in once:** `gh auth login --web` then `gh auth setup-git` |
-| Cursor | ✅ Dart + Flutter extensions already installed; `dart.flutterSdkPath` set to `C:/src/flutter` |
-| Developer Mode | ✅ ON (needed for Flutter's Windows plugin symlinks) |
-| Android Studio | ❌ Not installed — cmdline-tools + platform-tools are enough for `flutter build apk` |
-| Physical Android phone | Plug in + USB debugging → `flutter devices` / `flutter run` |
-| Drives | `C:` internal (projects + toolchains), `W:` Jay-Ex-SSD (backups), `G:` Google Drive |
+| Flutter | ✅ stable **3.47.9** / Dart **3.13.7** in `C:\src\flutter` |
+| JDK | ✅ Temurin 17 at `C:\Program Files\Eclipse Adoptium\jdk-17.0.21.9-hotspot` |
+| Android SDK | ✅ `%LOCALAPPDATA%\Android\Sdk` — cmdline-tools, platform-tools, platform 36, build-tools 36.0.0, licences accepted |
+| Visual Studio | ✅ Build Tools 2022 **17.14.44** + **C++ workload + ATL** (`atlstr.h` present under MSVC 14.44) |
+| Git | ✅ `C:\Program Files\Git\cmd\git.exe` |
+| GitHub CLI (`gh`) | ✅ signed in as `jwarren9393` (`gh auth setup-git` done) |
+| Cursor | ✅ Dart/Flutter extension; `dart.flutterSdkPath` = `C:/src/flutter` |
+| Developer Mode | ✅ ON |
+| Android Studio | ❌ not installed — cmdline-tools are enough for APK builds |
 
-User env for this account: `JAVA_HOME`, `ANDROID_HOME`, `ANDROID_SDK_ROOT`, and `PATH` entries for
-Flutter, the JDK, `platform-tools`, `cmdline-tools\latest\bin` and GitHub CLI. **Open a new terminal
-/ restart Cursor** after setup so PATH applies.
-
-Fresh install / re-run anytime (idempotent; run elevated if VS Build Tools or Developer Mode fail):
+Fresh install / re-run (elevated for VS Build Tools + Developer Mode):
 
 ```powershell
-cd C:\Users\jakwa\Documents\GitHub\Anima
+cd "C:\Users\Jay\Git and Cursor\Git Repos\Anima"
 powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows_dev.ps1
+# Open a new terminal / restart Cursor so PATH applies
 flutter doctor
 flutter pub get
-flutter run -d windows        # or: flutter run  with the phone connected
+flutter run -d windows
 ```
 
-The 2026-09-26 rebuild was driven from `C:\Users\jakwa\anima-setup\` (`run_all.ps1` → step1 winget
-JDK/gh/platform-tools + Developer Mode, step2 Android SDK, step3 Flutter + `pub get` for **both**
-repos, step4 VS Build Tools, step5 `flutter doctor` + `analyze` + `test`; then `verify_final.ps1` →
-`verify_report.txt` for the end-to-end proof). Progress went to `setup.log`, the summary to
-`SUMMARY.txt` — those helpers still work on a machine with **no** toolchain at all.
+**Verified 2026-11-07:** `flutter doctor` → **No issues found**. `flutter pub get` + `flutter analyze`
+clean for Anima (and the sibling Flutter apps in this folder). Fixed `scripts/setup_windows_dev.ps1`
+so `curl.exe -fsSL` does not trip `$ErrorActionPreference=Stop` on progress-meter stderr in Windows
+PowerShell 5.1.
 
-**Verified on this laptop (2026-09-26):** `flutter doctor` reports **No issues found** — Flutter
-3.47.5 / Dart 3.13.4, Windows 11, the Android toolchain (SDK 36, build-tools 36.0.0, licences
-accepted), **Visual Studio Build Tools 2022 17.14.41 for Windows apps**, Chrome and network resources.
-`flutter pub get` succeeds for both repos; **`flutter analyze` is clean** for both; **Anima 381 tests
-pass**, **Journey 49 tests pass**. `git ls-remote` on the private Anima repo answers without a prompt
-(Git Credential Manager already holds a GitHub credential), but **`gh` itself is not signed in yet** —
-`gh auth login --web` + `gh auth setup-git` (helper: `C:\Users\jakwa\anima-setup\github_login.ps1`)
-is needed for `deploy.sh`'s release/CI steps.
+**⚠️ VS Build Tools:** do **not** rely on `winget install …BuildTools --override "--passive …"` on a
+fresh Windows 11 box — use the official bootstrapper elevated with
+`--quiet --wait --norestart --nocache --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --add Microsoft.VisualStudio.Component.VC.ATLMFC`.
 
-**⚠️ VS Build Tools install caveat (learned 2026-09-26):** `winget install
-Microsoft.VisualStudio.2022.BuildTools --override "--passive …"` **fails** on a fresh Windows 11
-install (`Installer failed with exit code: 1`, winget exit `-1978335226`) because the bootstrapper
-cannot self-update in a passive, non-interactive session. Instead download
-`https://aka.ms/vs/17/release/vs_buildtools.exe` and run it **elevated** with
-`--quiet --wait --norestart --nocache --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --add Microsoft.VisualStudio.Component.VC.ATLMFC`
-— one pass installs the C++ toolchain (MSVC 14.44), the Windows 11 SDK and ATL.
-
-**Anima's own app data on this laptop:** the library folder `Documents\Anima` did not exist after the
-reinstall. A sync backup is sitting in `Documents\Anima Backup\anima-sync.anima-backup` (copies also
-on `W:\Anima Backup\` and `G:\My Drive\Anima Backup\`) — restore it in the app with
-**Settings → Backup, restore & sync → Restore**. The NanoGPT **API key is not inside that file**, so
-paste it again in **Settings → API** (it is written to the library folder as `api_key.txt`).
-
-**Windows line-ending quirk:** `flutter pub get` rewrites `linux/flutter/generated_*` and
-`windows/flutter/generated_*` (and Journey's `macos/Flutter/GeneratedPluginRegistrant.swift`) with
-CRLF line endings, so `git status` shows them as modified even though nothing really changed. Clear it
-with `git checkout -- linux/flutter/generated_* windows/flutter/generated_*` — or just ignore it.
+**Windows file-mode quirk:** a Linux-cloned tree shows many scripts as mode `100755→100644` under
+`git status` on Windows. That is executable-bit noise, not content — stage only real edits.
+`flutter pub get` may also rewrite `linux/flutter/generated_*` / `windows/flutter/generated_*` with
+CRLF; clear with `git checkout --` on those paths or ignore.
 
 
 ### Phone USB debugging (owner checklist)
