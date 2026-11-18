@@ -62,8 +62,9 @@ High-value SillyTavern concepts to aim for over time:
 
 **Phase:** Living World experiment — **Phases 1–11 + Phase 13 shipped; Phase 12 agent package done** on `experiment/living-world` (build **82**) — **merge blocked until owner soak + explicit merge approve** (see [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md) + [`docs/LIVING_WORLD_MERGE_READINESS.md`](docs/LIVING_WORLD_MERGE_READINESS.md))
 
-**Last updated:** 2026-11-15
-**Last agent action:** **Kubuntu NVMe migration** — cloned `experiment/living-world`, Linux release built + installed to `~/Git and Cursor/Installed Linux Cursor Apps/Anima/` with `anima.desktop` launcher. Toolchain on this host is Flutter **3.50.0** / Dart **3.14.0**, distro JDK 17, `~/Android/Sdk`. Runtime paths are internal-disk only (Jay-Storage was transfer-only).
+**Last updated:** 2026-11-18
+**Last agent action:** **Kubuntu clean reinstall restore** — fresh Flutter **3.50.0** / Dart **3.14.0** + Android SDK on internal NVMe; cloned `experiment/living-world`; Linux release rebuilt + installed with empty `AnimaData/` (no library/key restore) + `anima.desktop`. Analyze infos only (material deprecation); **517** tests passed; smoke-launch OK. Jay-Storage transfer-only.
+**Previous agent action:** **Kubuntu NVMe migration** — cloned `experiment/living-world`, Linux release built + installed to `~/Git and Cursor/Installed Linux Cursor Apps/Anima/` with `anima.desktop` launcher. Toolchain on this host is Flutter **3.50.0** / Dart **3.14.0**, distro JDK 17, `~/Android/Sdk`. Runtime paths are internal-disk only (Jay-Storage was transfer-only).
 **Previous agent action:** **Build 82 — cast fill + upsertPerson prerelease.** Factory pads invent batches to the People slider; mid-chat **New person** proposals via Review pending; soft roster nudge. Uploaded `v1.0.0-living-world`. **Did not merge to `main`.**
 **Previous agent action:** **Living World cast fill + mid-chat person capture.** Factory now pads invent batches so the People slider is honored after Creation Center seeds (must-include cast + supporting NPCs). After-turn / Update world can propose reviewable **upsertPerson** (Review pending) when chat clearly introduces someone new; soft roster-prefer nudge in the retrieve pack. **Did not merge to `main`.**
 **Previous agent action:** **Build 81 — Composer voice UX + soak QoL prerelease.** Long-press You → Impersonate / My line…; cast long-press → Guide AI (returns to You after send); slim message menu; lore pick-at-start only; Period voice mood; Update character from world; LW JSON harden. Uploaded `v1.0.0-living-world`. **Did not merge to `main`.**
@@ -469,26 +470,23 @@ scripts/
 
 ## Machine notes (developer PCs)
 
-### Kubuntu 26.04.1 LTS (Ubuntu “Resolute Raccoon”) — **current host** (`jay@jaykubuntu`)
+### Kubuntu 26.04.1 LTS (Ubuntu “Resolute Raccoon”) — **current host** (`jay@jay-kubuntu`)
 
-Reinstalled from scratch on **2026-09-30** and rebuilt by the Cline agent with
-**`bash scripts/setup_linux_dev_noroot.sh`** — the no-password installer — plus the single `apt`
-command it prints. `scripts/setup_linux_dev.sh` still does the same job *with* sudo if you prefer
-one command; both are idempotent, so re-run either any time.
+**Clean OS reinstall restored 2026-11-18** from Jay-Storage Migrate handoff (configs/icons/desktop only — **no** Anima library/`api_key` restore). Toolchain reinstalled fresh onto the internal NVMe.
 
 | Tool | Status |
 |------|--------|
 | Flutter | ✅ **3.50.0** stable in `~/development/flutter` (official Linux tarball) |
 | Dart | ✅ **3.14.0** (ships with Flutter) |
 | JDK | ✅ distro **openjdk-17-jdk** |
-| Android SDK | ✅ `~/Android/Sdk` — Linux cmdline-tools + platform-tools; platforms/build-tools refreshed; licences accepted |
+| Android SDK | ✅ `~/Android/Sdk` — Linux cmdline-tools + platform-tools; platforms 36/35; build-tools 36.0.0 (+28.0.3); licences accepted |
 | Linux desktop toolchain | ✅ clang / cmake / ninja / pkg-config / GTK 3 / **libsecret-1-dev** (needed by `flutter_secure_storage_linux`) |
 | GitHub CLI (`gh`) | ✅ installed + authenticated as `jwarren9393` |
 | Git identity | ✅ restored (`jwarren9393` / GitHub noreply e-mail) |
 | Cursor | ✅ `dart.flutterSdkPath = /home/jay/development/flutter` |
 | Project checkout | ✅ `~/Git and Cursor/Git Repos/Anima` (`experiment/living-world`) |
-| Linux portable install | ✅ `~/Git and Cursor/Installed Linux Cursor Apps/Anima/` + `~/.local/share/applications/anima.desktop` (use **AnimaData/** beside the binary for portable library) |
-| Verified end-to-end | ✅ `flutter doctor` all green · Linux release build · launcher smoke-test OK |
+| Linux portable install | ✅ `~/Git and Cursor/Installed Linux Cursor Apps/Anima/` + `~/.local/share/applications/anima.desktop` (empty **AnimaData/** beside the binary — configure library/API key on first run) |
+| Verified end-to-end | ✅ `flutter doctor` all green · **517** tests · Linux release build · launcher smoke-test OK |
 
 **The one command that still needs the owner's password** (Linux desktop build libs + GitHub CLI + phone udev rules):
 
