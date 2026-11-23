@@ -62,8 +62,9 @@ High-value SillyTavern concepts to aim for over time:
 
 **Phase:** Living World experiment — **Phases 1–11 + Phase 13 shipped; Phase 12 agent package done** on `experiment/living-world` (build **82**) — **merge blocked until owner soak + explicit merge approve** (see [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md) + [`docs/LIVING_WORLD_MERGE_READINESS.md`](docs/LIVING_WORLD_MERGE_READINESS.md))
 
-**Last updated:** 2026-11-18
-**Last agent action:** **Kubuntu clean reinstall restore** — fresh Flutter **3.50.0** / Dart **3.14.0** + Android SDK on internal NVMe; cloned `experiment/living-world`; Linux release rebuilt + installed with empty `AnimaData/` (no library/key restore) + `anima.desktop`. Analyze infos only (material deprecation); **517** tests passed; smoke-launch OK. Jay-Storage transfer-only.
+**Last updated:** 2026-11-23
+**Last agent action:** **Windows migration pack** — Jay-Storage `Migrate-Windows-2026-11/` includes current `AnimaData/` (characters/chats/personas + `api_key.txt`). Owner moving back to Windows host **Jay**; paste that folder’s **Cursor Prompt** into a Windows Cursor agent. Stay on `experiment/living-world`.
+**Previous agent action:** **Kubuntu clean reinstall restore** — fresh Flutter **3.50.0** / Dart **3.14.0** + Android SDK on internal NVMe; cloned `experiment/living-world`; Linux release rebuilt + installed with empty `AnimaData/` (no library/key restore) + `anima.desktop`. Analyze infos only (material deprecation); **517** tests passed; smoke-launch OK. Jay-Storage transfer-only.
 **Previous agent action:** **Kubuntu NVMe migration** — cloned `experiment/living-world`, Linux release built + installed to `~/Git and Cursor/Installed Linux Cursor Apps/Anima/` with `anima.desktop` launcher. Toolchain on this host is Flutter **3.50.0** / Dart **3.14.0**, distro JDK 17, `~/Android/Sdk`. Runtime paths are internal-disk only (Jay-Storage was transfer-only).
 **Previous agent action:** **Build 82 — cast fill + upsertPerson prerelease.** Factory pads invent batches to the People slider; mid-chat **New person** proposals via Review pending; soft roster nudge. Uploaded `v1.0.0-living-world`. **Did not merge to `main`.**
 **Previous agent action:** **Living World cast fill + mid-chat person capture.** Factory now pads invent batches so the People slider is honored after Creation Center seeds (must-include cast + supporting NPCs). After-turn / Update world can propose reviewable **upsertPerson** (Review pending) when chat clearly introduces someone new; soft roster-prefer nudge in the retrieve pack. **Did not merge to `main`.**
@@ -470,9 +471,9 @@ scripts/
 
 ## Machine notes (developer PCs)
 
-### Kubuntu 26.04.1 LTS (Ubuntu “Resolute Raccoon”) — **current host** (`jay@jay-kubuntu`)
+### Kubuntu 26.04.1 LTS (Ubuntu “Resolute Raccoon”) — previous host (`jay@jay-kubuntu`)
 
-**Clean OS reinstall restored 2026-11-18** from Jay-Storage Migrate handoff (configs/icons/desktop only — **no** Anima library/`api_key` restore). Toolchain reinstalled fresh onto the internal NVMe.
+**Leaving for Windows 2026-11-23.** Handoff pack: Jay-Storage `Migrate-Windows-2026-11/` (includes `apps/AnimaData/` with library + key). Clean OS reinstall was **2026-11-18**; library was rebuilt on Kubuntu afterward and is in that pack.
 
 | Tool | Status |
 |------|--------|
