@@ -103,24 +103,6 @@ class AppBackupService {
       }
     }
 
-    // Living World notebooks + side cars (log / undo) under worlds/.
-    final worlds = <String, String>{};
-    final worldsDir = Directory(p.join(docs.path, 'worlds'));
-    if (await worldsDir.exists()) {
-      await for (final entity in worldsDir.list(followLinks: false)) {
-        if (entity is! File) continue;
-        final name = p.basename(entity.path);
-        if (!_isSafeWorldFileName(name)) continue;
-        final text = await entity.readAsString();
-        if (utf8.encode(text).length > _maxJsonFileBytes) {
-          throw AppBackupException(
-            'Living World file “$name” is too large to include in a backup.',
-          );
-        }
-        worlds[name] = text;
-      }
-    }
-
     final preferences = await _exportPreferences();
 
     final createdAt = DateTime.now().toUtc();
@@ -130,7 +112,6 @@ class AppBackupService {
       'files': files,
       'avatars': avatars,
       if (chatBackgrounds.isNotEmpty) 'chatBackgrounds': chatBackgrounds,
-      if (worlds.isNotEmpty) 'worlds': worlds,
       'settings': preferences,
     };
 
@@ -140,7 +121,6 @@ class AppBackupService {
       fileCount: files.length,
       avatarCount: avatars.length,
       settingsCount: preferences.length,
-      worldFileCount: worlds.length,
     );
     return AppBackupBundle(
       bytes: Uint8List.fromList(utf8.encode(json)),
@@ -181,13 +161,6 @@ class AppBackupService {
       for (final entry in payload.chatBackgrounds.entries) {
         final out = File(p.join(stagedBackgrounds.path, entry.key));
         await out.writeAsBytes(entry.value, flush: true);
-      }
-
-      final stagedWorlds = Directory(p.join(staging.path, 'worlds'));
-      await stagedWorlds.create(recursive: true);
-      for (final entry in payload.worlds.entries) {
-        final out = File(p.join(stagedWorlds.path, entry.key));
-        await out.writeAsString(entry.value, flush: true);
       }
 
       // Apply document files (write present; delete known files absent from backup).
@@ -237,26 +210,6 @@ class AppBackupService {
         if (entity is! File) continue;
         final name = p.basename(entity.path);
         final dest = File(p.join(backgroundsDir.path, name));
-        await dest.writeAsBytes(await entity.readAsBytes(), flush: true);
-      }
-
-      // Replace Living World notebooks folder with the backup set.
-      final worldsDir = Directory(p.join(docs.path, 'worlds'));
-      if (await worldsDir.exists()) {
-        await for (final entity in worldsDir.list(followLinks: false)) {
-          if (entity is File) {
-            try {
-              await entity.delete();
-            } catch (_) {}
-          }
-        }
-      } else {
-        await worldsDir.create(recursive: true);
-      }
-      await for (final entity in stagedWorlds.list(followLinks: false)) {
-        if (entity is! File) continue;
-        final name = p.basename(entity.path);
-        final dest = File(p.join(worldsDir.path, name));
         await dest.writeAsBytes(await entity.readAsBytes(), flush: true);
       }
 
@@ -380,41 +333,6 @@ class AppBackupService {
       }
     }
 
-    final worldsRaw = map['worlds'];
-    if (worldsRaw != null && worldsRaw is! Map) {
-      throw AppBackupException('Backup Living World list is invalid.');
-    }
-    final worlds = <String, String>{};
-    if (worldsRaw is Map) {
-      if (worldsRaw.length > 200) {
-        throw AppBackupException('Backup has too many Living World files.');
-      }
-      for (final entry in worldsRaw.entries) {
-        final name = entry.key.toString();
-        if (!_isSafeWorldFileName(name)) {
-          throw AppBackupException(
-            'Backup has an unsafe Living World file name: $name',
-          );
-        }
-        final text = entry.value?.toString() ?? '';
-        if (utf8.encode(text).length > _maxJsonFileBytes) {
-          throw AppBackupException(
-            'Living World file “$name” is too large.',
-          );
-        }
-        if (text.trim().isNotEmpty) {
-          try {
-            jsonDecode(text);
-          } catch (_) {
-            throw AppBackupException(
-              'Living World file “$name” is not valid JSON.',
-            );
-          }
-        }
-        worlds[name] = text;
-      }
-    }
-
     final settingsRaw = map['settings'];
     if (settingsRaw != null && settingsRaw is! Map) {
       throw AppBackupException('Backup settings list is invalid.');
@@ -425,6 +343,9 @@ class AppBackupService {
         final key = entry.key.toString();
         if (key == 'nanogpt_api_key') {
           // Never restore secrets from a backup file.
+          continue;
+        }
+        if (SettingsService.legacyIgnoredPreferenceKeys.contains(key)) {
           continue;
         }
         if (!_isAllowedPreferenceKey(key)) {
@@ -445,14 +366,12 @@ class AppBackupService {
       files: files,
       avatars: avatars,
       chatBackgrounds: chatBackgrounds,
-      worlds: worlds,
       settings: settings,
       summary: AppBackupSummary(
         createdAt: createdAt,
         fileCount: files.length,
         avatarCount: avatars.length,
         settingsCount: settings.length,
-        worldFileCount: worlds.length,
       ),
     );
   }
@@ -503,12 +422,6 @@ class AppBackupService {
   }
 
   /// Notebook JSON plus optional `.log.json` / `.undo.json` side cars.
-  bool _isSafeWorldFileName(String name) {
-    if (!_isSafeImageFileName(name)) return false;
-    final lower = name.toLowerCase();
-    return lower.endsWith('.json');
-  }
-
   bool _isAllowedPreferenceKey(String key) {
     if (key == activePersonaIdKey) return true;
     return SettingsService.backupPreferenceKeys.contains(key);
@@ -530,7 +443,6 @@ class AppBackupPayload {
     required this.files,
     required this.avatars,
     this.chatBackgrounds = const {},
-    this.worlds = const {},
     required this.settings,
     required this.summary,
   });
@@ -538,7 +450,6 @@ class AppBackupPayload {
   final Map<String, String> files;
   final Map<String, Uint8List> avatars;
   final Map<String, Uint8List> chatBackgrounds;
-  final Map<String, String> worlds;
   final Map<String, String> settings;
   final AppBackupSummary summary;
 }
@@ -549,22 +460,18 @@ class AppBackupSummary {
     required this.fileCount,
     required this.avatarCount,
     required this.settingsCount,
-    this.worldFileCount = 0,
   });
 
   final DateTime createdAt;
   final int fileCount;
   final int avatarCount;
   final int settingsCount;
-  final int worldFileCount;
 
   String get shortDescription {
     final parts = <String>[
       '$fileCount data file${fileCount == 1 ? '' : 's'}',
       '$avatarCount avatar${avatarCount == 1 ? '' : 's'}',
       '$settingsCount setting${settingsCount == 1 ? '' : 's'}',
-      if (worldFileCount > 0)
-        '$worldFileCount world file${worldFileCount == 1 ? '' : 's'}',
     ];
     return parts.join(' · ');
   }

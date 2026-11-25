@@ -188,32 +188,21 @@ void main() {
     );
   });
 
-  test('Living World worlds/ folder round-trips in backup', () async {
+  test('legacy worlds key in backup is ignored on restore', () async {
     await seedDocs();
-    final worlds = Directory(p.join(tempDir.path, 'worlds'));
-    await worlds.create(recursive: true);
-    await File(p.join(worlds.path, 'harbor.json')).writeAsString(
-      '{"id":"harbor","title":"Sample Harbor","schemaVersion":2}',
-    );
-    await File(p.join(worlds.path, 'harbor.log.json')).writeAsString('[]');
-    await File(p.join(worlds.path, 'harbor.undo.json')).writeAsString('[]');
-
     final bundle = await service.createBackup();
-    expect(bundle.summary.worldFileCount, 3);
     final map = jsonDecode(utf8.decode(bundle.bytes)) as Map<String, dynamic>;
-    expect(map['worlds'], isA<Map>());
-    expect((map['worlds'] as Map).keys, contains('harbor.json'));
+    expect(map.containsKey('worlds'), isFalse);
 
-    // Wipe worlds and restore.
-    await File(p.join(worlds.path, 'harbor.json')).delete();
-    await File(p.join(worlds.path, 'extra.json')).writeAsString('{"id":"x"}');
-
-    await service.restoreBackup(bundle.bytes);
-    expect(
-      await File(p.join(worlds.path, 'harbor.json')).readAsString(),
-      contains('Sample Harbor'),
+    map['worlds'] = {
+      'harbor.json': '{"id":"harbor","title":"Sample Harbor"}',
+    };
+    final withLegacy = Uint8List.fromList(
+      utf8.encode(const JsonEncoder.withIndent('  ').convert(map)),
     );
-    expect(await File(p.join(worlds.path, 'harbor.log.json')).exists(), isTrue);
-    expect(await File(p.join(worlds.path, 'extra.json')).exists(), isFalse);
+
+    // Must still restore successfully; worlds/ is no longer part of Anima.
+    await service.restoreBackup(withLegacy);
+    expect(Directory(p.join(tempDir.path, 'worlds')).existsSync(), isFalse);
   });
 }

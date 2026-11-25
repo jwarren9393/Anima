@@ -6,7 +6,6 @@ import 'package:path/path.dart' as p;
 
 import 'package:anima/models/global_lorebook.dart';
 import 'package:anima/models/lorebook.dart';
-import 'package:anima/services/living_world_update_service.dart';
 import 'package:anima/services/world_info_service.dart';
 
 void main() {
@@ -15,12 +14,6 @@ void main() {
 
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('anima_lore_scope_');
-    // Point AppPaths via env is not used — WorldInfoService uses AppPaths.
-    // Write books file directly after constructing with a custom path helper
-    // is hard; instead test extractJson + GlobalLorebook defaults, and
-    // booksForChat via a thin subclass pattern isn't available.
-    // So we unit-test extract salvage + document booksForChat contract via
-    // a local fake file write if WorldInfoService allows.
     worldInfo = WorldInfoService();
   });
 
@@ -28,18 +21,6 @@ void main() {
     if (await tempDir.exists()) {
       await tempDir.delete(recursive: true);
     }
-  });
-
-  test('Living World update extract salvages truncated updates array', () {
-    const truncated = '''
-{"updates":[
- {"op":"addEvent","text":"Elara sent riders at dusk."},
- {"op":"setFlag","key":"rumor_soren","value":true,"summary":"Soren rumor
-''';
-    final map = LivingWorldUpdateService.extractJsonObject(truncated);
-    final updates = map['updates'] as List;
-    expect(updates, hasLength(1));
-    expect(updates.first['op'], 'addEvent');
   });
 
   test('new GlobalLorebook still stores enabled but chat scope ignores it', () {

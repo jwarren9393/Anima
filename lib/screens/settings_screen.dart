@@ -23,7 +23,6 @@ import 'lore_settings_screen.dart';
 import 'personas_screen.dart';
 import 'sampling_settings_screen.dart';
 import 'world_workshop_list_screen.dart';
-import 'worlds_hub_screen.dart';
 
 /// Top-level settings menu — each area opens its own screen.
 class SettingsScreen extends StatefulWidget {
@@ -215,28 +214,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   apiKeyService: widget.apiKeyService,
                   settingsService: widget.settingsService,
                   nanoGptService: widget.nanoGptService,
-                  appearanceController: widget.appearanceController,
-                ),
-              ),
-            ),
-          ),
-          _SettingsTile(
-            icon: Icons.public_outlined,
-            title: 'Living Worlds',
-            subtitle:
-                'Optional notebooks + factory — off until you bind a chat',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => WorldsHubScreen(
-                  settingsService: widget.settingsService,
-                  nanoGptService: widget.nanoGptService,
-                  characterService: widget.characterService,
-                  personaService: widget.personaService,
-                  chatService: widget.chatService,
-                  apiKeyService: widget.apiKeyService,
-                  characterCategoryService: widget.characterCategoryService,
-                  worldInfoService: widget.worldInfoService,
-                  worldWorkshopService: widget.worldWorkshopService,
                   appearanceController: widget.appearanceController,
                 ),
               ),

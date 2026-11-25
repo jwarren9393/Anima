@@ -5,14 +5,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'settings_store.dart';
 
-import '../models/living_world_tick_settings.dart';
-import '../models/living_world_update_policy.dart';
 import '../models/ui_style_settings.dart';
 import '../utils/platform_utils.dart';
 
-export '../models/living_world_tick_settings.dart'
-    show LivingWorldTickSettings, LivingWorldTickTrigger;
-export '../models/living_world_update_policy.dart' show LivingWorldUpdatePolicy;
 export '../models/ui_style_settings.dart'
     show AvatarShape, AvatarSizeTier, AvatarStyleSettings;
 
@@ -493,14 +488,18 @@ class SettingsService {
   static const _contextKeepRecentKey = 'context_summarize_keep_recent';
   static const _favoriteModelsKey = 'nanogpt_favorite_models';
   static const _legacyContextMaxHistoryKey = 'context_max_history_messages';
-  static const _livingWorldUpdatePolicyKey = 'living_world_update_policy';
-  static const _livingWorldResolveBeforeNarrateKey =
-      'living_world_resolve_before_narrate';
-  static const _livingWorldTickTriggerKey = 'living_world_tick_trigger';
-  static const _livingWorldTickEveryNKey = 'living_world_tick_every_n';
-  static const _livingWorldTickMaxPeopleKey = 'living_world_tick_max_people';
-  static const _livingWorldTickMaxOpsKey = 'living_world_tick_max_ops';
-  static const _livingWorldTickRadiusHopsKey = 'living_world_tick_radius_hops';
+
+  /// Old Living World keys — accepted on restore so older backups still load,
+  /// then ignored (the feature was removed).
+  static const legacyIgnoredPreferenceKeys = <String>{
+    'living_world_update_policy',
+    'living_world_resolve_before_narrate',
+    'living_world_tick_trigger',
+    'living_world_tick_every_n',
+    'living_world_tick_max_people',
+    'living_world_tick_max_ops',
+    'living_world_tick_radius_hops',
+  };
 
   /// Preference keys included in a full-app backup (never the API key).
   static const backupPreferenceKeys = <String>[
@@ -544,13 +543,6 @@ class SettingsService {
     _contextSummarizeEveryKey,
     _contextKeepRecentKey,
     _favoriteModelsKey,
-    _livingWorldUpdatePolicyKey,
-    _livingWorldResolveBeforeNarrateKey,
-    _livingWorldTickTriggerKey,
-    _livingWorldTickEveryNKey,
-    _livingWorldTickMaxPeopleKey,
-    _livingWorldTickMaxOpsKey,
-    _livingWorldTickRadiusHopsKey,
   ];
 
   static const storedKeys = <String>[
@@ -1181,74 +1173,6 @@ class SettingsService {
     final parsed = double.tryParse(raw ?? '');
     if (parsed == null) return SamplingSettings.defaultPenalty;
     return parsed.clamp(-2.0, 2.0);
-  }
-
-  /// Living World after-turn write policy (Phase 5). Default = manual.
-  Future<LivingWorldUpdatePolicy> getLivingWorldUpdatePolicy() async {
-    final raw = await _storage.read(key: _livingWorldUpdatePolicyKey);
-    return LivingWorldUpdatePolicyX.fromStorage(raw);
-  }
-
-  Future<void> setLivingWorldUpdatePolicy(LivingWorldUpdatePolicy policy) async {
-    await _storage.write(
-      key: _livingWorldUpdatePolicyKey,
-      value: policy.storageValue,
-    );
-  }
-
-  /// Phase 6: resolve/persist safe canon before streaming the reply (opt-in).
-  ///
-  /// Default off — costs an extra API call. Needs a non-manual play policy to
-  /// actually write; otherwise it no-ops and Phase 5 after-turn still applies.
-  Future<bool> getLivingWorldResolveBeforeNarrate() async {
-    final raw = await _storage.read(key: _livingWorldResolveBeforeNarrateKey);
-    return raw == '1' || raw == 'true';
-  }
-
-  Future<void> setLivingWorldResolveBeforeNarrate(bool enabled) async {
-    await _storage.write(
-      key: _livingWorldResolveBeforeNarrateKey,
-      value: enabled ? '1' : '0',
-    );
-  }
-
-  /// Phase 8 near-scene tick settings (default = off / manual Advance only).
-  Future<LivingWorldTickSettings> getLivingWorldTickSettings() async {
-    final triggerRaw = await _storage.read(key: _livingWorldTickTriggerKey);
-    final everyNRaw = await _storage.read(key: _livingWorldTickEveryNKey);
-    final maxPeopleRaw =
-        await _storage.read(key: _livingWorldTickMaxPeopleKey);
-    final maxOpsRaw = await _storage.read(key: _livingWorldTickMaxOpsKey);
-    final radiusRaw = await _storage.read(key: _livingWorldTickRadiusHopsKey);
-    return LivingWorldTickSettings(
-      trigger: LivingWorldTickTriggerX.fromStorage(triggerRaw),
-      everyN: int.tryParse(everyNRaw ?? '') ??
-          LivingWorldTickSettings.defaults.everyN,
-      maxPeople: int.tryParse(maxPeopleRaw ?? '') ??
-          LivingWorldTickSettings.defaults.maxPeople,
-      maxOps: int.tryParse(maxOpsRaw ?? '') ??
-          LivingWorldTickSettings.defaults.maxOps,
-      radiusHops: int.tryParse(radiusRaw ?? '') ??
-          LivingWorldTickSettings.defaults.radiusHops,
-    ).clamped();
-  }
-
-  Future<void> setLivingWorldTickSettings(LivingWorldTickSettings settings) async {
-    final s = settings.clamped();
-    await _storage.write(
-      key: _livingWorldTickTriggerKey,
-      value: s.trigger.storageValue,
-    );
-    await _storage.write(key: _livingWorldTickEveryNKey, value: '${s.everyN}');
-    await _storage.write(
-      key: _livingWorldTickMaxPeopleKey,
-      value: '${s.maxPeople}',
-    );
-    await _storage.write(key: _livingWorldTickMaxOpsKey, value: '${s.maxOps}');
-    await _storage.write(
-      key: _livingWorldTickRadiusHopsKey,
-      value: '${s.radiusHops}',
-    );
   }
 
   double? _parseOptionalDouble(String? raw, double min, double max) {

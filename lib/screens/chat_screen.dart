@@ -33,18 +33,6 @@ import '../services/group_beat_codec.dart';
 import '../services/group_reply_service.dart';
 import '../services/group_speaker_inference.dart';
 import '../services/lorebook_service.dart';
-import '../models/living_world.dart';
-import '../models/living_world_update_policy.dart';
-import '../models/turn_resolution.dart';
-import '../services/living_world_log_service.dart';
-import '../services/living_world_pending_service.dart';
-import '../services/living_world_retriever.dart';
-import '../services/living_world_service.dart';
-import '../services/living_world_simulator.dart';
-import '../services/living_world_systems_service.dart';
-import '../services/living_world_turn_resolver.dart';
-import '../services/living_world_undo_service.dart';
-import '../services/living_world_update_service.dart';
 import '../services/presence_service.dart';
 import '../services/director_service.dart';
 import '../services/narrator_service.dart';
@@ -58,9 +46,6 @@ import '../services/reply_rewrite_service.dart';
 import '../services/settings_service.dart';
 import '../services/speaker_prefix.dart';
 import '../services/world_info_service.dart';
-import '../widgets/living_world_log_sheet.dart';
-import '../widgets/living_world_picker.dart';
-import '../widgets/living_world_update_sheet.dart';
 import '../models/world_workshop.dart';
 import '../models/workshop_chat_import_options.dart';
 import '../services/world_workshop_service.dart';
@@ -73,8 +58,6 @@ import '../widgets/chat_composer_tools_sheet.dart';
 import '../widgets/chat_overrides_sheet.dart';
 import '../widgets/chat_hero_portrait.dart';
 import '../widgets/chat_image_background.dart';
-import '../widgets/living_world_person_card_sheet.dart';
-import '../services/living_world_card_bridge.dart';
 import '../widgets/anima_avatar.dart';
 import '../widgets/greeting_picker.dart';
 import '../widgets/group_beat_bubble.dart';
@@ -142,39 +125,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   static const _tokenService = CharacterTokenService();
   final _transcriptCodec = ChatTranscriptCodec();
   final _draftService = ComposerDraftService();
-  final _livingWorldService = LivingWorldService();
-  final _livingWorldUndo = LivingWorldUndoService();
-  final _livingWorldLog = LivingWorldLogService();
-  final _livingWorldPending = LivingWorldPendingService();
-  static const _livingWorldRetriever = LivingWorldRetriever();
-  static const _livingWorldUpdates = LivingWorldUpdateService();
-  static const _livingWorldResolver = LivingWorldTurnResolver();
-  static const _livingWorldSystems = LivingWorldSystemsService();
-  static const _livingWorldSimulator = LivingWorldSimulator();
-  bool _livingWorldAfterTurnBusy = false;
-  bool _livingWorldTickBusy = false;
-
-  /// Phase 11: one after-turn+tick pipeline at a time; extra turns queue once.
-  bool _livingWorldPipelineBusy = false;
-  bool _livingWorldPipelineQueued = false;
-
-  /// Bumped on leave so in-flight after-turn work stops applying UI/saves.
-  int _livingWorldEpoch = 0;
-
-  /// Phase 6: set when resolve-before-narrate ran this stream (skip re-propose).
-  bool _livingWorldResolvedThisTurn = false;
-
-  /// Relationships deferred from resolve-before for after-turn review.
-  List<LivingWorldCanonUpdate> _pendingLivingWorldRisky = const [];
-
-  /// Injected into the same reply's prompt after engine apply.
-  String? _livingWorldAsOfTurnBlock;
-
-  /// Phase 11 ambient chip — safe facts just auto-saved (tap → World log).
-  int _ambientWorldUpdatedCount = 0;
-
-  /// Phase 11 — disk-backed risky ops waiting for Review pending….
-  int _pendingWorldReviewCount = 0;
   static const _replyRewrite = ReplyRewriteService();
   static const _narrator = NarratorService();
   static const _director = DirectorService();
@@ -265,8 +215,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   ChatSession? _session;
   Persona? _persona;
 
-  /// Cached title for the chat's bound Living World (menu label).
-  String? _boundWorldTitle;
   Timer? _draftSaveTimer;
   Timer? _toastTimer;
   OverlayEntry? _toastEntry;
@@ -518,46 +466,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     });
     _scrollToBottom(jump: true);
     unawaited(_syncChatBackgroundPath());
-    unawaited(_refreshBoundWorldTitle());
-  }
-
-  Future<void> _refreshBoundWorldTitle() async {
-    final id = _session?.worldId?.trim();
-    if (id == null || id.isEmpty) {
-      if (mounted) {
-        setState(() {
-          _boundWorldTitle = null;
-          _pendingWorldReviewCount = 0;
-          _ambientWorldUpdatedCount = 0;
-        });
-      }
-      return;
-    }
-    final world = await _livingWorldService.getById(id);
-    final pending = await _livingWorldPending.count(id);
-    if (!mounted) return;
-    setState(() {
-      _boundWorldTitle = world?.title;
-      _pendingWorldReviewCount = pending;
-    });
-  }
-
-  bool _livingWorldJobAlive(int epoch) => mounted && epoch == _livingWorldEpoch;
-
-  void _noteWorldUpdated(int count) {
-    if (!mounted || count <= 0) return;
-    setState(() => _ambientWorldUpdatedCount = count);
-  }
-
-  Future<void> _refreshPendingWorldReviewCount() async {
-    final id = _session?.worldId?.trim();
-    if (id == null || id.isEmpty) {
-      if (mounted) setState(() => _pendingWorldReviewCount = 0);
-      return;
-    }
-    final n = await _livingWorldPending.count(id);
-    if (!mounted) return;
-    setState(() => _pendingWorldReviewCount = n);
   }
 
   @override
@@ -1905,8 +1813,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     });
     _scrollToBottom(jump: true);
     await _persist();
-    // Phase 7: Narrator leavers/arrivals → validated who/where (non-manual).
-    unawaited(_syncLivingWorldPresenceFromNarrator());
     if (!autoReply) {
       _refocusComposer();
       return;
@@ -1917,85 +1823,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       speakingAs: speaker,
       advanceGroupSpeaker: _shouldAdvanceGroupSpeaker,
     );
-  }
-
-  /// Phase 7: after a Narrator card, sync liveState who/where from the scene.
-  Future<void> _syncLivingWorldPresenceFromNarrator() async {
-    if (!mounted) return;
-    final session = _session;
-    final worldId = session?.worldId?.trim();
-    if (session == null || worldId == null || worldId.isEmpty) return;
-
-    try {
-      final policy = await widget.settingsService.getLivingWorldUpdatePolicy();
-      if (policy == LivingWorldUpdatePolicy.manual) return;
-
-      final world = await _livingWorldService.getById(worldId);
-      if (world == null || !mounted) return;
-
-      // Parse presence using world people names (plus chat cast / you).
-      final worldCast = [
-        for (final p in world.people) Character(id: p.id, name: p.name),
-        ..._participants,
-      ];
-      final snapshot = _presence.sceneSnapshotFromLatestNarrator(
-        messages: _messages,
-        participants: worldCast,
-        userName: _userName,
-      );
-
-      final ops = _livingWorldSystems.presenceOpsFromNarrator(
-        world: world,
-        presentNames: snapshot.present,
-        arrivingNames: snapshot.arriving,
-      );
-      final departedIds = _livingWorldSystems.resolveDepartedPersonIds(
-        world: world,
-        departedNames: snapshot.departed,
-      );
-      if (ops.isEmpty && departedIds.isEmpty) return;
-
-      await _livingWorldUndo.pushSnapshot(world);
-      var next = world;
-      if (ops.isNotEmpty) {
-        next = _livingWorldUpdates.applyUpdates(next, ops, runSystems: false);
-      }
-      next = _livingWorldSystems.clearDeparted(
-        world: next,
-        departedPersonIds: departedIds,
-      );
-      await _livingWorldService.save(next);
-
-      String personName(String id) {
-        for (final p in world.people) {
-          if (p.id == id) return p.name;
-        }
-        return id;
-      }
-
-      final clearSummaries = <LivingWorldCanonUpdate>[
-        for (final id in departedIds)
-          LivingWorldCanonUpdate(
-            op: LivingWorldUpdateOp.setPersonLocation,
-            summary: '${personName(id)} left (cleared location)',
-            personId: id,
-          ),
-      ];
-      await _livingWorldLog.append(
-        TurnResolution(
-          worldId: world.id,
-          at: DateTime.now(),
-          kind: TurnResolutionKind.presenceSync,
-          proposed: [...ops, ...clearSummaries],
-          applied: [...ops, ...clearSummaries],
-          chatId: session.id,
-        ),
-      );
-      if (!mounted) return;
-      setState(() => _boundWorldTitle = next.title);
-    } catch (_) {
-      // Soft-fail — Narrator post already succeeded.
-    }
   }
 
   void _toggleDirectorMode() {
@@ -2204,8 +2031,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _scrollToBottom(jump: true);
 
       unawaited(_maybeAutoSummarize());
-      // Phase 10: group-react must not skip Living World after-turn / ticks.
-      unawaited(_afterLivingWorldTurnPipeline());
     } on NanoGptCancelledException {
       // Ignore.
     } on NanoGptException catch (error) {
@@ -2297,7 +2122,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       await _persist();
       _scrollToBottom(jump: true);
       unawaited(_maybeAutoSummarize());
-      unawaited(_afterLivingWorldTurnPipeline());
     } on NanoGptCancelledException {
       // Ignore.
     } on NanoGptException catch (error) {
@@ -2460,17 +2284,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       globalPostHistory: globalPrompts.postHistoryInstructions,
     );
 
-    final historyEnd = historyEndExclusive ?? _messages.length;
-    final recentForWorld = historyEnd <= 0
-        ? const <ChatMessage>[]
-        : _messages.sublist(0, historyEnd);
-    final livingWorldBlock =
-        await _livingWorldPromptBlock(
-          speaker: primary,
-          recentForScan: recentForWorld,
-        ) ??
-        '';
-
     return _groupReply.buildBeatMessages(
       speakers: speakers,
       allInChat: _participants,
@@ -2498,7 +2311,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           ) ??
           '',
       priorBeatToAvoid: priorBeatToAvoid,
-      livingWorldBlock: livingWorldBlock,
     );
   }
 
@@ -2756,764 +2568,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     await _persist();
   }
 
-  Future<void> _pickLivingWorld() async {
-    final session = _session;
-    if (session == null || _busy) return;
-    final worlds = await _livingWorldService.listSummaries();
-    if (!mounted) return;
-    final result = await pickLivingWorld(
-      context,
-      worlds: worlds,
-      currentWorldId: session.worldId,
-    );
-    if (result == null || !mounted) return;
-
-    try {
-      if (result.importFile) {
-        final pick = await FilePicker.platform.pickFiles(
-          type: FileType.custom,
-          allowedExtensions: const ['json'],
-          withData: true,
-        );
-        if (pick == null || !mounted) return;
-        final file = pick.files.single;
-        final bytes = file.bytes;
-        if (bytes == null) {
-          setState(() => _error = 'Could not read that world file.');
-          return;
-        }
-        final world = await _livingWorldService.importFromBytes(
-          bytes,
-          fileName: file.name,
-        );
-        setState(() {
-          _session = session.copyWith(worldId: world.id);
-          _boundWorldTitle = world.title;
-          _error = null;
-        });
-        await _persist();
-        return;
-      }
-
-      if (result.createEmpty) {
-        final world = await _livingWorldService.createEmpty(title: 'New world');
-        setState(() {
-          _session = session.copyWith(worldId: world.id);
-          _boundWorldTitle = world.title;
-          _error = null;
-        });
-        await _persist();
-        return;
-      }
-
-      if (result.createSample) {
-        final world = await _livingWorldService.save(buildSampleHarborWorld());
-        setState(() {
-          _session = session.copyWith(worldId: world.id);
-          _boundWorldTitle = world.title;
-          _error = null;
-        });
-        await _persist();
-        return;
-      }
-
-      if (result.clearBinding) {
-        setState(() {
-          _session = session.copyWith(clearWorldId: true);
-          _boundWorldTitle = null;
-        });
-        await _persist();
-        return;
-      }
-
-      final id = result.worldId?.trim();
-      if (id == null || id.isEmpty) return;
-      final world = await _livingWorldService.getById(id);
-      setState(() {
-        _session = session.copyWith(worldId: id);
-        _boundWorldTitle = world?.title;
-      });
-      await _persist();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _error = 'Living World: $e');
-    }
-  }
-
-  /// Retrieve a small world pack when this chat is bound (solo or group).
-  Future<String?> _livingWorldPromptBlock({
-    required Character speaker,
-    required List<ChatMessage> recentForScan,
-  }) async {
-    final worldId = _session?.worldId?.trim();
-    if (worldId == null || worldId.isEmpty) return null;
-    final world = await _livingWorldService.getById(worldId);
-    if (world == null) return null;
-    final pack = _livingWorldRetriever.retrieve(
-      world: world,
-      recentMessages: recentForScan,
-      speakerName: speaker.name,
-      userName: _userName,
-      speakerCharacterId: speaker.id,
-      castNames: _participants.map((c) => c.name).toList(),
-    );
-    final block = _livingWorldRetriever.formatForPrompt(pack);
-    return block.trim().isEmpty ? null : block;
-  }
-
-  /// Phase 6: resolve safe facts before the reply streams (Living mode).
-  ///
-  /// On success, notebook + as-of-turn block feed the same reply's pack.
-  /// On failure / off / manual policy: no-op; Phase 5 after-turn still runs.
-  Future<void> _resolveLivingWorldBeforeNarrate({
-    required Character speaker,
-  }) async {
-    _livingWorldResolvedThisTurn = false;
-    _pendingLivingWorldRisky = const [];
-    _livingWorldAsOfTurnBlock = null;
-
-    final session = _session;
-    final worldId = session?.worldId?.trim();
-    if (session == null || worldId == null || worldId.isEmpty) return;
-    if (!_hasApiKey) return;
-
-    final enabled = await widget.settingsService
-        .getLivingWorldResolveBeforeNarrate();
-    if (!enabled) return;
-
-    final policy = await widget.settingsService.getLivingWorldUpdatePolicy();
-    if (policy == LivingWorldUpdatePolicy.manual) return;
-
-    try {
-      final world = await _livingWorldService.getById(worldId);
-      if (world == null || !mounted) return;
-
-      final proposed = await _proposeLivingWorldUpdates(
-        world: world,
-        speakerName: speaker.name,
-      );
-      if (!mounted) return;
-
-      final result = _livingWorldResolver.resolveBeforeNarrate(
-        world: world,
-        proposed: proposed,
-        policy: policy,
-        chatId: session.id,
-      );
-      _pendingLivingWorldRisky = result.resolution.deferred;
-      _livingWorldResolvedThisTurn = true;
-
-      if (result.resolution.applied.isNotEmpty) {
-        await _livingWorldUndo.pushSnapshot(world);
-        await _livingWorldService.save(result.world);
-        _livingWorldAsOfTurnBlock = result.resolution.asOfTurnBlock;
-        if (mounted) {
-          setState(() => _boundWorldTitle = result.world.title);
-          _noteWorldUpdated(result.resolution.applied.length);
-        }
-      }
-      await _livingWorldLog.append(result.resolution);
-    } catch (e) {
-      // Soft-fail: stream continues; Phase 5 after-turn remains the fallback.
-      _livingWorldResolvedThisTurn = false;
-      _pendingLivingWorldRisky = const [];
-      _livingWorldAsOfTurnBlock = null;
-      debugPrint('Living World resolve-before-narrate skipped: $e');
-      final id = _session?.worldId?.trim();
-      if (id != null && id.isNotEmpty) {
-        await _livingWorldLog.append(
-          TurnResolution(
-            worldId: id,
-            at: DateTime.now(),
-            kind: TurnResolutionKind.resolveBeforeNarrate,
-            error: '$e',
-            chatId: _session?.id,
-          ),
-        );
-      }
-    }
-  }
-
-  /// Propose Living World updates with one JSON-retry if the model returns prose.
-  Future<List<LivingWorldCanonUpdate>> _proposeLivingWorldUpdates({
-    required LivingWorld world,
-    required String speakerName,
-  }) async {
-    final model = await widget.settingsService.getModel();
-    final sampling = (await widget.settingsService.getSampling()).copyWith(
-      temperature: 0.2,
-      maxTokens: 4096,
-    );
-    var messages = _livingWorldUpdates.buildProposeMessages(
-      world: world,
-      recentMessages: _messages,
-      userName: _userName,
-      speakerName: speakerName,
-    );
-    FormatException? lastFormat;
-    for (var attempt = 0; attempt < 2; attempt++) {
-      final raw = await widget.nanoGptService.complete(
-        model: model,
-        messages: messages,
-        sampling: sampling,
-        timeout: const Duration(minutes: 3),
-      );
-      try {
-        return _livingWorldUpdates.parseProposal(raw, world: world);
-      } on FormatException catch (e) {
-        lastFormat = e;
-        if (attempt == 0) {
-          messages = [
-            ...messages,
-            {
-              'role': 'user',
-              'content':
-                  'Your previous reply was not valid Living World update JSON '
-                  '($e). Reply again with ONLY a JSON object shaped like '
-                  '{"updates":[{"op":"addEvent","text":"..."}, ...]} — no prose, '
-                  'no markdown fences.',
-            },
-          ];
-        }
-      }
-    }
-    throw lastFormat ??
-        const FormatException(
-          'Could not parse Living World updates from the model.',
-        );
-  }
-
-  /// Phase 2: propose canon updates from recent chat → review → save.
-  Future<void> _updateLivingWorldFromChat() async {
-    final session = _session;
-    if (session == null || _busy) return;
-    final worldId = session.worldId?.trim();
-    if (worldId == null || worldId.isEmpty) {
-      setState(() => _error = 'Bind a Living World first (⋮ → Living World).');
-      return;
-    }
-    if (!_hasApiKey) {
-      setState(() => _error = 'Add your NanoGPT API key in Settings first.');
-      return;
-    }
-
-    final world = await _livingWorldService.getById(worldId);
-    if (world == null) {
-      if (!mounted) return;
-      setState(() => _error = 'That Living World file is missing.');
-      return;
-    }
-
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-
-    try {
-      final proposed = await _proposeLivingWorldUpdates(
-        world: world,
-        speakerName: _character?.name ?? '',
-      );
-      if (!mounted) return;
-
-      if (proposed.isEmpty) {
-        setState(() {
-          _busy = false;
-          _error = null;
-        });
-        _showLocalToast('No new Living World facts found in recent chat.');
-        return;
-      }
-
-      setState(() => _busy = false);
-      final selected = await showLivingWorldUpdateSheet(
-        context: context,
-        updates: proposed,
-        title: 'Update ${world.title}',
-      );
-      if (selected == null || selected.isEmpty || !mounted) return;
-
-      setState(() => _busy = true);
-      await _livingWorldUndo.pushSnapshot(world);
-      final updated = _livingWorldUpdates.applyUpdates(world, selected);
-      await _livingWorldService.save(updated);
-      await _livingWorldLog.append(
-        TurnResolution(
-          worldId: world.id,
-          at: DateTime.now(),
-          kind: TurnResolutionKind.manual,
-          proposed: proposed,
-          applied: selected,
-          chatId: session.id,
-        ),
-      );
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-        _boundWorldTitle = updated.title;
-        _error = null;
-      });
-      _showLocalToast(
-        'Saved ${selected.length} Living World '
-        '${selected.length == 1 ? 'update' : 'updates'}.',
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-        _error = 'Living World update: $e';
-      });
-    }
-  }
-
-  /// Phase 5 then Phase 8: after-turn extract, then optional near-scene tick.
-  ///
-  /// Phase 11: never blocks typing; overlapping turns queue one extra run;
-  /// leave-chat bumps [_livingWorldEpoch] so stale work stops applying.
-  Future<void> _afterLivingWorldTurnPipeline() async {
-    if (_livingWorldPipelineBusy) {
-      _livingWorldPipelineQueued = true;
-      return;
-    }
-    _livingWorldPipelineBusy = true;
-    final epoch = _livingWorldEpoch;
-    try {
-      do {
-        _livingWorldPipelineQueued = false;
-        if (!_livingWorldJobAlive(epoch)) return;
-        await _maybeLivingWorldAfterTurn();
-        if (!_livingWorldJobAlive(epoch)) return;
-        await _maybeLivingWorldNearSceneTick(automatic: true);
-      } while (_livingWorldPipelineQueued && _livingWorldJobAlive(epoch));
-    } finally {
-      _livingWorldPipelineBusy = false;
-    }
-  }
-
-  /// Phase 8: tiny near-scene tick around the active place (rules-only).
-  ///
-  /// Automatic ticks respect Settings trigger (off / after turn / every N).
-  /// Manual Advance always plans a tick when the chat is bound.
-  Future<void> _maybeLivingWorldNearSceneTick({required bool automatic}) async {
-    if (!_livingWorldJobAlive(_livingWorldEpoch) || _livingWorldTickBusy) {
-      return;
-    }
-    final epoch = _livingWorldEpoch;
-    final session = _session;
-    final worldId = session?.worldId?.trim();
-    if (session == null || worldId == null || worldId.isEmpty) return;
-
-    final tickSettings = await widget.settingsService
-        .getLivingWorldTickSettings();
-    if (!_livingWorldJobAlive(epoch)) return;
-    if (automatic) {
-      final assistantCount = _messages
-          .where((m) => m.isAssistant || m.isGroupBeat)
-          .length;
-      if (!tickSettings.shouldAutoTick(assistantReplyCount: assistantCount)) {
-        return;
-      }
-    }
-
-    _livingWorldTickBusy = true;
-    try {
-      final world = await _livingWorldService.getById(worldId);
-      if (world == null || !_livingWorldJobAlive(epoch)) return;
-
-      final plan = _livingWorldSimulator.planTick(
-        world,
-        settings: tickSettings,
-      );
-      if (plan.isEmpty || !_livingWorldJobAlive(epoch)) return;
-
-      List<LivingWorldCanonUpdate> selected;
-      if (automatic) {
-        // Auto ticks only apply safe ops (rules never emit relationships).
-        selected = plan.ops.where((u) => u.isSafeForAutoApply).toList();
-      } else {
-        if (!mounted || !_livingWorldJobAlive(epoch)) return;
-        final reviewed = await showLivingWorldUpdateSheet(
-          context: context,
-          updates: plan.ops,
-          title: 'Advance a beat — ${world.title}',
-        );
-        if (reviewed == null ||
-            reviewed.isEmpty ||
-            !_livingWorldJobAlive(epoch)) {
-          return;
-        }
-        selected = reviewed;
-      }
-      if (selected.isEmpty) return;
-
-      await _livingWorldUndo.pushSnapshot(world);
-      if (!_livingWorldJobAlive(epoch)) return;
-      final updated = _livingWorldUpdates.applyUpdates(world, selected);
-      await _livingWorldService.save(updated);
-      await _livingWorldLog.append(
-        TurnResolution(
-          worldId: world.id,
-          at: DateTime.now(),
-          kind: TurnResolutionKind.nearSceneTick,
-          proposed: plan.ops,
-          applied: selected,
-          chatId: session.id,
-        ),
-      );
-      if (!_livingWorldJobAlive(epoch)) return;
-      setState(() => _boundWorldTitle = updated.title);
-      _noteWorldUpdated(selected.length);
-      if (!automatic) {
-        _showLocalToast(
-          'Advanced world beat '
-          '(${selected.length} '
-          '${selected.length == 1 ? 'change' : 'changes'}).',
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      if (automatic) {
-        debugPrint('Living World near-scene tick skipped: $e');
-      } else {
-        setState(() => _error = 'Living World beat: $e');
-      }
-    } finally {
-      _livingWorldTickBusy = false;
-    }
-  }
-
-  Future<void> _advanceLivingWorldBeat() async {
-    if (_busy) return;
-    final worldId = _session?.worldId?.trim();
-    if (worldId == null || worldId.isEmpty) {
-      setState(() => _error = 'Bind a Living World first (⋮ → Living World).');
-      return;
-    }
-    await _maybeLivingWorldNearSceneTick(automatic: false);
-  }
-
-  /// Phase 5: after a successful reply, propose / auto-apply per app policy.
-  ///
-  /// When Phase 6 resolve-before already ran, skip a second propose call and
-  /// enqueue deferred relationship ops for one-tap Review pending… (Phase 11).
-  Future<void> _maybeLivingWorldAfterTurn() async {
-    if (!_livingWorldJobAlive(_livingWorldEpoch) || _livingWorldAfterTurnBusy) {
-      return;
-    }
-    final epoch = _livingWorldEpoch;
-    final session = _session;
-    final worldId = session?.worldId?.trim();
-    if (session == null || worldId == null || worldId.isEmpty) return;
-    if (!_hasApiKey) return;
-
-    final policy = await widget.settingsService.getLivingWorldUpdatePolicy();
-    if (!_livingWorldJobAlive(epoch)) return;
-    if (policy == LivingWorldUpdatePolicy.manual) {
-      _livingWorldResolvedThisTurn = false;
-      _pendingLivingWorldRisky = const [];
-      _livingWorldAsOfTurnBlock = null;
-      return;
-    }
-
-    _livingWorldAfterTurnBusy = true;
-    try {
-      // Phase 6 already resolved this turn — queue deferred risky ops (no modal).
-      if (_livingWorldResolvedThisTurn) {
-        final deferred = List<LivingWorldCanonUpdate>.from(
-          _pendingLivingWorldRisky,
-        );
-        _livingWorldResolvedThisTurn = false;
-        _pendingLivingWorldRisky = const [];
-        _livingWorldAsOfTurnBlock = null;
-        if (deferred.isEmpty || !_livingWorldJobAlive(epoch)) return;
-
-        await _livingWorldPending.enqueue(worldId, deferred);
-        if (!_livingWorldJobAlive(epoch)) return;
-        await _refreshPendingWorldReviewCount();
-        _showLocalToast(
-          '${deferred.length} relationship '
-          '${deferred.length == 1 ? 'change' : 'changes'} '
-          'waiting — tap Review pending.',
-        );
-        return;
-      }
-
-      final world = await _livingWorldService.getById(worldId);
-      if (world == null || !_livingWorldJobAlive(epoch)) return;
-
-      final proposed = await _proposeLivingWorldUpdates(
-        world: world,
-        speakerName: _character?.name ?? '',
-      );
-      if (!_livingWorldJobAlive(epoch)) return;
-      if (proposed.isEmpty) return;
-
-      if (policy == LivingWorldUpdatePolicy.proposeAfterTurn) {
-        if (!mounted || !_livingWorldJobAlive(epoch)) return;
-        final selected = await showLivingWorldUpdateSheet(
-          context: context,
-          updates: proposed,
-          title: 'World updates — ${world.title}',
-        );
-        if (selected == null ||
-            selected.isEmpty ||
-            !_livingWorldJobAlive(epoch)) {
-          return;
-        }
-        await _livingWorldUndo.pushSnapshot(world);
-        final updated = _livingWorldUpdates.applyUpdates(world, selected);
-        await _livingWorldService.save(updated);
-        await _livingWorldLog.append(
-          TurnResolution(
-            worldId: world.id,
-            at: DateTime.now(),
-            kind: TurnResolutionKind.afterTurn,
-            proposed: proposed,
-            applied: selected,
-            chatId: session.id,
-          ),
-        );
-        if (!_livingWorldJobAlive(epoch)) return;
-        setState(() => _boundWorldTitle = updated.title);
-        _noteWorldUpdated(selected.length);
-        _showLocalToast(
-          'Saved ${selected.length} Living World '
-          '${selected.length == 1 ? 'update' : 'updates'}.',
-        );
-        return;
-      }
-
-      // autoSafe — apply safe quietly; enqueue risky for Review pending (no modal).
-      final parts = _livingWorldUpdates.partitionForAutoSafe(proposed);
-      var working = world;
-      if (parts.safe.isNotEmpty) {
-        await _livingWorldUndo.pushSnapshot(working);
-        if (!_livingWorldJobAlive(epoch)) return;
-        working = _livingWorldUpdates.applyUpdates(working, parts.safe);
-        await _livingWorldService.save(working);
-        await _livingWorldLog.append(
-          TurnResolution(
-            worldId: working.id,
-            at: DateTime.now(),
-            kind: TurnResolutionKind.afterTurn,
-            proposed: proposed,
-            applied: parts.safe,
-            deferred: parts.risky,
-            chatId: session.id,
-          ),
-        );
-        if (!_livingWorldJobAlive(epoch)) return;
-        setState(() => _boundWorldTitle = working.title);
-        _noteWorldUpdated(parts.safe.length);
-      }
-      if (parts.risky.isEmpty || !_livingWorldJobAlive(epoch)) return;
-      await _livingWorldPending.enqueue(worldId, parts.risky);
-      if (!_livingWorldJobAlive(epoch)) return;
-      await _refreshPendingWorldReviewCount();
-      if (parts.safe.isEmpty) {
-        _showLocalToast(
-          '${parts.risky.length} relationship '
-          '${parts.risky.length == 1 ? 'change' : 'changes'} '
-          'waiting — tap Review pending.',
-        );
-      }
-    } catch (e) {
-      // Soft-fail: play continues; owner can use manual Update world…
-      if (!mounted) return;
-      debugPrint('Living World after-turn skipped: $e');
-    } finally {
-      _livingWorldAfterTurnBusy = false;
-      _livingWorldResolvedThisTurn = false;
-      _pendingLivingWorldRisky = const [];
-      _livingWorldAsOfTurnBlock = null;
-    }
-  }
-
-  /// Phase 11: one-tap review of disk-backed pending (usually relationships).
-  Future<void> _reviewPendingWorldChanges() async {
-    final session = _session;
-    final worldId = session?.worldId?.trim();
-    if (session == null || worldId == null || worldId.isEmpty || _busy) return;
-
-    final pending = await _livingWorldPending.list(worldId);
-    if (pending.isEmpty) {
-      await _refreshPendingWorldReviewCount();
-      if (!mounted) return;
-      _showLocalToast('No pending world changes.');
-      return;
-    }
-    final world = await _livingWorldService.getById(worldId);
-    if (world == null || !mounted) return;
-
-    final selected = await showLivingWorldUpdateSheet(
-      context: context,
-      updates: pending,
-      title: 'Review pending — ${world.title}',
-    );
-    if (selected == null || !mounted) return;
-    if (selected.isEmpty) {
-      _showLocalToast('Nothing selected — pending changes kept.');
-      return;
-    }
-
-    setState(() => _busy = true);
-    try {
-      await _livingWorldUndo.pushSnapshot(world);
-      final updated = _livingWorldUpdates.applyUpdates(world, selected);
-      await _livingWorldService.save(updated);
-      await _livingWorldLog.append(
-        TurnResolution(
-          worldId: world.id,
-          at: DateTime.now(),
-          kind: TurnResolutionKind.afterTurn,
-          proposed: pending,
-          applied: selected,
-          chatId: session.id,
-        ),
-      );
-      await _livingWorldPending.removeApplied(worldId, selected);
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-        _boundWorldTitle = updated.title;
-      });
-      await _refreshPendingWorldReviewCount();
-      _noteWorldUpdated(selected.length);
-      _showLocalToast(
-        'Saved ${selected.length} pending '
-        '${selected.length == 1 ? 'update' : 'updates'}.',
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-        _error = 'Pending world review: $e';
-      });
-    }
-  }
-
-  Future<void> _undoLastLivingWorldUpdate() async {
-    final worldId = _session?.worldId?.trim();
-    if (worldId == null || worldId.isEmpty || _busy) return;
-    final can = await _livingWorldUndo.canUndo(worldId);
-    if (!can) {
-      if (!mounted) return;
-      _showLocalToast('Nothing to undo for this Living World yet.');
-      return;
-    }
-    setState(() => _busy = true);
-    try {
-      final restored = await _livingWorldUndo.undoLast(
-        worldService: _livingWorldService,
-        worldId: worldId,
-      );
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-        _boundWorldTitle = restored?.title;
-      });
-      _showLocalToast(
-        restored == null
-            ? 'Undo failed.'
-            : 'Reverted last Living World update pack.',
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-        _error = 'Living World undo: $e';
-      });
-    }
-  }
-
-  Future<void> _pickLivingWorldUpdatePolicy() async {
-    final current = await widget.settingsService.getLivingWorldUpdatePolicy();
-    var livingMode = await widget.settingsService
-        .getLivingWorldResolveBeforeNarrate();
-    if (!mounted) return;
-    final picked = await showModalBottomSheet<LivingWorldUpdatePolicy>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) {
-        final maxHeight = MediaQuery.sizeOf(context).height * 0.85;
-        return SafeArea(
-          child: StatefulBuilder(
-            builder: (context, setModalState) {
-              return ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: maxHeight),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            'Living World during play',
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                        ),
-                      ),
-                      for (final policy in LivingWorldUpdatePolicy.values)
-                        ListTile(
-                          leading: Icon(
-                            policy == current
-                                ? Icons.check_circle
-                                : Icons.circle_outlined,
-                          ),
-                          title: Text(policy.menuLabel),
-                          subtitle: Text(policy.helpText),
-                          onTap: () => Navigator.pop(context, policy),
-                        ),
-                      SwitchListTile(
-                        secondary: const Icon(Icons.sync_alt),
-                        title: const Text('Resolve before reply'),
-                        subtitle: const Text(
-                          'Living mode — Anima decides and saves safe facts first, '
-                          'then the character speaks from that truth (one extra '
-                          'API call; reply starts a bit later). Needs Propose or '
-                          'Auto-safe. Off = update after the reply only.',
-                        ),
-                        value: livingMode,
-                        onChanged: (v) async {
-                          await widget.settingsService
-                              .setLivingWorldResolveBeforeNarrate(v);
-                          setModalState(() => livingMode = v);
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        );
-      },
-    );
-    if (picked == null) return;
-    await widget.settingsService.setLivingWorldUpdatePolicy(picked);
-    if (!mounted) return;
-    _showLocalToast('Living World play mode: ${picked.shortLabel}');
-  }
-
-  Future<void> _showLivingWorldLog() async {
-    final worldId = _session?.worldId?.trim();
-    if (worldId == null || worldId.isEmpty) return;
-    final title = _boundWorldTitle?.trim().isNotEmpty == true
-        ? _boundWorldTitle!.trim()
-        : 'Living World';
-    if (!mounted) return;
-    await showLivingWorldLogSheet(
-      context: context,
-      worldId: worldId,
-      worldTitle: title,
-      logService: _livingWorldLog,
-    );
-  }
-
   Future<void> _editMemorySummary() async {
     final session = _session;
     if (session == null || _busy) return;
@@ -3632,15 +2686,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       memoryTokens = _contextService.estimateTokens(block);
     }
 
-    var livingWorldTokens = 0;
-    final worldBlock = await _livingWorldPromptBlock(
-      speaker: speaker,
-      recentForScan: historyForScan,
-    );
-    if (worldBlock != null && worldBlock.trim().isNotEmpty) {
-      livingWorldTokens = _contextService.estimateTokens(worldBlock);
-    }
-
     final contextSettings = await widget.settingsService.getContextSettings();
     final history = _contextService.selectHistory(
       messages: _messages,
@@ -3673,7 +2718,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         personaOnlyTokens +
         globalPromptTokens +
         loreTokens +
-        livingWorldTokens +
         memoryTokens +
         historyTokens +
         postHistoryTokens;
@@ -3691,7 +2735,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       historyTokens: historyTokens,
       postHistoryTokens: postHistoryTokens,
       estimatedSentTokens: estimatedSent,
-      livingWorldTokens: livingWorldTokens,
     );
   }
 
@@ -3789,12 +2832,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   )
                 else
                   const Text('World Info (this turn): none matched'),
-                if (breakdown.livingWorldTokens > 0)
-                  Text(
-                    'Living World pack: ~${ContextEstimate.formatTokenCount(breakdown.livingWorldTokens)} tokens',
-                  )
-                else if ((session.worldId ?? '').trim().isNotEmpty)
-                  const Text('Living World pack: bound, nothing retrieved'),
                 if (breakdown.personaTokens > 0)
                   Text(
                     'Persona + global prompts: ~${ContextEstimate.formatTokenCount(breakdown.personaTokens)} tokens',
@@ -4005,95 +3042,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       participants: participants,
       character: participants.isNotEmpty ? participants.first : fallback,
     );
-  }
-
-  Future<void> _updateCharacterFromLivingWorld() async {
-    if (_busy || _session == null) return;
-    final worldId = _session!.worldId?.trim() ?? '';
-    if (worldId.isEmpty) {
-      setState(() => _error = 'Bind a Living World first (⋮ → Living World).');
-      return;
-    }
-    if (!_hasApiKey) {
-      setState(() => _error = 'Add your NanoGPT API key in Settings first.');
-      return;
-    }
-    final world = await _livingWorldService.getById(worldId);
-    if (world == null) {
-      if (!mounted) return;
-      setState(() => _error = 'That Living World file is missing.');
-      return;
-    }
-
-    const bridge = LivingWorldCardBridge();
-    final options = <({Character character, WorldPerson person})>[];
-    for (final c in _participants) {
-      final person = bridge.findPersonForCharacter(world, c);
-      if (person != null) {
-        options.add((character: c, person: person));
-      }
-    }
-    if (!mounted) return;
-    if (options.isEmpty) {
-      _showLocalToast(
-        'No cast member is linked to a world person yet. '
-        'Open the world editor → person → Pick card… or Create character.',
-      );
-      return;
-    }
-
-    final picked =
-        await showModalBottomSheet<({Character character, WorldPerson person})>(
-          context: context,
-          showDragHandle: true,
-          builder: (context) {
-            return SafeArea(
-              child: ListView(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-                    child: Text(
-                      'Update character from world',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-                    child: Text(
-                      'Pull Living World arcs and relationships into a character '
-                      'card (review before save).',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ),
-                  for (final o in options)
-                    ListTile(
-                      title: Text(o.character.name),
-                      subtitle: Text(
-                        o.person.summary.trim().isEmpty
-                            ? 'World person: ${o.person.name}'
-                            : o.person.summary.trim(),
-                      ),
-                      onTap: () => Navigator.pop(context, o),
-                    ),
-                ],
-              ),
-            );
-          },
-        );
-    if (picked == null || !mounted) return;
-
-    final updated =
-        await LivingWorldPersonCardActions.refreshCharacterFromWorld(
-          context: context,
-          world: world,
-          person: picked.person,
-          existing: picked.character,
-          characterService: widget.characterService,
-          settingsService: widget.settingsService,
-          nanoGptService: widget.nanoGptService,
-        );
-    if (updated == null || !mounted) return;
-    await _refreshCastFromSession(_session!);
   }
 
   Future<void> _openChatOverrides() async {
@@ -4391,18 +3339,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       }
     }
 
-    final worldBlock = await _livingWorldPromptBlock(
-      speaker: character,
-      recentForScan: historyForScan,
-    );
-    if (worldBlock != null && worldBlock.isNotEmpty) {
-      msgs.add({'role': 'system', 'content': worldBlock});
-    }
-    final asOfTurn = _livingWorldAsOfTurnBlock?.trim();
-    if (asOfTurn != null && asOfTurn.isNotEmpty) {
-      msgs.add({'role': 'system', 'content': asOfTurn});
-    }
-
     final joinIndex = _joinIndexFor(character);
     if (joinIndex > 0) {
       final catchUp = _buildCatchUpBlock(joinIndex);
@@ -4679,9 +3615,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       if (!writingAsUser) {
         _bindPendingDirectorToAssistant(assistantId);
       }
-      // Phase 6: optional resolve → persist → narrate (before stream).
-      // Soft-fails to Phase 5 after-turn when off or on error.
-      await _resolveLivingWorldBeforeNarrate(speaker: speaker);
       final messages = await _buildApiMessages(
         excludeLastAssistant: excludeLastAssistant,
         allowGreetingNudge: allowGreetingNudge,
@@ -4782,7 +3715,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       setState(() => _busy = false);
       await _persist();
       unawaited(_maybeAutoSummarize());
-      unawaited(_afterLivingWorldTurnPipeline());
       _refocusComposer();
     } on NanoGptCancelledException {
       if (!mounted) return;
@@ -5228,8 +4160,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   @override
   void dispose() {
-    // Invalidate in-flight Living World after-turn / tick work (Phase 11).
-    _livingWorldEpoch++;
     WidgetsBinding.instance.removeObserver(this);
     widget.nanoGptService.cancelActiveStream();
     _draftSaveTimer?.cancel();
@@ -5302,20 +4232,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               if (value == 'api') _openApiSettings();
               if (value == 'persona') _pickPersona();
               if (value == 'authors_note') _editAuthorsNote();
-              if (value == 'living_world') _pickLivingWorld();
-              if (value == 'living_world_update') _updateLivingWorldFromChat();
-              if (value == 'living_world_tick') _advanceLivingWorldBeat();
-              if (value == 'living_world_policy') {
-                _pickLivingWorldUpdatePolicy();
-              }
-              if (value == 'living_world_pending') {
-                _reviewPendingWorldChanges();
-              }
-              if (value == 'living_world_log') _showLivingWorldLog();
-              if (value == 'living_world_undo') _undoLastLivingWorldUpdate();
-              if (value == 'update_char_world') {
-                _updateCharacterFromLivingWorld();
-              }
               if (value == 'chat_copies') _openChatOverrides();
               if (value == 'memory') _editMemorySummary();
               if (value == 'summarize') _summarizeNow();
@@ -5343,51 +4259,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 value: "authors_note",
                 child: Text("Author's Note"),
               ),
-              PopupMenuItem(
-                value: 'living_world',
-                child: Text(
-                  livingWorldMenuLabel(_session?.worldId, _boundWorldTitle),
-                ),
-              ),
-              if (_session?.hasLivingWorld ?? false)
-                const PopupMenuItem(
-                  value: 'living_world_update',
-                  child: Text('Update world from chat…'),
-                ),
-              if (_session?.hasLivingWorld ?? false)
-                const PopupMenuItem(
-                  value: 'update_char_world',
-                  child: Text('Update character from world…'),
-                ),
-              if (_session?.hasLivingWorld ?? false)
-                const PopupMenuItem(
-                  value: 'living_world_tick',
-                  child: Text('Advance world a beat…'),
-                ),
-              if (_session?.hasLivingWorld ?? false)
-                const PopupMenuItem(
-                  value: 'living_world_policy',
-                  child: Text('World play mode…'),
-                ),
-              if ((_session?.hasLivingWorld ?? false) &&
-                  _pendingWorldReviewCount > 0)
-                PopupMenuItem(
-                  value: 'living_world_pending',
-                  child: Text(
-                    'Review pending world changes '
-                    '($_pendingWorldReviewCount)',
-                  ),
-                ),
-              if (_session?.hasLivingWorld ?? false)
-                const PopupMenuItem(
-                  value: 'living_world_log',
-                  child: Text('World log…'),
-                ),
-              if (_session?.hasLivingWorld ?? false)
-                const PopupMenuItem(
-                  value: 'living_world_undo',
-                  child: Text('Undo last world update'),
-                ),
               if (_session != null &&
                   _sessionResolver.hasChatOverrides(_session!))
                 const PopupMenuItem(
@@ -5816,39 +4687,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if ((_session?.hasLivingWorld ?? false) &&
-                        (_pendingWorldReviewCount > 0 ||
-                            _ambientWorldUpdatedCount > 0))
-                      Padding(
-                        padding: EdgeInsets.only(bottom: keyboardOpen ? 4 : 6),
-                        child: MinimalChipRow(
-                          children: [
-                            if (_pendingWorldReviewCount > 0)
-                              MinimalChipButton(
-                                label:
-                                    'Review pending ($_pendingWorldReviewCount)',
-                                icon: Icons.rate_review_outlined,
-                                selected: true,
-                                onPressed: _busy
-                                    ? null
-                                    : _reviewPendingWorldChanges,
-                              ),
-                            if (_ambientWorldUpdatedCount > 0) ...[
-                              if (_pendingWorldReviewCount > 0)
-                                const SizedBox(width: 8),
-                              MinimalChipButton(
-                                label:
-                                    'World updated · $_ambientWorldUpdatedCount',
-                                icon: Icons.public_outlined,
-                                onPressed: () {
-                                  setState(() => _ambientWorldUpdatedCount = 0);
-                                  _showLivingWorldLog();
-                                },
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
                     if (!keyboardOpen &&
                         (hasAuthorsNote || activeMoodCount > 0))
                       MinimalChipRow(

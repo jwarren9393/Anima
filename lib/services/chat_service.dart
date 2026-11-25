@@ -140,7 +140,6 @@ class ChatService {
     String? personaId,
     int greetingIndex = 0,
     String? sourceWorkshopId,
-    String? worldId,
     List<String>? lorebookIds,
   }) async {
     final builder = const PromptBuilder();
@@ -169,7 +168,6 @@ class ChatService {
       );
     }
 
-    final boundWorld = worldId?.trim();
     final loreIds = [
       for (final id in lorebookIds ?? const <String>[])
         if (id.trim().isNotEmpty) id.trim(),
@@ -185,7 +183,6 @@ class ChatService {
       sourceWorkshopId: sourceWorkshopId?.trim().isEmpty == true
           ? null
           : sourceWorkshopId?.trim(),
-      worldId: (boundWorld == null || boundWorld.isEmpty) ? null : boundWorld,
     );
 
     await saveChat(session);

@@ -7,8 +7,7 @@
 >
 > **Living documents:** `AGENTS.md` + this file + `README.md` are kept current together — see §29 for the upkeep rule every agent must follow.
 
-**Last updated:** 2026-10-21 · **Version:** 1.0.0 build **78** · **Tests:** 499 (`flutter test`) · Living World Phases 1–11 + Phase 12 agent package on `experiment/living-world`; **Phase 13 next** (world→character/persona); then owner soak + merge (`docs/LIVING_WORLD_MERGE_READINESS.md`)
-
+**Last updated:** 2026-11-24 · **Version:** 1.0.0 build **83** · **Tests:** 407 (
 ---
 
 ## Table of contents
@@ -28,7 +27,6 @@
 13. [Group chat mechanics](#13-group-chat-mechanics)
 14. [World Info / lorebooks](#14-world-info--lorebooks)
 15. [Memory summary and auto-summarize](#15-memory-summary-and-auto-summarize)
-15b. [Living World (experiment)](#15b-living-world-experiment)
 16. [Character cards and personas](#16-character-cards-and-personas)
 17. [Creation Center (workshops)](#17-creation-center-workshops)
 18. [UI map — every major screen](#18-ui-map--every-major-screen)
@@ -158,13 +156,9 @@ Anima/
 | File | Role |
 |------|------|
 | `chat_message.dart` | Message bubble: `ChatRole` user / assistant / **narrator**; swipes; group speaker |
-| `chat_session.dart` | Thread: messages, note, persona, lore picks, memory, group cast, optional `worldId` |
 | `character.dart` | ST-compatible card fields + Anima id + embedded lorebook |
 | `persona.dart` | Structured {{user}} identity fields |
-| `living_world.dart` | Living World notebook schema v2 (people/places/relationships/events/flags/threads/promises/secrets/liveState; `routineHints` + `inventory` on people) |
-| `living_world_update_policy.dart` | Play modes: manual / proposeAfterTurn / autoSafe |
 | `turn_resolution.dart` | Phase 6+ resolve result (applied / deferred / as-of-turn / presenceSync / nearSceneTick) |
-| `living_world_tick_settings.dart` | Phase 8 tick trigger + caps |
 | `lorebook.dart` | World Info entries (ST import shapes) |
 | `global_lorebook.dart` | Standalone lorebook id + enabled flag |
 | `character_category.dart` | Anima-only category lists (not ST tags) |
@@ -191,8 +185,6 @@ Anima/
 | `lorebook_edit_screen.dart` | Entry list + entry editor |
 | `lore_settings_screen.dart` | Scan depth/budget + link to global books |
 | `world_workshop_list_screen.dart` | Creation Center list |
-| `worlds_hub_screen.dart` | Living Worlds hub (list / factory / import) |
-| `living_world_edit_screen.dart` | Living World notebook editor + export |
 | `world_workshop_chat_screen.dart` | Workshop chat (NOT regular chat) |
 | `settings_screen.dart` | Settings hub |
 | `api_settings_screen.dart` | API key, model catalog browser |
@@ -216,17 +208,6 @@ Anima/
 | `character_service.dart` | `anima_characters.json` |
 | `persona_service.dart` | `anima_personas.json` |
 | `lorebook_service.dart` | Keyword scan, budget, injection |
-| `living_world_service.dart` | Load/save/export `worlds/<id>.json` notebooks |
-| `living_world_retriever.dart` | Scored/capped canon pack + prompt format |
-| `living_world_update_service.dart` | Propose / parse / apply typed canon updates |
-| `living_world_turn_resolver.dart` | Phase 6: select/apply safe ops before narrate |
-| `living_world_systems_service.dart` | Phase 7: relationship drift, flag recipes, narrator presence sync |
-| `living_world_simulator.dart` | Phase 8: near-scene tick planner (radius + capped ops) |
-| `living_world_tick_settings.dart` | Phase 8: tick trigger + caps |
-| `living_world_log_service.dart` | World log / timeline under `worlds/<id>.log.json` |
-| `living_world_undo_service.dart` | Undo snapshots (`worlds/<id>.undo.json`) |
-| `living_world_pending_service.dart` | Phase 11 pending review queue (`worlds/<id>.pending.json`) |
-| `living_world_factory_service.dart` | Multi-pass world factory (outline→places→people→links→seed) |
 | `world_info_service.dart` | `anima_lorebooks.json` |
 | `narrator_service.dart` | Chat Narrator generate + prompt injection + output cleanup |
 | `roadway_service.dart` | Paths brainstorm + combine |
@@ -297,11 +278,8 @@ No global state management package — services passed as constructor args.
 | `nextSpeakerIndex` | Round-robin / chip selection |
 | `sourceWorkshopId` | Provenance from Creation Center |
 | `castJoinedAt` | `Map<String,int>` — message count when each character id joined; empty for legacy chats. See §12 for prompt-level effects |
-| `worldId` | Optional Living World notebook id (`worlds/<id>.json`). Null = Living World off for this chat (default). See §15b |
 
-### `LivingWorld` (`living_world.dart`) — structured canon notebook
 
-Genre-agnostic JSON: `people`, `places`, `relationships` (−100…100 + labels), `events`, `flags`, optional `liveState` (active place / who-where — door to Phase B). Schema version `1`. Validated on load/save (`LivingWorld.validated()`).
 
 ### `Character` — SillyTavern-compatible card
 
@@ -342,12 +320,10 @@ All library files live in **one user-owned folder** (`AppDataRoot`, default `Doc
 | `anima_roadway_cache.json` | Cached Paths options per chat |
 | `avatars/` | Local avatar images |
 | `chat_backgrounds/` | User-picked chat backgrounds |
-| `worlds/` | Living World notebooks (`<id>.json`) — see §15b |
 | `README.txt` | Explains that this folder is the library |
 
 **Character saves** (`character_service.dart`): every write is flushed to disk (`flush: true`) with one automatic retry; concurrent saves are serialized through a write queue so a read-modify-write can never clobber another card (e.g. a quick temporary-NPC save racing an editor save); `upsert()` re-reads the file after writing and throws if the card did not land, so the editor can show the error and stay open instead of closing and silently losing edits.
 
-**Backup** (`AppBackupService`): single `.anima-backup` JSON with whitelist above + settings keys + base64 avatars + Living World `worlds/` notebooks (and `.log.json` / `.undo.json` side cars). **No API key.** Copy the whole Anima folder to move the key too.
 
 **Sync — removed in build 72.** There is no cloud feature in the app any more: no `SyncService`, no sync file, no rclone mount, no Google. See §22 for how data moves between devices now (`scripts/sync_phone_anima.sh` optionally copies a `.anima-backup` over adb).
 
@@ -412,7 +388,6 @@ All library files live in **one user-owned folder** (`AppDataRoot`, default `Doc
 
 2. **System (optional):** Memory summary — clinical bullet facts via Presence-filtered formatting (reference only; do not mimic tone)
 
-2b. **System (optional, bound world — solo or group):** Living World pack via `LivingWorldRetriever` — scored/capped authoritative canon scraps (not a dump of the whole notebook). See §15b
 
 3. **History:** `ChatContextService.selectHistory()` — recent messages within **history token budget** (skips messages already in `memoryCoveredCount` when possible)
 
@@ -455,7 +430,6 @@ Special tuned sampling for: memory summarize, narrator generate, composer format
 | **Director** (control-camera) | `ChatRole.director` in timeline | `role: system` director block (pending note only, late) | Mandatory command for the **next** AI reply |
 | **Author's Note** | `ChatSession.authorsNote` | Post-history system | Every-turn steer |
 | **Memory summary** | `ChatSession.memorySummary` | System before history (clinical bullets; reference-only wrapper) | Long-term facts, not voice |
-| **Living World pack** | `ChatSession.worldId` → `worlds/<id>.json` | Early system (solo or group, when bound) | Scored/capped authoritative structured canon scraps |
 | **Lore hits** | Injected in system prompt | World info sections | Keyword-triggered facts |
 | **Continue** | No new user line | Continue nudge user message | Next char reply |
 | **Impersonate** | Empty `ChatRole.user` bubble (no cast speaker stamp) | Player-perspective system + Impersonate nudges + final lock | AI writes {{user}} line in first person |
@@ -582,158 +556,6 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 
 ---
 
-## 15b. Living World (experiment)
-
-**Branch:** `experiment/living-world` (not on `main` until owner merge approve).  
-**Brief (philosophy / locked scope):** [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md)  
-**Roadmap (Phases 5–12 → DF-lite living play):** [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md)  
-**Merge gate / soak:** [`docs/LIVING_WORLD_MERGE_READINESS.md`](docs/LIVING_WORLD_MERGE_READINESS.md)  
-**Playtest:** [`docs/LIVING_WORLD_PLAYTEST.md`](docs/LIVING_WORLD_PLAYTEST.md)
-
-**North star:** App owns structured canon; AI roleplays from retrieved scraps — does not silently overwrite hard state.  
-**Owner end-goal:** organic after-turn world updates (validated engine loop under Anima chat) — Phases 1–4 are the warehouse + factory; Phase 5+ is the living write loop. See roadmap.
-
-**Defaults (merge invariant):** `ChatSession.worldId` null; play policy **Manual**; near-scene ticks **Off**; Resolve-before-narrate **Off**. Unbound chat never injects a pack or runs after-turn / ticks.
-
-### Phase 1 (shipped on the experiment branch)
-
-| Piece | Role |
-|-------|------|
-| `LivingWorld` model | People, places, relationships, events, flags, optional `liveState` (schema v1 base; v2 adds continuity — see Phase 9) |
-| `LivingWorldService` | `worlds/<id>.json` under the Anima library (`AppDataRoot.librarySubdirs` includes `worlds`) |
-| `LivingWorldRetriever` | Relevance over recent chat + speaker; token budget trim; prompt formatter |
-| `ChatSession.worldId` | Per-chat bind; **null = off** (default — classic Anima unchanged) |
-| Chat ⋮ → **Living World** | Off / pick / create empty / sample harbor / import JSON |
-| Prompt injection | `_buildApiMessages`: early system block after Memory summary when bound |
-
-### Phase 2 (shipped on the experiment branch)
-
-| Piece | Role |
-|-------|------|
-| `LivingWorldUpdateService` | Build propose prompt; parse/validate JSON ops; apply selected ops in memory |
-| Chat ⋮ → **Update world from chat…** | Bound world; NanoGPT proposes; **review sheet**; save only applied rows |
-| Ops | `addEvent`, `setFlag`, `setRelationship`, `setActivePlace`, `setPersonLocation` (+ Phase 9 continuity ops) |
-| Safety | Unknown person/place ids dropped; no new people/places invented; nothing written until Apply |
-
-### Phase 3 (shipped on the experiment branch)
-
-| Piece | Role |
-|-------|------|
-| Scored retrieve | Speaker name, `characterCardId` link, mentions, active place, strong relationships — ranked then capped (`maxPeople` 8, places 5, etc.) |
-| Group chats | Bind + inject + **Update world from chat…** available; cast names feed relevance |
-| Prompt marks | `[speaking]` / `[linked card]`; “relevant only — many more exist off-scene” |
-| Cast scale proof | Tests with a 40-person synthetic world keep pack ≪ full cast |
-
-### Phase 4 (shipped on the experiment branch)
-
-| Piece | Role |
-|-------|------|
-| **Settings → Living Worlds** | Hub: list / empty / sample harbor / import JSON / delete |
-| `LivingWorldEditScreen` | Tabbed notebook editor (overview, places, people, links, events/flags) + export JSON |
-| `LivingWorldFactoryService` | Multi-pass AI compile: outline → places → people → relationships → seed events/flags/liveState |
-| Factory UI | Pitch + place/people sliders; progress per pass; saves validated notebook (uses Character build model/sampling) |
-| People fill | Outline must-include cast + invent to People slider; `planPeopleBatches` pads invent batches when outline is short (Creation Center seeds no longer stop at linked cast size) |
-| Separation | **Not** Creation Center — workshop chat untouched; factory never relies on one endless thread |
-
-### Phase 5 (shipped on the experiment branch)
-
-| Piece | Role |
-|-------|------|
-| `LivingWorldUpdatePolicy` | `manual` / `proposeAfterTurn` / `autoSafe` (Settings + chat ⋮) |
-| After-turn hook | Successful `_streamAssistantReply` → propose when bound + non-manual |
-| Auto-safe split | Events/flags/active place/who-where/continuity/inventory auto-apply; **relationships** and **upsertPerson** (newly introduced NPCs) still reviewed / Review pending |
-| `upsertPerson` | When chat clearly names/introduces someone not on the roster; apply adds a People row → Create character from person |
-| `LivingWorldUndoService` | `worlds/<id>.undo.json` snapshots; ⋮ → Undo last world update |
-
-### Phase 6 (shipped on the experiment branch)
-
-| Piece | Role |
-|-------|------|
-| `TurnResolution` | Structured resolve result (proposed / applied / deferred + as-of-turn prompt block) |
-| `LivingWorldTurnResolver` | Partition + apply safe ops for resolve-before-narrate (no NanoGPT call) |
-| Living mode setting | `getLivingWorldResolveBeforeNarrate` — opt-in; Settings hub + chat World play mode sheet |
-| Resolve-before-stream | `_resolveLivingWorldBeforeNarrate` before `_buildApiMessages`; then stream with updated pack |
-| Fallback | Living mode off or soft-fail → Phase 5 after-turn unchanged |
-| `LivingWorldLogService` | `worlds/<id>.log.json` (last 50); chat ⋮ → **World log…** |
-
-### Phase 7 (shipped on the experiment branch)
-
-| Piece | Role |
-|-------|------|
-| `LivingWorldSystemsService` | Rule tables after validated `applyUpdates`: relationship drift + flag recipes |
-| Relationship drift | Event text tags (aid / betrayal / promise / deceit / warmth) nudge scores ± with −100…100 clamp; skips pairs that got an explicit `setRelationship` in the same batch |
-| Flag recipes | Explicit keys only (`knows_<name>`, `banished_from_<place>`, `<personId>_deceased`) — no freeform silent invention |
-| `WorldPerson.routineHints` | Soft schedule string; editor + factory + retrieve prompt (“routine: …”) |
-| Narrator presence sync | After Narrator post (non-manual play mode): arrivals → `setPersonLocation` at active place; leavers cleared from `personLocations`; World log kind `presenceSync` |
-
-### Phase 8 (shipped on the experiment branch)
-
-| Piece | Role |
-|-------|------|
-| `LivingWorldSimulator` | Plan near-scene tick: active place + N-hop `connectedPlaceIds` (bidirectional), score/cap people, emit validated short events / soft who-where |
-| `LivingWorldTickSettings` | Trigger: `off` (default) / `afterTurn` / `everyN`; caps for people, ops, radius hops |
-| Auto tick | After Phase 5 after-turn pipeline when trigger says so; unbound chats never tick; rules-first (no API) |
-| Manual | Chat ⋮ + Worlds hub row menu → **Advance world a beat…** (review sheet) |
-| World log | `TurnResolutionKind.nearSceneTick` |
-
-### Phase 9 (shipped on the experiment branch)
-
-| Piece | Role |
-|-------|------|
-| Schema **v2** | `threads` / `promises` / `secrets` (`open`/`closed`, person/place/witness ids) + `WorldPerson.inventory` (short item names) |
-| Migration | `fromJson` accepts v1 (or missing version); fills empty continuity; sets in-memory `schemaVersion` to 2 so next save upgrades |
-| Update ops | `upsertThread`/`closeThread`, `upsertPromise`/`closePromise`, `upsertSecret`/`closeSecret`, `setInventory` — all auto-safe |
-| Retriever | Scores open loops by selected cast, place, haystack text, speaker-as-witness/subject; closed only on strong text hit; prompt sections + person `items:` |
-| Factory / editor | seedCanon may emit continuity; Canon tab edits threads/promises/secrets; person dialog inventory field |
-| Sample harbor | Missing-crate thread, Edric→Mira dawn promise, letter secret (Lena witness), Mira `pier ledger` |
-
-### Phase 10 (shipped on the experiment branch)
-
-| Piece | Role |
-|-------|------|
-| Card-link UX | Person editor **Pick card…** / Clear link + name-based suggestions (`CharacterService`); list shows linked card id; Phase 13 **Create character / persona from this person…** + **Start chat** |
-| Hard-pin retrieve | Linked/named speaker forced into pack; open threads/promises/secrets involving them pinned front; `fitBudget` keeps speaker |
-| Group-react | `_buildGroupBeatApiMessages` injects Living World pack; generate/regenerate call `_afterLivingWorldTurnPipeline` |
-| Shared World log | Already per-`worldId`; sheet copy clarifies shared across bound chats |
-| Backup | `AppBackupService` packs/restores `worlds/` map (notebooks + `.log.json` / `.undo.json` / `.pending.json`) |
-| Context estimate | `ChatPromptBreakdown.livingWorldTokens` + dialog row |
-| Factory seed | **Seed from Creation Center…** → one-way pitch via `brainstormFromWorkshop` (workshop chat stays non-engine). Must-include linked cast + invent supporting people up to the People slider; then the normal multi-pass factory runs. Does **not** sync back into Creation Center. |
-
-### Phase 11 (shipped on the experiment branch)
-
-| Piece | Role |
-|-------|------|
-| Ambient chip | **World updated · N** above composer after safe auto-apply / ticks / resolve-before (tap → timeline; no modal) |
-| `LivingWorldPendingService` | `worlds/<id>.pending.json` — full serializable risky ops (relationships + new people); enqueue on auto-safe / resolve-before deferral |
-| Review pending | Chat chip + ⋮ + hub row ⋮ → reuse `showLivingWorldUpdateSheet`; remove only applied keys |
-| Hub timeline | World ⋮ → **Timeline…** (log sheet + Undo last); **Export JSON…**; plain-English policy/Living-mode copy via `SettingsUi` |
-| Pipeline hygiene | After-turn+tick pipeline queues one extra run; `_livingWorldEpoch` invalidates work on leave chat; never sets `_busy` for after-turn |
-| Playtest | [`docs/LIVING_WORLD_PLAYTEST.md`](docs/LIVING_WORLD_PLAYTEST.md) checklist + owner sign-off table |
-
-### Phase 12 (agent package shipped — await owner soak + merge)
-
-| Piece | Role |
-|-------|------|
-| Opt-in defaults | Verified + `test/living_world_phase12_test.dart` (unbound / Manual / ticks Off / resolve-before Off) |
-| Merge readiness doc | [`docs/LIVING_WORLD_MERGE_READINESS.md`](docs/LIVING_WORLD_MERGE_READINESS.md) — phone + Windows soak + merge steps |
-| Hub / Settings copy | Stresses optional + off until bind |
-
-### Phase 13 (shipped — world → character / persona bridge)
-
-| Piece | Role |
-|-------|------|
-| `LivingWorldCardBridge` | Person brief for AI; seed character/persona from notebook fields; `linkPersonToCharacter`; `bindSessionToWorld` |
-| `LivingWorldPersonCardActions` | UI flows: AI draft (build model) → review sheet → save; character sets `WorldPerson.characterCardId` |
-| People tab / person editor | **Create character…** / **Create persona…** / **Start chat with this character…** |
-| `ChatService.startNewChat` | Optional `worldId` so new solo chats open already bound |
-| Keep | **Pick card…** (existing cards) + **Seed from Creation Center…** (workshop → factory pitch only) |
-| Tests | `test/living_world_phase13_test.dart` |
-
-**Still blocked for merge:** owner soak on phone + Windows, then explicit approve → merge to `main` → normal `v1.0.0` deploy.
-
-**Invariant:** Lorebooks + Memory summary stay; Living World is the authoritative layer for *tracked* facts when bound. AI never silently overwrites hard state (even when auto-apply lands — validation + policy required).
-
----
 
 ## 16. Character cards and personas
 
@@ -875,7 +697,6 @@ Plus **Enter to send** toggle (desktop).
 
 ## 22. Backup and restore (local only)
 
-See §8. User must **re-enter API key** after restore. Living World notebooks under `worlds/` are included in `.anima-backup` (Phase 10).
 
 **No cloud sync.** The cross-device sync feature was **removed** in build 72 (with `SyncService`, `SyncTarget`, the four `sync_*` settings keys and the `saf` dependency), because the owner's phone and laptop are always together and the cloud path only added rate-limit stalls and Google tokens that expired every 7 days. `Create backup` writes one `.anima-backup` file and `Restore backup` applies it; moving the file between devices is up to the user. `scripts/sync_phone_anima.sh` automates that copy over USB/Wi-Fi adb (`--auto` newest-wins, `--library` for the whole library, `--dry-run` to preview, and it refuses to overwrite without confirmation). API key: never in the backup; each device keeps its own.
 
@@ -990,7 +811,6 @@ Tests cover: lore scan, prompt builders, card codec, backup, sync stability, cha
 - Backup not encrypted.
 - PNG export needs PNG avatar for embedded image.
 - Windows build requires Windows host.
-- **Living World (experiment):** Phases 1–11 + Phase 12 agent package; **Phase 13 next** (world→cards). Feature **off until bind**. See §15b + `docs/LIVING_WORLD_MERGE_READINESS.md`.
 - Back-burner: undo send, last-chat resume, pinned mood chips, memory preview panel, etc.
 
 ---
@@ -1002,17 +822,14 @@ Tests cover: lore scan, prompt builders, card codec, backup, sync stability, cha
 | **`PROJECT_REFERENCE.md`** (this file) | External AI, deep onboarding | Full technical encyclopedia |
 | **`AGENTS.md`** | Cursor coding agents | Current status, roadmap, code map, machine notes, next actions |
 | **`README.md`** | Human owner | Screen-by-screen feature catalog, install, release history |
-| **`LIVING_WORLD_HANDOFF_PROMPT.md`** | Agents | Living World philosophy + locked in/out scope |
 | **`LIVING_WORLD_ROADMAP.md`** | Agents | Phases 5–12 build order toward organic DF-lite living play |
 
 **How to feed Gemini / external AI:**
 
 1. Attach or paste **`PROJECT_REFERENCE.md`** for full context.
 2. Optionally add **`AGENTS.md`** for latest build status and agent conventions.
-3. For Living World future work, also attach **`LIVING_WORLD_ROADMAP.md`** (+ handoff for scope locks).
 4. For UI-only questions, **`README.md`** sections 1–4 are enough.
 
-**Living-document rule (for every agent):** the core three files must be updated together after meaningful work — **`AGENTS.md`** always (status/roadmap/code map), **this file** whenever mechanics or architecture changed (update the section you touched), and **`README.md`** whenever anything user-visible changed. For Living World phase completions, also update checkboxes in **`LIVING_WORLD_ROADMAP.md`**.
 
 ---
 

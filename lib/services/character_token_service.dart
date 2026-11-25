@@ -36,7 +36,6 @@ class ChatPromptBreakdown {
     required this.historyTokens,
     required this.postHistoryTokens,
     required this.estimatedSentTokens,
-    this.livingWorldTokens = 0,
   });
 
   final String speakerName;
@@ -49,9 +48,6 @@ class ChatPromptBreakdown {
   final int historyTokens;
   final int postHistoryTokens;
   final int estimatedSentTokens;
-
-  /// Living World pack tokens when the chat is bound (0 if unbound / empty).
-  final int livingWorldTokens;
 }
 
 class CharacterTokenService {

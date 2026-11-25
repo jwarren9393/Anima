@@ -91,7 +91,7 @@ if (-not $SkipVsBuildTools) {
 
     $atl = Get-ChildItem 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools' -Recurse -Filter 'atlstr.h' -ErrorAction SilentlyContinue |
         Select-Object -First 1
-    if (Test-Path $vsVcVars -and -not $atl) {
+    if ((Test-Path $vsVcVars) -and -not $atl) {
         Write-Host '  ATL header missing — adding the C++ ATL component ...'
         & (Join-Path $PSScriptRoot 'install_windows_atl.ps1')
     }

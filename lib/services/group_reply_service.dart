@@ -67,7 +67,6 @@ class GroupReplyService {
     String narratorBlock = '',
     String directorBlock = '',
     String priorBeatToAvoid = '',
-    String livingWorldBlock = '',
   }) {
     final safeUser = userName.trim().isEmpty ? 'User' : userName.trim();
     final ordered = _orderedSpeakers(speakers);
@@ -121,9 +120,6 @@ class GroupReplyService {
       );
     }
 
-    if (livingWorldBlock.trim().isNotEmpty) {
-      systemParts.add(livingWorldBlock.trim());
-    }
     if (loreBefore.trim().isNotEmpty) {
       systemParts.add('World info:\n${loreBefore.trim()}');
     }
