@@ -60,10 +60,27 @@ High-value SillyTavern concepts to aim for over time:
 
 ## Current status
 
-**Phase:** Post-roadmap tweaks → **Living World experiment next** (see [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md))
+**Phase:** Classic Anima on **main** (build **83**) — Living World experiment removed; kept composer voice UX, lore pick-at-start, Period voice mood, branding.
 
-**Last updated:** 2026-10-15
-**Last agent action:** **Living World handoff on main.** Added [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md) — chat-native structured world memory (people/places/events/flags; ~20–50 named cast); feature-branch plan; Creation Center is *not* the world factory yet. Removed the older Chronicle-oriented handoff. Chronicle side project retired; Anima remains the product. No Living World product code on main yet — next agent starts Phase 0 from that handoff, then branches only after owner approval.
+
+**Last updated:** 2026-11-24
+**Last agent action:** **Dropped Living World** — removed notebooks/hub/factory/pipeline from the app; kept non-LW experiment work (You-chip Impersonate/My line, cast-chip Guide AI, slim menus, lore pick-at-start only, Period voice mood, black/gold icons). Merged onto **main**, deleted experiment/living-world. **407** tests pass. Next focus: dig into **summarize / memory** features.
+**Previous agent action:** **Windows migration pack** — Jay-Storage `Migrate-Windows-2026-11/` includes current `AnimaData/` (characters/chats/personas + `api_key.txt`). Owner moving back to Windows host **Jay**; paste that folder’s **Cursor Prompt** into a Windows Cursor agent. Stay on `experiment/living-world`.
+**Previous agent action:** **Kubuntu clean reinstall restore** — fresh Flutter **3.50.0** / Dart **3.14.0** + Android SDK on internal NVMe; cloned `experiment/living-world`; Linux release rebuilt + installed with empty `AnimaData/` (no library/key restore) + `anima.desktop`. Analyze infos only (material deprecation); **517** tests passed; smoke-launch OK. Jay-Storage transfer-only.
+**Previous agent action:** **Kubuntu NVMe migration** — cloned `experiment/living-world`, Linux release built + installed to `~/Git and Cursor/Installed Linux Cursor Apps/Anima/` with `anima.desktop` launcher. Toolchain on this host is Flutter **3.50.0** / Dart **3.14.0**, distro JDK 17, `~/Android/Sdk`. Runtime paths are internal-disk only (Jay-Storage was transfer-only).
+**Previous agent action:** **Build 82 — cast fill + upsertPerson prerelease.** Factory pads invent batches to the People slider; mid-chat **New person** proposals via Review pending; soft roster nudge. Uploaded `v1.0.0-living-world`. **Did not merge to `main`.**
+**Previous agent action:** **Living World cast fill + mid-chat person capture.** Factory now pads invent batches so the People slider is honored after Creation Center seeds (must-include cast + supporting NPCs). After-turn / Update world can propose reviewable **upsertPerson** (Review pending) when chat clearly introduces someone new; soft roster-prefer nudge in the retrieve pack. **Did not merge to `main`.**
+**Previous agent action:** **Build 81 — Composer voice UX + soak QoL prerelease.** Long-press You → Impersonate / My line…; cast long-press → Guide AI (returns to You after send); slim message menu; lore pick-at-start only; Period voice mood; Update character from world; LW JSON harden. Uploaded `v1.0.0-living-world`. **Did not merge to `main`.**
+**Previous agent action:** **Composer voice UX cleanup (experiment branch).** Long-press **You** chip → Impersonate / My line… (removed from message menu). Message long-press slimmed: Delete / Rewind / Regenerate / Rewrite / Branch / swipe browse / **Paths** last; dropped Narrator, Continue, Group react, Auto-reply, New swipe, Impersonate, My line. Long-press cast chip opens **Guide AI** (not Write line); after Guide AI send, voice returns to You without popping the keyboard. **Did not merge to `main`.**
+**Previous agent action:** **Chat menu / lore scope / Living World QoL (post–Phase 13 soak feedback).** Lorebooks: no Settings “on for all chats”; pick at solo/group start or Manage cast only; removed mid-chat World Info + Chat lore injection. Menu: dropped Characters / Add-update-from-chat; added **Update character from world…**; Memory chip removed (menu only); World play mode sheet scrolls; **Period voice (adult)** scene mood; Living World update JSON retry + salvage. **Did not merge to `main`.**
+**Previous agent action:** **Build 80 — World factory reliability + prerelease APK.**
+**Previous agent action:** **Phase 13 Living World world → character / persona bridge.** Create character/persona from person + Start chat already bound. **Did not merge to `main`.**
+**Previous agent action:** **Phase 12 Living World merge-readiness package.** Opt-in defaults + soak/merge docs. **Did not merge to `main`.**
+**Previous agent action:** **Phase 11 Living World invisible-engine UX.** Auto-safe no longer pops a relationship modal every turn — risky ops queue in `worlds/<id>.pending.json` with a **Review pending (N)** chip + ⋮ menu. Safe applies show a quiet **World updated · N** chip (tap → timeline). Worlds hub: plain-English policy copy, row ⋮ **Timeline… / Undo last pack / Export JSON… / Review pending**. After-turn pipeline queues one extra run and cancels on leave chat (`_livingWorldEpoch`). Playtest checklist: [`docs/LIVING_WORLD_PLAYTEST.md`](docs/LIVING_WORLD_PLAYTEST.md).
+**Previous agent action:** **Living World end-goal roadmap written.** Added [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md) — phased plan from today’s static-during-play notebooks to organic after-turn validated world updates (DF-lite under Anima chat, not a fortress clone). Next build work starts at **Phase 5** (auto propose / auto-safe after turn + undo). Phases 1–4 unchanged.
+**Previous agent action:** **Phase 4 Living World factory + Worlds hub on `experiment/living-world`.** New **Settings → Living Worlds** hub (list / empty / sample / import / export / edit notebook). **World factory** multi-pass compile (outline → places → people → relationships → events/flags) writes validated JSON under `worlds/` — not Creation Center chat. Simple tabbed editor for people/places/links/canon. Uses Character & persona build model settings for drafting. Creation Center unchanged. Ask before commit/push.
+**Previous agent action:** **Phase 3 Living World cast scale + group retrieve on `experiment/living-world`.** Retriever now scores people/places (speaker, linked character card, name mentions, active place, strong relationships) and caps the pack so a ~40–50 person notebook does not dump into the prompt. Living World bind / retrieve / **Update world from chat…** work in **group** chats too (cast names feed relevance). Prompt marks `[speaking]` / `[linked card]`. Creation Center still untouched. Ask before commit/push.
+**Previous agent action:** **Phase 2 Living World canon write path on `experiment/living-world`.** Solo ⋮ → **Update world from chat…** asks NanoGPT for typed proposals (events / flags / relationships / active place / who-where), shows a review sheet, and saves only what you apply — no silent overwrites. Unknown person/place ids rejected. Phase 1 retrieve-into-prompt unchanged. Creation Center still untouched. Ask before commit/push.
 **Previous agent action:** **AI busy spinner on character/persona editors (build 77).** While Base on another card… / Expand / Compact / Consistency / AI builder runs, the editor shows a spinning progress banner under the AppBar plus a small AppBar spinner (`ai_busy_banner.dart`) with a plain-English status (e.g. "Drafting card from source…") so the screen no longer looks frozen during the wait.
 **Previous agent action:** **Saved steer notes for regen/swipe + Paths direction (build 76).** My line… / Impersonate and Guide AI now store the player's note on the bubble (`generationKind` + `generationGuide`), so Regenerate / New swipe / ◀▶ reuse the same steer instead of dropping it. Paths cache also keeps the "Steer these paths" text and restores it when you reopen the sheet. Long-press menu: Impersonate + My line… moved up next to Paths / Regenerate / Rewrite. Verified: `flutter analyze` clean, **404 tests pass**.
 **Previous agent action:** **Shipped build 75 from the Windows laptop** — commit `62151db` + phone APK install (both adb links), GitHub release APK refreshed, Windows zip CI green. Also patched `deploy.sh` so Linux desktop steps are **skipped on Windows** (`d9d2fe8`). First Windows APK build also pulled NDK 28.2 + platforms 35/34 + CMake (one-time).
@@ -82,13 +99,13 @@ full `./deploy.sh` afterwards was verified end to end — it printed
 ### What works today
 
 - **Data folder** — one visible library folder for characters, chats, avatars, lore, settings, and the API key (`Documents/Anima` by default; change anytime in Settings). Android uses public Documents (My Files), not locked app storage; desktop can also keep `AnimaData` next to the app for a portable zip. First launch copies any older hidden files into that folder.
-- **Chat screen** — **minimal chrome**: Close · title · ⋮ (⋮ menu leads with **API & connection** for quick model swaps); **voice row** above composer (You + cast) — **long-press a name** to write that character’s line manually; **Write line** / **Guide AI** toggle when a character is selected (Guide = loose player direction → fresh AI reply for that character only, no Director card); tap **You** to return to your persona; tap a name (when not writing as them) still forces an AI reply in groups; **Android:** **Director** + **Continue** sit above the composer (stay visible with the keyboard); **Director turns the same filled gold as Continue while it’s on**; **+** for Narrator / scene moods; composer row is field + send/stop; **desktop:** moods · Narrator · Director · field · ▶ · send/stop (Director icon fills gold when on). No delete confirmations or bottom toasts in chat (errors use the banner above the composer). **Narrator** / **Director** centered cards — tap to edit, **long-press to delete**; Director commands the next AI reply; solo/group chats only (not Creation Center)
+- **Chat screen** — **minimal chrome**: Close · title · ⋮ (⋮ menu leads with **API & connection** for quick model swaps); **voice row** above composer (You + cast) — **long-press You** → Impersonate / My line…; **long-press a cast name** → **Guide AI** for that character (Write line still available via the toggle when selected); after Guide AI send, focus returns to **You** (no auto-keyboard); **Write line** / **Guide AI** toggle when a character is selected; tap **You** to return to your persona; tap a name (when not writing as them) still forces an AI reply in groups; **Android:** **Director** + **Continue** sit above the composer (stay visible with the keyboard); **Director turns the same filled gold as Continue while it’s on**; **+** for Narrator / scene moods; composer row is field + send/stop; **desktop:** moods · Narrator · Director · field · ▶ · send/stop (Director icon fills gold when on). No delete confirmations or bottom toasts in chat (errors use the banner above the composer). **Narrator** / **Director** centered cards — tap to edit, **long-press to delete**; Director commands the next AI reply; solo/group chats only (not Creation Center)
 - **Group chat setup** — cast + order on main form; **Lore / Note / Auto-reply** chips open sheets (no inline lore checkboxes or long prose fields)
 - **New chat** — choose **Solo** or **Group**; **Solo:** pick character **and persona** on one screen (persona bar at top — tap to change); if the character has several greetings, a **Choose opening** sheet picks which one starts (others stay as swipes); **Group:** cast + lore + note as before
 - **Settings hub** — separate menus:
   - **Personas** — **import a persona JSON file** (upload button in the app bar: the app's own persona format, an AI-written card using `identity`/`looks`/`backstory`/`motivations`, a list of personas, or a whole `.anima-backup`; a review sheet lists what was found before saving); create multiple {{user}} identities; **list may be empty**; **~token badges** on list + live count in editor; **Compact persona…** / **Expand persona…** / **Base on another card…** (editor menus, review before apply) — Expand lets the AI invent new interesting details from what’s already there, Base-on drafts the persona from another character/persona’s shared world; **pick persona when starting solo or group chat** (defaults to app default or **Plain User**); per-chat switch in ⋮ menu; **AI persona builder**; **AI wand**; **Generate avatar**; optional default for new chats
   - **Characters** — character cards + **categories**; **list may be empty** (no forced starter card); **temporary characters**; **Full cards only** filter; filter; **consistency check + one-tap fix**; AI card builder; **section chips**; **Expand card…** (⋮ menu — AI adds new detail/ideas from the card without prompts) + **Compact card…** + **Base on another card…** (⋮ menu — AI drafts this card from another character/persona's shared world; target identity always wins); avatar + consistency in ⋮ menu; **~token badges**
-  - **World Info & lore** — **global lorebooks** (create / import ST JSON / export / on-off) + **~token badges** on list and per-entry in editor; **Compact lorebook…** / per-entry **Compact entry…** with review sheet; scan depth/budget + link to per-character books; **consistency check + fix** on lorebook editor and Creation Center linked book; **entry AI wand** + **Suggest keywords from content**
+  - **World Info & lore** — **global lorebooks** (create / import ST JSON / export; pick per chat at start or Manage cast — not auto-on from Settings) + **~token badges** on list and per-entry in editor; **Compact lorebook…** / per-entry **Compact entry…** with review sheet; scan depth/budget + link to per-character books; **consistency check + fix** on lorebook editor and Creation Center linked book; **entry AI wand** + **Suggest keywords from content**
   - **Creation Center** — hub on Home + Settings; minimal workshop chrome (⋮ menu leads with **API & connection** for quick model swaps); composer **▶ Continue** (like main chat) when your last message needs a reply; **Stop** while streaming (keeps partial text); world summary folding; **Fix last** chip applies a correction to the previous AI reply in place (no new AI bubble); long-press → Apply correction; delta-style revision prompts; workshop chat uses dedicated guidance (not character-card wand text) + tuned sampling to reduce repetition loops; **opening scenes are gone — the collaborator is explicitly aware of Narrator cards (scene/presence prose) and Director cards (next-reply commands) and writes Narrator card text when asked for an "opening"**; **Create lorebook** pre-flight audit (World Info gaps only) with optional **Fill gaps…** → per-entry preview sheet before export; **Create / Update lorebook** → review sheet (pick entries to save) before writing World Info; **Check lorebook consistency** (⋮ when linked) → report dialog → optional fix → review sheet; status banner + progress bar during lore operations; **Create / Update** character + persona pick **Standard** vs **Add more workshop details** merge style; generated card editors pass **Workshop** context to field wands
   - **AI collaborator** — per-field **wand** guidance + Creation Center **brainstorm chat** + **auto-wrap dialogue on send** + **Roadway / Paths** + **Narrator** notes (uses main chat model — not full card JSON builds)
   - **Character & persona builds** — shared model, max tokens, temperature, top P for **full JSON card generation**; separate **character** and **persona** build prompts (Creation Center, chat import, AI builders on character/persona editors); separate from main chat model
@@ -118,19 +135,19 @@ full `./deploy.sh` afterwards was verified end to end — it printed
 - **World Info entry AI wand** — sparkle on Label / Keywords / Lore content (and Secondary keywords when Selective); uses book + sibling entry context; appends (keywords merge comma-separated); same model + collaborator guidance
 - **API & connection** — live NanoGPT model catalog: **Category** filter (All · **Uncensored & derestricted (broad)** · Roleplay · …) then **provider**; **Browse models** sheet shows context, max output, parameter size, TPS, TTFT, uptime %, description, capabilities, and pricing/Included — stats from `detailed=true` catalog + providers API; filtered count in status line; refresh; custom model id; subscription toggle reloads catalog; **image model** picker; **See remaining credits**
 - **Chat stop** — while a reply streams, the send button becomes a red **Stop** button (keeps any partial text); status banner shows “Generating… tap Stop to cancel” in Creation Center; the list does **not** auto-scroll during streaming — scroll freely while a reply types in (regular chat + Creation Center)
-- **Composer shortcuts** — **Android:** Director + Continue above the composer; **+** tools sheet (Narrator, scene moods, group react). **Desktop:** Narrator · Director · field · ▶ Continue · Send/Stop. **Character voice:** long-press cast chip → **Write line** (manual bubble) or **Guide AI** (loose direction → fresh reply for that character). **auto-wrap dialogue on send** (default on) wraps plain text in `"quotes"` between `*actions*` locally — no Format button; Memory/Note/Moods chips hide while the keyboard is open on mobile; **desktop only:** Enter to send; toggle auto-wrap in **Settings → AI collaborator**
+- **Composer shortcuts** — **Android:** Director + Continue above the composer; **+** tools sheet (Narrator, scene moods, group react). **Desktop:** Narrator · Director · field · ▶ Continue · Send/Stop. **Character voice:** long-press cast chip → **Guide AI**; toggle still switches Write line ↔ Guide AI. **You chip:** long-press → Impersonate / My line…. **auto-wrap dialogue on send** (default on) wraps plain text in `"quotes"` between `*actions*` locally — no Format button; Memory/Note/Moods chips hide while the keyboard is open on mobile; **desktop only:** Enter to send; toggle auto-wrap in **Settings → AI collaborator**
 - **Draft autosave** — composer text saved per chat (survives leaving chat/app); cleared on send
 - **Character categories** — Anima-only lists (not ST card tags); **All characters** master view + custom categories; filter in Characters (manage/pick) and Group setup; membership via row menu → Categories
-- **Paths (Roadway)** — long-press → **Paths**; first-person options (`*I…*` not persona name); dedupe + tuned sampling; tap → composer; **Combine selected**; cached until chat moves on or refresh; note under AI collaborator — plus an optional **direction field** in the sheet ("Steer these paths"): type what the options should be about and the AI writes variations of that instead of a random mix; empty keeps the old behaviour
-- **Auto-reply** — long-press → toggle; **new chats default to off** (send alone; Continue or tap a name for a reply)
+- **Paths (Roadway)** — message long-press → **Paths** (last in the menu); first-person options (`*I…*` not persona name); dedupe + tuned sampling; tap → composer; **Combine selected**; cached until chat moves on or refresh; note under AI collaborator — plus an optional **direction field** in the sheet ("Steer these paths"): type what the options should be about and the AI writes variations of that instead of a random mix; empty keeps the old behaviour
+- **Auto-reply** — set when starting a group chat or via **Manage cast**; **new chats default to off** (send alone; Continue or tap a name for a reply)
 - **RP message look** — bubbles style `*narration*` in soft italic gold and `"spoken lines"` in bolder text
-- **Message actions** — **tap** a bubble to edit; **long-press** for Delete, Rewind, Branch, Continue, Paths, Impersonate, **My line…**, Auto-reply, **Rewrite reply…**, Regenerate / New swipe on AI bubbles (and on Impersonate / My line… bubbles) — Regenerate / swipe **reuse the saved steer** from My line… or Guide AI when present (Delete / Rewind / regenerate run immediately with no confirm dialog)
+- **Message actions** — **tap** a bubble to edit; **long-press** for Delete, Rewind, Branch, **Rewrite reply…**, Regenerate, swipe browse, **Paths** (last); Impersonate / My line… live on long-press **You** chip; Narrator / Continue / Group react / Auto-reply / New swipe use composer chrome or under-bubble ▶ (Delete / Rewind / regenerate run immediately with no confirm dialog; Regenerate / swipe **reuse the saved steer** from My line… or Guide AI when present)
 - **Lore toast** — when keywords match and entries fit the budget, a brief **top** overlay shows “Lore Triggered: …” (does not cover the composer)
 - **Recursive lore scanning** — Settings toggle works: matched entry content can pull further active entries; shared token budget + priority still apply
 - **Quick swipe** — on the **latest** AI message, ◀ **1/N** ▶ always shows; ▶ on the last version generates a new swipe (older multi-swipe bubbles still show arrows to browse only)
 - **Clean chat chrome** — no Swipe/Regen/Continue bar under messages (those live in the long-press menu; compact swipe arrows under bubbles)
 - **Per-chat persona** — in a chat, ⋮ menu → **Persona: …** to switch who you are for that thread (saved on the chat)
-- **Per-chat World Info** — ⋮ menu → **World Info: …** to use Settings default, pick specific global lorebooks, or turn global lore off for this thread (character card lore still applies)
+- **Per-chat lorebooks** — pick at solo/group start or **Manage cast** (no Settings “on for all chats”; no mid-chat World Info picker; character card lore still applies)
 - **Group chat controls** — **manual mode (default):** your message only; **Continue** and implicit generation pick the speaker from scene context (last reply, name in your text, etc.) — **no** round-robin “next in order” chip highlight; tap a name chip to **force** that character’s reply; **Group react** — composer **+** menu / cast chip / long-press message — one AI call → **one centered group-react card** with each character’s line + avatar; long-press for Delete/Rewind/etc.; regenerate avoids copying prior beats verbatim; auto-reply (optional, long-press toggle) still round-robins when on; leading `Name:` is stripped from solo replies
 - **Manage cast (mid-chat)** — ⋮ → **Manage cast** (rename groups, add/remove cast); **+ menu → Add temporary character** (quick NPC) or full character; ⋮ → **Add / update character…** — one menu with **New character from this chat** (optionally **based on** a chosen character + persona from the chat, each optional), **Add temporary character**, and **Update saved character from chat**; manage screen **+** uses full or temporary flow
 - **Avatars** — persona + character photos; **Generate avatar** saves each accept as history (`{id}_{timestamp}.png`) — **Avatar history…** (⋮ menu / History button) to reuse; changing avatar no longer deletes older files; accept also **exports a copy** (Gallery on Android · `Downloads/Anima Avatars` on desktop); long-press history tile to export/delete; **tap avatar** for fullscreen
@@ -138,10 +155,10 @@ full `./deploy.sh` afterwards was verified end to end — it printed
 - **Character token badges** — ~token count beside names in **Characters**, character editor (live), group setup, and Creation Center cast pickers (≈1 token per 4 chars; color hints when large)
 - **Persona + lorebook token badges** — same style on **Personas** list + editor; **global lorebooks** list; lorebook editor shows enabled-book total and per-entry content size
 - **AI Compact** — character card, **persona**, whole lorebook, and individual lore entries; review sheet before apply
-- **Chat screen** — Close returns home; bubbles use the chat’s persona avatar; **Scene moods** (mood icon + **+** menu) — includes **Sensual / intimate**, **Real voice (anti-script)**, **Intimate build-up**, **Explicit / graphic**, **Afterglow** with hard-coded **vocabulary law** (plain adult words; bans LLM euphemisms, porn-script dialogue, em-dash spam, recycled *actions* when those moods are on); **Chat copies** — per-chat character/persona overrides + **Chat lore** (thread-only World Info merged with global picks); long-press avatar edits chat copy (library unchanged)
+- **Chat screen** — Close returns home; bubbles use the chat’s persona avatar; **Scene moods** (mood icon + **+** menu) — includes **Sensual / intimate**, **Real voice (anti-script)**, **Intimate build-up**, **Explicit / graphic**, **Afterglow**, **Period voice (adult)** with hard-coded **vocabulary law** (plain adult words; bans LLM euphemisms, porn-script dialogue, em-dash spam, recycled *actions* when those moods are on); **Chat copies** — per-chat character/persona overrides; long-press avatar edits chat copy (library unchanged)
 - **Linux install/update** — `./scripts/update_linux.sh` builds and installs the desktop app; add `--pull` to download GitHub changes first
 - **Windows app** — built for you by **GitHub Actions** on every `./deploy.sh` (Flutter can't build Windows from Linux); download `Anima-1.0.0-windows-x64.zip` from the release and run it as a portable folder — no installer
-- **Smoke:** `flutter test` (404) + `flutter analyze` pass; Android + Windows + Linux desktop debug work
+- **Smoke:** `flutter test` (407) + `flutter analyze` pass (material deprecation infos only); Android + Windows + Linux desktop debug work
 
 ### What does NOT work yet / limits
 
@@ -434,25 +451,23 @@ scripts/
 
 ## Machine notes (developer PCs)
 
-### Kubuntu 26.04.1 LTS (Ubuntu “Resolute Raccoon”) — **current host** (`jay@jaykubuntu`)
+### Kubuntu 26.04.1 LTS (Ubuntu “Resolute Raccoon”) — previous host (`jay@jay-kubuntu`)
 
-Reinstalled from scratch on **2026-09-30** and rebuilt by the Cline agent with
-**`bash scripts/setup_linux_dev_noroot.sh`** — the no-password installer — plus the single `apt`
-command it prints. `scripts/setup_linux_dev.sh` still does the same job *with* sudo if you prefer
-one command; both are idempotent, so re-run either any time.
+**Leaving for Windows 2026-11-23.** Handoff pack: Jay-Storage `Migrate-Windows-2026-11/` (includes `apps/AnimaData/` with library + key). Clean OS reinstall was **2026-11-18**; library was rebuilt on Kubuntu afterward and is in that pack.
 
 | Tool | Status |
 |------|--------|
-| Flutter | ✅ **3.47.5** stable in `~/development/flutter` (shallow git clone, so `flutter upgrade` works) |
-| Dart | ✅ **3.13.4** (ships with Flutter; satisfies `pubspec.yaml` `sdk: ^3.12.2`) |
-| JDK | ✅ **Temurin 17.0.20.1** at **`~/development/jdk-17`** — a tarball from the Adoptium API, so no apt/sudo was needed (this path differs from the older `/usr/lib/jvm/temurin-17-jdk-amd64`) |
-| Android SDK | ✅ `~/Android/Sdk` — cmdline-tools 23.0.0, **platform-tools 37.0.1 (adb)**, platforms **36 / 35 / 34**, **build-tools 36.0.0**, licences accepted |
-| Linux desktop toolchain | ⏳ **not installed yet** — needs the one apt line below (clang / cmake / ninja / pkg-config / GTK 3 / `libsecret-1-dev` / `libjsoncpp-dev`). Android builds do **not** need it |
-| GitHub CLI (`gh`) | ⏳ not installed yet (it is apt-only, in the one-liner below) — plain `git` already works; after installing run `gh auth login --hostname github.com --git-protocol https --web` then `gh auth setup-git` |
-| Git identity | ✅ restored (`jwarren9393` / GitHub noreply e-mail) — a fresh install has no `~/.gitconfig`, so commits would otherwise fail |
-| Cursor | ✅ `dart.flutterSdkPath = /home/jay/development/flutter` (user-level setting) |
-| Physical Android phone | Samsung SM-S731U — udev rules come from `android-sdk-platform-tools-common` (in the apt line below); check `adb devices` shows `device` |
-| Verified end-to-end | ✅ `flutter doctor` (Android toolchain ✓, all licences accepted) · `flutter analyze` **clean** · **398 tests pass** · **debug APK built** (`flutter build apk --debug`; the first run also pulled NDK r28c, a one-time ~1 GB) |
+| Flutter | ✅ **3.50.0** stable in `~/development/flutter` (official Linux tarball) |
+| Dart | ✅ **3.14.0** (ships with Flutter) |
+| JDK | ✅ distro **openjdk-17-jdk** |
+| Android SDK | ✅ `~/Android/Sdk` — Linux cmdline-tools + platform-tools; platforms 36/35; build-tools 36.0.0 (+28.0.3); licences accepted |
+| Linux desktop toolchain | ✅ clang / cmake / ninja / pkg-config / GTK 3 / **libsecret-1-dev** (needed by `flutter_secure_storage_linux`) |
+| GitHub CLI (`gh`) | ✅ installed + authenticated as `jwarren9393` |
+| Git identity | ✅ restored (`jwarren9393` / GitHub noreply e-mail) |
+| Cursor | ✅ `dart.flutterSdkPath = /home/jay/development/flutter` |
+| Project checkout | ✅ `~/Git and Cursor/Git Repos/Anima` (`experiment/living-world`) |
+| Linux portable install | ✅ `~/Git and Cursor/Installed Linux Cursor Apps/Anima/` + `~/.local/share/applications/anima.desktop` (empty **AnimaData/** beside the binary — configure library/API key on first run) |
+| Verified end-to-end | ✅ `flutter doctor` all green · **517** tests · Linux release build · launcher smoke-test OK |
 
 **The one command that still needs the owner's password** (Linux desktop build libs + GitHub CLI + phone udev rules):
 
@@ -544,75 +559,50 @@ so the definition reaches every plugin target. Don't remove it unless the depend
 `deploy.sh` step 7/7 also now notices a **failed** run (compares the newest run's `createdAt` with the
 dispatch time) and reports it immediately instead of waiting out the 15-minute poll.
 
-### Windows laptop — **JAYS-DELL** (current Windows host)
+### Windows host — **Jay** (current; restored 2026-11-23 from Kubuntu)
 
-A **fresh Windows 11 install** was rebuilt by the Cline agent on **2026-09-26**. Project checkout:
-**`C:\Users\jakwa\Documents\GitHub\Anima`** (normal `git clone`, remote `jwarren9393/Anima`, branch
-`main`, clean tree). Journey lives beside it at `C:\Users\jakwa\Documents\GitHub\Journey` (`master`).
-**One working copy each.** Never build from `W:` (**Jay-Ex-SSD**, exFAT) or `G:` (Google Drive) —
-Flutter writes plugin symlinks and fails on those filesystems.
+Projects live at **`C:\Users\Jay\Git and Cursor\Git Repos\`**
+(Anima, Boundless, Journey, System-Checker, tagline). Prefer this NTFS tree only — never build from
+exFAT/FAT / Jay-Storage / cloud-mirrored folders (Flutter plugin symlinks fail there).
 
 | Tool | Status |
 |------|--------|
-| Flutter | ✅ stable in `C:\src\flutter` (`git clone -b stable --depth 1`) |
-| JDK | ✅ Temurin 17 at `C:\Program Files\Eclipse Adoptium\jdk-17.0.20.101-hotspot` |
-| Android SDK | ✅ `%LOCALAPPDATA%\Android\Sdk` — cmdline-tools, platform-tools 37.0.1, platform 36, build-tools 36.0.0, licences accepted |
-| Visual Studio | ✅ Build Tools 2022 **17.14.41** + **C++ workload + ATL** — `vcvarsall.bat` present, `VC\Tools\MSVC\14.44.35207\` (cl.exe + `atlmfc\include\atlstr.h`) |
-| Git | ✅ `C:\Program Files\Git\cmd\git.exe` (git-lfs 3.7.1 also installed) |
-| GitHub CLI (`gh`) | ✅ `C:\Program Files\GitHub CLI\gh.exe` 2.101.0 — **sign in once:** `gh auth login --web` then `gh auth setup-git` |
-| Cursor | ✅ Dart + Flutter extensions already installed; `dart.flutterSdkPath` set to `C:/src/flutter` |
-| Developer Mode | ✅ ON (needed for Flutter's Windows plugin symlinks) |
-| Android Studio | ❌ Not installed — cmdline-tools + platform-tools are enough for `flutter build apk` |
-| Physical Android phone | Plug in + USB debugging → `flutter devices` / `flutter run` |
-| Drives | `C:` internal (projects + toolchains), `W:` Jay-Ex-SSD (backups), `G:` Google Drive |
+| Flutter | ✅ stable **3.50.1** / Dart **3.14.0** in `C:\src\flutter` |
+| JDK | ✅ Temurin 17 at `C:\Program Files\Eclipse Adoptium\jdk-17.0.21.10002-hotspot` |
+| Android SDK | ✅ `%LOCALAPPDATA%\Android\Sdk` — cmdline-tools, platform-tools, platform 36, build-tools 36.0.0, licences accepted |
+| Visual Studio | ✅ Build Tools 2022 **17.14.45** + **C++ workload + ATL** (`atlstr.h` under MSVC 14.44) |
+| Git | ✅ `C:\Program Files\Git\cmd\git.exe` + Git LFS |
+| GitHub CLI (`gh`) | ✅ signed in as `jwarren9393` (`gh auth setup-git` done); credential helper `!gh auth git-credential` |
+| Cursor | ✅ `dart.flutterSdkPath` = `C:/src/flutter` |
+| Developer Mode | ✅ ON |
+| Python | ✅ 3.12.10 (System-Checker venv) |
+| Android Studio | ❌ not installed — cmdline-tools are enough for APK builds |
+| Anima checkout | ✅ `experiment/living-world` |
+| Portable Anima | ✅ `Installed Windows Cursor Apps\Anima\` + **AnimaData** (restored; also `Documents\Anima`) |
 
-User env for this account: `JAVA_HOME`, `ANDROID_HOME`, `ANDROID_SDK_ROOT`, and `PATH` entries for
-Flutter, the JDK, `platform-tools`, `cmdline-tools\latest\bin` and GitHub CLI. **Open a new terminal
-/ restart Cursor** after setup so PATH applies.
-
-Fresh install / re-run anytime (idempotent; run elevated if VS Build Tools or Developer Mode fail):
+Fresh install / re-run (elevated for VS Build Tools + Developer Mode):
 
 ```powershell
-cd C:\Users\jakwa\Documents\GitHub\Anima
+cd "C:\Users\Jay\Git and Cursor\Git Repos\Anima"
 powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows_dev.ps1
+# Open a new terminal / restart Cursor so PATH applies
 flutter doctor
 flutter pub get
-flutter run -d windows        # or: flutter run  with the phone connected
+flutter run -d windows
 ```
 
-The 2026-09-26 rebuild was driven from `C:\Users\jakwa\anima-setup\` (`run_all.ps1` → step1 winget
-JDK/gh/platform-tools + Developer Mode, step2 Android SDK, step3 Flutter + `pub get` for **both**
-repos, step4 VS Build Tools, step5 `flutter doctor` + `analyze` + `test`; then `verify_final.ps1` →
-`verify_report.txt` for the end-to-end proof). Progress went to `setup.log`, the summary to
-`SUMMARY.txt` — those helpers still work on a machine with **no** toolchain at all.
+**Verified 2026-11-23:** `flutter doctor` → **No issues found** (Windows + Android green). Restored
+library/key from Migrate pack; smoke-launch OK. Also fixed `scripts/setup_windows_dev.ps1`
+`Test-Path $vsVcVars -and …` → `(Test-Path $vsVcVars) -and …` (PowerShell 5.1).
 
-**Verified on this laptop (2026-09-26):** `flutter doctor` reports **No issues found** — Flutter
-3.47.5 / Dart 3.13.4, Windows 11, the Android toolchain (SDK 36, build-tools 36.0.0, licences
-accepted), **Visual Studio Build Tools 2022 17.14.41 for Windows apps**, Chrome and network resources.
-`flutter pub get` succeeds for both repos; **`flutter analyze` is clean** for both; **Anima 381 tests
-pass**, **Journey 49 tests pass**. `git ls-remote` on the private Anima repo answers without a prompt
-(Git Credential Manager already holds a GitHub credential), but **`gh` itself is not signed in yet** —
-`gh auth login --web` + `gh auth setup-git` (helper: `C:\Users\jakwa\anima-setup\github_login.ps1`)
-is needed for `deploy.sh`'s release/CI steps.
+**⚠️ VS Build Tools:** do **not** rely on `winget install …BuildTools --override "--passive …"` on a
+fresh Windows 11 box — use the official bootstrapper elevated with
+`--quiet --wait --norestart --nocache --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --add Microsoft.VisualStudio.Component.VC.ATLMFC`.
 
-**⚠️ VS Build Tools install caveat (learned 2026-09-26):** `winget install
-Microsoft.VisualStudio.2022.BuildTools --override "--passive …"` **fails** on a fresh Windows 11
-install (`Installer failed with exit code: 1`, winget exit `-1978335226`) because the bootstrapper
-cannot self-update in a passive, non-interactive session. Instead download
-`https://aka.ms/vs/17/release/vs_buildtools.exe` and run it **elevated** with
-`--quiet --wait --norestart --nocache --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --add Microsoft.VisualStudio.Component.VC.ATLMFC`
-— one pass installs the C++ toolchain (MSVC 14.44), the Windows 11 SDK and ATL.
-
-**Anima's own app data on this laptop:** the library folder `Documents\Anima` did not exist after the
-reinstall. A sync backup is sitting in `Documents\Anima Backup\anima-sync.anima-backup` (copies also
-on `W:\Anima Backup\` and `G:\My Drive\Anima Backup\`) — restore it in the app with
-**Settings → Backup, restore & sync → Restore**. The NanoGPT **API key is not inside that file**, so
-paste it again in **Settings → API** (it is written to the library folder as `api_key.txt`).
-
-**Windows line-ending quirk:** `flutter pub get` rewrites `linux/flutter/generated_*` and
-`windows/flutter/generated_*` (and Journey's `macos/Flutter/GeneratedPluginRegistrant.swift`) with
-CRLF line endings, so `git status` shows them as modified even though nothing really changed. Clear it
-with `git checkout -- linux/flutter/generated_* windows/flutter/generated_*` — or just ignore it.
+**Windows file-mode quirk:** a Linux-cloned tree shows many scripts as mode `100755→100644` under
+`git status` on Windows. That is executable-bit noise, not content — stage only real edits.
+`flutter pub get` may also rewrite `linux/flutter/generated_*` / `windows/flutter/generated_*` with
+CRLF; clear with `git checkout --` on those paths or ignore.
 
 
 ### Phone USB debugging (owner checklist)
@@ -630,7 +620,8 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 
 ## Next actions (do these in order)
 
-0. **Living World (new direction):** Open a new agent chat and follow [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md). Phase 0 explore first; create `experiment/living-world` only after owner approval; never put Living World product code on `main` until merge. Classic Anima on `main` stays the daily driver.
+0. **Next product focus:** dig into **summarize / memory** (Scene + Ledger, auto-summarize, witness tags) — improve reliability and UX on main.
+
 1. **New/reinstalled PC?** Linux — pick one:
    - **`bash scripts/setup_linux_dev_noroot.sh`** — no admin password needed. Use this when `sudo` is unavailable or you would rather not type it. It prints the single `apt` line for the desktop libs.
    - **`bash scripts/setup_linux_dev.sh --github`** — the sudo version; also installs `gh` from apt and signs you in.
@@ -639,7 +630,7 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 3. First launch: use **Documents/Anima** (or pick a folder). On Android, allow **All files access** so My Files can open it.
 4. Enter your NanoGPT API key in **Settings → API** (saved in that folder as `api_key.txt`). Your old library can be restored from a `.anima-backup` file in **Settings → Backup, restore & sync** — on the Windows laptop one is waiting in `Documents\Anima Backup\`, `W:\Anima Backup\` and `G:\My Drive\Anima Backup\`.
 5. On Windows, Cursor already points the Dart extension at `C:/src/flutter` (`dart.flutterSdkPath`); set that user-level setting on any new machine if the Dart extension cannot find Flutter.
-6. **Release rule:** keep `pubspec.yaml` at **`1.0.0+<build>`** — only increment the number after `+`. Upload to the existing **`v1.0.0`** GitHub release (not a new tag per build). Current tree is **build 77**. On **Windows**, `./deploy.sh` skips the Linux desktop steps and uploads the APK (plus kicks off the Windows zip via Actions).
+6. **Release rule:** keep `pubspec.yaml` at **`1.0.0+<build>`** — only increment the number after `+`. Stable daily driver uploads to **`v1.0.0`**. Current build is **83**. On **Windows**, `./deploy.sh` skips the Linux desktop steps and uploads the APK (plus kicks off the Windows zip via Actions).
 7. **Moving data between devices (no cloud any more):** create a backup on one device, move the file, then **Restore backup** on the other. `bash scripts/sync_phone_anima.sh --auto` does the copy over USB/Wi-Fi adb in about two seconds, or use whatever you like (KDE Connect, a USB stick). Each device keeps its own API key, so re-entering it is never part of a restore.
 
 ---
@@ -651,16 +642,15 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
 | [`PROJECT_REFERENCE.md`](PROJECT_REFERENCE.md) | Complete encyclopedia for external AI — architecture, data, UI, prompts, mechanics |
 | [`README.md`](README.md) | User-facing feature catalog and install guide |
 | [`AGENTS.md`](AGENTS.md) | This file — agent status, roadmap, code map |
-| [`LIVING_WORLD_HANDOFF_PROMPT.md`](LIVING_WORLD_HANDOFF_PROMPT.md) | Brief for the Living World experiment (structured canon + chat-native play) — start a **new** agent with this; work on a feature branch after Phase 0 approval |
 
 ---
 
 ## How to update the living documents
 
-After finishing work, keep all three living documents in sync:
+After finishing work, keep the living documents in sync:
 
 1. **`AGENTS.md` (this file — always)** — Current status (date + last agent action), what works / doesn't, build-phase checkboxes, code map (add/remove files), next actions.
-2. **`PROJECT_REFERENCE.md` (when mechanics or architecture changed)** — update the numbered section covering what you touched (e.g. §8 persistence, §12 chat mechanics, §16 character cards, §22 sync, §26 test count).
+2. **`PROJECT_REFERENCE.md` (when mechanics or architecture changed)** — update the numbered section covering what you touched (e.g. §8 persistence, §12 chat mechanics, §16 character cards).
 3. **`README.md` (when anything user-visible changed)** — feature catalog rows, menu tables, install/release notes.
 
 Do not delete historical phase checklists; mark them done so future agents see progress.

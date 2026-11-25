@@ -489,6 +489,18 @@ class SettingsService {
   static const _favoriteModelsKey = 'nanogpt_favorite_models';
   static const _legacyContextMaxHistoryKey = 'context_max_history_messages';
 
+  /// Old Living World keys — accepted on restore so older backups still load,
+  /// then ignored (the feature was removed).
+  static const legacyIgnoredPreferenceKeys = <String>{
+    'living_world_update_policy',
+    'living_world_resolve_before_narrate',
+    'living_world_tick_trigger',
+    'living_world_tick_every_n',
+    'living_world_tick_max_people',
+    'living_world_tick_max_ops',
+    'living_world_tick_radius_hops',
+  };
+
   /// Preference keys included in a full-app backup (never the API key).
   static const backupPreferenceKeys = <String>[
     _modelStorageKey,

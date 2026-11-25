@@ -92,11 +92,6 @@ class _LorebooksScreenState extends State<LorebooksScreen> {
     await _load();
   }
 
-  Future<void> _toggle(GlobalLorebook book, bool enabled) async {
-    await widget.worldInfoService.upsert(book.copyWith(enabled: enabled));
-    await _load();
-  }
-
   Future<void> _delete(GlobalLorebook book) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -262,10 +257,8 @@ class _LorebooksScreenState extends State<LorebooksScreen> {
                     final book = _books[index];
                     return ListTile(
                       leading: Icon(
-                        book.enabled ? Icons.menu_book : Icons.menu_book_outlined,
-                        color: book.enabled
-                            ? Theme.of(context).colorScheme.primary
-                            : Theme.of(context).disabledColor,
+                        Icons.menu_book,
+                        color: Theme.of(context).colorScheme.primary,
                       ),
                       title: Row(
                         children: [
@@ -281,30 +274,21 @@ class _LorebooksScreenState extends State<LorebooksScreen> {
                       ),
                       subtitle: Text(
                         '${book.enabledEntryCount}/${book.entryCount} entries on'
-                        '${book.enabled ? '' : ' · disabled'}',
+                        ' · pick per chat when starting or Manage cast',
                       ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Switch(
-                            value: book.enabled,
-                            onChanged: (on) => _toggle(book, on),
+                      trailing: PopupMenuButton<String>(
+                        onSelected: (value) {
+                          if (value == 'export') _export(book);
+                          if (value == 'delete') _delete(book);
+                        },
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(
+                            value: 'export',
+                            child: Text('Export JSON'),
                           ),
-                          PopupMenuButton<String>(
-                            onSelected: (value) {
-                              if (value == 'export') _export(book);
-                              if (value == 'delete') _delete(book);
-                            },
-                            itemBuilder: (context) => const [
-                              PopupMenuItem(
-                                value: 'export',
-                                child: Text('Export JSON'),
-                              ),
-                              PopupMenuItem(
-                                value: 'delete',
-                                child: Text('Delete'),
-                              ),
-                            ],
+                          PopupMenuItem(
+                            value: 'delete',
+                            child: Text('Delete'),
                           ),
                         ],
                       ),

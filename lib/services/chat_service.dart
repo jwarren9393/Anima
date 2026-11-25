@@ -140,6 +140,7 @@ class ChatService {
     String? personaId,
     int greetingIndex = 0,
     String? sourceWorkshopId,
+    List<String>? lorebookIds,
   }) async {
     final builder = const PromptBuilder();
     final greetings = character.allGreetings
@@ -167,6 +168,10 @@ class ChatService {
       );
     }
 
+    final loreIds = [
+      for (final id in lorebookIds ?? const <String>[])
+        if (id.trim().isNotEmpty) id.trim(),
+    ];
     final session = ChatSession(
       id: ChatSession.newId(),
       characterId: character.id,
@@ -174,6 +179,7 @@ class ChatService {
       updatedAt: DateTime.now(),
       messages: messages,
       personaId: personaId,
+      lorebookIds: loreIds,
       sourceWorkshopId: sourceWorkshopId?.trim().isEmpty == true
           ? null
           : sourceWorkshopId?.trim(),

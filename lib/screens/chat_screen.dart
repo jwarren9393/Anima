@@ -55,14 +55,9 @@ import '../utils/text_punctuation.dart';
 import '../utils/composer_markup.dart';
 import '../widgets/chat_composer_field.dart';
 import '../widgets/chat_composer_tools_sheet.dart';
-import '../widgets/chat_lorebook_picker.dart';
 import '../widgets/chat_overrides_sheet.dart';
 import '../widgets/chat_hero_portrait.dart';
 import '../widgets/chat_image_background.dart';
-import '../widgets/add_update_character_sheet.dart';
-import '../widgets/create_character_from_chat_sheet.dart';
-import '../widgets/temporary_character_sheet.dart';
-import '../widgets/update_character_from_chat_sheet.dart';
 import '../widgets/anima_avatar.dart';
 import '../widgets/greeting_picker.dart';
 import '../widgets/group_beat_bubble.dart';
@@ -81,7 +76,6 @@ import 'api_settings_screen.dart';
 import 'characters_screen.dart';
 import 'character_edit_screen.dart';
 import 'group_chat_setup_screen.dart';
-import 'lorebook_edit_screen.dart';
 import 'persona_edit_screen.dart';
 import 'personas_screen.dart';
 import '../services/world_workshop_builder.dart';
@@ -167,8 +161,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       chatTitle: title.isNotEmpty
           ? title
           : (_character?.name.trim().isNotEmpty == true
-              ? _character!.name.trim()
-              : 'Chat'),
+                ? _character!.name.trim()
+                : 'Chat'),
     );
     if (source == null) return const [];
     return [source];
@@ -220,6 +214,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   List<Character> _participants = const [];
   ChatSession? _session;
   Persona? _persona;
+
   Timer? _draftSaveTimer;
   Timer? _toastTimer;
   OverlayEntry? _toastEntry;
@@ -262,7 +257,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       }
       if (msg.isUser) {
         snippets.add('$_userName: ${msg.text.trim()}');
-      } else if (msg.speakerName != null && msg.speakerName!.trim().isNotEmpty) {
+      } else if (msg.speakerName != null &&
+          msg.speakerName!.trim().isNotEmpty) {
         final body = msg.text.trim();
         if (body.isNotEmpty) {
           snippets.add('${msg.speakerName}: $body');
@@ -329,13 +325,19 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     return _characterById(id);
   }
 
-  Future<void> _setComposerVoice(String? characterId) async {
+  Future<void> _setComposerVoice(
+    String? characterId, {
+    bool guideMode = false,
+    bool requestFocus = true,
+  }) async {
     if (_busy) return;
     final session = _session;
     if (session == null) return;
     final nextId = characterId?.trim();
-    if (nextId == _composerVoiceCharacterId) {
-      _composerFocusNode?.requestFocus();
+    final clearing = nextId == null || nextId.isEmpty;
+    if (nextId == _composerVoiceCharacterId &&
+        (clearing || _composerVoiceGuideMode == guideMode)) {
+      if (requestFocus) _composerFocusNode?.requestFocus();
       return;
     }
 
@@ -343,10 +345,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (!mounted) return;
 
     setState(() {
-      _composerVoiceCharacterId =
-          (nextId == null || nextId.isEmpty) ? null : nextId;
+      _composerVoiceCharacterId = clearing ? null : nextId;
       if (_composerVoiceCharacterId != null) {
         _directorMode = false;
+        _composerVoiceGuideMode = guideMode;
       } else {
         _composerVoiceGuideMode = false;
       }
@@ -357,7 +359,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     _inputController.text = draft;
     _inputController.selection = TextSelection.collapsed(offset: draft.length);
     _lastSavedDraft = draft;
-    _composerFocusNode?.requestFocus();
+    if (requestFocus) _composerFocusNode?.requestFocus();
     final voice = _composerVoiceCharacter;
     if (voice != null) {
       final name = voice.name.trim().isEmpty ? 'character' : voice.name.trim();
@@ -367,6 +369,50 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             : 'Writing as $name — tap You to switch back',
       );
     }
+  }
+
+  Future<void> _showYouChipMenu() async {
+    if (_busy) return;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Your next line ($_userName)',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.record_voice_over_outlined),
+                title: const Text('Impersonate'),
+                subtitle: const Text('AI writes your next line as you'),
+                onTap: () => Navigator.pop(context, 'impersonate'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.edit_note),
+                title: const Text('My line…'),
+                subtitle: const Text(
+                  'Steer what you say or do — AI writes your message',
+                ),
+                onTap: () => Navigator.pop(context, 'my_line'),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+    if (action == 'impersonate') await _impersonate();
+    if (action == 'my_line') await _showMyLineSheet();
   }
 
   Future<void> _clearSavedDraft() async {
@@ -385,8 +431,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final character = await _resolveCharacterForSession(session);
     final uiStyle = await widget.settingsService.getUiStyle();
     final enterToSend = await widget.settingsService.getEnterToSendComposer();
-    final autoWrapDialogue =
-        await widget.settingsService.getAutoWrapDialogueOnSend();
+    final autoWrapDialogue = await widget.settingsService
+        .getAutoWrapDialogueOnSend();
     var persona = await widget.personaService.resolve(session.personaId);
     if (session.personaId == null) {
       final savedDefault = await widget.personaService.tryGetActivePersona();
@@ -435,8 +481,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         : null;
     if (fileName == _resolvedBackgroundFileName) return;
     _resolvedBackgroundFileName = fileName;
-    final path =
-        fileName != null ? await _chatBackgroundService.resolvePath(fileName) : null;
+    final path = fileName != null
+        ? await _chatBackgroundService.resolvePath(fileName)
+        : null;
     if (!mounted) return;
     if (path != _chatBackgroundPath) {
       setState(() => _chatBackgroundPath = path);
@@ -664,7 +711,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   String _lowerName(String name) =>
       name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_');
 
-  ChatMessage _applyGroupBeatParts(ChatMessage message, List<GroupBeatPart> parts) {
+  ChatMessage _applyGroupBeatParts(
+    ChatMessage message,
+    List<GroupBeatPart> parts,
+  ) {
     if (parts.isEmpty || message.beatSwipes == null) return message;
     final variants = List<List<GroupBeatPart>>.from(message.beatSwipes!);
     final idx = message.swipeIndex.clamp(0, variants.length - 1);
@@ -820,8 +870,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
 
     final builder = WorldWorkshopBuilder();
-    final contextSettings =
-        await widget.settingsService.getContextSettings();
+    final contextSettings = await widget.settingsService.getContextSettings();
     final source = builder.buildImportedChatSource(
       session: _session!,
       characters: _participants,
@@ -845,9 +894,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       return;
     }
     final workshop = await widget.worldWorkshopService.upsert(
-      WorldWorkshop.empty(title: 'From: ${_session!.title}').copyWith(
-        importedSource: source,
-      ),
+      WorldWorkshop.empty(
+        title: 'From: ${_session!.title}',
+      ).copyWith(importedSource: source),
     );
     if (!mounted) return;
     await Navigator.of(context).push(
@@ -1178,10 +1227,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   Future<void> _send() async {
     var text = normalizeEmDashes(_inputController.text.trim());
-    if (text.isEmpty ||
-        _busy ||
-        _session == null ||
-        _character == null) {
+    if (text.isEmpty || _busy || _session == null || _character == null) {
       return;
     }
 
@@ -1289,8 +1335,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _error = null;
       var session = _session!;
       session.messages.add(message);
-      final speakerIndex =
-          _participants.indexWhere((c) => c.id == speaker.id);
+      final speakerIndex = _participants.indexWhere((c) => c.id == speaker.id);
       _session = session.copyWith(
         clearPendingDirector: true,
         nextSpeakerIndex: speakerIndex >= 0
@@ -1343,8 +1388,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           generationGuide: trimmed,
         ),
       );
-      final speakerIndex =
-          _participants.indexWhere((c) => c.id == speaker.id);
+      final speakerIndex = _participants.indexWhere((c) => c.id == speaker.id);
       _session = session.copyWith(
         clearPendingDirector: true,
         nextSpeakerIndex: speakerIndex >= 0
@@ -1361,8 +1405,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       userName: _userName,
     );
 
-    final assistantIndex =
-        _session!.messages.indexWhere((m) => m.id == assistantId);
+    final assistantIndex = _session!.messages.indexWhere(
+      (m) => m.id == assistantId,
+    );
     if (assistantIndex < 0) {
       setState(() => _busy = false);
       return;
@@ -1377,6 +1422,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       advanceGroupSpeaker: false,
       rewriteMessages: guideMessages,
     );
+
+    // Back to the persona chip so the next send is the player's reply
+    // (don't pop the keyboard — just clear character voice mode).
+    if (mounted) {
+      await _setComposerVoice(null, requestFocus: false);
+    }
   }
 
   Future<void> _sendDirectorNote(String text) async {
@@ -1447,10 +1498,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       assistantId = null;
     }
     if (pendingId == null) {
-      return session.copyWith(
-        messages: messages,
-        clearPendingDirector: true,
-      );
+      return session.copyWith(messages: messages, clearPendingDirector: true);
     }
     return session.copyWith(
       messages: messages,
@@ -1517,11 +1565,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             userName: _userName,
             endExclusive: endExclusive,
           )
-        : const NarratorSceneSnapshot(
-            present: {},
-            departed: {},
-            arriving: {},
-          );
+        : const NarratorSceneSnapshot(present: {}, departed: {}, arriving: {});
     return _narrator.activeSceneLawBlock(
       messages: _messages,
       activeNarratorId: activeId,
@@ -1557,10 +1601,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     required ChatMessage message,
     required Character observer,
   }) {
-    var body = stripLeadingSpeakerPrefix(
-      message.text,
-      message.speakerName,
-    );
+    var body = stripLeadingSpeakerPrefix(message.text, message.speakerName);
     if (_isGroup &&
         !message.isUser &&
         message.speakerName != null &&
@@ -1587,10 +1628,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         : 'Character';
     final otherNames = _isGroup
         ? _participants
-            .where((c) => c.id != _character!.id)
-            .map((c) => c.name.trim())
-            .where((n) => n.isNotEmpty)
-            .toList()
+              .where((c) => c.id != _character!.id)
+              .map((c) => c.name.trim())
+              .where((n) => n.isNotEmpty)
+              .toList()
         : const <String>[];
     final result = await showNarratorSheet(
       context: context,
@@ -1658,10 +1699,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         : 'Character';
     final otherNames = _isGroup
         ? _participants
-            .where((c) => c.id != _character?.id)
-            .map((c) => c.name.trim())
-            .where((n) => n.isNotEmpty)
-            .toList()
+              .where((c) => c.id != _character?.id)
+              .map((c) => c.name.trim())
+              .where((n) => n.isNotEmpty)
+              .toList()
         : const <String>[];
     final result = await showNarratorSheet(
       context: context,
@@ -1799,15 +1840,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     setState(() => _composerVoiceGuideMode = guide);
   }
 
-  Future<void> _toggleAutoReply() async {
-    if (_busy || _session == null) return;
-    final next = !_session!.autoReply;
-    setState(() {
-      _session = _session!.copyWith(autoReply: next);
-    });
-    await _persist();
-  }
-
   /// Pick who speaks next. In a group with auto-reply off, tapping a name
   /// generates that character's reply (even if they are already selected).
   Future<void> _selectSpeaker(int index) async {
@@ -1871,10 +1903,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       participants: _participants,
     );
     if (result == null || !mounted) return;
-    await _generateGroupBeat(
-      speakers: result.speakers,
-      nudge: result.nudge,
-    );
+    await _generateGroupBeat(speakers: result.speakers, nudge: result.nudge);
   }
 
   String _latestPriorGroupBeatText({required int beforeIndex}) {
@@ -1996,12 +2025,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
       setState(() {
         final parts = _partsFromBeatLines(beats);
-        _session!.messages.add(
-          ChatMessage.groupBeat(
-            id: beatId,
-            lines: parts,
-          ),
-        );
+        _session!.messages.add(ChatMessage.groupBeat(id: beatId, lines: parts));
       });
       await _persist();
       _scrollToBottom(jump: true);
@@ -2164,8 +2188,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       isGroup: true,
     );
 
-    final minJoinIndex =
-        speakers.map((c) => _joinIndexFor(c)).reduce((a, b) => a < b ? a : b);
+    final minJoinIndex = speakers
+        .map((c) => _joinIndexFor(c))
+        .reduce((a, b) => a < b ? a : b);
     final visibleHistory = _presence.filterHistoryForSpeakers(
       history: history,
       allMessages: _messages,
@@ -2233,8 +2258,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       }
     }
 
-    final globalPrompts =
-        await widget.settingsService.getGlobalChatPromptSettings();
+    final globalPrompts = await widget.settingsService
+        .getGlobalChatPromptSettings();
 
     var memoryBlock = '';
     final memory = (_session?.memorySummary ?? '').trim();
@@ -2271,12 +2296,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       nudge: nudge,
       globalSystemPrompt: globalPrompts.systemPrompt,
       postHistory: postHistory,
-      narratorBlock: _narratorActiveBlock(
+      narratorBlock:
+          _narratorActiveBlock(
             charName: primary.name,
             endExclusive: historyEndExclusive ?? _messages.length,
           ) ??
           '',
-      directorBlock: _directorBlockForGeneration(
+      directorBlock:
+          _directorBlockForGeneration(
             character: primary,
             mode: PromptMode.normal,
             groupBeat: true,
@@ -2541,25 +2568,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     await _persist();
   }
 
-  Future<void> _pickChatLorebooks() async {
-    final session = _session;
-    if (session == null || _busy) return;
-    final books = await widget.worldInfoService.loadBooks();
-    if (!mounted) return;
-    final result = await pickChatLorebooks(
-      context,
-      allBooks: books,
-      chatLorebookIds: session.lorebookIds,
-    );
-    if (result == null || !mounted) return;
-    setState(() {
-      _session = result.useAppDefault
-          ? session.copyWith(clearLorebookIds: true)
-          : session.copyWith(lorebookIds: result.selectedIds);
-    });
-    await _persist();
-  }
-
   Future<void> _editMemorySummary() async {
     final session = _session;
     if (session == null || _busy) return;
@@ -2609,8 +2617,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
 
     final others = _participants.where((c) => c.id != speaker.id).toList();
-    final globalPrompts =
-        await widget.settingsService.getGlobalChatPromptSettings();
+    final globalPrompts = await widget.settingsService
+        .getGlobalChatPromptSettings();
 
     final systemBase = _promptBuilder.buildSystemPrompt(
       character: speaker,
@@ -2637,10 +2645,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       globalSystemPrompt: globalPrompts.systemPrompt,
     );
     final speakerCardTokens = _contextService.estimateTokens(systemBase);
-    final personaOnlyTokens = _contextService.estimateTokens(systemWithPersona) -
-        speakerCardTokens;
-    final globalPromptTokens = _contextService.estimateTokens(systemWithGlobal) -
-        speakerCardTokens;
+    final personaOnlyTokens =
+        _contextService.estimateTokens(systemWithPersona) - speakerCardTokens;
+    final globalPromptTokens =
+        _contextService.estimateTokens(systemWithGlobal) - speakerCardTokens;
     final castSummaries = <({String name, int tokens})>[
       for (final other in others)
         (
@@ -2648,8 +2656,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           tokens: _tokenService.breakdown(other).groupSummaryTokens,
         ),
     ];
-    final castSummaryTokens =
-        castSummaries.fold<int>(0, (sum, row) => sum + row.tokens);
+    final castSummaryTokens = castSummaries.fold<int>(
+      0,
+      (sum, row) => sum + row.tokens,
+    );
 
     final postHistory = _promptBuilder.buildPostHistory(
       character: speaker,
@@ -2702,7 +2712,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
 
     final personaTokens = personaOnlyTokens + globalPromptTokens;
-    final estimatedSent = speakerCardTokens +
+    final estimatedSent =
+        speakerCardTokens +
         castSummaryTokens +
         personaOnlyTokens +
         globalPromptTokens +
@@ -2712,7 +2723,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         postHistoryTokens;
 
     return ChatPromptBreakdown(
-      speakerName: speaker.name.trim().isEmpty ? 'Character' : speaker.name.trim(),
+      speakerName: speaker.name.trim().isEmpty
+          ? 'Character'
+          : speaker.name.trim(),
       speakerCardTokens: speakerCardTokens,
       castSummaries: castSummaries,
       loreTokens: loreTokens,
@@ -3031,64 +3044,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
-  Future<void> _updateCharacterFromChat() async {
-    if (_busy || _session == null) return;
-    final result = await showUpdateCharacterFromChatSheet(
-      context: context,
-      session: _session!,
-      participants: _participants,
-      persona: _persona,
-      characterService: widget.characterService,
-      settingsService: widget.settingsService,
-      nanoGptService: widget.nanoGptService,
-      worldInfoService: widget.worldInfoService,
-    );
-    if (result == null || !mounted) return;
-
-    if (result.chatOnly) {
-      _setCharacterOverride(result.character);
-      return;
-    }
-
-    final updated = result.character;
-    final overrides = Map<String, Character>.from(_session!.characterOverrides)
-      ..remove(updated.id);
-    final session = _session!.copyWith(
-      characterOverrides: overrides,
-      clearCharacterOverrides: overrides.isEmpty,
-    );
-    await widget.chatService.saveChat(session);
-    await _refreshCastFromSession(session);
-  }
-
-  Future<void> _openChatLorebook() async {
-    final session = _session;
-    if (session == null || _busy) return;
-    final initial = session.chatLorebook ??
-        const Lorebook(
-          name: 'Chat story lore',
-          description: 'Facts and relationships for this thread only.',
-        );
-    final book = await Navigator.of(context).push<Lorebook>(
-      MaterialPageRoute(
-        builder: (_) => LorebookEditScreen(
-          initial: initial,
-          settingsService: widget.settingsService,
-          nanoGptService: widget.nanoGptService,
-          characterName: _isGroup
-              ? _participants.map((c) => c.name).join(', ')
-              : (_character?.name ?? ''),
-        ),
-      ),
-    );
-    if (book == null || !mounted) return;
-    final updated = session.copyWith(
-      chatLorebook: book.isEmpty ? null : book,
-      clearChatLorebook: book.isEmpty,
-    );
-    await _persistSessionAndRefreshCast(updated);
-  }
-
   Future<void> _openChatOverrides() async {
     final session = _session;
     if (session == null || _busy) return;
@@ -3101,110 +3056,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         await _persistSessionAndRefreshCast(next);
       },
     );
-  }
-
-  Future<void> _addOrUpdateCharacter() async {
-    if (_busy || _session == null) return;
-    final action = await showAddUpdateCharacterSheet(context: context);
-    if (action == null || !mounted || _session == null) return;
-    switch (action) {
-      case 'new':
-        await _createCharacterForChat();
-        break;
-      case 'temporary':
-        await _addTemporaryCharacterToChat();
-        break;
-      case 'update':
-        await _updateCharacterFromChat();
-        break;
-    }
-  }
-
-  Future<void> _createCharacterForChat() async {
-    if (_busy || _session == null) return;
-    final created = await showCreateCharacterFromChatSheet(
-      context: context,
-      session: _session!,
-      participants: _participants,
-      persona: _persona,
-      characterService: widget.characterService,
-      settingsService: widget.settingsService,
-      nanoGptService: widget.nanoGptService,
-      worldInfoService: widget.worldInfoService,
-      personaService: widget.personaService,
-    );
-    if (created == null || !mounted || _session == null) return;
-
-    final currentIds = _session!.effectiveParticipantIds;
-    if (currentIds.contains(created.id)) {
-      _showChatError('${created.name} is already in this chat.');
-      return;
-    }
-
-    final byId = {
-      for (final c in _participants) c.id: c,
-      created.id: created,
-    };
-    final ordered = [
-      for (final id in currentIds)
-        if (byId.containsKey(id)) byId[id]!,
-      created,
-    ];
-
-    try {
-      final updated = await widget.chatService.updateSessionCast(
-        _session!,
-        ordered,
-      );
-      if (!mounted) return;
-      await _applySession(
-        updated,
-        participants: ordered,
-        character: ordered.first,
-      );
-    } catch (error) {
-      _showChatError('Could not add character: $error');
-    }
-  }
-
-  Future<void> _addTemporaryCharacterToChat() async {
-    if (_busy || _session == null) return;
-    final created = await showTemporaryCharacterSheet(
-      context: context,
-      characterService: widget.characterService,
-    );
-    if (created == null || !mounted || _session == null) return;
-
-    final currentIds = _session!.effectiveParticipantIds;
-    if (currentIds.contains(created.id)) {
-      _showChatError('${created.name} is already in this chat.');
-      return;
-    }
-
-    final byId = {
-      for (final c in _participants) c.id: c,
-      created.id: created,
-    };
-    final ordered = [
-      for (final id in currentIds)
-        if (byId.containsKey(id)) byId[id]!,
-      created,
-    ];
-
-    try {
-      final updated = await widget.chatService.updateSessionCast(
-        _session!,
-        ordered,
-      );
-      if (!mounted) return;
-      await _applySession(
-        updated,
-        participants: ordered,
-        character: ordered.first,
-      );
-    } catch (error) {
-      _showChatError('Could not add character: $error');
-    }
   }
 
   Future<void> _regenerateOrSwipe({required bool asNewSwipe}) async {
@@ -3232,11 +3083,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
     final choice = await showReplyRewriteSheet(context);
     if (!mounted || choice == null) return;
-    await _regenerateMessageAt(
-      index,
-      asNewSwipe: true,
-      rewrite: choice,
-    );
+    await _regenerateMessageAt(index, asNewSwipe: true, rewrite: choice);
   }
 
   Future<void> _regenerateMessageAt(
@@ -3252,7 +3099,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     // reuses the saved steer (if any) instead of asking the player to retype it.
     if (message.generationKind == MessageGenerationKind.impersonate) {
       if (rewrite != null) {
-        _showChatError('Rewrite is for character replies — use Regenerate or New swipe.');
+        _showChatError(
+          'Rewrite is for character replies — use Regenerate or New swipe.',
+        );
         return;
       }
       if (!_hasApiKey) {
@@ -3357,7 +3206,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     await _streamAssistantReply(
       assistantIndex: index,
-      allowGreetingNudge: rewrite == null &&
+      allowGreetingNudge:
+          rewrite == null &&
           message.generationKind != MessageGenerationKind.characterGuide,
       speakingAs: speaker,
       advanceGroupSpeaker: false,
@@ -3381,8 +3231,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
     if (hasTurn) return;
 
-    final char =
-        characterName.trim().isEmpty ? 'Character' : characterName.trim();
+    final char = characterName.trim().isEmpty
+        ? 'Character'
+        : characterName.trim();
     final user = userName.trim().isEmpty ? 'User' : userName.trim();
     if (mode == PromptMode.impersonate) {
       msgs.add({
@@ -3415,7 +3266,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final userName = _userName;
     final persona = _persona?.promptText ?? '';
 
-    final end = historyEndExclusive ??
+    final end =
+        historyEndExclusive ??
         (excludeLastAssistant ? _messages.length - 1 : _messages.length);
     final rawHistoryForScan = _messages.sublist(0, end);
     final historyForScan = _presence.ensureLastUserMessageIncluded(
@@ -3446,8 +3298,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
 
     final others = _participants.where((c) => c.id != character.id).toList();
-    final globalPrompts =
-        await widget.settingsService.getGlobalChatPromptSettings();
+    final globalPrompts = await widget.settingsService
+        .getGlobalChatPromptSettings();
     final system = _promptBuilder.buildSystemPrompt(
       character: character,
       userName: userName,
@@ -3618,8 +3470,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final narratorBlock = _narratorActiveBlock(
       charName: character.name,
       endExclusive: end,
-      speakingAsName:
-          mode == PromptMode.impersonate ? userName : character.name,
+      speakingAsName: mode == PromptMode.impersonate
+          ? userName
+          : character.name,
       excludeMessageIndex: excludeMessageIndex,
     );
     if (narratorBlock != null && narratorBlock.trim().isNotEmpty) {
@@ -3706,8 +3559,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final last = messages[endExclusive - 1];
     if (!last.isUser || last.text.trim().isEmpty) return;
 
-    final char =
-        characterName.trim().isEmpty ? 'Character' : characterName.trim();
+    final char = characterName.trim().isEmpty
+        ? 'Character'
+        : characterName.trim();
     final user = userName.trim().isEmpty ? 'User' : userName.trim();
     msgs.add({
       'role': 'user',
@@ -3754,8 +3608,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       final baseUrl = await widget.settingsService.getApiBaseUrl();
       final speaker = speakingAs ?? _resolvedGroupSpeaker();
       final assistantId = _messages[assistantIndex].id;
-      final writingAsUser = mode == PromptMode.impersonate ||
-          _messages[assistantIndex].isUser;
+      final writingAsUser =
+          mode == PromptMode.impersonate || _messages[assistantIndex].isUser;
       // Impersonate fills a user bubble — never bind / consume a pending
       // Director note meant for the next AI character reply.
       if (!writingAsUser) {
@@ -3780,8 +3634,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       )) {
         if (!mounted) return;
         buffer.write(chunk);
-        final speakerLabel =
-            writingAsUser ? _userName : speaker.name;
+        final speakerLabel = writingAsUser ? _userName : speaker.name;
         final text = stripLeadingSpeakerPrefix(buffer.toString(), speakerLabel);
         setState(() {
           final updated = List<ChatMessage>.from(_session!.messages);
@@ -3823,9 +3676,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       final current = updated[index];
       final cleaned = stripLeadingSpeakerPrefix(
         current.text.trim(),
-        writingAsUser
-            ? _userName
-            : (current.speakerName ?? speaker.name),
+        writingAsUser ? _userName : (current.speakerName ?? speaker.name),
       );
       if (cleaned != current.text) {
         setState(() {
@@ -3986,8 +3837,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           message.isDirector
               ? 'Edit director note'
               : message.isUser
-                  ? 'Edit your message'
-                  : 'Edit reply',
+              ? 'Edit your message'
+              : 'Edit reply',
         ),
         content: TextField(
           controller: controller,
@@ -4169,7 +4020,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         Expanded(
           child: _composerVoiceGuideMode
               ? OutlinedButton.icon(
-                  onPressed: _busy ? null : () => _setComposerVoiceGuideMode(false),
+                  onPressed: _busy
+                      ? null
+                      : () => _setComposerVoiceGuideMode(false),
                   icon: const Icon(Icons.edit_outlined, size: 18),
                   label: const Text('Write line'),
                   style: OutlinedButton.styleFrom(
@@ -4177,7 +4030,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   ),
                 )
               : FilledButton.tonalIcon(
-                  onPressed: _busy ? null : () => _setComposerVoiceGuideMode(false),
+                  onPressed: _busy
+                      ? null
+                      : () => _setComposerVoiceGuideMode(false),
                   icon: const Icon(Icons.edit, size: 18),
                   label: const Text('Write line'),
                   style: FilledButton.styleFrom(
@@ -4189,7 +4044,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         Expanded(
           child: _composerVoiceGuideMode
               ? FilledButton.tonalIcon(
-                  onPressed: _busy ? null : () => _setComposerVoiceGuideMode(true),
+                  onPressed: _busy
+                      ? null
+                      : () => _setComposerVoiceGuideMode(true),
                   icon: const Icon(Icons.auto_awesome, size: 18),
                   label: const Text('Guide AI'),
                   style: FilledButton.styleFrom(
@@ -4197,7 +4054,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   ),
                 )
               : OutlinedButton.icon(
-                  onPressed: _busy ? null : () => _setComposerVoiceGuideMode(true),
+                  onPressed: _busy
+                      ? null
+                      : () => _setComposerVoiceGuideMode(true),
                   icon: const Icon(Icons.auto_awesome_outlined, size: 18),
                   label: const Text('Guide AI'),
                   style: OutlinedButton.styleFrom(
@@ -4215,38 +4074,45 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       child: Row(
         children: [
           Tooltip(
-            message: 'Write as $_userName',
-            child: InputChip(
-              avatar: const Icon(Icons.person_outline, size: 18),
-              label: Text(
-                _userName.length > 14 ? 'You' : _userName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+            message:
+                'Tap: write as $_userName · Long-press: Impersonate / My line…',
+            child: GestureDetector(
+              onLongPress: _busy ? null : _showYouChipMenu,
+              child: InputChip(
+                avatar: const Icon(Icons.person_outline, size: 18),
+                label: Text(
+                  _userName.length > 14 ? 'You' : _userName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                selected: _composerVoiceCharacterId == null,
+                onPressed: _busy
+                    ? null
+                    : () {
+                        if (_composerVoiceCharacterId == null) {
+                          _composerFocusNode?.requestFocus();
+                          return;
+                        }
+                        _setComposerVoice(null);
+                      },
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                labelPadding: const EdgeInsets.symmetric(horizontal: 8),
               ),
-              selected: _composerVoiceCharacterId == null,
-              onPressed: _busy
-                  ? null
-                  : () {
-                      if (_composerVoiceCharacterId == null) {
-                        _composerFocusNode?.requestFocus();
-                        return;
-                      }
-                      _setComposerVoice(null);
-                    },
-              visualDensity: VisualDensity.compact,
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              labelPadding: const EdgeInsets.symmetric(horizontal: 8),
             ),
           ),
           for (var i = 0; i < _participants.length; i++) ...[
             const SizedBox(width: 6),
             Tooltip(
               message:
-                  'Tap: AI reply · Long-press: write as ${_participants[i].name.trim().isEmpty ? 'character' : _participants[i].name.trim()}',
+                  'Tap: AI reply · Long-press: Guide AI for ${_participants[i].name.trim().isEmpty ? 'character' : _participants[i].name.trim()}',
               child: GestureDetector(
                 onLongPress: _busy
                     ? null
-                    : () => _setComposerVoice(_participants[i].id),
+                    : () => _setComposerVoice(
+                        _participants[i].id,
+                        guideMode: true,
+                      ),
                 child: InputChip(
                   label: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 140),
@@ -4325,12 +4191,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         ? '${session.effectiveParticipantIds.length} characters'
         : null;
     final ui = AnimaUiTheme.of(context);
-    final showChatBackground = ui.chatExperience.backgroundEnabled &&
-        _chatBackgroundPath != null;
+    final showChatBackground =
+        ui.chatExperience.backgroundEnabled && _chatBackgroundPath != null;
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 24;
     final compactComposer = !isDesktopPlatform;
-    final hasMemory =
-        (_session?.memorySummary.trim().isNotEmpty ?? false);
     final hasAuthorsNote = _hasEffectiveAuthorsNote;
     final activeMoodCount = _activeSceneMoodCount;
     return Scaffold(
@@ -4350,10 +4214,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           children: [
             Text(titleName),
             if (groupSubtitle != null)
-              Text(
-                groupSubtitle,
-                style: Theme.of(context).textTheme.bodySmall,
-              )
+              Text(groupSubtitle, style: Theme.of(context).textTheme.bodySmall)
             else if (_session != null && !_isGroup)
               Text(
                 _session!.title,
@@ -4371,15 +4232,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               if (value == 'api') _openApiSettings();
               if (value == 'persona') _pickPersona();
               if (value == 'authors_note') _editAuthorsNote();
-              if (value == 'lorebooks') _pickChatLorebooks();
-              if (value == 'chat_lore') _openChatLorebook();
               if (value == 'chat_copies') _openChatOverrides();
               if (value == 'memory') _editMemorySummary();
               if (value == 'summarize') _summarizeNow();
               if (value == 'context') _showContextEstimate();
-              if (value == 'characters') _openCharacters();
               if (value == 'manage_cast') _manageCast();
-              if (value == 'add_character') _addOrUpdateCharacter();
               if (value == 'creation_center') _openCreationCenter();
               if (value == 'export') _exportChat();
               if (value == 'import') _importChat();
@@ -4401,19 +4258,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               const PopupMenuItem(
                 value: "authors_note",
                 child: Text("Author's Note"),
-              ),
-              PopupMenuItem(
-                value: 'lorebooks',
-                child: Text(chatLorebookMenuLabel(_session?.lorebookIds)),
-              ),
-              PopupMenuItem(
-                value: 'chat_lore',
-                child: Text(
-                  (_session?.chatLorebook != null &&
-                          !_session!.chatLorebook!.isEmpty)
-                      ? 'Chat lore (${_session!.chatLorebook!.entries.length})'
-                      : 'Chat lore (this thread)',
-                ),
               ),
               if (_session != null &&
                   _sessionResolver.hasChatOverrides(_session!))
@@ -4438,16 +4282,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 child: Text('Context estimate'),
               ),
               const PopupMenuItem(
-                value: 'characters',
-                child: Text('Characters'),
-              ),
-              const PopupMenuItem(
                 value: 'manage_cast',
                 child: Text('Manage cast'),
-              ),
-              const PopupMenuItem(
-                value: 'add_character',
-                child: Text('Add / update character…'),
               ),
               const PopupMenuDivider(),
               const PopupMenuItem(
@@ -4509,228 +4345,275 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                           onNewChat: _newChat,
                         )
                       : CustomScrollView(
-                      controller: _scrollController,
-                      slivers: [
-                        SliverPadding(
-                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-                          sliver: SliverList(
-                            delegate: SliverChildBuilderDelegate(
-                              (context, index) {
-                        final message = _messages[index];
-                        if (message.isNarrator) {
-                          return Padding(
-                            padding: EdgeInsets.symmetric(
-                              vertical:
-                                  AnimaUiTheme.of(context).messageSpacing / 2,
-                            ),
-                            child: NarratorBubble(
-                              label: 'Narrator',
-                              icon: Icons.theater_comedy_outlined,
-                              text: message.text,
-                              onTap: _busy
-                                  ? null
-                                  : () => _editNarratorAt(index),
-                              onLongPress: _busy
-                                  ? null
-                                  : () => _showSceneCardMenu(
-                                        index: index,
-                                        isDirector: false,
+                          controller: _scrollController,
+                          slivers: [
+                            SliverPadding(
+                              padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                              sliver: SliverList(
+                                delegate: SliverChildBuilderDelegate((
+                                  context,
+                                  index,
+                                ) {
+                                  final message = _messages[index];
+                                  if (message.isNarrator) {
+                                    return Padding(
+                                      padding: EdgeInsets.symmetric(
+                                        vertical:
+                                            AnimaUiTheme.of(
+                                              context,
+                                            ).messageSpacing /
+                                            2,
                                       ),
-                            ),
-                          );
-                        }
-                        if (message.isDirector) {
-                          final pending = message.id ==
-                              (_session?.pendingDirectorMessageId ?? '');
-                          return Padding(
-                            padding: EdgeInsets.symmetric(
-                              vertical:
-                                  AnimaUiTheme.of(context).messageSpacing / 2,
-                            ),
-                            child: NarratorBubble(
-                              label: 'Director',
-                              icon: Icons.control_camera_outlined,
-                              text: message.text,
-                              injecting: pending,
-                              onTap: _busy
-                                  ? null
-                                  : () => _editDirectorAt(index),
-                              onLongPress: _busy
-                                  ? null
-                                  : () => _showSceneCardMenu(
-                                        index: index,
-                                        isDirector: true,
+                                      child: NarratorBubble(
+                                        label: 'Narrator',
+                                        icon: Icons.theater_comedy_outlined,
+                                        text: message.text,
+                                        onTap: _busy
+                                            ? null
+                                            : () => _editNarratorAt(index),
+                                        onLongPress: _busy
+                                            ? null
+                                            : () => _showSceneCardMenu(
+                                                index: index,
+                                                isDirector: false,
+                                              ),
                                       ),
-                            ),
-                          );
-                        }
-                        if (message.isGroupBeat) {
-                          final isLast = index == _messages.length - 1;
-                          final lines = message.beatLines ?? const [];
-                          final thinking = _busy &&
-                              isLast &&
-                              lines.every((l) => l.text.trim().isEmpty);
-                          final isLastAi = isLast;
-                          final canGoPrev =
-                              message.swipes.length > 1 &&
-                              message.swipeIndex > 0;
-                          final canGoNextExisting =
-                              message.swipes.length > 1 &&
-                              message.swipeIndex < message.swipes.length - 1;
-                          final canQuickSwipe =
-                              isLastAi &&
-                              !thinking &&
-                              !_busy &&
-                              message.swipeIndex >= message.swipes.length - 1;
-                          return Padding(
-                            padding: EdgeInsets.symmetric(
-                              vertical:
-                                  AnimaUiTheme.of(context).messageSpacing / 2,
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                if (thinking)
-                                  Material(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .surfaceContainerHighest
-                                        .withValues(alpha: 0.72),
-                                    borderRadius: BorderRadius.circular(
-                                      AnimaUiTheme.of(context).chatBubbleRadius,
-                                    ),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(16),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
+                                    );
+                                  }
+                                  if (message.isDirector) {
+                                    final pending =
+                                        message.id ==
+                                        (_session?.pendingDirectorMessageId ??
+                                            '');
+                                    return Padding(
+                                      padding: EdgeInsets.symmetric(
+                                        vertical:
+                                            AnimaUiTheme.of(
+                                              context,
+                                            ).messageSpacing /
+                                            2,
+                                      ),
+                                      child: NarratorBubble(
+                                        label: 'Director',
+                                        icon: Icons.control_camera_outlined,
+                                        text: message.text,
+                                        injecting: pending,
+                                        onTap: _busy
+                                            ? null
+                                            : () => _editDirectorAt(index),
+                                        onLongPress: _busy
+                                            ? null
+                                            : () => _showSceneCardMenu(
+                                                index: index,
+                                                isDirector: true,
+                                              ),
+                                      ),
+                                    );
+                                  }
+                                  if (message.isGroupBeat) {
+                                    final isLast =
+                                        index == _messages.length - 1;
+                                    final lines = message.beatLines ?? const [];
+                                    final thinking =
+                                        _busy &&
+                                        isLast &&
+                                        lines.every(
+                                          (l) => l.text.trim().isEmpty,
+                                        );
+                                    final isLastAi = isLast;
+                                    final canGoPrev =
+                                        message.swipes.length > 1 &&
+                                        message.swipeIndex > 0;
+                                    final canGoNextExisting =
+                                        message.swipes.length > 1 &&
+                                        message.swipeIndex <
+                                            message.swipes.length - 1;
+                                    final canQuickSwipe =
+                                        isLastAi &&
+                                        !thinking &&
+                                        !_busy &&
+                                        message.swipeIndex >=
+                                            message.swipes.length - 1;
+                                    return Padding(
+                                      padding: EdgeInsets.symmetric(
+                                        vertical:
+                                            AnimaUiTheme.of(
+                                              context,
+                                            ).messageSpacing /
+                                            2,
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.stretch,
                                         children: [
-                                          SizedBox(
-                                            width: 16,
-                                            height: 16,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
+                                          if (thinking)
+                                            Material(
                                               color: Theme.of(context)
                                                   .colorScheme
-                                                  .primary,
+                                                  .surfaceContainerHighest
+                                                  .withValues(alpha: 0.72),
+                                              borderRadius:
+                                                  BorderRadius.circular(
+                                                    AnimaUiTheme.of(
+                                                      context,
+                                                    ).chatBubbleRadius,
+                                                  ),
+                                              child: Padding(
+                                                padding: const EdgeInsets.all(
+                                                  16,
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    SizedBox(
+                                                      width: 16,
+                                                      height: 16,
+                                                      child:
+                                                          CircularProgressIndicator(
+                                                            strokeWidth: 2,
+                                                            color:
+                                                                Theme.of(
+                                                                      context,
+                                                                    )
+                                                                    .colorScheme
+                                                                    .primary,
+                                                          ),
+                                                    ),
+                                                    const SizedBox(width: 10),
+                                                    Text(
+                                                      'Group react…',
+                                                      style: Theme.of(
+                                                        context,
+                                                      ).textTheme.bodyMedium,
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            )
+                                          else
+                                            GroupBeatBubble(
+                                              lines: lines,
+                                              avatarForSpeakerId:
+                                                  _avatarForParticipantId,
+                                              avatarStyle: _avatarStyle,
+                                              onTap: (_busy || thinking)
+                                                  ? null
+                                                  : () =>
+                                                        _editGroupBeatAt(index),
+                                              onLongPress: (_busy || thinking)
+                                                  ? null
+                                                  : () =>
+                                                        _showMessageMenu(index),
                                             ),
-                                          ),
-                                          const SizedBox(width: 10),
-                                          Text(
-                                            'Group react…',
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .bodyMedium,
-                                          ),
+                                          if (!thinking &&
+                                              (message.canSwipe || isLastAi))
+                                            _SwipePager(
+                                              index: message.swipeIndex,
+                                              total: message.swipes.length,
+                                              onPrev: (!_busy && canGoPrev)
+                                                  ? () => _shiftSwipe(index, -1)
+                                                  : null,
+                                              onNext:
+                                                  (!_busy && canGoNextExisting)
+                                                  ? () => _shiftSwipe(index, 1)
+                                                  : (canQuickSwipe
+                                                        ? () =>
+                                                              _regenerateOrSwipe(
+                                                                asNewSwipe:
+                                                                    true,
+                                                              )
+                                                        : null),
+                                              nextGeneratesSwipe: canQuickSwipe,
+                                            ),
                                         ],
                                       ),
+                                    );
+                                  }
+                                  final isLast = index == _messages.length - 1;
+                                  final thinking =
+                                      _busy && isLast && message.text.isEmpty;
+                                  final isLastAi =
+                                      isLast && message.isAiGenerated;
+                                  final canGoPrev =
+                                      message.isAiGenerated &&
+                                      message.swipes.length > 1 &&
+                                      message.swipeIndex > 0;
+                                  final canGoNextExisting =
+                                      message.isAiGenerated &&
+                                      message.swipes.length > 1 &&
+                                      message.swipeIndex <
+                                          message.swipes.length - 1;
+                                  // On the latest AI bubble, ▶ past the last swipe = new generation.
+                                  final canQuickSwipe =
+                                      isLastAi &&
+                                      !thinking &&
+                                      !_busy &&
+                                      message.swipeIndex >=
+                                          message.swipes.length - 1;
+                                  return Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      vertical:
+                                          AnimaUiTheme.of(
+                                            context,
+                                          ).messageSpacing /
+                                          2,
                                     ),
-                                  )
-                                else
-                                  GroupBeatBubble(
-                                    lines: lines,
-                                    avatarForSpeakerId: _avatarForParticipantId,
-                                    avatarStyle: _avatarStyle,
-                                    onTap: (_busy || thinking)
-                                        ? null
-                                        : () => _editGroupBeatAt(index),
-                                    onLongPress: (_busy || thinking)
-                                        ? null
-                                        : () => _showMessageMenu(index),
-                                  ),
-                                if (!thinking &&
-                                    (message.canSwipe || isLastAi))
-                                  _SwipePager(
-                                    index: message.swipeIndex,
-                                    total: message.swipes.length,
-                                    onPrev: (!_busy && canGoPrev)
-                                        ? () => _shiftSwipe(index, -1)
-                                        : null,
-                                    onNext: (!_busy && canGoNextExisting)
-                                        ? () => _shiftSwipe(index, 1)
-                                        : (canQuickSwipe
-                                              ? () => _regenerateOrSwipe(
+                                    child: _MessageBubble(
+                                      message: message,
+                                      showThinking: thinking,
+                                      showSwipePager:
+                                          message.isAiGenerated &&
+                                          !thinking &&
+                                          (message.canSwipe || isLastAi),
+                                      avatarFileName: _avatarForMessage(
+                                        message,
+                                      ),
+                                      avatarLabel: message.isUser
+                                          ? _userName
+                                          : (message.speakerName ??
+                                                _character?.name ??
+                                                'AI'),
+                                      avatarStyle: _avatarStyle,
+                                      onTap: (_busy || thinking)
+                                          ? null
+                                          : () => _editMessage(index),
+                                      onAvatarLongPress: _busy
+                                          ? null
+                                          : () {
+                                              if (message.isUser) {
+                                                _editPersonaFromAvatar();
+                                              } else {
+                                                _editCharacterFromAvatar(
+                                                  message,
+                                                );
+                                              }
+                                            },
+                                      onLongPress: _busy
+                                          ? null
+                                          : () => _showMessageMenu(index),
+                                      onSwipePrev:
+                                          (!_busy && !thinking && canGoPrev)
+                                          ? () => _shiftSwipe(index, -1)
+                                          : null,
+                                      onSwipeNext:
+                                          (!_busy &&
+                                              !thinking &&
+                                              canGoNextExisting)
+                                          ? () => _shiftSwipe(index, 1)
+                                          : (canQuickSwipe
+                                                ? () => _regenerateOrSwipe(
                                                     asNewSwipe: true,
                                                   )
-                                            : null),
-                                    nextGeneratesSwipe: canQuickSwipe,
-                                  ),
-                              ],
+                                                : null),
+                                      nextGeneratesSwipe: canQuickSwipe,
+                                    ),
+                                  );
+                                }, childCount: _messages.length),
+                              ),
                             ),
-                          );
-                        }
-                        final isLast = index == _messages.length - 1;
-                        final thinking =
-                            _busy && isLast && message.text.isEmpty;
-                        final isLastAi =
-                            isLast && message.isAiGenerated;
-                        final canGoPrev =
-                            message.isAiGenerated &&
-                            message.swipes.length > 1 &&
-                            message.swipeIndex > 0;
-                        final canGoNextExisting =
-                            message.isAiGenerated &&
-                            message.swipes.length > 1 &&
-                            message.swipeIndex < message.swipes.length - 1;
-                        // On the latest AI bubble, ▶ past the last swipe = new generation.
-                        final canQuickSwipe =
-                            isLastAi &&
-                            !thinking &&
-                            !_busy &&
-                            message.swipeIndex >= message.swipes.length - 1;
-                        return Padding(
-                          padding: EdgeInsets.symmetric(
-                            vertical:
-                                AnimaUiTheme.of(context).messageSpacing / 2,
-                          ),
-                          child: _MessageBubble(
-                            message: message,
-                            showThinking: thinking,
-                            showSwipePager:
-                                message.isAiGenerated &&
-                                !thinking &&
-                                (message.canSwipe || isLastAi),
-                            avatarFileName: _avatarForMessage(message),
-                            avatarLabel: message.isUser
-                                ? _userName
-                                : (message.speakerName ??
-                                      _character?.name ??
-                                      'AI'),
-                            avatarStyle: _avatarStyle,
-                            onTap: (_busy || thinking)
-                                ? null
-                                : () => _editMessage(index),
-                            onAvatarLongPress: _busy
-                                ? null
-                                : () {
-                                    if (message.isUser) {
-                                      _editPersonaFromAvatar();
-                                    } else {
-                                      _editCharacterFromAvatar(message);
-                                    }
-                                  },
-                            onLongPress: _busy
-                                ? null
-                                : () => _showMessageMenu(index),
-                            onSwipePrev: (!_busy && !thinking && canGoPrev)
-                                ? () => _shiftSwipe(index, -1)
-                                : null,
-                            onSwipeNext:
-                                (!_busy && !thinking && canGoNextExisting)
-                                ? () => _shiftSwipe(index, 1)
-                                : (canQuickSwipe
-                                      ? () =>
-                                            _regenerateOrSwipe(asNewSwipe: true)
-                                      : null),
-                            nextGeneratesSwipe: canQuickSwipe,
-                          ),
-                        );
-                              },
-                              childCount: _messages.length,
-                            ),
-                          ),
+                          ],
                         ),
-                      ],
-                    ),
                 ],
               ),
             ),
@@ -4804,20 +4687,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (!keyboardOpen && (hasMemory || hasAuthorsNote || activeMoodCount > 0))
+                    if (!keyboardOpen &&
+                        (hasAuthorsNote || activeMoodCount > 0))
                       MinimalChipRow(
                         children: [
-                          if (hasMemory)
-                            MinimalChipButton(
-                              label: 'Memory',
-                              icon: Icons.psychology_outlined,
-                              onPressed: _busy ? null : _editMemorySummary,
-                            ),
-                          if (hasMemory &&
-                              ((_session?.authorsNote.trim().isNotEmpty ??
-                                      false) ||
-                                  activeMoodCount > 0))
-                            const SizedBox(width: 8),
                           if (_session?.authorsNote.trim().isNotEmpty ?? false)
                             MinimalChipButton(
                               label: 'Note',
@@ -4825,7 +4698,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                               onPressed: _busy ? null : _editAuthorsNote,
                             ),
                           if (activeMoodCount > 0) ...[
-                            if (_session?.authorsNote.trim().isNotEmpty ?? false)
+                            if (_session?.authorsNote.trim().isNotEmpty ??
+                                false)
                               const SizedBox(width: 8),
                             MinimalChipButton(
                               label: 'Moods ($activeMoodCount)',
@@ -4842,16 +4716,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       ),
                     if (_composerVoiceCharacterId != null && !_directorMode)
                       Padding(
-                        padding: EdgeInsets.only(
-                          bottom: keyboardOpen ? 4 : 8,
-                        ),
+                        padding: EdgeInsets.only(bottom: keyboardOpen ? 4 : 8),
                         child: _buildComposerVoiceModeToggle(colorScheme),
                       ),
                     if (compactComposer)
                       Padding(
-                        padding: EdgeInsets.only(
-                          bottom: keyboardOpen ? 4 : 8,
-                        ),
+                        padding: EdgeInsets.only(bottom: keyboardOpen ? 4 : 8),
                         child: Row(
                           children: [
                             Expanded(
@@ -4880,8 +4750,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                       label: const Text('Director'),
                                       style: OutlinedButton.styleFrom(
                                         visualDensity: VisualDensity.compact,
-                                        foregroundColor:
-                                            colorScheme.onSurface,
+                                        foregroundColor: colorScheme.onSurface,
                                         side: BorderSide(
                                           color: colorScheme.outline,
                                         ),
@@ -4891,12 +4760,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                             const SizedBox(width: 8),
                             Expanded(
                               child: FilledButton.tonalIcon(
-                                onPressed:
-                                    _busy ? null : _continueScene,
-                                icon: const Icon(
-                                  Icons.play_arrow,
-                                  size: 18,
-                                ),
+                                onPressed: _busy ? null : _continueScene,
+                                icon: const Icon(Icons.play_arrow, size: 18),
                                 label: const Text('Continue'),
                                 style: FilledButton.styleFrom(
                                   visualDensity: VisualDensity.compact,
@@ -4912,9 +4777,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         if (compactComposer)
                           IconButton(
                             tooltip: 'Composer tools',
-                            onPressed: _busy
-                                ? null
-                                : _openComposerToolsSheet,
+                            onPressed: _busy ? null : _openComposerToolsSheet,
                             visualDensity: VisualDensity.compact,
                             color: activeMoodCount > 0
                                 ? colorScheme.tertiary
@@ -4926,8 +4789,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                             tooltip: activeMoodCount > 0
                                 ? 'Scene moods ($activeMoodCount on)'
                                 : 'Scene moods — steer tone for this chat',
-                            onPressed:
-                                _busy ? null : _pickSceneMoods,
+                            onPressed: _busy ? null : _pickSceneMoods,
                             visualDensity: VisualDensity.compact,
                             color: activeMoodCount > 0
                                 ? colorScheme.tertiary
@@ -4940,9 +4802,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                           ),
                           IconButton(
                             tooltip: 'Narrator — scene voice & direction',
-                            onPressed: _busy
-                                ? null
-                                : _openNarratorSheet,
+                            onPressed: _busy ? null : _openNarratorSheet,
                             visualDensity: VisualDensity.compact,
                             color: colorScheme.tertiary,
                             icon: const Icon(Icons.theater_comedy_outlined),
@@ -4951,18 +4811,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                               ? IconButton.filledTonal(
                                   tooltip:
                                       'Director on — your note commands the next reply',
-                                  onPressed: _busy
-                                      ? null
-                                      : _toggleDirectorMode,
+                                  onPressed: _busy ? null : _toggleDirectorMode,
                                   visualDensity: VisualDensity.compact,
                                   icon: const Icon(Icons.control_camera),
                                 )
                               : IconButton(
                                   tooltip:
                                       'Director off — normal roleplay send',
-                                  onPressed: _busy
-                                      ? null
-                                      : _toggleDirectorMode,
+                                  onPressed: _busy ? null : _toggleDirectorMode,
                                   visualDensity: VisualDensity.compact,
                                   color: colorScheme.outline,
                                   icon: const Icon(
@@ -4996,10 +4852,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                 borderSide: BorderSide(
                                   color: _composerVoiceCharacterId != null
                                       ? (_composerVoiceGuideMode
-                                          ? colorScheme.secondary
-                                          : colorScheme.tertiary)
+                                            ? colorScheme.secondary
+                                            : colorScheme.tertiary)
                                       : colorScheme.primary,
-                                  width: (_directorMode ||
+                                  width:
+                                      (_directorMode ||
                                           _composerVoiceCharacterId != null)
                                       ? 2
                                       : 1,
@@ -5109,28 +4966,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       ? () => Navigator.pop(context, 'rewind')
                       : null,
                 ),
-                ListTile(
-                  leading: const Icon(Icons.alt_route),
-                  title: const Text('Paths'),
-                  subtitle: const Text(
-                    'Brainstorm what you could do or say next',
-                  ),
-                  onTap: () => Navigator.pop(context, 'paths'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.record_voice_over_outlined),
-                  title: const Text('Impersonate'),
-                  subtitle: const Text('Write your next line as you'),
-                  onTap: () => Navigator.pop(context, 'impersonate'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.edit_note),
-                  title: const Text('My line…'),
-                  subtitle: const Text(
-                    'AI writes your next message — or steer what you say',
-                  ),
-                  onTap: () => Navigator.pop(context, 'my_line'),
-                ),
                 if (canRegenAi) ...[
                   ListTile(
                     leading: const Icon(Icons.refresh),
@@ -5138,17 +4973,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       message.isGroupBeat
                           ? 'Regenerate group react'
                           : isImpersonateBubble
-                              ? 'Regenerate my line'
-                              : 'Regenerate',
+                          ? 'Regenerate my line'
+                          : 'Regenerate',
                     ),
                     subtitle: Text(
                       steerHint ??
                           (isLast
                               ? message.isGroupBeat
-                                  ? 'Generate this group react again'
-                                  : isImpersonateBubble
-                                      ? 'Generate your line again'
-                                      : 'Generate this reply again'
+                                    ? 'Generate this group react again'
+                                    : isImpersonateBubble
+                                    ? 'Generate your line again'
+                                    : 'Generate this reply again'
                               : 'Removes later messages, then regenerates'),
                     ),
                     onTap: () => Navigator.pop(context, 'regen'),
@@ -5172,66 +5007,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   ),
                   onTap: () => Navigator.pop(context, 'branch'),
                 ),
-                ListTile(
-                  leading: const Icon(Icons.theater_comedy_outlined),
-                  title: const Text('Narrator'),
-                  subtitle: const Text(
-                    'Omniscient scene voice — edit or nudge before posting',
-                  ),
-                  onTap: () => Navigator.pop(context, 'narrator'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.play_arrow),
-                  title: const Text('Continue'),
-                  subtitle: const Text('Generate the next reply'),
-                  onTap: () => Navigator.pop(context, 'continue'),
-                ),
-
-                if (_isGroup && _participants.length >= 2)
-                  ListTile(
-                    leading: const Icon(Icons.groups_outlined),
-                    title: const Text('Group react…'),
-                    subtitle: const Text(
-                      'Brief simultaneous reactions from several characters',
-                    ),
-                    onTap: () => Navigator.pop(context, 'group_react'),
-                  ),
-                ListTile(
-                  leading: Icon(
-                    (_session?.autoReply ?? false)
-                        ? Icons.forum_outlined
-                        : Icons.chat_bubble_outline,
-                  ),
-                  title: Text(
-                    (_session?.autoReply ?? false)
-                        ? 'Auto-reply: on'
-                        : 'Auto-reply: off',
-                  ),
-                  subtitle: Text(
-                    (_session?.autoReply ?? false)
-                        ? 'Tap to turn off — send without an AI reply'
-                        : 'Tap to turn on — characters answer when you send',
-                  ),
-                  onTap: () => Navigator.pop(context, 'auto_reply'),
-                ),
-                if (canRegenAi)
-                  ListTile(
-                    leading: const Icon(Icons.auto_awesome),
-                    title: Text(
-                      message.isGroupBeat
-                          ? 'New group react swipe'
-                          : isImpersonateBubble
-                              ? 'New swipe of my line'
-                              : 'New swipe',
-                    ),
-                    subtitle: Text(
-                      steerHint ??
-                          (message.isGroupBeat
-                              ? 'Generate another alternate group react'
-                              : 'Generate another alternate reply'),
-                    ),
-                    onTap: () => Navigator.pop(context, 'swipe'),
-                  ),
                 if (canSwipeNav) ...[
                   ListTile(
                     leading: const Icon(Icons.chevron_left),
@@ -5253,6 +5028,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         : null,
                   ),
                 ],
+                ListTile(
+                  leading: const Icon(Icons.alt_route),
+                  title: const Text('Paths'),
+                  subtitle: const Text(
+                    'Brainstorm what you could do or say next',
+                  ),
+                  onTap: () => Navigator.pop(context, 'paths'),
+                ),
               ],
             ),
           ),
@@ -5263,18 +5046,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (action == 'delete') await _deleteMessage(index);
     if (action == 'rewind') await _rewindToMessage(index);
     if (action == 'branch') await _branchFromMessage(index);
-    if (action == 'narrator') await _openNarratorSheet();
-    if (action == 'continue') await _continueScene();
-    if (action == 'my_line') await _showMyLineSheet();
-    if (action == 'impersonate') await _impersonate();
     if (action == 'paths') await _showPathsSheet();
-    if (action == 'group_react') await _openGroupReplySheet();
-    if (action == 'auto_reply') await _toggleAutoReply();
     if (action == 'regen') {
       await _regenerateMessageAt(index, asNewSwipe: false);
-    }
-    if (action == 'swipe') {
-      await _regenerateMessageAt(index, asNewSwipe: true);
     }
     if (action == 'rewrite') await _rewriteMessageAt(index);
     if (action == 'swipe_prev') _shiftSwipe(index, -1);
@@ -5435,24 +5209,21 @@ class _MessageBubble extends StatelessWidget {
           )
         : RpRichText(
             text: !isUser
-                ? stripLeadingSpeakerPrefix(
-                    message.text,
-                    message.speakerName,
-                  )
+                ? stripLeadingSpeakerPrefix(message.text, message.speakerName)
                 : message.text,
             isUser: isUser,
             baseStyle: Theme.of(context).textTheme.bodyLarge!.copyWith(
-                  color: foreground,
-                  height: storybook ? 1.55 : 1.4,
-                  fontSize: chatFontSize,
-                ),
+              color: foreground,
+              height: storybook ? 1.55 : 1.4,
+              fontSize: chatFontSize,
+            ),
           );
 
     final speakerName = isUser
         ? avatarLabel
         : (message.speakerName?.trim().isNotEmpty == true
-            ? message.speakerName!.trim()
-            : avatarLabel);
+              ? message.speakerName!.trim()
+              : avatarLabel);
 
     final avatarWidget = AnimaAvatar(
       fileName: avatarFileName,
@@ -5592,9 +5363,9 @@ class _MessageBubble extends StatelessWidget {
                 Text(
                   speakerName,
                   style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: colorScheme.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
@@ -5630,8 +5401,14 @@ class _MessageBubble extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: isUser
-              ? [column, if (!showHeader) ...[const SizedBox(width: 8), avatar]]
-              : [if (!showHeader) ...[avatar, const SizedBox(width: 8)], column],
+              ? [
+                  column,
+                  if (!showHeader) ...[const SizedBox(width: 8), avatar],
+                ]
+              : [
+                  if (!showHeader) ...[avatar, const SizedBox(width: 8)],
+                  column,
+                ],
         ),
       ),
     );
@@ -5849,10 +5626,7 @@ class _PathsSheetState extends State<_PathsSheet> {
         sampling: sampling,
       );
       if (!mounted) return;
-      final options = _roadway.parseOptions(
-        raw,
-        userName: widget.userName,
-      );
+      final options = _roadway.parseOptions(raw, userName: widget.userName);
       if (options.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Paths came back empty — try again.')),

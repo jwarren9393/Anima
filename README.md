@@ -16,6 +16,8 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 
 | Build | Highlights |
 |-------|------------|
+| **83** | Dropped Living World experiment; kept composer voice UX, lore pick-at-start, Period voice mood, and black/gold branding on **main**. |
+| **81** *(experiment)* | **Composer voice cleanup** — long-press **You** → Impersonate / My line…; long-press cast → **Guide AI** (returns to You after send); message long-press slimmed (Paths last; duplicates like Narrator / Continue / Group react / Auto-reply / New swipe removed). |
 | **76** | **Saved steers for regen** — My line… / Guide AI notes stick to the bubble, so Regenerate and New swipe reuse them. **Paths** remembers the steer box too. Long-press menu: Impersonate + My line… moved up near Paths / Regenerate. |
 | **75** | **Impersonate fix** — Impersonate / **My line…** stay in your persona (no more writing as the AI character). **First-person voice** — `*actions*` and thoughts use *I/my/me* for whoever is speaking (you or the character), not “he/she did”. |
 | **74** | **My line…** — the long-press menu now writes **your own** next message as your persona: add a note to steer what *you* say or do, or tap *Just write it* for a plain Impersonate. (The build-73 entry below steered the AI character instead — that entry was replaced, since Guide AI already did it.) |
@@ -170,7 +172,7 @@ Living build notes for coding agents: [`AGENTS.md`](AGENTS.md) (status, roadmap,
 
 ## Feature summary (at a glance)
 
-**Chat & roleplay** — Solo and group chats; streaming; swipes; edit / delete / rewind / branch; Continue, Impersonate, Regenerate, **Rewrite reply…**, **My line…** (write or steer *your* next message); **Narrator** (nudge + Generate + post); **Director** (commands next reply); **presence / scene law** (always on in groups — who’s present, witness-tagged memory, per-character filtering); **Character voice** — long-press cast chip → **Write line** or **Guide AI**; **Scene moods** (sensual, anti-script, explicit, afterglow + vocabulary law); Paths (Roadway); auto-reply (default off); **auto-wrap dialogue on send**; memory summary + auto-summarize (background); Author’s Note; per-chat persona and World Info; context estimate; export/import chat; manage cast mid-chat (+ temporary NPCs); fullscreen avatars; **group-react** cards.
+**Chat & roleplay** — Solo and group chats; streaming; swipes; edit / delete / rewind / branch; Continue, Regenerate, **Rewrite reply…**; **Impersonate** / **My line…** (long-press **You**); **Narrator** (nudge + Generate + post); **Director** (commands next reply); **presence / scene law** (always on in groups — who’s present, witness-tagged memory, per-character filtering); **Character voice** — long-press cast chip → **Guide AI** (returns to You after send); **Scene moods** (sensual, anti-script, explicit, afterglow + vocabulary law); Paths (Roadway); auto-reply (default off); **auto-wrap dialogue on send**; memory summary + auto-summarize (background); Author’s Note; per-chat persona and World Info; context estimate; export/import chat; manage cast mid-chat (+ temporary NPCs); fullscreen avatars; **group-react** cards.
 
 **Characters & personas** — ST V1/V2/V3 JSON + PNG import/export; categories; **Duplicate** from ⋮ menu; AI wand (tap quick / long-press source); consistency check **+ review-before-apply fix**; **Compact / Expand** card & persona (AI shortens or enriches fields, review before apply); **Compact** lore; **AI card/persona builder**; temporary characters; **Full cards only** filter; embedded lorebooks; alternate greetings; **~token badges**; **Generate avatar** + history; group speaker chips.
 
@@ -233,7 +235,7 @@ Landing page after launch.
 
 | Chip | Sheet contents |
 |------|----------------|
-| **Lore** | Which global lorebooks apply (enabled books start selected). Each character’s embedded lorebook still applies when they speak. |
+| **Lore** | Which library lorebooks apply to **this chat only** (none by default — nothing is “on for all chats”). Each character’s embedded lorebook still applies when they speak. Change later via **Manage cast**. |
 | **Note** | Author’s Note + text presets |
 | **Auto** | Auto-reply switch (default **off**) |
 
@@ -252,7 +254,7 @@ Anima has **no “opening scene” feature** — scene setup happens inside the 
 
 ## 3. Chat screen
 
-Minimal chrome: **Close** · title · **⋮** menu. **Voice row** above composer (**You** + cast names). **Long-press a cast name** → **Write line** (manual bubble) or **Guide AI** (direction → fresh reply for that character). Tap **You** to return to your persona. **Android:** **Director** and **Continue** above the composer (Director icon fills gold when on). **+** opens Narrator, **scene moods**, group react. **Desktop:** moods · Narrator · Director · field · **▶ Continue** · **Send** / **Stop**.
+Minimal chrome: **Close** · title · **⋮** menu. **Voice row** above composer (**You** + cast names). **Long-press You** → Impersonate / My line…. **Long-press a cast name** → **Guide AI** (direction → fresh reply; returns to You when done). Write line stays on the toggle when a character is selected. Tap **You** to return to your persona. **Android:** **Director** and **Continue** above the composer (Director icon fills gold when on). **+** opens Narrator, **scene moods**, group react. **Desktop:** moods · Narrator · Director · field · **▶ Continue** · **Send** / **Stop**.
 
 ### App bar ⋮ menu
 
@@ -261,15 +263,17 @@ Minimal chrome: **Close** · title · **⋮** menu. **Voice row** above composer
 | **API & connection** | Jump straight to the API key / model picker — top of the menu for quick model swaps while testing |
 | **Persona: …** / **Switch persona** | Who {{user}} is for **this thread only** (saved on the chat) |
 | **Author’s Note** | Per-chat instructions injected after history every turn (+ presets, macros) |
-| **World Info: …** | Use Settings default, pick specific global lorebooks, or turn global lore **off** for this thread (character card lore still applies) |
-| **Chat lore (this thread)** | Thread-only lorebook (starts empty — not your Settings books) |
+| ~~**World Info: …**~~ | Removed from chat ⋮ — pick lorebooks when starting the chat or under **Manage cast** |
+| **World play mode…** | *(Experiment — bound)* Manual / Propose after turn / Auto-safe (plain-English help); toggle **Resolve before reply** (Living mode — facts first, then prose) |
+| **World log…** | *(Experiment — bound)* Timeline of what the engine applied; tap **World updated** chip for the same sheet |
+| **Undo last world update** | *(Experiment — bound)* Revert the last applied update pack |
+| ~~**Chat lore**~~ | Removed — use library lorebooks picked per chat instead |
 | **Chat copies…** | Reset per-chat character/persona/lore overrides (only shows when you have some) |
 | **Memory summary** / **Memory summary (set)** | Scene (now) + Ledger (durable plot); pin facts so summarize never drops them |
 | **Summarize now** | Merge older messages into Scene/Ledger (does not wipe pinned lines or open threads) |
 | **Context estimate** | Rough token/message gauge vs history budget and model window |
 | **Characters** | Open Characters list |
 | **Manage cast** | Rename group, add/remove cast, lore, note — **Close** (X) returns Home for new/saved chats |
-| **Add / update character…** | One menu for all three character-in-chat flows: **New character from this chat** (AI builds a card from recent messages — optionally based on another card/persona you pick), **Add temporary character** (quick NPC), **Update saved character from chat** (revise one saved card from thread context) |
 | **Open in Creation Center** | Seed or open a workshop from this chat |
 | **Export chat** | Anima JSON (keeps swipes) or plain text |
 | **Import chat** | Anima JSON or best-effort `Name: message` text |
@@ -298,13 +302,14 @@ Minimal chrome: **Close** · title · **⋮** menu. **Voice row** above composer
 - **Default off** for new chats.
 - **Off:** send alone; use **Continue** or (group) tap a name chip.
 - **On:** send also generates the next AI reply.
-- Toggle: message **long-press** menu → **Auto-reply on/off**.
+- Toggle: group chat setup or **Manage cast** (Auto-reply chip).
 
 ### Group speaker chips
 
 - Name chips above composer = who speaks next.
 - **Auto-reply off:** tap a chip to select next speaker and **always generate** that character’s reply (even re-tapping the same chip).
-- **Group react** chip (or ⋮ / long-press → **Group react…**) — pick who reacts; one AI call writes **brief simultaneous reactions** for the same moment (avoids long back-to-back solo replies that shift tone).
+- **Long-press a cast chip** → **Guide AI** for that character; **long-press You** → Impersonate / My line….
+- **Group react** chip (or **+** menu) — pick who reacts; one AI call writes **brief simultaneous reactions** for the same moment (avoids long back-to-back solo replies that shift tone).
 - Bubbles store speaker name/id; other members get short summaries in the active speaker’s prompt.
 - Chips **hide when the keyboard is open** (more room for typing).
 
@@ -316,28 +321,23 @@ Minimal chrome: **Close** · title · **⋮** menu. **Voice row** above composer
 - **Tap any avatar** (chat, lists, editors, home) → **full-screen portrait**; tap again or ✕ to close.
 - RP styling: `*narration*` soft italic gold; `"dialogue"` bolder; plain text muted.
 - Streaming: thinking/typing state; list does **not** auto-scroll during streaming (scroll freely).
-- No permanent Swipe/Regen bar under messages — actions live in long-press menu + compact swipe arrows under bubbles.
+- No permanent Swipe/Regen bar under messages — actions live in long-press menu + compact swipe arrows under bubbles (▶ past last swipe = new alternate).
 
 ### Long-press message menu
 
-Scrollable sheet (~55% screen height on wide displays).
+Scrollable sheet (~55% screen height on wide displays). Slimmed so duplicates of composer chrome are gone.
 
 | Action | Behavior |
 |--------|----------|
 | **Delete** | Removes that message only; **4s Undo** SnackBar before disk write |
 | **Rewind to here** | Deletes everything after; **4s Undo** SnackBar before disk write |
-| **Branch from here** | New chat with history through here (keeps persona, auto-reply, note, lore picks); runs immediately |
-| **Narrator** | Same sheet as composer theater icon — nudge, Generate, Post |
-| **Director** | Same as composer Director chip — command the next AI reply |
-| **Continue** | Generate next reply |
-| **My line…** | The AI writes **your** next line as your persona — add a note to steer what you say or do, or *Just write it* |
-| **Impersonate** | AI drafts the next **user** message as the persona (first person — `*I…*` actions) |
-| **Paths** | Roadway brainstorm sheet |
-| **Auto-reply on/off** | Per-chat toggle |
+| **Regenerate** | On AI bubbles — generate again (on non-last messages, removes later messages first); reuses My line… / Guide AI steer when present |
 | **Rewrite reply…** | On AI bubbles — shorten / expand / mood / custom — replace or new swipe |
-| **Regenerate** | On AI bubbles — generate again (on non-last messages, removes later messages first) |
-| **New swipe** | Another alternate reply |
-| **Previous swipe** / **Next swipe** | When multiple swipes exist |
+| **Branch from here** | New chat with history through here (keeps persona, auto-reply, note, lore picks); runs immediately |
+| **Previous swipe** / **Next swipe** | When multiple swipes exist (browse only — new swipe is under-bubble ▶) |
+| **Paths** | Roadway brainstorm sheet (kept at the bottom) |
+
+**Moved off this menu:** Impersonate / My line… → long-press **You**; Narrator / Continue / Group react → composer; Auto-reply → Manage cast; New swipe → under-bubble ▶.
 
 ### Swipes
 
@@ -519,7 +519,7 @@ Imported creator notes, tags, extensions preserved on save/export even if not sh
 
 **Temporary characters**
 
-- Quick NPC: name + short note only (from chat ⋮ → **Add / update character… → Add temporary character**, Manage cast **+**, or group setup).
+- Quick NPC: name + short note only (from **Manage cast** **+** or group setup).
 - **Temporary** badge in Characters list; row ⋮ → **Promote to full character** opens the full editor.
 - Temporary NPCs are hidden when **Full cards only** is on (Characters list and group cast picker).
 
@@ -894,7 +894,7 @@ bash scripts/setup_linux_dev_noroot.sh   # once per Linux PC — no admin passwo
 cd ~/Documents/Git\ Projects/Anima       # this PC's checkout — quote the space in the name
 flutter doctor
 flutter pub get
-flutter test      # 404 tests
+flutter test      # 458 tests
 flutter analyze
 flutter run -d linux     # or -d windows / a connected Android device
 ```

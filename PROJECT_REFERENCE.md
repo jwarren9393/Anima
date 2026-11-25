@@ -7,8 +7,7 @@
 >
 > **Living documents:** `AGENTS.md` + this file + `README.md` are kept current together — see §29 for the upkeep rule every agent must follow.
 
-**Last updated:** 2026-10-05 · **Version:** 1.0.0 build **76** · **Tests:** 404 (`flutter test`)
-
+**Last updated:** 2026-11-24 · **Version:** 1.0.0 build **83** · **Tests:** 407 (
 ---
 
 ## Table of contents
@@ -98,7 +97,7 @@
 | Paths | `path_provider` → app documents directory |
 | Files | `file_picker`, `share_plus`, Android `saf` for sync URIs |
 | Fonts | `google_fonts` |
-| Tests | `flutter_test` — 404 tests |
+| Tests | `flutter_test` — 448 tests |
 
 **Platforms:** Android (primary), Linux desktop, Windows desktop. macOS not targeted.
 
@@ -157,9 +156,9 @@ Anima/
 | File | Role |
 |------|------|
 | `chat_message.dart` | Message bubble: `ChatRole` user / assistant / **narrator**; swipes; group speaker |
-| `chat_session.dart` | Thread: messages, note, persona, lore picks, memory, group cast |
 | `character.dart` | ST-compatible card fields + Anima id + embedded lorebook |
 | `persona.dart` | Structured {{user}} identity fields |
+| `turn_resolution.dart` | Phase 6+ resolve result (applied / deferred / as-of-turn / presenceSync / nearSceneTick) |
 | `lorebook.dart` | World Info entries (ST import shapes) |
 | `global_lorebook.dart` | Standalone lorebook id + enabled flag |
 | `character_category.dart` | Anima-only category lists (not ST tags) |
@@ -280,6 +279,8 @@ No global state management package — services passed as constructor args.
 | `sourceWorkshopId` | Provenance from Creation Center |
 | `castJoinedAt` | `Map<String,int>` — message count when each character id joined; empty for legacy chats. See §12 for prompt-level effects |
 
+
+
 ### `Character` — SillyTavern-compatible card
 
 Key fields: `name`, `description`, `personality`, `scenario`, `first_mes`, `alternate_greetings`, `mes_example`, `system_prompt`, `post_history_instructions`, embedded `character_book` (lore), `avatarFileName`.
@@ -323,7 +324,6 @@ All library files live in **one user-owned folder** (`AppDataRoot`, default `Doc
 
 **Character saves** (`character_service.dart`): every write is flushed to disk (`flush: true`) with one automatic retry; concurrent saves are serialized through a write queue so a read-modify-write can never clobber another card (e.g. a quick temporary-NPC save racing an editor save); `upsert()` re-reads the file after writing and throws if the card did not land, so the editor can show the error and stay open instead of closing and silently losing edits.
 
-**Backup** (`AppBackupService`): single `.anima-backup` JSON with whitelist above + settings keys + base64 avatars. **No API key.** Copy the whole Anima folder to move the key too.
 
 **Sync — removed in build 72.** There is no cloud feature in the app any more: no `SyncService`, no sync file, no rclone mount, no Google. See §22 for how data moves between devices now (`scripts/sync_phone_anima.sh` optionally copies a `.anima-backup` over adb).
 
@@ -386,7 +386,8 @@ All library files live in **one user-owned folder** (`AppDataRoot`, default `Doc
    - Persona block  
    - Global system prompt (Settings)
 
-2. **System (optional):** Memory summary — clinical bullet facts via `ChatContextService.formatMemoryForPrompt()` (reference only; do not mimic tone)
+2. **System (optional):** Memory summary — clinical bullet facts via Presence-filtered formatting (reference only; do not mimic tone)
+
 
 3. **History:** `ChatContextService.selectHistory()` — recent messages within **history token budget** (skips messages already in `memoryCoveredCount` when possible)
 
@@ -457,29 +458,36 @@ Special tuned sampling for: memory summarize, narrator generate, composer format
 
 - **Tap** bubble → edit text
 - **Tap narrator card** → reopen narrator sheet
-- **Long-press** → menu: Delete, Rewind, Branch, **Narrator**, Continue, Impersonate, **My line…**, Paths, Auto-reply, Rewrite/Regen/Swipe (AI only)
-- **Quick swipe** ◀ 1/N ▶ on latest AI message
+- **Long-press** → slim menu: Delete, Rewind, Regenerate / Rewrite (AI), Branch, swipe browse, **Paths** (last). Impersonate / My line… are on the **You** chip. Narrator / Continue / Group react / Auto-reply / New swipe stay on composer chrome or under-bubble ▶
+- **Quick swipe** ◀ 1/N ▶ on latest AI message (▶ past last swipe generates a new alternate)
+
+### Composer voice row
+
+- **You** chip — tap returns to persona typing; **long-press** → Impersonate / My line…
+- **Cast chip** — tap forces that character’s AI reply (groups); **long-press** opens **Guide AI** mode for that character (`_setComposerVoice(id, guideMode: true)`). Write line remains via the Write line / Guide AI toggle
+- After **Guide AI** send completes, `_setComposerVoice(null, requestFocus: false)` returns to You without opening the keyboard
 
 ### My line sheet (player side)
 
-- **My line…** (long-press menu) opens `_MyLineSheet` in `chat_screen.dart` — writes the **player's own** next message, the persona-side counterpart of Guide AI. It exists because `PromptMode.impersonate` had no way to steer the line.
+- **My line…** (long-press **You** chip) opens `_MyLineSheet` in `chat_screen.dart` — writes the **player's own** next message, the persona-side counterpart of Guide AI. It exists because `PromptMode.impersonate` had no way to steer the line.
 - **Steer my line** → `_impersonate(guideNote: …)`; the note is stored on the bubble as `generationKind: impersonate` + `generationGuide`, and also reaches the API through `_streamIntoLastAssistant` → `_streamAssistantReply` → `_buildApiMessages(playerGuideNote:)`, which appends `PersonaGuideService.formatPlayerDirection()` as a **final** late mandatory system block (after narrator/post-history) plus a last Impersonate lock so nothing can yank the model back to {{char}}. An empty box → `PersonaGuideService.defaultInstruction`.
 - **Just write it (no steers)** → plain `_impersonate()` with `generationKind: impersonate` and an empty guide (still regenerable as plain Impersonate).
-- **Regenerate / New swipe** on that bubble reuses the saved `generationGuide` (menu subtitle shows “Keeps your steer: …”). Same for **Guide AI** character replies (`generationKind: characterGuide`).
+- **Regenerate** on that bubble reuses the saved `generationGuide` (menu subtitle shows “Keeps your steer: …”). Same for **Guide AI** character replies (`generationKind: characterGuide`). New swipes still come from under-bubble ▶
 - Impersonate system prompt uses `PresenceService.formatPlayerPerspectiveBoundary()` instead of the normal “You are {{char}}” knowledge boundary, skips card post-history, and labels character card fields as “other person / reference only”.
-- Guide AI (cast chip → composer) is unchanged for sending — also first person (`*I…*` actions) — and now persists the note for regen/swipe.
+- Guide AI (cast chip long-press → composer) — first person (`*I…*` actions); persists the note for regen/swipe; returns to You after send
 - **First-person law:** `ChatStyleRules.formatFirstPersonPerspectiveRule()` is injected in every post-history block for the speaker of that turn.
-- Long-press menu order (top cluster): Paths · Impersonate · My line… · Regenerate · Rewrite reply…
+- Message long-press order: Delete · Rewind · Regenerate · Rewrite · Branch · swipe browse · **Paths** (bottom)
 - **Paths direction** is stored in `RoadwayCacheEntry.direction` with the options; reopening the sheet restores the steer box so Refresh keeps the same prompt.
 
 ### Auto-reply
 
 - Default **off**. Off = send only; use Continue or (group) tap name chip.
 - On = send (and narrator post) also queue AI reply.
+- Toggle at group chat setup / **Manage cast** (not on the message long-press menu).
 
 ### Paths (Roadway)
 
-- Long-press → **Paths** sheet (`_PathsSheet` in `chat_screen.dart`).
+- Message long-press (last item) → **Paths** sheet (`_PathsSheet` in `chat_screen.dart`).
 - `RoadwayService.buildMessages()` — first-person options only; recent chat labels player as **You (player):** not persona name.
 - `RoadwayService.generateSampling()` — capped tokens + repeat penalties; `parseOptions()` dedupes; `normalizeUserPerspective()` fixes `*Name*` leaks.
 - **Direction field** — the sheet's optional "Steer these paths" box is passed to `buildMessages(direction: …)`, which adds "The player asked for paths like this" plus *every option must follow that request — write N variations*; empty keeps the plain brainstorm.
@@ -547,6 +555,7 @@ Entry editor: AI wand on label/keywords/content; suggest keywords from content.
 - **Existing chats:** old flat bullets are classified on the next parse/summarize; run **Summarize now** to convert to Scene/Ledger.
 
 ---
+
 
 ## 16. Character cards and personas
 
@@ -688,7 +697,6 @@ Plus **Enter to send** toggle (desktop).
 
 ## 22. Backup and restore (local only)
 
-See §8. User must **re-enter API key** after restore.
 
 **No cloud sync.** The cross-device sync feature was **removed** in build 72 (with `SyncService`, `SyncTarget`, the four `sync_*` settings keys and the `saf` dependency), because the owner's phone and laptop are always together and the cloud path only added rate-limit stalls and Google tokens that expired every 7 days. `Create backup` writes one `.anima-backup` file and `Restore backup` applies it; moving the file between devices is up to the user. `scripts/sync_phone_anima.sh` automates that copy over USB/Wi-Fi adb (`--auto` newest-wins, `--library` for the whole library, `--dry-run` to preview, and it refuses to overwrite without confirmation). API key: never in the backup; each device keeps its own.
 
@@ -731,7 +739,7 @@ Applied in `PromptBuilder.applyMacros()`.
 ## 26. Testing and quality
 
 ```bash
-flutter test      # 404 tests
+flutter test      # 448 tests
 flutter analyze
 ```
 
@@ -814,14 +822,14 @@ Tests cover: lore scan, prompt builders, card codec, backup, sync stability, cha
 | **`PROJECT_REFERENCE.md`** (this file) | External AI, deep onboarding | Full technical encyclopedia |
 | **`AGENTS.md`** | Cursor coding agents | Current status, roadmap, code map, machine notes, next actions |
 | **`README.md`** | Human owner | Screen-by-screen feature catalog, install, release history |
+| **`LIVING_WORLD_ROADMAP.md`** | Agents | Phases 5–12 build order toward organic DF-lite living play |
 
 **How to feed Gemini / external AI:**
 
 1. Attach or paste **`PROJECT_REFERENCE.md`** for full context.
 2. Optionally add **`AGENTS.md`** for latest build status and agent conventions.
-3. For UI-only questions, **`README.md`** sections 1–4 are enough.
+4. For UI-only questions, **`README.md`** sections 1–4 are enough.
 
-**Living-document rule (for every agent):** these three files are the living docs and must be updated together after meaningful work — **`AGENTS.md`** always (status/roadmap/code map), **this file** whenever mechanics or architecture changed (update the section you touched), and **`README.md`** whenever anything user-visible changed.
 
 ---
 

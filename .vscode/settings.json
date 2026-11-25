@@ -1,4 +1,5 @@
 {
+  "dart.flutterSdkPath": "/home/jay/flutter",
   "dart.debugExternalPackageLibraries": false,
   "dart.debugSdkLibraries": false,
   "editor.formatOnSave": true,

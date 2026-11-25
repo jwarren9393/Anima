@@ -187,4 +187,22 @@ void main() {
       throwsA(isA<AppBackupException>()),
     );
   });
+
+  test('legacy worlds key in backup is ignored on restore', () async {
+    await seedDocs();
+    final bundle = await service.createBackup();
+    final map = jsonDecode(utf8.decode(bundle.bytes)) as Map<String, dynamic>;
+    expect(map.containsKey('worlds'), isFalse);
+
+    map['worlds'] = {
+      'harbor.json': '{"id":"harbor","title":"Sample Harbor"}',
+    };
+    final withLegacy = Uint8List.fromList(
+      utf8.encode(const JsonEncoder.withIndent('  ').convert(map)),
+    );
+
+    // Must still restore successfully; worlds/ is no longer part of Anima.
+    await service.restoreBackup(withLegacy);
+    expect(Directory(p.join(tempDir.path, 'worlds')).existsSync(), isFalse);
+  });
 }

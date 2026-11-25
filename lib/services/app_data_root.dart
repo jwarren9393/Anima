@@ -67,7 +67,10 @@ class AppDataRoot {
     activePersonaFileName,
   ];
 
-  static const librarySubdirs = <String>['avatars', 'chat_backgrounds'];
+  static const librarySubdirs = <String>[
+    'avatars',
+    'chat_backgrounds',
+  ];
 
   static const readmeText =
       'This folder is your Anima library.\n'

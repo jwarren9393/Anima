@@ -345,6 +345,9 @@ class AppBackupService {
           // Never restore secrets from a backup file.
           continue;
         }
+        if (SettingsService.legacyIgnoredPreferenceKeys.contains(key)) {
+          continue;
+        }
         if (!_isAllowedPreferenceKey(key)) {
           throw AppBackupException('Backup has an unexpected setting: $key');
         }
@@ -418,6 +421,7 @@ class AppBackupService {
     return RegExp(r'^[\w.\-]+$').hasMatch(name);
   }
 
+  /// Notebook JSON plus optional `.log.json` / `.undo.json` side cars.
   bool _isAllowedPreferenceKey(String key) {
     if (key == activePersonaIdKey) return true;
     return SettingsService.backupPreferenceKeys.contains(key);

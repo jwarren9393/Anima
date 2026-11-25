@@ -18,6 +18,7 @@ import '../services/world_info_service.dart';
 import '../models/world_workshop.dart';
 import '../services/world_workshop_service.dart';
 import '../widgets/anima_avatar.dart';
+import '../widgets/chat_lorebook_picker.dart';
 import '../widgets/greeting_picker.dart';
 import 'characters_screen.dart';
 import 'chat_screen.dart';
@@ -94,10 +95,11 @@ class _HomeScreenState extends State<HomeScreen> {
   String _chatSubtitle(ChatSession chat) {
     final count = chat.messages.length;
     final date = _shortDate(chat.updatedAt);
-    final note = AuthorsNoteComposer.hasEffectiveNote(
-      manualAuthorsNote: chat.authorsNote,
-      activeSceneMoodIds: chat.activeSceneMoodIds,
-    )
+    final note =
+        AuthorsNoteComposer.hasEffectiveNote(
+          manualAuthorsNote: chat.authorsNote,
+          activeSceneMoodIds: chat.activeSceneMoodIds,
+        )
         ? ' · Note'
         : '';
     return '$count message${count == 1 ? '' : 's'} · $date$note';
@@ -225,6 +227,21 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (pick == null || !mounted) return;
 
+    final loreBooks = await widget.worldInfoService.loadBooks();
+    var lorebookIds = <String>[];
+    if (loreBooks.isNotEmpty) {
+      if (!mounted) return;
+      final pickedLore = await pickChatLorebookIds(
+        context,
+        allBooks: loreBooks,
+        initialIds: const [],
+        title: 'Lorebooks for this chat',
+      );
+      if (pickedLore == null || !mounted) return;
+      lorebookIds = pickedLore;
+    }
+    if (!mounted) return;
+
     final greetingIndex = await pickGreetingIndex(
       context,
       character: pick.character,
@@ -237,6 +254,7 @@ class _HomeScreenState extends State<HomeScreen> {
       userName: pick.persona.name,
       personaId: pick.persona.sessionId,
       greetingIndex: greetingIndex,
+      lorebookIds: lorebookIds,
     );
     if (!mounted) return;
     await _openChat(session);
@@ -262,8 +280,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _openCreationCenter({bool createNew = false}) async {
     if (createNew) {
-      final workshop =
-          await widget.worldWorkshopService.upsert(WorldWorkshop.empty());
+      final workshop = await widget.worldWorkshopService.upsert(
+        WorldWorkshop.empty(),
+      );
       if (!mounted) return;
       await _openWorkshop(workshop);
       return;
@@ -373,9 +392,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         if (isContinue)
                           Text(
                             'Continue',
-                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
                           ),
                         Text(
                           w.title,

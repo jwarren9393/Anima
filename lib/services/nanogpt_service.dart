@@ -60,11 +60,7 @@ class NanoGptModelCapabilities {
 
 /// Routing / performance hints from `GET /api/models/:id/providers`.
 class NanoGptModelRuntimeStats {
-  const NanoGptModelRuntimeStats({
-    this.tps,
-    this.ttftMs,
-    this.uptimePercent,
-  });
+  const NanoGptModelRuntimeStats({this.tps, this.ttftMs, this.uptimePercent});
 
   final double? tps;
   final double? ttftMs;
@@ -213,9 +209,8 @@ class NanoGptModelInfo {
 
   /// Broad RP-friendly bucket: official Uncensored category OR name/id heuristic.
   bool get isUncensoredFriendly =>
-      isUncensoredCategory || uncensoredNameHeuristic.hasMatch(
-        '$id $displayName $description',
-      );
+      isUncensoredCategory ||
+      uncensoredNameHeuristic.hasMatch('$id $displayName $description');
 
   /// Label for API settings category dropdown rows.
   String get catalogPickerLabel {
@@ -237,9 +232,7 @@ class NanoGptModelInfo {
     }
     if (n < 1000000) return '${(n / 1000).round()}K';
     final m = n / 1000000;
-    final text = m == m.roundToDouble()
-        ? '${m.round()}'
-        : m.toStringAsFixed(1);
+    final text = m == m.roundToDouble() ? '${m.round()}' : m.toStringAsFixed(1);
     return '${text}M';
   }
 
@@ -407,6 +400,7 @@ class NanoGptModelInfo {
         sizes.add(_ParameterMatch(amount, unit.toUpperCase()));
       }
     }
+
     scan(name);
     scan(id);
     scan(description);
@@ -463,7 +457,10 @@ class NanoGptTextModelCatalogFilter {
   ) {
     if (filterId == allId) return models;
     if (filterId == uncensoredFriendlyId) {
-      return [for (final m in models) if (m.isUncensoredFriendly) m];
+      return [
+        for (final m in models)
+          if (m.isUncensoredFriendly) m,
+      ];
     }
     return [
       for (final m in models)
@@ -477,12 +474,7 @@ class NanoGptTextModelCatalogFilter {
 }
 
 /// Sort order for browse sheet model lists.
-enum TextModelSortMode {
-  catalog,
-  contextDesc,
-  tpsDesc,
-  ttftAsc,
-}
+enum TextModelSortMode { catalog, contextDesc, tpsDesc, ttftAsc }
 
 /// Context / speed / latency filters for the text model catalog.
 class NanoGptTextModelPerformanceFilter {
@@ -514,66 +506,61 @@ class NanoGptTextModelPerformanceFilter {
 
   static const tpsFilterIds = [tpsAllId, tps20Id, tps40Id, tps60Id];
 
-  static const ttftFilterIds = [
-    ttftAllId,
-    ttft500Id,
-    ttft1000Id,
-    ttft2000Id,
-  ];
+  static const ttftFilterIds = [ttftAllId, ttft500Id, ttft1000Id, ttft2000Id];
 
   static String labelForContext(String filterId) => switch (filterId) {
-        contextAllId => 'Any context',
-        context8kId => '≥ 8K context',
-        context32kId => '≥ 32K context',
-        context128kId => '≥ 128K context',
-        context200kId => '≥ 200K context',
-        _ => 'Any context',
-      };
+    contextAllId => 'Any context',
+    context8kId => '≥ 8K context',
+    context32kId => '≥ 32K context',
+    context128kId => '≥ 128K context',
+    context200kId => '≥ 200K context',
+    _ => 'Any context',
+  };
 
   static String labelForTps(String filterId) => switch (filterId) {
-        tpsAllId => 'Any speed',
-        tps20Id => '≥ 20 TPS',
-        tps40Id => '≥ 40 TPS',
-        tps60Id => '≥ 60 TPS',
-        _ => 'Any speed',
-      };
+    tpsAllId => 'Any speed',
+    tps20Id => '≥ 20 TPS',
+    tps40Id => '≥ 40 TPS',
+    tps60Id => '≥ 60 TPS',
+    _ => 'Any speed',
+  };
 
   static String labelForTtft(String filterId) => switch (filterId) {
-        ttftAllId => 'Any TTFT',
-        ttft500Id => '≤ 500 ms TTFT',
-        ttft1000Id => '≤ 1 s TTFT',
-        ttft2000Id => '≤ 2 s TTFT',
-        _ => 'Any TTFT',
-      };
+    ttftAllId => 'Any TTFT',
+    ttft500Id => '≤ 500 ms TTFT',
+    ttft1000Id => '≤ 1 s TTFT',
+    ttft2000Id => '≤ 2 s TTFT',
+    _ => 'Any TTFT',
+  };
 
   static String labelForSort(TextModelSortMode mode) => switch (mode) {
-        TextModelSortMode.catalog => 'Default order',
-        TextModelSortMode.contextDesc => 'Largest context',
-        TextModelSortMode.tpsDesc => 'Fastest (TPS)',
-        TextModelSortMode.ttftAsc => 'Lowest latency (TTFT)',
-      };
+    TextModelSortMode.catalog => 'Default order',
+    TextModelSortMode.contextDesc => 'Largest context',
+    TextModelSortMode.tpsDesc => 'Fastest (TPS)',
+    TextModelSortMode.ttftAsc => 'Lowest latency (TTFT)',
+  };
 
   static int? minContextTokens(String filterId) => switch (filterId) {
-        context8kId => 8000,
-        context32kId => 32000,
-        context128kId => 128000,
-        context200kId => 200000,
-        _ => null,
-      };
+    context8kId => 8000,
+    context32kId => 32000,
+    context128kId => 128000,
+    context200kId => 200000,
+    _ => null,
+  };
 
   static double? minTps(String filterId) => switch (filterId) {
-        tps20Id => 20,
-        tps40Id => 40,
-        tps60Id => 60,
-        _ => null,
-      };
+    tps20Id => 20,
+    tps40Id => 40,
+    tps60Id => 60,
+    _ => null,
+  };
 
   static double? maxTtftMs(String filterId) => switch (filterId) {
-        ttft500Id => 500,
-        ttft1000Id => 1000,
-        ttft2000Id => 2000,
-        _ => null,
-      };
+    ttft500Id => 500,
+    ttft1000Id => 1000,
+    ttft2000Id => 2000,
+    _ => null,
+  };
 
   static List<NanoGptModelInfo> applyContext(
     List<NanoGptModelInfo> models,
@@ -845,7 +832,9 @@ class NanoGptService {
   void clearRuntimeStatsCache() => _runtimeStatsCache.clear();
 
   /// Routing stats from `GET /api/models/:id/providers` (TPS, TTFT, uptime).
-  Future<NanoGptModelRuntimeStats?> fetchModelRuntimeStats(String modelId) async {
+  Future<NanoGptModelRuntimeStats?> fetchModelRuntimeStats(
+    String modelId,
+  ) async {
     final id = modelId.trim();
     if (id.isEmpty) return null;
     if (_runtimeStatsCache.containsKey(id)) {
@@ -916,7 +905,8 @@ class NanoGptService {
   }
 
   NanoGptModelRuntimeStats cachedRuntimeStats(String modelId) {
-    return _runtimeStatsCache[modelId.trim()] ?? const NanoGptModelRuntimeStats();
+    return _runtimeStatsCache[modelId.trim()] ??
+        const NanoGptModelRuntimeStats();
   }
 
   /// Loads wallet dollars and subscription allowance usage for the saved key.
@@ -1035,15 +1025,15 @@ class NanoGptService {
   ///
   /// Uses `GET …/models?detailed=true` so we get display names + `owned_by`.
   Future<List<NanoGptModelInfo>> listModels({String? baseUrl}) async {
-    final root =
-        (baseUrl ?? defaultBaseUrl).trim().replaceAll(RegExp(r'/+$'), '');
-    final uri = Uri.parse('$root/models').replace(
-      queryParameters: const {'detailed': 'true'},
+    final root = (baseUrl ?? defaultBaseUrl).trim().replaceAll(
+      RegExp(r'/+$'),
+      '',
     );
+    final uri = Uri.parse(
+      '$root/models',
+    ).replace(queryParameters: const {'detailed': 'true'});
 
-    final headers = <String, String>{
-      'Accept': 'application/json',
-    };
+    final headers = <String, String>{'Accept': 'application/json'};
     final apiKey = await _apiKeyService.getApiKey();
     if (apiKey != null) {
       headers['Authorization'] = 'Bearer $apiKey';
@@ -1114,16 +1104,19 @@ class NanoGptService {
             maxOutputTokens: NanoGptModelInfo.parseMaxOutputTokens(map),
             category: NanoGptModelInfo.parseCategory(map),
             description: description,
-            subscriptionIncluded:
-                NanoGptModelInfo.parseSubscriptionIncluded(map),
+            subscriptionIncluded: NanoGptModelInfo.parseSubscriptionIncluded(
+              map,
+            ),
             capabilities: NanoGptModelCapabilities.parse(
               map['capabilities'] is Map
                   ? Map<String, dynamic>.from(map['capabilities'] as Map)
                   : null,
             ),
             openWeights: map['open_weights'] == true,
-            pricingPromptPerMillion:
-                NanoGptModelInfo.parsePricingPerMillion(map, 'prompt'),
+            pricingPromptPerMillion: NanoGptModelInfo.parsePricingPerMillion(
+              map,
+              'prompt',
+            ),
             pricingCompletionPerMillion:
                 NanoGptModelInfo.parsePricingPerMillion(map, 'completion'),
             costEstimateUsd: NanoGptModelInfo.parseCostEstimateUsd(
@@ -1150,9 +1143,9 @@ class NanoGptService {
       models.sort((a, b) {
         final byOwner = _compareProviders(a.ownedBy, b.ownedBy);
         if (byOwner != 0) return byOwner;
-        return a.displayName
-            .toLowerCase()
-            .compareTo(b.displayName.toLowerCase());
+        return a.displayName.toLowerCase().compareTo(
+          b.displayName.toLowerCase(),
+        );
       });
       return models;
     } on NanoGptException {
@@ -1174,9 +1167,7 @@ class NanoGptService {
     bool subscriptionOnly = false,
   }) async {
     final apiKey = await _apiKeyService.getApiKey();
-    final headers = <String, String>{
-      'Accept': 'application/json',
-    };
+    final headers = <String, String>{'Accept': 'application/json'};
     if (apiKey != null) {
       headers['Authorization'] = 'Bearer $apiKey';
       headers['x-api-key'] = apiKey;
@@ -1206,8 +1197,9 @@ class NanoGptService {
     NanoGptException? lastError;
     for (final uri in [
       Uri.parse('https://nano-gpt.com/api/v1/images/models'),
-      Uri.parse('https://nano-gpt.com/api/v1/image-models')
-          .replace(queryParameters: const {'detailed': 'true'}),
+      Uri.parse(
+        'https://nano-gpt.com/api/v1/image-models',
+      ).replace(queryParameters: const {'detailed': 'true'}),
     ]) {
       try {
         final models = await _fetchImageModels(
@@ -1233,8 +1225,7 @@ class NanoGptService {
       }
     }
 
-    throw lastError ??
-        NanoGptException('Could not load NanoGPT image models.');
+    throw lastError ?? NanoGptException('Could not load NanoGPT image models.');
   }
 
   Future<List<NanoGptImageModelInfo>> _fetchImageModels({
@@ -1252,9 +1243,7 @@ class NanoGptService {
         'Could not reach NanoGPT to load image models. Check your internet.',
       );
     } on TimeoutException {
-      throw NanoGptException(
-        'Loading image models took too long. Try again.',
-      );
+      throw NanoGptException('Loading image models took too long. Try again.');
     } on http.ClientException {
       throw NanoGptException(
         'Could not reach NanoGPT to load image models. Check your internet.',
@@ -1362,9 +1351,7 @@ class NanoGptService {
         'Could not reach NanoGPT to generate an image. Check your internet.',
       );
     } on TimeoutException {
-      throw NanoGptException(
-        'Image generation took too long. Try again.',
-      );
+      throw NanoGptException('Image generation took too long. Try again.');
     } on http.ClientException {
       throw NanoGptException(
         'Could not reach NanoGPT to generate an image. Check your internet.',
@@ -1411,9 +1398,7 @@ class NanoGptService {
         'Could not reach NanoGPT to generate an image. Check your internet.',
       );
     } on TimeoutException {
-      throw NanoGptException(
-        'Image generation took too long. Try again.',
-      );
+      throw NanoGptException('Image generation took too long. Try again.');
     } on http.ClientException {
       throw NanoGptException(
         'Could not reach NanoGPT to generate an image. Check your internet.',
@@ -1427,11 +1412,15 @@ class NanoGptService {
   }) {
     final decoded = jsonDecode(body);
     if (decoded is! Map) {
-      throw NanoGptException('NanoGPT returned an unexpected image models list.');
+      throw NanoGptException(
+        'NanoGPT returned an unexpected image models list.',
+      );
     }
     final data = decoded['data'];
     if (data is! List) {
-      throw NanoGptException('NanoGPT returned an unexpected image models list.');
+      throw NanoGptException(
+        'NanoGPT returned an unexpected image models list.',
+      );
     }
 
     final models = <NanoGptImageModelInfo>[];
@@ -1495,7 +1484,9 @@ class NanoGptService {
       if (a.subscriptionIncluded != b.subscriptionIncluded) {
         return a.subscriptionIncluded ? -1 : 1;
       }
-      final byOwner = a.ownedBy.toLowerCase().compareTo(b.ownedBy.toLowerCase());
+      final byOwner = a.ownedBy.toLowerCase().compareTo(
+        b.ownedBy.toLowerCase(),
+      );
       if (byOwner != 0) return byOwner;
       return a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
     });
@@ -1584,8 +1575,9 @@ class NanoGptService {
         }
         if (first is Map) {
           final item = Map<String, dynamic>.from(first);
-          final b64 = '${item['b64_json'] ?? item['b64'] ?? item['base64'] ?? ''}'
-              .trim();
+          final b64 =
+              '${item['b64_json'] ?? item['b64'] ?? item['base64'] ?? ''}'
+                  .trim();
           if (b64.isNotEmpty) {
             return NanoGptGeneratedImage(
               bytes: Uint8List.fromList(base64Decode(_stripDataUrl(b64))),
@@ -1670,8 +1662,10 @@ class NanoGptService {
       throw NanoGptException('Nothing to send to NanoGPT yet.');
     }
 
-    final root =
-        (baseUrl ?? defaultBaseUrl).trim().replaceAll(RegExp(r'/+$'), '');
+    final root = (baseUrl ?? defaultBaseUrl).trim().replaceAll(
+      RegExp(r'/+$'),
+      '',
+    );
     final uri = Uri.parse('$root/chat/completions');
 
     final body = <String, dynamic>{
@@ -1697,8 +1691,9 @@ class NanoGptService {
 
     late final http.StreamedResponse response;
     try {
-      response =
-          await streamClient.send(request).timeout(const Duration(seconds: 90));
+      response = await streamClient
+          .send(request)
+          .timeout(const Duration(seconds: 90));
     } on SocketException {
       _clearStreamClient(streamClient);
       if (_cancelRequested) throw NanoGptCancelledException();
@@ -1856,6 +1851,9 @@ class NanoGptService {
     required List<Map<String, String>> messages,
     String? baseUrl,
     SamplingSettings sampling = const SamplingSettings(),
+
+    /// How long to wait for one full reply. Factory passes need longer than chat.
+    Duration timeout = const Duration(seconds: 120),
   }) async {
     final apiKey = await _apiKeyService.getApiKey();
     if (apiKey == null) {
@@ -1867,8 +1865,10 @@ class NanoGptService {
       throw NanoGptException('Nothing to send to NanoGPT yet.');
     }
 
-    final root =
-        (baseUrl ?? defaultBaseUrl).trim().replaceAll(RegExp(r'/+$'), '');
+    final root = (baseUrl ?? defaultBaseUrl).trim().replaceAll(
+      RegExp(r'/+$'),
+      '',
+    );
     final uri = Uri.parse('$root/chat/completions');
 
     final body = <String, dynamic>{
@@ -1889,14 +1889,15 @@ class NanoGptService {
             },
             body: jsonEncode(body),
           )
-          .timeout(const Duration(seconds: 120));
+          .timeout(timeout);
     } on SocketException {
       throw NanoGptException(
         'Could not reach NanoGPT. Check your internet connection and try again.',
       );
     } on TimeoutException {
       throw NanoGptException(
-        'NanoGPT took too long to reply. Try again in a moment.',
+        'NanoGPT took too long to reply. The World factory runs several long '
+        'steps — wait it out, try fewer people/places, or try again.',
       );
     } on http.ClientException {
       throw NanoGptException(
@@ -1985,8 +1986,7 @@ class NanoGptService {
     }
   }
 
-  bool _isSuccess(int statusCode) =>
-      statusCode >= 200 && statusCode < 300;
+  bool _isSuccess(int statusCode) => statusCode >= 200 && statusCode < 300;
 
   Map<String, dynamic>? _decodeJsonMap(String body) {
     try {
@@ -1998,10 +1998,7 @@ class NanoGptService {
     return null;
   }
 
-  Map<String, dynamic>? _mapAt(
-    Map<String, dynamic>? source,
-    String key,
-  ) {
+  Map<String, dynamic>? _mapAt(Map<String, dynamic>? source, String key) {
     final value = source?[key];
     if (value is Map) return Map<String, dynamic>.from(value);
     return null;
@@ -2024,7 +2021,8 @@ class NanoGptService {
     final explicitRemaining = _numberAt(window, 'remaining');
     final explicitLimit = _numberAt(window, 'limit') ?? limit;
     final resolvedLimit =
-        explicitLimit ?? (explicitRemaining == null ? 0 : used + explicitRemaining);
+        explicitLimit ??
+        (explicitRemaining == null ? 0 : used + explicitRemaining);
     final remaining =
         explicitRemaining ?? (resolvedLimit - used).clamp(0, double.infinity);
     return NanoGptUsageWindow(
