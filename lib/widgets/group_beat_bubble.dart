@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../models/group_beat_part.dart';
 import '../models/ui_style_settings.dart';

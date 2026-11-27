@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../models/chat_message.dart';
 import '../services/nanogpt_service.dart';

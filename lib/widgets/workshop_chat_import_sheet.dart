@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../models/chat_session.dart';
 import '../models/workshop_chat_import_options.dart';

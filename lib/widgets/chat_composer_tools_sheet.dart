@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Actions available from the mobile composer tools sheet (+ button).
 class ChatComposerToolsActions {

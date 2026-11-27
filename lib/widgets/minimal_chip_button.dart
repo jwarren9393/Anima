@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Compact tappable chip used across minimal UI chrome (chat, setup, filters).
 class MinimalChipButton extends StatelessWidget {

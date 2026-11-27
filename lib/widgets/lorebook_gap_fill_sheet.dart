@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../models/lorebook.dart';
 import '../models/lorebook_gap_suggestion.dart';

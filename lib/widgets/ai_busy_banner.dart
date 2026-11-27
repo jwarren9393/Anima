@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Status strip with a spinner — shown while AI drafts or edits a card.
 class AiBusyBanner extends StatelessWidget {

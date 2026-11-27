@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/theme_palette.dart';
@@ -344,22 +344,48 @@ class AnimaTheme {
       return white;
     }
     try {
+      // google_fonts still types against the old SDK TextTheme; call through
+      // dynamic and rebuild a material_ui TextTheme from the shared TextStyles.
+      final Object googleTheme;
       switch (font) {
         case AnimaFontChoice.plusJakartaSans:
-          return GoogleFonts.plusJakartaSansTextTheme(white);
+          googleTheme = GoogleFonts.plusJakartaSansTextTheme(white as dynamic);
         case AnimaFontChoice.inter:
-          return GoogleFonts.interTextTheme(white);
+          googleTheme = GoogleFonts.interTextTheme(white as dynamic);
         case AnimaFontChoice.merriweather:
-          return GoogleFonts.merriweatherTextTheme(white);
+          googleTheme = GoogleFonts.merriweatherTextTheme(white as dynamic);
         case AnimaFontChoice.sourceSerif4:
-          return GoogleFonts.sourceSerif4TextTheme(white);
+          googleTheme = GoogleFonts.sourceSerif4TextTheme(white as dynamic);
         case AnimaFontChoice.outfit:
-          return GoogleFonts.outfitTextTheme(white);
+          googleTheme = GoogleFonts.outfitTextTheme(white as dynamic);
         case AnimaFontChoice.system:
-          break;
+          return white;
       }
+      return _textThemeFromGoogle(googleTheme);
     } catch (_) {}
     return white;
+  }
+
+  /// Rebuild a [TextTheme] so google_fonts (SDK-typed) can feed material_ui.
+  static TextTheme _textThemeFromGoogle(Object theme) {
+    final t = theme as dynamic;
+    return TextTheme(
+      displayLarge: t.displayLarge as TextStyle?,
+      displayMedium: t.displayMedium as TextStyle?,
+      displaySmall: t.displaySmall as TextStyle?,
+      headlineLarge: t.headlineLarge as TextStyle?,
+      headlineMedium: t.headlineMedium as TextStyle?,
+      headlineSmall: t.headlineSmall as TextStyle?,
+      titleLarge: t.titleLarge as TextStyle?,
+      titleMedium: t.titleMedium as TextStyle?,
+      titleSmall: t.titleSmall as TextStyle?,
+      bodyLarge: t.bodyLarge as TextStyle?,
+      bodyMedium: t.bodyMedium as TextStyle?,
+      bodySmall: t.bodySmall as TextStyle?,
+      labelLarge: t.labelLarge as TextStyle?,
+      labelMedium: t.labelMedium as TextStyle?,
+      labelSmall: t.labelSmall as TextStyle?,
+    );
   }
 
   /// Material 2021 text styles may leave [TextStyle.fontSize] null; [TextTheme.apply]

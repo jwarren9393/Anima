@@ -63,8 +63,9 @@ High-value SillyTavern concepts to aim for over time:
 **Phase:** Classic Anima on **main** (build **83**) — Living World experiment removed; kept composer voice UX, lore pick-at-start, Period voice mood, branding.
 
 
-**Last updated:** 2026-11-25
-**Last agent action:** **Shipped build 83 to `v1.0.0`** — release APK + Windows zip built on host Jay and uploaded to the stable GitHub release (Living World gone; experiment UX kept). Next focus: dig into **summarize / memory** features.
+**Last updated:** 2026-11-27
+**Last agent action:** **Flutter 3.50 `material_ui` migration** — fixed Cursor’s 9K fake analyzer errors by adding `material_ui` and running `dart fix --apply --code=migrate_design_widgets` (74 import rewrites). Theme bridges google_fonts TextThemes; `MaterialUiCompatibilityBridge` wraps the main app for plugins still on SDK Material. `flutter analyze` clean; **407** tests pass.
+**Previous agent action:** **Shipped build 83 to `v1.0.0`** — release APK + Windows zip built on host Jay and uploaded to the stable GitHub release (Living World gone; experiment UX kept). Next focus: dig into **summarize / memory** features.
 **Previous agent action:** **Dropped Living World** — removed notebooks/hub/factory/pipeline from the app; kept non-LW experiment work (You-chip Impersonate/My line, cast-chip Guide AI, slim menus, lore pick-at-start only, Period voice mood, black/gold icons). Merged onto **main**, deleted experiment/living-world. **407** tests pass.
 **Previous agent action:** **Windows migration pack** — Jay-Storage `Migrate-Windows-2026-11/` includes current `AnimaData/` (characters/chats/personas + `api_key.txt`). Owner moving back to Windows host **Jay**; paste that folder’s **Cursor Prompt** into a Windows Cursor agent. Stay on `experiment/living-world`.
 **Previous agent action:** **Kubuntu clean reinstall restore** — fresh Flutter **3.50.0** / Dart **3.14.0** + Android SDK on internal NVMe; cloned `experiment/living-world`; Linux release rebuilt + installed with empty `AnimaData/` (no library/key restore) + `anima.desktop`. Analyze infos only (material deprecation); **517** tests passed; smoke-launch OK. Jay-Storage transfer-only.

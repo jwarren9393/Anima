@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Sparkle wand with tap (quick expand) and long-press (full menu).
 class FieldWandIconButton extends StatelessWidget {

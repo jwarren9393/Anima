@@ -43,6 +43,7 @@ dependencies:
   google_fonts: ^8.2.0
   gal: ^2.3.3
   permission_handler: ^12.0.1
+  material_ui: ^1.11.1
 
 dev_dependencies:
   flutter_test:

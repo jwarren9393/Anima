@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Chat ⋮ → "Add / update character…". One menu entry that consolidates the
 /// three character-in-chat flows. Returns the picked action so the chat screen

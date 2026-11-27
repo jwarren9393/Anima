@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Extra padding so a focused [TextField] can scroll above the keyboard.
 const kAnimaKeyboardScrollPadding = EdgeInsets.fromLTRB(20, 24, 20, 120);

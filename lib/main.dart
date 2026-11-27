@@ -1,7 +1,7 @@
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'screens/data_folder_setup_screen.dart';
 import 'screens/home_screen.dart';
@@ -212,9 +212,13 @@ class _AnimaAppState extends State<AnimaApp> {
       darkTheme: theme,
       themeMode: mode,
       builder: (context, child) {
-        return GlassBackdrop(
-          settings: style,
-          child: child ?? const SizedBox.shrink(),
+        // Bridge theme/localizations for plugins still on package:flutter/material.
+        // ignore: deprecated_member_use
+        return MaterialUiCompatibilityBridge(
+          child: GlassBackdrop(
+            settings: style,
+            child: child ?? const SizedBox.shrink(),
+          ),
         );
       },
       home: HomeScreen(

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// How the chat screen lays out messages and backgrounds.
 enum ChatLayoutMode {
