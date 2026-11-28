@@ -10,13 +10,14 @@ It talks to the [NanoGPT](https://nano-gpt.com) API (OpenAI-compatible chat comp
 | **Also builds** | Linux desktop (works); Windows desktop (needs a Windows host) |
 | **Distribution** | Personal use only — **not** published to app stores |
 | **Repo** | https://github.com/jwarren9393/Anima |
-| **Version** | **1.0.0** build **73** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
+| **Version** | **1.0.0** build **83** — official builds on [GitHub Releases](https://github.com/jwarren9393/Anima/releases) |
+| **Tests** | **407** (`flutter test`) |
 
 ### What’s new in recent builds (1.0.0)
 
 | Build | Highlights |
 |-------|------------|
-| **83** | Dropped Living World experiment; kept composer voice UX, lore pick-at-start, Period voice mood, and black/gold branding on **main**. |
+| **83** | Dropped Living World experiment; kept composer voice UX, lore pick-at-start, Period voice mood, and black/gold branding on **main**. Flutter 3.50 **`material_ui`** migration (clean analyzer baseline). |
 | **81** *(experiment)* | **Composer voice cleanup** — long-press **You** → Impersonate / My line…; long-press cast → **Guide AI** (returns to You after send); message long-press slimmed (Paths last; duplicates like Narrator / Continue / Group react / Auto-reply / New swipe removed). |
 | **76** | **Saved steers for regen** — My line… / Guide AI notes stick to the bubble, so Regenerate and New swipe reuse them. **Paths** remembers the steer box too. Long-press menu: Impersonate + My line… moved up near Paths / Regenerate. |
 | **75** | **Impersonate fix** — Impersonate / **My line…** stay in your persona (no more writing as the AI character). **First-person voice** — `*actions*` and thoughts use *I/my/me* for whoever is speaking (you or the character), not “he/she did”. |
@@ -153,10 +154,10 @@ publish only a zip you built locally, use
 
 ### Moving data between devices
 
-Use **Settings → Backup, restore & sync**:
+Use **Settings → Backup, restore & sync** (local only — the hub row still says “sync”, but there is no cloud feature):
 
 - **Create backup** — one `.anima-backup` JSON file (no API key).
-- **Backup & restore (local only)** — one `.anima-backup` file; **there is no cloud/sync feature in the app** — move the file to the other device yourself (USB, KDE Connect, a shared folder) and use **Restore backup** there. `scripts/sync_phone_anima.sh` automates that copy over adb.
+- **Restore backup** — apply that file on the other device after you move it yourself (USB, KDE Connect, a shared folder). `scripts/sync_phone_anima.sh` automates the copy over adb.
 
 ---
 
@@ -753,7 +754,9 @@ Does **not** affect per-field wands (those use AI collaborator).
 
 Live preview; **Save** applies app-wide immediately via `AppearanceController`. The preview bubbles are real sample RP lines — your side shows `*action* + "dialogue"` and the character side shows `*smiles* "Hello there."` — so action / dialogue colors and fonts render exactly like live chat.
 
-### 4.12 Backup, restore & sync
+### 4.12 Backup & restore (local only)
+
+Settings hub still labels this row **Backup, restore & sync**, but there is **no cloud sync** — backup/restore is local only.
 
 **Create backup**
 
@@ -854,11 +857,11 @@ A tiny pointer file still sits in hidden app storage so the next launch knows wh
 ## 8. Current limits
 
 - Windows builds are made for you by **GitHub Actions** (`windows-release.yml`, dispatched by `./deploy.sh`) because Flutter cannot cross-compile Windows from Linux; a Windows PC can still build one by hand.
-- Group chat is simple (chips + round-robin), not full SillyTavern group orchestration.
+- Group chat is manual-first (Continue / name tap / Group react); optional auto-reply still round-robins — not full SillyTavern group orchestration.
 - No NovelAI / Agnai / Risu lore converters (ST JSON + `character_book` work).
 - No TTS (removed).
 - Paths only on long-press menu (not permanent composer button).
-- Backup/sync plain JSON, not encrypted; API key excluded on purpose.
+- Backup is plain JSON, not encrypted; API key excluded on purpose (no in-app cloud sync).
 - PNG card export: JPEG/WebP avatars may use placeholder; PNG avatars embed correctly.
 - **Presence / scene law** is always on (no toggle) — uses narrator name mentions; very old memory without witness tags may leak until re-summarized; honorifics don’t match names — use the **Narrator** control to establish who’s present.
 - NanoGPT website **Intelligence** scores not available via API (Anima shows catalog + routing stats instead).
@@ -882,7 +885,7 @@ A tiny pointer file still sits in hidden app storage so the next launch knows wh
 | **[`PROJECT_REFERENCE.md`](PROJECT_REFERENCE.md)** | **Full encyclopedia** — paste/attach for Gemini or any external AI; architecture, models, persistence, every screen, prompt assembly, mechanics |
 | **[`AGENTS.md`](AGENTS.md)** | Cursor agents — current build status, roadmap, code map, machine notes, next actions |
 
-Read and update **`AGENTS.md`** after meaningful code changes.
+After meaningful work, update all three living docs: **`AGENTS.md`** (always), **`PROJECT_REFERENCE.md`** (mechanics/architecture), **`README.md`** (user-visible).
 
 ---
 
@@ -894,9 +897,9 @@ bash scripts/setup_linux_dev_noroot.sh   # once per Linux PC — no admin passwo
 cd ~/Documents/Git\ Projects/Anima       # this PC's checkout — quote the space in the name
 flutter doctor
 flutter pub get
-flutter test      # 458 tests
+flutter test      # 407 tests
 flutter analyze
-flutter run -d linux     # or -d windows / a connected Android device
+flutter run -d windows   # current host Jay; or -d linux / a connected Android device
 ```
 
-**API key:** Settings → API & connection → paste key → Save.
+**API key:** Settings → API & connection → paste key → Save. On host **Jay** the checkout is `C:\Users\Jay\Git and Cursor\Git Repos\Anima` on **`main`**.

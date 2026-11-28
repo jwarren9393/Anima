@@ -7,7 +7,8 @@
 >
 > **Living documents:** `AGENTS.md` + this file + `README.md` are kept current together — see §29 for the upkeep rule every agent must follow.
 
-**Last updated:** 2026-11-24 · **Version:** 1.0.0 build **83** · **Tests:** 407 (
+**Last updated:** 2026-11-27 · **Version:** 1.0.0 build **83** · **Tests:** 407 · **Branch:** `main`
+
 ---
 
 ## Table of contents
@@ -81,8 +82,8 @@
 ```
 
 - **No Anima backend server.** The app is a thick client.
-- **No bundled API key.** User enters key in Settings → stored in `flutter_secure_storage`.
-- **All chat history, cards, lore** live in app documents directory as JSON (+ avatar images).
+- **No bundled API key.** User enters key in Settings → stored as `api_key.txt` in the user Anima library folder (`ApiKeyService`). `flutter_secure_storage` remains only for legacy migration.
+- **All chat history, cards, lore** live in the user-owned Anima library folder as JSON (+ avatar images).
 
 ---
 
@@ -90,14 +91,15 @@
 
 | Layer | Choice |
 |-------|--------|
-| Framework | Flutter 3.x, Dart 3.x |
+| Framework | Flutter **3.50.x**, Dart **3.14.x** |
+| UI widgets | **`material_ui`** (Flutter 3.50 design widgets) — app imports `package:material_ui/material_ui.dart`; `MaterialUiCompatibilityBridge` wraps `MaterialApp` for plugins still on SDK Material |
 | State | `StatefulWidget` + services; `AppearanceController` for global theme |
 | HTTP | `package:http` — streaming SSE + non-streaming `complete()` |
-| Secrets | `flutter_secure_storage` |
-| Paths | `path_provider` → app documents directory |
-| Files | `file_picker`, `share_plus`, Android `saf` for sync URIs |
-| Fonts | `google_fonts` |
-| Tests | `flutter_test` — 448 tests |
+| Secrets | `api_key.txt` in the Anima folder (`ApiKeyService`); `flutter_secure_storage` for legacy migration only |
+| Paths | `AppDataRoot` / `app_paths.dart` → user library (`Documents/Anima` or portable `AnimaData`) |
+| Files | `file_picker`, `share_plus` |
+| Fonts | `google_fonts` (TextThemes bridged into `material_ui` in `anima_theme.dart`) |
+| Tests | `flutter_test` — **407** tests |
 
 **Platforms:** Android (primary), Linux desktop, Windows desktop. macOS not targeted.
 
@@ -121,7 +123,7 @@ If a key is ever committed: rotate NanoGPT key immediately and purge git history
 ```
 Anima/
   lib/                    # All Dart app code
-    main.dart             # Entry: AppearanceController + MaterialApp
+    main.dart             # Entry: AppearanceController + MaterialApp (+ MaterialUiCompatibilityBridge)
     models/               # Data classes + presets
     screens/              # Full-screen UI
     widgets/              # Reusable UI + sheets
@@ -691,7 +693,7 @@ Plus **Enter to send** toggle (desktop).
 - Avatar shape/size scale.
 - **Live preview** renders real RP sample lines through `RpRichText` — user bubble shows `*action* + "dialogue"` (`isUser: true`), AI bubble shows `*smiles* "Hello there."` — so RP color/font changes are visible exactly as they'll appear in chat before saving.
 
-`AppearanceController` reloads `MaterialApp` theme on save.
+`AppearanceController` reloads `MaterialApp` theme on save. Theme factory (`anima_theme.dart`) bridges `google_fonts` TextThemes into `material_ui`; the root app is wrapped in `MaterialUiCompatibilityBridge` so plugins still on SDK Material keep working.
 
 ---
 
@@ -739,11 +741,11 @@ Applied in `PromptBuilder.applyMacros()`.
 ## 26. Testing and quality
 
 ```bash
-flutter test      # 448 tests
+flutter test      # 407 tests
 flutter analyze
 ```
 
-Tests cover: lore scan, prompt builders, card codec, backup, sync stability, character save serialization, chat-export reference grounding, narrator cleanup, model catalog, workshop JSON parsers, etc.
+Tests cover: lore scan, prompt builders, card codec, backup, character save serialization, chat-export reference grounding, narrator cleanup, model catalog, workshop JSON parsers, presence/perspective, persona import, etc.
 
 **Agent rule:** Run tests after meaningful changes; update the living documents — `AGENTS.md` always, plus `PROJECT_REFERENCE.md` / `README.md` when the change affects mechanics or the user-facing catalog.
 
@@ -805,13 +807,15 @@ Tests cover: lore scan, prompt builders, card codec, backup, sync stability, cha
 
 ## 28. Known limits and not implemented
 
-- Not full SillyTavern group orchestration.
+- Not full SillyTavern group orchestration (manual-first groups; optional auto-reply round-robin).
 - NovelAI / Agnai / Risu lore converters not implemented (ST JSON works).
 - No TTS (removed).
-- Backup not encrypted.
+- No Living World / world notebooks (experiment removed on **main**, build 83).
+- Backup not encrypted; no in-app cloud sync (local `.anima-backup` + optional adb helper).
 - PNG export needs PNG avatar for embedded image.
-- Windows build requires Windows host.
+- Windows desktop zip is built by GitHub Actions (or locally on a Windows host).
 - Back-burner: undo send, last-chat resume, pinned mood chips, memory preview panel, etc.
+- Next product focus (see `AGENTS.md`): summarize / memory reliability and UX.
 
 ---
 
@@ -822,13 +826,16 @@ Tests cover: lore scan, prompt builders, card codec, backup, sync stability, cha
 | **`PROJECT_REFERENCE.md`** (this file) | External AI, deep onboarding | Full technical encyclopedia |
 | **`AGENTS.md`** | Cursor coding agents | Current status, roadmap, code map, machine notes, next actions |
 | **`README.md`** | Human owner | Screen-by-screen feature catalog, install, release history |
-| **`LIVING_WORLD_ROADMAP.md`** | Agents | Phases 5–12 build order toward organic DF-lite living play |
+
+**Living World** experiment docs/code were removed when that branch merged into **`main`** (build 83). Do not look for `LIVING_WORLD_ROADMAP.md` or `docs/LIVING_WORLD_*`.
 
 **How to feed Gemini / external AI:**
 
 1. Attach or paste **`PROJECT_REFERENCE.md`** for full context.
 2. Optionally add **`AGENTS.md`** for latest build status and agent conventions.
-4. For UI-only questions, **`README.md`** sections 1–4 are enough.
+3. For UI-only questions, **`README.md`** sections 1–4 are enough.
+
+**Upkeep rule:** after meaningful work, update **`AGENTS.md`** always; update this file when mechanics/architecture changed; update **`README.md`** when anything user-visible changed.
 
 
 ---

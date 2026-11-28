@@ -362,7 +362,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         SizedBox(
-          height: 88,
+          // Continue tiles stack label + title + meta; 88 left ~4px short after material_ui fonts.
+          height: 96,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 12),

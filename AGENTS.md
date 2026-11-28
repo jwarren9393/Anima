@@ -64,7 +64,8 @@ High-value SillyTavern concepts to aim for over time:
 
 
 **Last updated:** 2026-11-27
-**Last agent action:** **Flutter 3.50 `material_ui` migration** — fixed Cursor’s 9K fake analyzer errors by adding `material_ui` and running `dart fix --apply --code=migrate_design_widgets` (74 import rewrites). Theme bridges google_fonts TextThemes; `MaterialUiCompatibilityBridge` wraps the main app for plugins still on SDK Material. `flutter analyze` clean; **407** tests pass.
+**Last agent action:** **Living docs audit + sync to GitHub** — brought `AGENTS.md`, `PROJECT_REFERENCE.md`, and `README.md` in line with **main** / build **83** / **407** tests / `material_ui` stack (fixed stale version, test counts, secrets/`saf` notes, and machine checkout branch). Also kept the home Continue-tile height bump (88→96) for `material_ui` fonts.
+**Previous agent action:** **Flutter 3.50 `material_ui` migration** — fixed Cursor’s 9K fake analyzer errors by adding `material_ui` and running `dart fix --apply --code=migrate_design_widgets` (74 import rewrites). Theme bridges google_fonts TextThemes; `MaterialUiCompatibilityBridge` wraps the main app for plugins still on SDK Material. `flutter analyze` clean; **407** tests pass.
 **Previous agent action:** **Shipped build 83 to `v1.0.0`** — release APK + Windows zip built on host Jay and uploaded to the stable GitHub release (Living World gone; experiment UX kept). Next focus: dig into **summarize / memory** features.
 **Previous agent action:** **Dropped Living World** — removed notebooks/hub/factory/pipeline from the app; kept non-LW experiment work (You-chip Impersonate/My line, cast-chip Guide AI, slim menus, lore pick-at-start only, Period voice mood, black/gold icons). Merged onto **main**, deleted experiment/living-world. **407** tests pass.
 **Previous agent action:** **Windows migration pack** — Jay-Storage `Migrate-Windows-2026-11/` includes current `AnimaData/` (characters/chats/personas + `api_key.txt`). Owner moving back to Windows host **Jay**; paste that folder’s **Cursor Prompt** into a Windows Cursor agent. Stay on `experiment/living-world`.
@@ -78,8 +79,8 @@ High-value SillyTavern concepts to aim for over time:
 **Previous agent action:** **Build 80 — World factory reliability + prerelease APK.**
 **Previous agent action:** **Phase 13 Living World world → character / persona bridge.** Create character/persona from person + Start chat already bound. **Did not merge to `main`.**
 **Previous agent action:** **Phase 12 Living World merge-readiness package.** Opt-in defaults + soak/merge docs. **Did not merge to `main`.**
-**Previous agent action:** **Phase 11 Living World invisible-engine UX.** Auto-safe no longer pops a relationship modal every turn — risky ops queue in `worlds/<id>.pending.json` with a **Review pending (N)** chip + ⋮ menu. Safe applies show a quiet **World updated · N** chip (tap → timeline). Worlds hub: plain-English policy copy, row ⋮ **Timeline… / Undo last pack / Export JSON… / Review pending**. After-turn pipeline queues one extra run and cancels on leave chat (`_livingWorldEpoch`). Playtest checklist: [`docs/LIVING_WORLD_PLAYTEST.md`](docs/LIVING_WORLD_PLAYTEST.md).
-**Previous agent action:** **Living World end-goal roadmap written.** Added [`LIVING_WORLD_ROADMAP.md`](LIVING_WORLD_ROADMAP.md) — phased plan from today’s static-during-play notebooks to organic after-turn validated world updates (DF-lite under Anima chat, not a fortress clone). Next build work starts at **Phase 5** (auto propose / auto-safe after turn + undo). Phases 1–4 unchanged.
+**Previous agent action:** **Phase 11 Living World invisible-engine UX.** Auto-safe no longer pops a relationship modal every turn — risky ops queue in `worlds/<id>.pending.json` with a **Review pending (N)** chip + ⋮ menu. Safe applies show a quiet **World updated · N** chip (tap → timeline). Worlds hub: plain-English policy copy, row ⋮ **Timeline… / Undo last pack / Export JSON… / Review pending**. After-turn pipeline queues one extra run and cancels on leave chat (`_livingWorldEpoch`). Playtest checklist was `docs/LIVING_WORLD_PLAYTEST.md` (removed with Living World on merge to **main**).
+**Previous agent action:** **Living World end-goal roadmap written.** Added `LIVING_WORLD_ROADMAP.md` (later removed with Living World) — phased plan from static-during-play notebooks to organic after-turn validated world updates.
 **Previous agent action:** **Phase 4 Living World factory + Worlds hub on `experiment/living-world`.** New **Settings → Living Worlds** hub (list / empty / sample / import / export / edit notebook). **World factory** multi-pass compile (outline → places → people → relationships → events/flags) writes validated JSON under `worlds/` — not Creation Center chat. Simple tabbed editor for people/places/links/canon. Uses Character & persona build model settings for drafting. Creation Center unchanged. Ask before commit/push.
 **Previous agent action:** **Phase 3 Living World cast scale + group retrieve on `experiment/living-world`.** Retriever now scores people/places (speaker, linked character card, name mentions, active place, strong relationships) and caps the pack so a ~40–50 person notebook does not dump into the prompt. Living World bind / retrieve / **Update world from chat…** work in **group** chats too (cast names feed relevance). Prompt marks `[speaking]` / `[linked card]`. Creation Center still untouched. Ask before commit/push.
 **Previous agent action:** **Phase 2 Living World canon write path on `experiment/living-world`.** Solo ⋮ → **Update world from chat…** asks NanoGPT for typed proposals (events / flags / relationships / active place / who-where), shows a review sheet, and saves only what you apply — no silent overwrites. Unknown person/place ids rejected. Phase 1 retrieve-into-prompt unchanged. Creation Center still untouched. Ask before commit/push.
@@ -160,7 +161,7 @@ full `./deploy.sh` afterwards was verified end to end — it printed
 - **Chat screen** — Close returns home; bubbles use the chat’s persona avatar; **Scene moods** (mood icon + **+** menu) — includes **Sensual / intimate**, **Real voice (anti-script)**, **Intimate build-up**, **Explicit / graphic**, **Afterglow**, **Period voice (adult)** with hard-coded **vocabulary law** (plain adult words; bans LLM euphemisms, porn-script dialogue, em-dash spam, recycled *actions* when those moods are on); **Chat copies** — per-chat character/persona overrides; long-press avatar edits chat copy (library unchanged)
 - **Linux install/update** — `./scripts/update_linux.sh` builds and installs the desktop app; add `--pull` to download GitHub changes first
 - **Windows app** — built for you by **GitHub Actions** on every `./deploy.sh` (Flutter can't build Windows from Linux); download `Anima-1.0.0-windows-x64.zip` from the release and run it as a portable folder — no installer
-- **Smoke:** `flutter test` (407) + `flutter analyze` pass (material deprecation infos only); Android + Windows + Linux desktop debug work
+- **Smoke:** `flutter test` (**407**) + `flutter analyze` clean; Android + Windows + Linux desktop debug work; UI on Flutter 3.50 **`material_ui`**
 
 ### What does NOT work yet / limits
 
@@ -274,9 +275,9 @@ Goal: bring characters in/out of the SillyTavern ecosystem; tune generation.
 
 ```
 lib/
-  main.dart                       App entry — AppearanceController + runtime ThemeData
+  main.dart                       App entry — AppearanceController + ThemeData + MaterialUiCompatibilityBridge
   theme/
-    anima_theme.dart              Settings-driven ThemeData factory
+    anima_theme.dart              Settings-driven ThemeData factory (`material_ui` + google_fonts TextTheme bridge)
     glass_backdrop.dart           Configurable solid/gradient/soft-glow backdrop
   models/
     chat_message.dart             Bubble + swipes + optional speaker + groupBeat lines
@@ -437,7 +438,7 @@ scripts/
                                   and attaches it to the existing v1.0.0 release (deploy.sh step 7/7)
 ```
 
-**Dependencies in use:** `flutter_secure_storage` (legacy migration), `http`, `path_provider`, `path`, `file_picker`, `share_plus`, `google_fonts`, `gal` (export portraits to Gallery), `permission_handler` (Android All files access for Documents/Anima)  
+**Dependencies in use:** `material_ui` (Flutter 3.50 design widgets; `MaterialUiCompatibilityBridge` in `main.dart`), `flutter_secure_storage` (legacy migration only — live key is `api_key.txt`), `http`, `path_provider`, `path`, `file_picker`, `share_plus`, `google_fonts`, `gal` (export portraits to Gallery), `permission_handler` (Android All files access for Documents/Anima)  
 **Dev / branding:** `flutter_launcher_icons` (Android + Windows from `assets/branding/anima_icon.png`; Linux bundles the same PNG beside `data/`); master icon at `assets/branding/anima_icon.png`. Release scripts run icon generation before desktop builds.
 
 ---
@@ -467,9 +468,9 @@ scripts/
 | GitHub CLI (`gh`) | ✅ installed + authenticated as `jwarren9393` |
 | Git identity | ✅ restored (`jwarren9393` / GitHub noreply e-mail) |
 | Cursor | ✅ `dart.flutterSdkPath = /home/jay/development/flutter` |
-| Project checkout | ✅ `~/Git and Cursor/Git Repos/Anima` (`experiment/living-world`) |
+| Project checkout | ✅ was `~/Git and Cursor/Git Repos/Anima` on `experiment/living-world` at handoff — that branch was later merged/deleted; current work is on **`main`** on host **Jay** |
 | Linux portable install | ✅ `~/Git and Cursor/Installed Linux Cursor Apps/Anima/` + `~/.local/share/applications/anima.desktop` (empty **AnimaData/** beside the binary — configure library/API key on first run) |
-| Verified end-to-end | ✅ `flutter doctor` all green · **517** tests · Linux release build · launcher smoke-test OK |
+| Verified end-to-end | ✅ `flutter doctor` all green · **517** tests (Living World era) · Linux release build · launcher smoke-test OK |
 
 **The one command that still needs the owner's password** (Linux desktop build libs + GitHub CLI + phone udev rules):
 
@@ -579,7 +580,7 @@ exFAT/FAT / Jay-Storage / cloud-mirrored folders (Flutter plugin symlinks fail t
 | Developer Mode | ✅ ON |
 | Python | ✅ 3.12.10 (System-Checker venv) |
 | Android Studio | ❌ not installed — cmdline-tools are enough for APK builds |
-| Anima checkout | ✅ `experiment/living-world` |
+| Anima checkout | ✅ **`main`** at `C:\Users\Jay\Git and Cursor\Git Repos\Anima` (build **83**, Living World removed) |
 | Portable Anima | ✅ `Installed Windows Cursor Apps\Anima\` + **AnimaData** (restored; also `Documents\Anima`) |
 
 Fresh install / re-run (elevated for VS Build Tools + Developer Mode):
@@ -596,6 +597,8 @@ flutter run -d windows
 **Verified 2026-11-23:** `flutter doctor` → **No issues found** (Windows + Android green). Restored
 library/key from Migrate pack; smoke-launch OK. Also fixed `scripts/setup_windows_dev.ps1`
 `Test-Path $vsVcVars -and …` → `(Test-Path $vsVcVars) -and …` (PowerShell 5.1).
+**Verified 2026-11-27:** on **`main`** at build **83** — Living World gone; `material_ui` migration landed;
+`flutter test` **407** pass; living docs reconciled to this state.
 
 **⚠️ VS Build Tools:** do **not** rely on `winget install …BuildTools --override "--passive …"` on a
 fresh Windows 11 box — use the official bootstrapper elevated with
@@ -614,7 +617,7 @@ CRLF; clear with `git checkout --` on those paths or ignore.
 3. Plug phone into this PC with a data-capable USB cable.
 4. Accept the “Allow USB debugging?” prompt on the phone.
 5. In a terminal, run: `adb devices` — you should see your phone listed (not `unauthorized`).
-6. From the project folder (`~/Documents/Git Projects/Anima` on this Linux host): `flutter run`
+6. From the project folder on the current host (**Jay**: `C:\Users\Jay\Git and Cursor\Git Repos\Anima`): `flutter run`
 
 If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the prompt. On some Linux setups a udev rule may be needed later.
 
@@ -628,10 +631,10 @@ If the phone shows as `unauthorized` or missing, unplug/replug and re-accept the
    - **`bash scripts/setup_linux_dev_noroot.sh`** — no admin password needed. Use this when `sudo` is unavailable or you would rather not type it. It prints the single `apt` line for the desktop libs.
    - **`bash scripts/setup_linux_dev.sh --github`** — the sudo version; also installs `gh` from apt and signs you in.
    Each installs Flutter (`~/development/flutter`), a JDK 17, the Android SDK (`~/Android/Sdk`), env vars, the Cursor Dart path, then runs `flutter pub get` + `flutter doctor`. Windows: from an **elevated** terminal in your checkout run **`powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows_dev.ps1`**, then reopen the terminal. The 2026-09-26 **JAYS-DELL** rebuild went further with the helper steps in `C:\Users\jakwa\anima-setup\` (`run_all.ps1`).
-2. Work in the checkout on an **internal** disk — Linux **`~/Documents/Git Projects/Anima`** (ext4), Windows **`C:\Users\jakwa\Documents\GitHub\Anima`**. Never build on exFAT (`W:` / Jay-Storage) or a Google Drive mount (`G:`): Flutter writes plugin symlinks and fails there. Then **`flutter run -d windows`** / **`-d linux`** (desktop) or plug in your Android phone + **`flutter run`**.
+2. Work in the checkout on an **internal** disk — current Windows host **Jay**: **`C:\Users\Jay\Git and Cursor\Git Repos\Anima`** (NTFS). Linux: **`~/Git and Cursor/Git Repos/Anima`** or **`~/Documents/Git Projects/Anima`** (ext4). Never build on exFAT (`W:` / Jay-Storage) or a Google Drive mount (`G:`): Flutter writes plugin symlinks and fails there. Then **`flutter run -d windows`** / **`-d linux`** (desktop) or plug in your Android phone + **`flutter run`**.
 3. First launch: use **Documents/Anima** (or pick a folder). On Android, allow **All files access** so My Files can open it.
-4. Enter your NanoGPT API key in **Settings → API** (saved in that folder as `api_key.txt`). Your old library can be restored from a `.anima-backup` file in **Settings → Backup, restore & sync** — on the Windows laptop one is waiting in `Documents\Anima Backup\`, `W:\Anima Backup\` and `G:\My Drive\Anima Backup\`.
-5. On Windows, Cursor already points the Dart extension at `C:/src/flutter` (`dart.flutterSdkPath`); set that user-level setting on any new machine if the Dart extension cannot find Flutter.
+4. Enter your NanoGPT API key in **Settings → API** (saved in that folder as `api_key.txt`). Your library can be restored from a `.anima-backup` file in **Settings → Backup, restore & sync** (local only — no cloud).
+5. On Windows host **Jay**, Cursor already points the Dart extension at `C:/src/flutter` (`dart.flutterSdkPath`); set that user-level setting on any new machine if the Dart extension cannot find Flutter.
 6. **Release rule:** keep `pubspec.yaml` at **`1.0.0+<build>`** — only increment the number after `+`. Stable daily driver uploads to **`v1.0.0`**. Current build is **83**. On **Windows**, `./deploy.sh` skips the Linux desktop steps and uploads the APK (plus kicks off the Windows zip via Actions).
 7. **Moving data between devices (no cloud any more):** create a backup on one device, move the file, then **Restore backup** on the other. `bash scripts/sync_phone_anima.sh --auto` does the copy over USB/Wi-Fi adb in about two seconds, or use whatever you like (KDE Connect, a USB stick). Each device keeps its own API key, so re-entering it is never part of a restore.
 
